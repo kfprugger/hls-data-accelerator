@@ -1,0 +1,52 @@
+{
+    "name": "Modalities Exentension Sample",
+    "description": "An integration test for clinical foundations",
+    "targetEnvironment": "MSIT",
+    "initial_context": {
+        "dist_path": "/dist",
+        "notebooks_path": "/notebooks"
+    },
+    "tasks": [
+        {
+            "type": "ConfiguredTask",
+            "description": "Set up Foundations",
+            "ignore": "false",
+            "params": {
+                "configFilePath": "AutomationFramework/integrationTests/clinical_foundations.json"
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up Silver ingestion notebook",
+            "ignore": "false",
+            "params": {
+                "workspace": "$test_workspace",
+                "environment": "$test_environment",
+                "notebookName": "msft_dm4h_bronze_silver_flatten",
+                "notebooks_path": "$notebooks_path",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "Silver",
+                    "known_lakehouses": [
+                    "Config",
+                    "Bronze",
+                    "Silver"
+                    ]
+                },
+                "notebook_parameters": {}
+            }
+        },
+        {
+            "type": "RunDataPipeline",
+            "description": "Running Omop analytics pipelines",
+            "ignore": "false",
+            "params": {
+                "workspace": "$test_workspace",
+                "dataPipelineName": "msft_omop_analytics",
+                "pipelineParameters": {}
+            },
+            "outputs": [
+                "pipeline_run_id"
+            ]
+        }
+    ]
+}

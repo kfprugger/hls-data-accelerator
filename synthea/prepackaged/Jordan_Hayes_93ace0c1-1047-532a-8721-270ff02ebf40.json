@@ -1,0 +1,1930 @@
+{
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40",
+      "resource": {
+        "active": true,
+        "address": [
+          {
+            "city": "Atlanta",
+            "country": "US",
+            "line": [
+              "179 Synthetic Care Way"
+            ],
+            "postalCode": "30303",
+            "state": "GA",
+            "use": "home"
+          }
+        ],
+        "birthDate": "2009-07-01",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2106-3",
+                  "display": "White",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "White"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+          },
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2135-2",
+                  "display": "Hispanic or Latino",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Hispanic or Latino"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+          }
+        ],
+        "gender": "male",
+        "id": "93ace0c1-1047-532a-8721-270ff02ebf40",
+        "identifier": [
+          {
+            "system": "https://brakekat.example/fhir/synthetic-mrn",
+            "type": {
+              "text": "Synthetic MRN"
+            },
+            "value": "SYN-000080"
+          }
+        ],
+        "name": [
+          {
+            "family": "Hayes",
+            "given": [
+              "Jordan"
+            ],
+            "text": "Jordan Hayes",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5b49de43-e60b-5d6f-8a4c-fca736112ea3",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "5b49de43-e60b-5d6f-8a4c-fca736112ea3",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Hughes Spalding",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+            }
+          }
+        ],
+        "period": {
+          "end": "2024-07-12T12:00:00Z",
+          "start": "2024-07-11T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Hughes Spalding",
+          "reference": "Organization/choa-hughes-spalding"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b07afa2c-f5c6-5bce-9fea-f082c022317d",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "b07afa2c-f5c6-5bce-9fea-f082c022317d",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Hughes Spalding",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-01-07T18:00:00Z",
+          "start": "2025-01-07T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Hughes Spalding",
+          "reference": "Organization/choa-hughes-spalding"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6b92bbf5-ec7f-561c-8017-fdcf3105da96",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "6b92bbf5-ec7f-561c-8017-fdcf3105da96",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Hughes Spalding",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-04T12:00:00Z",
+          "start": "2025-07-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Hughes Spalding",
+          "reference": "Organization/choa-hughes-spalding"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:10d70cac-fc71-51d2-a0b9-5c5711503d7f",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "10d70cac-fc71-51d2-a0b9-5c5711503d7f",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Hughes Spalding",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-18T12:00:00Z",
+          "start": "2025-07-16T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Hughes Spalding",
+          "reference": "Organization/choa-hughes-spalding"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:df75afd8-859f-5bfd-8263-884705cee0b6",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "df75afd8-859f-5bfd-8263-884705cee0b6",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Hughes Spalding",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Hughes Spalding",
+          "reference": "Organization/choa-hughes-spalding"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:09e17645-6b5e-57af-a735-22cbac398ce6",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "09e17645-6b5e-57af-a735-22cbac398ce6",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Hughes Spalding",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-04-02T16:48:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Hughes Spalding",
+          "reference": "Organization/choa-hughes-spalding"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "3ed17846-d702-5ca8-b4e6-064b0a5bd7c5",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Hughes Spalding",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-06-05T12:00:00Z",
+          "start": "2026-06-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Hughes Spalding",
+          "reference": "Organization/choa-hughes-spalding"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b1f752fa-af41-534d-b8fe-899318b23cbd",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "254637007",
+              "display": "Lung cancer",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Lung cancer"
+        },
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "b1f752fa-af41-534d-b8fe-899318b23cbd",
+        "onsetDateTime": "2025-07-01T12:00:00Z",
+        "recordedDate": "2026-06-01T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6e4e6b7c-ae5d-5785-b9e0-f3575f1d2b51",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "44054006",
+              "display": "Type 2 diabetes mellitus",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Type 2 diabetes mellitus"
+        },
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "6e4e6b7c-ae5d-5785-b9e0-f3575f1d2b51",
+        "onsetDateTime": "2024-07-01T12:00:00Z",
+        "recordedDate": "2026-05-31T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:24944f75-a437-5a43-b906-08278d4f265b",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "4548-4",
+              "display": "Hemoglobin A1c",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "effectiveDateTime": "2026-06-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "24944f75-a437-5a43-b906-08278d4f265b",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 7.2
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6e41e955-c9e4-597e-ad41-298b3eea1906",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8480-6",
+              "display": "Systolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Systolic blood pressure"
+        },
+        "effectiveDateTime": "2026-05-06T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "6e41e955-c9e4-597e-ad41-298b3eea1906",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 128
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:21ddd00a-a544-522d-90b7-29c95e742773",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8462-4",
+              "display": "Diastolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Diastolic blood pressure"
+        },
+        "effectiveDateTime": "2026-04-08T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "21ddd00a-a544-522d-90b7-29c95e742773",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 78
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8820b451-46b6-5aba-b4db-a6f80b0e7b0f",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "39156-5",
+              "display": "Body mass index",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Body mass index"
+        },
+        "effectiveDateTime": "2026-03-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "8820b451-46b6-5aba-b4db-a6f80b0e7b0f",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "valueQuantity": {
+          "code": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "unit": "kg/m2",
+          "value": 34.5
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2ce0c76d-9969-5912-976c-d066b2851439",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "14959-1",
+              "display": "Microalbumin/Creatinine",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Microalbumin/Creatinine"
+        },
+        "effectiveDateTime": "2026-02-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "2ce0c76d-9969-5912-976c-d066b2851439",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "valueQuantity": {
+          "code": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mg/g",
+          "value": 24
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2d254d03-c7c5-5589-8850-e717d8a473ba",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "2708-6",
+              "display": "Oxygen saturation",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "effectiveDateTime": "2026-01-14T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "2d254d03-c7c5-5589-8850-e717d8a473ba",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 90
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c545ad29-328b-5a93-8fdd-7ed1b48d0561",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "c545ad29-328b-5a93-8fdd-7ed1b48d0561",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2eea7aff-fc37-55df-9517-9a438a518fed",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "2eea7aff-fc37-55df-9517-9a438a518fed",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:59b61b6f-3834-5b01-a37e-b23f7c8024b9",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "59b61b6f-3834-5b01-a37e-b23f7c8024b9",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4f686604-e40c-5871-bed9-ddd19f303e04",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "4f686604-e40c-5871-bed9-ddd19f303e04",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:862a1b97-f981-5c74-b6fd-83264bc8dc17",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "862a1b97-f981-5c74-b6fd-83264bc8dc17",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c06e6b4f-bc6c-5291-903d-c45b0ec36a9a",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "c06e6b4f-bc6c-5291-903d-c45b0ec36a9a",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e6b79906-bdd2-5e81-bc6b-a783765748aa",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "e6b79906-bdd2-5e81-bc6b-a783765748aa",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:57b246a1-aea9-5dd2-b3f4-e3e3457b4dfd",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "57b246a1-aea9-5dd2-b3f4-e3e3457b4dfd",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:32441d9c-563e-5671-9f6a-414b147f16c3",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "32441d9c-563e-5671-9f6a-414b147f16c3",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e2719769-cdc8-545b-a7a0-15a3f8c291b4",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "e2719769-cdc8-545b-a7a0-15a3f8c291b4",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:16d3f4a7-ec7b-5d02-9ce2-bc4edd94fb0c",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "16d3f4a7-ec7b-5d02-9ce2-bc4edd94fb0c",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d627409d-e643-584d-bcc2-a97d12125dc1",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "d627409d-e643-584d-bcc2-a97d12125dc1",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:930fd4aa-e8d4-5f21-b127-66d86696fe2b",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "930fd4aa-e8d4-5f21-b127-66d86696fe2b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:84162847-5bdb-540b-be14-8f3a0d7ff687",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "84162847-5bdb-540b-be14-8f3a0d7ff687",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c4700438-e42d-5ef2-aeee-4af3498106f5",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "c4700438-e42d-5ef2-aeee-4af3498106f5",
+        "occurrenceDateTime": "2026-03-03T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "133",
+              "display": "Pneumococcal conjugate PCV 13",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a6c34e80-e836-5efd-8d71-c33f1bd53672",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "a6c34e80-e836-5efd-8d71-c33f1bd53672",
+        "occurrenceDateTime": "2026-05-02T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "140",
+              "display": "Influenza seasonal injectable",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:57a800a5-8aee-57b8-b033-acc563b3e5cd",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "43075005",
+              "display": "Inhalation therapy",
+              "system": "http://snomed.info/sct"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "id": "57a800a5-8aee-57b8-b033-acc563b3e5cd",
+        "performedDateTime": "2026-06-17T12:00:00Z",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:payer-uninsured",
+      "resource": {
+        "active": true,
+        "id": "payer-uninsured",
+        "name": "Self Pay",
+        "resourceType": "Organization",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "pay",
+                "display": "Payer",
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fb9da3cb-50b5-501d-8c10-10d5ca5aa53a",
+      "resource": {
+        "beneficiary": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "id": "fb9da3cb-50b5-501d-8c10-10d5ca5aa53a",
+        "payor": [
+          {
+            "display": "Self Pay",
+            "reference": "Organization/payer-uninsured"
+          }
+        ],
+        "period": {
+          "end": "2026-12-31",
+          "start": "2024-01-01"
+        },
+        "resourceType": "Coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "code": "SELF-PAY",
+              "display": "Self pay",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+            }
+          ],
+          "text": "Self Pay"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:807cb4c5-7cb6-5cb5-acff-e4380e3f7e85",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+        },
+        "id": "807cb4c5-7cb6-5cb5-acff-e4380e3f7e85",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:fb9da3cb-50b5-501d-8c10-10d5ca5aa53a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2475.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:041cf29b-737c-5358-b10f-de7003b5feba",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:807cb4c5-7cb6-5cb5-acff-e4380e3f7e85"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+        },
+        "id": "041cf29b-737c-5358-b10f-de7003b5feba",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:fb9da3cb-50b5-501d-8c10-10d5ca5aa53a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Self Pay",
+          "reference": "Organization/payer-uninsured"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2029.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2475.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:60305608-e2dc-5f04-963e-59ae88bc68ea",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+        },
+        "id": "60305608-e2dc-5f04-963e-59ae88bc68ea",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:fb9da3cb-50b5-501d-8c10-10d5ca5aa53a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3225.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5ff121d0-27b5-53e0-954b-47e9cb1acfb2",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:60305608-e2dc-5f04-963e-59ae88bc68ea"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+        },
+        "id": "5ff121d0-27b5-53e0-954b-47e9cb1acfb2",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:fb9da3cb-50b5-501d-8c10-10d5ca5aa53a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Self Pay",
+          "reference": "Organization/payer-uninsured"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2644.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3225.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:41ad842e-baa0-50d0-b1ae-4cad08b826c8",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+        },
+        "id": "41ad842e-baa0-50d0-b1ae-4cad08b826c8",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:fb9da3cb-50b5-501d-8c10-10d5ca5aa53a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3975.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0d872eba-386a-5632-97c2-ee30e2ee1858",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:41ad842e-baa0-50d0-b1ae-4cad08b826c8"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+        },
+        "id": "0d872eba-386a-5632-97c2-ee30e2ee1858",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:fb9da3cb-50b5-501d-8c10-10d5ca5aa53a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Self Pay",
+          "reference": "Organization/payer-uninsured"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3259.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3975.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:006a65a7-a7bd-5266-9b64-9d85724dcd73",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+        },
+        "id": "006a65a7-a7bd-5266-9b64-9d85724dcd73",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:fb9da3cb-50b5-501d-8c10-10d5ca5aa53a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 4725.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fc6c5c58-acde-5f7e-89c0-3e2bd27c01ce",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:006a65a7-a7bd-5266-9b64-9d85724dcd73"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-hughes-spalding"
+        },
+        "id": "fc6c5c58-acde-5f7e-89c0-3e2bd27c01ce",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:fb9da3cb-50b5-501d-8c10-10d5ca5aa53a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Self Pay",
+          "reference": "Organization/payer-uninsured"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3874.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810079"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 4725.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:daf1ae91-eefe-505b-a192-d2bb0b41c731",
+      "resource": {
+        "description": {
+          "text": "Maintain oxygen saturation at or above 94 percent"
+        },
+        "id": "daf1ae91-eefe-505b-a192-d2bb0b41c731",
+        "lifecycleStatus": "active",
+        "resourceType": "Goal",
+        "startDate": "2026-07-01",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "target": [
+          {
+            "dueDate": "2026-09-29",
+            "measure": {
+              "text": "Maintain oxygen saturation at or above 94 percent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a418d22-32cd-5aff-9a01-7341d924c40d",
+      "resource": {
+        "addresses": [
+          {
+            "reference": "urn:uuid:b1f752fa-af41-534d-b8fe-899318b23cbd"
+          }
+        ],
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ],
+            "text": "Assessment and Plan of Treatment"
+          }
+        ],
+        "encounter": {
+          "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+        },
+        "goal": [
+          {
+            "reference": "urn:uuid:daf1ae91-eefe-505b-a192-d2bb0b41c731"
+          }
+        ],
+        "id": "5a418d22-32cd-5aff-9a01-7341d924c40d",
+        "intent": "plan",
+        "period": {
+          "end": "2026-12-31",
+          "start": "2026-01-01"
+        },
+        "resourceType": "CarePlan",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "title": "Synthetic chronic care plan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:965771f5-ab1e-51bf-8a2d-3b9a8dbd5d0b",
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U3ludGhldGljIGNsaW5pY2FsIHN1bW1hcnku"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "urn:uuid:3ed17846-d702-5ca8-b4e6-064b0a5bd7c5"
+            }
+          ]
+        },
+        "date": "2026-07-01T12:00:00Z",
+        "id": "965771f5-ab1e-51bf-8a2d-3b9a8dbd5d0b",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "urn:uuid:93ace0c1-1047-532a-8721-270ff02ebf40"
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "34133-9",
+              "display": "Summary of episode note",
+              "system": "http://loinc.org"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "resourceType": "Bundle",
+  "type": "transaction"
+}

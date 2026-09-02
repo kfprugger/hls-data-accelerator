@@ -1,0 +1,82 @@
+{
+    "fields": [
+        {
+            "metadata": {},
+            "name": "height",
+            "nullable": true,
+            "type": "integer",
+            "description": "The height of the mask. Some models may resize images prior to inference. If resized, this is the size of the resized image."
+        },
+        {
+            "metadata": {},
+            "name": "width",
+            "nullable": true,
+            "type": "integer",
+            "description": "The width of the mask. Some models may resize images prior to inference. If resized, this is the size of the resized image."
+        },
+        {
+            "metadata": {},
+            "name": "depth",
+            "nullable": true,
+            "type": "integer",
+            "description": "The depth of the original mask before encoding"
+        },
+        {
+            "metadata": {},
+            "name": "segmentation_type",
+            "nullable": true,
+            "type": "string",
+            "description": "Type of 3d segmentation: either 'rle', or 'class_label'"
+        },
+        {
+            "metadata": {},
+            "name": "metadata",
+            "nullable": true,
+            "type":"string",
+            "description": "Additional metadata for the segmentation e.g. description of the segmentation, labels and so on..."
+        },
+        {
+            "metadata": {},
+            "name": "file_ref_segmentation_mask",
+            "nullable": true,
+            "type": "string",
+            "description": "Reference to an external file containing the segmentation mask if the mask is large"
+        },
+        {
+            "metadata": {},
+            "name": "segmentation_mask",
+            "nullable": true,
+            "type": {
+                "type": "struct",
+                "fields": [
+                    {
+                        "metadata": {},
+                        "name": "background",
+                        "nullable": true,
+                        "type": "integer",
+                        "description": "The class label for the background. Default is 0."
+                    },
+                    {
+                        "metadata": {},
+                        "name": "rle",
+                        "nullable": true,
+                        "type":"string",
+                        "description": "A sequence of pairs: class label and the number of pixels for that class label. Example: [0, 199, 1,5, 0, 50,...]"
+                    },
+                    {
+                        "metadata": {},
+                        "name": "class_label",
+                        "nullable": true,
+                        "description": "The 2D array representing the segmentation mask",
+                        "type": {
+                            "type": "array",
+                            "elementType": "integer",
+                            "containsNull": true
+                        }
+                    }
+                ]
+            }
+        }      
+    ],
+    "type": "struct"
+}

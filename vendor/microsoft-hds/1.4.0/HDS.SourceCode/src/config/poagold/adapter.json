@@ -1,0 +1,738 @@
+{
+    "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/adapter_schema.json",
+    "name": "POAnalytics",
+    "description": "",
+    "version": "1.0",
+    "source": {
+        "lakeDBName": "silver",
+        "dataFormat": "delta",
+        "connectionStringUri": ""
+    },
+    "sourceDomain": "Healthcare",
+
+    "dbSourceSchema": "dbSourceSchema.json",
+    "dbSemantics": "dbSemantics.json",
+    "dbSemanticsConfig": "dbSemanticsConfig.json",
+    "dbTargetSchema": "dbTargetSchema.json",
+    "dbTargetSchemaConfig": "dbTargetSchemaConfig.json",
+    "dmfEnvConfig": "environment.json",
+    "defaultReferenceValue": 0,
+    "failUponMissingReferenceValues": false,
+    "queryTables": [
+        {
+            "name": "Patient"
+        },
+        {
+            "name": "Appointment"
+        },
+        {
+            "name": "Location"
+        },
+        {
+            "name": "Encounter"
+        },
+        {
+            "name": "MarketingCampaignTask"
+        },
+        {
+            "name": "MarketingCampaignTaskCommunication"
+        },
+        {
+            "name": "MarketingCampaignTaskRelatedParty"
+        },
+        {
+            "name": "RelatedMarketingCampaignTask"
+        },
+        {
+            "name": "IdmPatient"
+        },
+        {
+            "name": "IdmCommunication"
+        }
+    ],
+    "sourceTables": [
+        {
+            "tableName": "serviceline_combined",
+            "enabled": true,
+            "query": "WITH CombinedServices AS ( SELECT serviceType[0].coding[0].code AS service_type_id, serviceType[0].coding[0].display AS service_type_name, meta.lastUpdated as modifiedon, 1 AS priority FROM Appointment WHERE serviceType[0].coding[0].code IS NOT NULL UNION ALL SELECT serviceType.coding[0].code AS service_type_id, serviceType.coding[0].display, meta.lastUpdated as modifiedon, 2 AS priority FROM Encounter WHERE serviceType.coding[0].code IS NOT NULL UNION ALL SELECT ServiceType AS service_type_id, NULL AS service_type_name, SourceModifiedOn as modifiedon, 3 AS priority FROM MarketingCampaignTask WHERE MarketingCampaignTaskTypeId = 20000001 AND ServiceType IS NOT NULL ), PriorityServices AS ( SELECT service_type_id, service_type_name, modifiedon, ROW_NUMBER() OVER (PARTITION BY service_type_id ORDER BY priority) AS rn FROM CombinedServices ) SELECT service_type_id, service_type_name, modifiedon FROM PriorityServices WHERE rn = 1",
+            "modifiedonField": "modifiedon",
+
+            "targetAnchorTables": [
+                {
+                    "tableName": "ServiceLineDim"
+                }
+            ],
+            "sourceFields": [
+                {
+                    "fieldName": "service_type_id",
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "ServiceLineDim",
+                                "fieldName": "ServiceLineKey"
+                            },
+                            {
+                                "tableName": "ServiceLineDim",
+                                "fieldName": "ServiceLineNum"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "service_type_name",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "ServiceLineDim",
+                                "fieldName": "Name"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "tableName": "MarketingCampaignTask_assets",
+            "enabled": true,
+            "query":"SELECT DISTINCT j_com.CommunicationText AS m_assetname, CASE m.MarketingCampaignTaskTypeId WHEN 20000004 THEN 'Email' WHEN 20000005 THEN 'Email' WHEN 20000008 THEN 'Email' WHEN 20000009 THEN 'Email' WHEN 20000010 THEN 'Sms' WHEN 20000011 THEN 'Sms' WHEN 20000012 THEN 'Sms' WHEN 20000006 THEN 'Sms' WHEN 20000013 THEN 'PushNotification' WHEN 20000014 THEN 'PushNotification' WHEN 20000015 THEN 'PushNotification' WHEN 20000016 THEN 'PushNotification' END AS m_channelname, j_com.SourceModifiedOn as m_modified_date FROM MarketingCampaignTask m LEFT JOIN MarketingCampaignTaskCommunication j_rel_e_communication ON j_rel_e_communication.TaskId = m.TaskId LEFT JOIN IdmCommunication j_com ON j_com.CommunicationId = j_rel_e_communication.CommunicationId WHERE m.MarketingCampaignTaskTypeId IN ( 20000004, 20000005, 20000008, 20000009, 20000010, 20000011, 20000012, 20000006, 20000013, 20000014, 20000015, 20000016 )",
+            "modifiedonField": "m_modified_date",
+            "targetAnchorTables": [
+                {
+                    "tableName": "MarketingAssetDim"
+                }
+            ],
+            "sourceFields": [
+                {
+                    "fieldName": "m_assetid",
+                    "fieldCalculatedValue": "concat_ws('<->', m_channelname, m_assetname)",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "MarketingAssetDim",
+                                "fieldName": "AssetKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "m_assetname",
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "MarketingAssetDim",
+                                "fieldName": "AssetName"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "m_channelname",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "MarketingAssetDim",
+                                "fieldName": "AssetType"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },       
+        {
+            "tableName": "MarketingCampaignTask_eventfact",
+            "enabled": true,
+            "query": "SELECT m.TaskId AS m_id ,m.CreatedOn AS m_modifiedon ,m.CreatedOn AS m_eventdate, DATE_FORMAT(m.CreatedOn, 'MMM-yyyy') AS m_month_year, j_base.RelatedTaskId AS m_journeyid, m.MarketingCampaignTaskTypeId as m_tasktypeid, CASE m.MarketingCampaignTaskTypeId WHEN 20000004 THEN 'Email' WHEN 20000005 THEN 'Email' WHEN 20000008 THEN 'Email' WHEN 20000009 THEN 'Email' WHEN 20000010 THEN 'Sms' WHEN 20000011 THEN 'Sms' WHEN 20000012 THEN 'Sms' WHEN 20000006 THEN 'Sms' WHEN 20000013 THEN 'PushNotification' WHEN 20000014 THEN 'PushNotification' WHEN 20000015 THEN 'PushNotification' WHEN 20000016 THEN 'PushNotification' END AS m_channelname ,CASE m.MarketingCampaignTaskTypeId WHEN 20000004 THEN 'Sent' WHEN 20000005 THEN 'Opened' WHEN 20000008 THEN 'Clicked' WHEN 20000009 THEN 'Delivered' WHEN 20000010 THEN 'Delivered' WHEN 20000011 THEN 'Clicked' WHEN 20000012 THEN 'NotSent' WHEN 20000006 THEN 'Sent' WHEN 20000013 THEN 'Opened' WHEN 20000014 THEN 'Clicked' WHEN 20000015 THEN 'Sent' WHEN 20000016 THEN 'NotSent' END AS m_channelaction ,patinet_rel.PartyId AS m_patientpartyid ,patinet_rel.CorrelationId AS m_patientfhirid ,NULL AS m_appointmentid ,j_com.CommunicationText AS m_assetname FROM MarketingCampaignTask m LEFT JOIN RelatedMarketingCampaignTask j_rel ON j_rel.TaskId = m.TaskId AND j_rel.TaskRelationshipTypeId IN ( 20000016 ,20000013 ,20000008 ,20000010 ,20000019 ,20000022 ,20000028 ,20000025 ,20000031 ,20000034 ,20000037 ,20000040 ) LEFT JOIN RelatedMarketingCampaignTask j_base ON j_base.TaskId = j_rel.RelatedTaskId LEFT JOIN MarketingCampaignTaskRelatedParty pat_rel ON pat_rel.TaskId = m.TaskId AND pat_rel.TaskPartyRelationshipTypeId IN ( 20000005 ,20000007 ,20000009 ,20000011 ,20000013 ,20000015 ,20000019 ,20000017 ,20000021 ,20000023 ,20000025 ,20000027 ) LEFT JOIN IdmPatient patinet_rel ON patinet_rel.PartyId = pat_rel.PartyId LEFT JOIN MarketingCampaignTaskCommunication j_rel_e_communication ON j_rel_e_communication.TaskId = m.TaskId LEFT JOIN IdmCommunication j_com ON j_com.CommunicationId = j_rel_e_communication.CommunicationId WHERE m.MarketingCampaignTaskTypeId IN ( 20000004 ,20000005 ,20000008 ,20000009 ,20000010 ,20000011 ,20000012 ,20000006 ,20000013 ,20000014 ,20000015 ,20000016 )",
+            "modifiedonField": "m_modifiedon",
+            "targetAnchorTables": [
+                {
+                    "tableName": "MarketingEventFact"
+                },
+                {
+                    "tableName": "JourneyDim"
+                },
+                {
+                    "tableName": "PatientDim"
+                },
+                {
+                    "tableName": "MarketingAssetDim"
+                }
+            ],
+            "sourceFields":[
+                {
+                    "fieldName": "m_id",
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "MarketingEventFact",
+                                "fieldName": "MarketingEventKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "m_eventdate",
+                    "enabled": true,
+                    "fieldType": "timestamp",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "MarketingEventFact",
+                                "fieldName": "EventDate"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "m_month_year",                    
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "MarketingEventFact",
+                                "fieldName": "EventMonthYear"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "m_journeyid",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "JourneyDim",
+                                "fieldName": "JourneyKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "m_tasktypeid",
+                    "enabled": true,
+                    "fieldType": "integer",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "MarketingChannelDim",
+                                "fieldName": "ChannelKey"
+                            }
+                        ]
+                    }
+                },             
+                {
+                    "fieldName": "m_patientfhirid",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "PatientDim",
+                                "fieldName": "PatientKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "m_assetid",
+                    "fieldCalculatedValue": "concat_ws('<->', m_channelname, m_assetname)",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "MarketingAssetDim",
+                                "fieldName": "AssetKey"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "tableName": "MarketingCampaignTask_journey",
+            "enabled": true,
+            "query": "SELECT r.RelatedTaskId AS j_id ,m.SourceModifiedOn AS j_modified_date ,m.TaskName AS j_name ,m.TaskActualStartDate AS j_start ,m.StateCode AS j_status ,m.ServiceType AS j_serviceline FROM MarketingCampaignTask m JOIN RelatedMarketingCampaignTask r ON r.TaskId = m.TaskId JOIN ( SELECT r2.RelatedTaskId as Journey_Id, MAX(m2.SequenceNumber) as Max_Version FROM MarketingCampaignTask m2 JOIN RelatedMarketingCampaignTask r2 ON r2.TaskId = m2.TaskId WHERE m2.MarketingCampaignTaskTypeId = 20000001 GROUP BY r2.RelatedTaskId ) last ON last.Journey_Id = r.RelatedTaskId AND m.SequenceNumber = last.Max_Version WHERE MarketingCampaignTaskTypeId = 20000001",
+            "modifiedonField": "j_modified_date",
+            "targetAnchorTables": [
+                {
+                    "tableName": "JourneyDim"
+                },
+                {
+                    "tableName": "ServiceLineDim"
+                }
+            ],
+            "sourceFields": [
+                {
+                    "fieldName": "j_id",
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "JourneyDim",
+                                "fieldName": "JourneyKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "j_name",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "JourneyDim",
+                                "fieldName": "Name"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "j_start",
+                    "enabled": true,
+                    "fieldType": "timestamp",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "JourneyDim",
+                                "fieldName": "StartDate"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "j_status",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "JourneyDim",
+                                "fieldName": "Status"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "j_serviceline",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "ServiceLineDim",
+                                "fieldName": "ServiceLineKey"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "tableName": "Patient",
+            "enabled": true,
+            "query": "select idOrig as p_id, meta.lastUpdated AS p_modified_date, name[0].family as p_lastname, name[0].given[0] as p_firstname from Patient ",
+            "modifiedonField": "p_modified_date",
+            "targetAnchorTables": [
+                {
+                    "tableName": "PatientDim"
+                }
+            ],
+            "sourceFields": [
+                {
+                    "fieldName": "p_id",
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "PatientDim",
+                                "fieldName": "PatientKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "p_firstname",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "PatientDim",
+                                "fieldName": "FirstName"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "p_lastname",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "PatientDim",
+                                "fieldName": "LastName"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "tableName": "Location",
+            "enabled": true,
+            "query": "select idOrig as l_id,name as l_name, meta.lastUpdated AS l_modified_date, address.city as l_city, address.country as l_country, address.postalCode as l_postalcode, address.line[0] as l_line from Location",
+            "modifiedonField": "l_modified_date",
+            "targetAnchorTables": [
+                {
+                    "tableName": "LocationDim"
+                }
+            ],
+            "sourceFields": [
+                {
+                    "fieldName": "l_id",
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "LocationDim",
+                                "fieldName": "LocationKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "l_name",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "LocationDim",
+                                "fieldName": "LocationName"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "l_city",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "LocationDim",
+                                "fieldName": "City"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "l_country",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "LocationDim",
+                                "fieldName": "Country"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "l_line",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "LocationDim",
+                                "fieldName": "Street"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "l_postalcode",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "LocationDim",
+                                "fieldName": "Zipcode"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "tableName":"Appointment_Status",
+            "enabled": true,
+            "query": "SELECT idOrig AS a_id, status as a_status, meta.lastUpdated AS a_modified_date FROM Appointment WHERE idOrig IS NOT NULL",
+            "modifiedonField": "a_modified_date",
+            "targetAnchorTables": [
+                {
+                    "tableName": "AppointmentTransitionFact"
+                }
+            ],
+            "sourceFields": [
+                {
+                    "fieldName": "AppointmentTransitionKey_Unique",
+                    "fieldCalculatedValue": "concat_ws('<->', a_id, a_status)",
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "AppointmentTransitionFact",
+                                "fieldName": "AppointmentTransitionKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "a_id",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "AppointmentTransitionFact",
+                                "fieldName": "AppointmentKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "a_status",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "AppointmentTransitionFact",
+                                "fieldName": "Status"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "tableName": "Appointment",
+            "enabled": true,
+            "query": "SELECT idOrig AS id  ,meta.lastUpdated AS p_modified_date  ,FILTER(participant, ex->ex.actor.type = 'Patient') [0].actor.idOrig AS patient_id  ,FILTER(participant, ex->ex.actor.type = 'Location') [0].actor.idOrig AS location_id, serviceType[0].coding[0].code AS service_type_id, serviceType[0].coding[0].display AS service_type_name, start, end, COALESCE(created, msftCreatedDatetime) AS date_created FROM Appointment",
+            "modifiedonField": "p_modified_date",
+            "targetAnchorTables": [
+                {
+                    "tableName": "AppointmentDim"
+                },
+                {
+                    "tableName": "LocationDim"
+                },
+                {
+                    "tableName": "ServiceLineDim"
+                }
+            ],
+            "sourceFields": [
+                {
+                    "fieldName": "id",
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "AppointmentDim",
+                                "fieldName": "AppointmentKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "start",
+                    "enabled": true,
+                    "fieldType": "timestamp",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "AppointmentDim",
+                                "fieldName": "AppointmentStartDate"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "end",
+                    "enabled": true,
+                    "fieldType": "timestamp",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "AppointmentDim",
+                                "fieldName": "AppointmentEndDate"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "location_id",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "LocationDim",
+                                "fieldName": "LocationKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "patient_id",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "PatientDim",
+                                "fieldName": "PatientKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "service_type_id",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "ServiceLineDim",
+                                "fieldName": "ServiceLineKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "date_created",
+                    "enabled": true,
+                    "fieldType": "timestamp",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "AppointmentDim",
+                                "fieldName": "AppointmentScheduledDate"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "tableName": "Encounter",
+            "enabled": true,
+            "query": "SELECT idOrig AS id ,meta.lastUpdated AS e_modified_date  ,subject.idOrig as patient_id,  period.start as start, period.end as end, status, serviceType.coding[0].code as serviceline_code, serviceType.coding[0].display as serviceline_text FROM Encounter",
+            "modifiedonField": "e_modified_date",
+            "targetAnchorTables": [
+                {
+                    "tableName": "EncounterDim"
+                },
+                {
+                    "tableName": "ServiceLineDim"
+                }
+            ],
+            "sourceFields": [
+                {
+                    "fieldName": "id",
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "EncounterDim",
+                                "fieldName": "EncounterKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "start",
+                    "enabled": true,
+                    "fieldType": "timestamp",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "EncounterDim",
+                                "fieldName": "EncounterStartDate"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "end",
+                    "enabled": true,
+                    "fieldType": "timestamp",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "EncounterDim",
+                                "fieldName": "EncounterEndDate"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "patient_id",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "PatientDim",
+                                "fieldName": "PatientKey"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "status",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "EncounterDim",
+                                "fieldName": "EncounterStatus"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "fieldName": "serviceline_code",
+                    "enabled": true,
+                    "fieldType": "string",
+                    "targetFields": {
+                        "fields": [
+                            {
+                                "tableName": "ServiceLineDim",
+                                "fieldName": "ServiceLineKey"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ]
+}

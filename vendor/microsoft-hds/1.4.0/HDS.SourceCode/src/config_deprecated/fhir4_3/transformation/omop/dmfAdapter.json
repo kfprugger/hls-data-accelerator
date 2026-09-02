@@ -1,0 +1,2387 @@
+{
+  "$schema": "./dmfAdapterSchema.json",
+  "name": "FHIR",
+  "description": "",
+  "version": "1.0",
+  "sourceDomain": "HLC-OMOP",
+  "dbSemantics": "dbSemantics.json",
+  "dbTargetSchema": "dbTargetSchema.json",
+  "defaultReferenceValue": 0,
+  "failUponMissingReferenceValues": false,
+  "queryTables": [
+    {
+      "name": "patient"
+    },
+    {
+      "name": "encounter"
+    },
+    {
+      "name": "observation"
+    },
+    {
+      "name": "practitioner"
+    },
+    {
+      "name": "practitionerrole"
+    },
+    {
+      "name": "organization"
+    },
+    {
+      "name": "medicationrequest"
+    },
+    {
+      "name": "procedure"
+    },
+    {
+      "name": "documentreference"
+    },
+    {
+      "name": "imagingstudy"
+    }
+  ],
+  "sourceTables": [
+    {
+      "tableName": "patient",
+      "query": "select *, id as p_id, modified_date as p_modified_date, cast(parse_extension(address[0].extension, 'http://hl7.org/fhir/StructureDefinition/geolocation,latitude', 'valueDecimal', '') as float) as p_latitude, cast(parse_extension(address[0].extension, 'http://hl7.org/fhir/StructureDefinition/geolocation,longitude', 'valueDecimal', '') as float) as p_longitude, parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race,ombCategory', 'valueCoding', 'code,system') as p_race_standard, parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race,ombCategory', 'valueCoding', 'code') as p_race_code, parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity,ombCategory', 'valueCoding', 'code,system') as p_ethnicity_standard, parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity,ombCategory', 'valueCoding', 'code') as p_ethnicity_code from patient",
+      "modifiedonField": "p_modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "person"
+        },
+        {
+          "tableName": "location"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "p_id",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              },
+              {
+                "tableName": "person",
+                "fieldName": "person_source_value"
+              },
+              {
+                "tableName": "death",
+                "fieldName": "person_id",
+                "condition": "isnotnull(deceasedDateTime)"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "birthDateYear",
+          "fieldCalculatedValue": "year(birthDate)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "year_of_birth"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "birthDateMonth",
+          "fieldCalculatedValue": "month(birthDate)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "month_of_birth"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "birthDateDay",
+          "fieldCalculatedValue": "day(birthDate)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "day_of_birth"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "birthDate",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "birth_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "deceased_date",
+          "fieldCalculatedValue": "to_date(deceasedDateTime)",
+          "fieldType": "date",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "death",
+                "fieldName": "death_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "deceasedDateTime",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "death",
+                "fieldName": "death_datetime",
+                "condition": "isnotnull(deceasedDateTime)"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "gender_standard",
+          "fieldCalculatedValue": "concat_ws('<->', gender, 'http://hl7.org/fhir/ValueSet/administrative-gender')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "gender_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "gender_NH",
+          "fieldCalculatedValue": "concat_ws('<->', gender, 'http://hl7.org/fhir/ValueSet/administrative-gender', 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "gender_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "gender",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "gender_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "race_standard",
+          "fieldCalculatedValue": "p_race_standard",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "race_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "race_NH",
+          "fieldCalculatedValue": "concat_ws('<->', p_race_standard, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "race_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_us_core_race_code",
+          "fieldCalculatedValue": "p_race_code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "race_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "ethnicity_standard",
+          "fieldCalculatedValue": "p_ethnicity_standard",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "ethnicity_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "ethnicity_NH",
+          "fieldCalculatedValue": "concat_ws('<->', p_ethnicity_standard, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "ethnicity_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_us_core_ethnicity_code",
+          "fieldCalculatedValue": "p_ethnicity_code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "ethnicity_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "addressId",
+          "fieldCalculatedValue": "concat_ws('', address[0].country, address[0].city, address[0].line[0], address[0].line[1])",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "location_id"
+              },
+              {
+                "tableName": "person",
+                "fieldName": "location_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_city",
+          "fieldCalculatedValue": "address[0].city",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "city"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_line_1",
+          "fieldCalculatedValue": "address[0].line[0]",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "address_1"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_line_2",
+          "fieldCalculatedValue": "address[0].line[1]",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "address_2"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_state",
+          "fieldCalculatedValue": "address[0].state",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "state"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_postalCode",
+          "fieldCalculatedValue": "address[0].postalCode",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "zip"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_geolocation_latitude_valueDecimal",
+          "fieldCalculatedValue": "p_latitude",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "latitude"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_geolocation_longitude_valueDecimal",
+          "fieldCalculatedValue": "p_longitude",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "longitude"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "encounter",
+      "query": "select *, id as e_id, modified_date as e_modified_date, case when array_contains(participant.individual.type, 'Practitioner') then participant[array_position(participant.individual.type, 'Practitioner')-1].individual.id else NULL end as e_participant_individual_id from encounter",
+      "modifiedonField": "e_modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "visit_occurrence"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "e_id",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_occurrence_id",
+                "condition": "subject.type = 'Patient'"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "visit_standard",
+          "fieldCalculatedValue": "concat_ws('<->', class.code, class.system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "visit_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "visit_NH",
+          "fieldCalculatedValue": "concat_ws('<->', class.code, class.system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "visit_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "class_code",
+          "fieldCalculatedValue": "class.code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_start",
+          "fieldCalculatedValue": "period.start",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_start_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_start_date",
+          "fieldCalculatedValue": "to_date(period.start)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_start_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_end",
+          "fieldCalculatedValue": "period.end",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_end_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_end_date",
+          "fieldCalculatedValue": "to_date(period.end)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "participant_individual_id",
+          "fieldCalculatedValue": "e_participant_individual_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "provider",
+                "fieldName": "provider_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "serviceProvider_id",
+          "fieldCalculatedValue": "serviceProvider.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_site",
+                "fieldName": "care_site_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "admitted_standard",
+          "fieldCalculatedValue": "concat_ws('<->', hospitalization.admitSource.coding.code, hospitalization.admitSource.coding.system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "admitted_from_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "hospitalization_admitSource_text",
+          "fieldCalculatedValue": "hospitalization.admitSource.text",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "admitted_from_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "discharge_standard",
+          "fieldCalculatedValue": "concat_ws('<->', hospitalization.dischargeDisposition.coding.code, hospitalization.dischargeDisposition.coding.system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "discharged_to_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "hospitalization_dischargeDisposition_text",
+          "fieldCalculatedValue": "hospitalization.dischargeDisposition.text",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "discharged_to_source_value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "observation",
+      "query": "select *, id as o_id, modified_date as o_modified_date from observation ",
+      "modifiedonField": "o_modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "observation"
+        },
+        {
+          "tableName": "measurement"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "o_id",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "observation",
+                "fieldName": "observation_id",
+                "condition": "subject.type = 'Patient' and category[0].coding[0].code != 'laboratory'"
+              },
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_id",
+                "condition": "subject.type = 'Patient' and category[0].coding[0].code == 'laboratory'"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "observation_standard",
+          "fieldCalculatedValue": "concat_ws('<->', code.coding[0].code, code.coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "observation_concept_id"
+              },
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "measurement_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "observation_NH",
+          "fieldCalculatedValue": "concat_ws('<->', code.coding[0].code, code.coding[0].system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "observation_source_concept_id"
+              },
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "measurement_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "code_coding_code",
+          "fieldCalculatedValue": "code.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "observation",
+                "fieldName": "observation_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "code_coding_code",
+          "fieldCalculatedValue": "code.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "observation_datetime",
+          "fieldCalculatedValue": "coalesce(effectiveDateTime, effectivePeriod.end, effectiveInstant)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "observation",
+                "fieldName": "observation_datetime"
+              },
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_datetime"
+              },
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_time"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "observation_date",
+          "fieldCalculatedValue": "to_date(coalesce(effectiveDateTime, effectivePeriod.end, effectiveInstant))",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "observation",
+                "fieldName": "observation_date"
+              },
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "valueString",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "observation",
+                "fieldName": "value_as_string"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "valueQuantity_unit",
+          "fieldCalculatedValue": "valueQuantity.unit",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "observation",
+                "fieldName": "unit_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "value_standard",
+          "fieldCalculatedValue": "concat_ws('<->', valueCodeableConcept.coding[0].code, valueCodeableConcept.coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "value_as_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "unit_standard",
+          "fieldCalculatedValue": "concat_ws('<->', valueQuantity.unit, valueQuantity.system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "unit_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "encounter_id",
+          "fieldCalculatedValue": "encounter.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_occurrence_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "value_quantity_value_calc",
+          "fieldCalculatedValue": "coalesce(valueQuantity.value, valueInteger)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "observation",
+                "fieldName": "value_as_number"
+              },
+              {
+                "tableName": "measurement",
+                "fieldName": "value_as_number"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "practitioner",
+      "query": "select practitioner.*, practitioner.id as p_id, practitioner.modified_date as p_modified_date, practitionerrole.organization, practitionerrole.specialty from practitioner left join practitionerrole on practitioner.id = practitionerrole.practitioner.id",
+      "modifiedonField": "p_modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "provider"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "p_id",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "provider",
+                "fieldName": "provider_id"
+              },
+              {
+                "tableName": "provider",
+                "fieldName": "provider_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "providerName",
+          "fieldCalculatedValue": "concat_ws(' ', practitioner.name[0].prefix[0], practitioner.name[0].given[0], practitioner.name[0].family)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "provider",
+                "fieldName": "provider_name"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "identifier_value_npi",
+          "fieldCalculatedValue": "try_element_at(filter(practitioner.identifier, x -> x.system == 'http://hl7.org/fhir/sid/us-npi'), 1).value",
+          "enabled": true,
+          "fieldType": "string",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "provider",
+                "fieldName": "npi"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "identifier_value_dea",
+          "fieldCalculatedValue": "try_element_at(filter(practitioner.identifier, x -> x.system == 'https://www.deanumber.com/'), 1).value",
+          "enabled": true,        
+          "fieldType": "string",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "provider",
+                "fieldName": "dea"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "organization_id",
+          "fieldCalculatedValue": "practitionerrole.organization.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_site",
+                "fieldName": "care_site_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "specialty_concept_standard",
+          "fieldCalculatedValue": "concat_ws('<->', practitionerrole.specialty[0].coding.code, practitionerrole.specialty[0].coding.system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "specialty_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "specialty_concept_NH",
+          "fieldCalculatedValue": "concat_ws('<->', practitionerrole.specialty[0].coding.code, practitionerrole.specialty[0].coding.system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "specialty_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "specialty_coding_code",
+          "fieldCalculatedValue": "practitionerrole.specialty[0].coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "provider",
+                "fieldName": "specialty_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "gender_standard",
+          "fieldCalculatedValue": "concat_ws('<->', gender, 'http://hl7.org/fhir/ValueSet/administrative-gender')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "gender_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "gender_NH",
+          "fieldCalculatedValue": "concat_ws('<->', gender, 'http://hl7.org/fhir/ValueSet/administrative-gender', 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "gender_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "gender",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "provider",
+                "fieldName": "gender_source_value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "organization",
+      "query": "select *, id as o_id, modified_date as o_modified_date, cast(parse_extension(address.extension[0], 'http://hl7.org/fhir/StructureDefinition/geolocation,latitude', 'valueDecimal', '') as float) as o_latitude, cast(parse_extension(address.extension[0], 'http://hl7.org/fhir/StructureDefinition/geolocation,longitude', 'valueDecimal', '') as float) as o_longitude from organization",
+      "modifiedonField": "o_modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "care_site"
+        },
+        {
+          "tableName": "location"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "o_id",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_site",
+                "fieldName": "care_site_id"
+              },
+              {
+                "tableName": "care_site",
+                "fieldName": "care_site_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "name",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_site",
+                "fieldName": "care_site_name"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "place_of_service_standard",
+          "fieldCalculatedValue": "concat_ws('<->', type[0].coding[0].code, type[0].coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "place_of_service_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "place_of_service_code",
+          "fieldCalculatedValue": "type[0].coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_site",
+                "fieldName": "place_of_service_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "addressId",
+          "fieldCalculatedValue": "concat_ws('', address[0].country, address[0].city, address[0].line[0], address[0].line[1])",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "location_id"
+              },
+              {
+                "tableName": "care_site",
+                "fieldName": "location_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_city",
+          "fieldCalculatedValue": "address[0].city",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "city"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_line_1",
+          "fieldCalculatedValue": "address[0].line[0]",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "address_1"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_line_2",
+          "fieldCalculatedValue": "address[0].line[1]",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "address_2"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_state",
+          "fieldCalculatedValue": "address[0].state",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "state"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_postalCode",
+          "fieldCalculatedValue": "address[0].postalCode",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "zip"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_geolocation_latitude_valueDecimal",
+          "fieldCalculatedValue": "o_latitude",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "latitude"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_geolocation_longitude_valueDecimal",
+          "fieldCalculatedValue": "o_longitude",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "longitude"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "condition",
+      "modifiedonField": "modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "condition_occurrence"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "id",
+          "fieldType": "string",
+          "enabled": true,
+          "isPrimaryKey": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_occurrence_id",
+                "condition": "subject.type = 'Patient'"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_standard",
+          "fieldCalculatedValue": "concat_ws('<->', code.coding[0].code, code.coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "condition_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_NH",
+          "fieldCalculatedValue": "concat_ws('<->', code.coding[0].code, code.coding[0].system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "condition_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "code_coding_code",
+          "fieldCalculatedValue": "code.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_start_datetime",
+          "fieldCalculatedValue": "coalesce(onsetPeriod.start, onsetDateTime)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_start_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_start_date",
+          "fieldCalculatedValue": "to_date(coalesce(onsetPeriod.start, onsetDateTime))",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_start_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_end_datetime",
+          "fieldCalculatedValue": "onsetPeriod.end",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_end_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_end_date",
+          "fieldCalculatedValue": "to_date(onsetPeriod.end)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_status_standard",
+          "fieldCalculatedValue": "concat_ws('<->', clinicalStatus.coding[0].code, clinicalStatus.coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "condition_status_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_status_NH",
+          "fieldCalculatedValue": "concat_ws('<->', clinicalStatus.coding[0].code, clinicalStatus.coding[0].system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "condition_status_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "clinicalStatus_coding_code",
+          "fieldCalculatedValue": "clinicalStatus.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_status_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "encounter_id",
+          "fieldCalculatedValue": "encounter.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_occurrence_id"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "medicationrequest",
+      "query": "select * , id as m_id, modified_date as m_modified_date from medicationrequest",
+      "modifiedonField": "m_modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "drug_exposure"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "m_id",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "drug_exposure",
+                "fieldName": "drug_exposure_id",
+                "condition": "subject.type = 'Patient'"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "drug_standard",
+          "fieldCalculatedValue": "concat_ws('<->', medicationCodeableConcept.coding[0].code, medicationCodeableConcept.coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "drug_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "drug_NH",
+          "fieldCalculatedValue": "concat_ws('<->', medicationCodeableConcept.coding[0].code, medicationCodeableConcept.coding[0].system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "drug_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "medication_codeableConcept_code",
+          "fieldCalculatedValue": "medicationCodeableConcept.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "drug_exposure",
+                "fieldName": "drug_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "drug_exposure_start_datetime",
+          "fieldCalculatedValue": "coalesce(dispenseRequest.validityPeriod.start, authoredOn)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "drug_exposure",
+                "fieldName": "drug_exposure_start_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "drug_exposure_start_date",
+          "fieldCalculatedValue": "to_date(coalesce(dispenseRequest.validityPeriod.start, authoredOn))",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "drug_exposure",
+                "fieldName": "drug_exposure_start_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "dispenseRequest_validityPeriod_end_calc",
+          "fieldCalculatedValue": "dispenseRequest.validityPeriod.end",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "drug_exposure",
+                "fieldName": "drug_exposure_end_datetime"
+              },
+              {
+                "tableName": "drug_exposure",
+                "fieldName": "verbatim_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "drug_exposure_end_date",
+          "fieldCalculatedValue": "to_date(dispenseRequest.validityPeriod.end)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "drug_exposure",
+                "fieldName": "drug_exposure_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "stop_reason_standard",
+          "fieldCalculatedValue": "concat_ws('<->', statusReason.coding.code, statusReason.coding.system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "stop_reason"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "dosageInstruction_text",
+          "fieldCalculatedValue": "dosageInstruction[0].text",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "drug_exposure",
+                "fieldName": "sig"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "route_standard",
+          "fieldCalculatedValue": "concat_ws('<->', dosageInstruction[0].route.coding.code, dosageInstruction[0].route.coding.system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "route_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "route_NH",
+          "fieldCalculatedValue": "concat_ws('<->', dosageInstruction[0].route.coding.code, dosageInstruction[0].route.coding.system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "route_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "dosageInstruction_route_coding_code",
+          "fieldCalculatedValue": "dosageInstruction[0].route.coding.code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "route_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "requester_id",
+          "fieldCalculatedValue": "case when requester.type = 'Practitioner' then requester.id else NULL end",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "provider",
+                "fieldName": "provider_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "encounter_id",
+          "fieldCalculatedValue": "encounter.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_occurrence_id"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "procedure",
+      "query": "select *, id as p_id, modified_date as p_modified_date from procedure",
+      "modifiedonField": "p_modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "procedure_occurrence"
+        },
+        {
+          "tableName": "device_exposure"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "p_id",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_occurrence_id",
+                "condition": "subject.type = 'Patient' and isnull(focalDevice)"
+              },
+              {
+                "tableName": "device_exposure",
+                "fieldName": "device_exposure_id",
+                "condition": "subject.type = 'Patient' and isnotnull(focalDevice)"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "procedure_standard",
+          "fieldCalculatedValue": "concat_ws('<->', code.coding.code, code.coding.system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "procedure_concept_id"
+              },
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "device_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "procedure_NH",
+          "fieldCalculatedValue": "concat_ws('<->', code.coding.code, code.coding.system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "procedure_source_concept_id"
+              },
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "device_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "code_coding_code",
+          "fieldCalculatedValue": "code.coding.code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_source_value"
+              },
+              {
+                "tableName": "device_exposure",
+                "fieldName": "device_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "procedure_start_datetime",
+          "fieldCalculatedValue": "coalesce(performedPeriod.start, performedDateTime)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_datetime"
+              },
+              {
+                "tableName": "device_exposure",
+                "fieldName": "device_exposure_start_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "procedure_start_date",
+          "fieldCalculatedValue": "to_date(coalesce(performedPeriod.start,performedDateTime))",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_date"
+              },
+              {
+                "tableName": "device_exposure",
+                "fieldName": "device_exposure_start_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "performedPeriod_end",
+          "fieldCalculatedValue": "performedPeriod.end",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_end_datetime"
+              },
+              {
+                "tableName": "device_exposure",
+                "fieldName": "device_exposure_end_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "drug_exposure_end_date",
+          "fieldCalculatedValue": "to_date(performedPeriod.end)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_end_date"
+              },
+              {
+                "tableName": "device_exposure",
+                "fieldName": "device_exposure_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "quantity",
+          "fieldCalculatedValue": "1",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "quantity"
+              },
+              {
+                "tableName": "device_exposure",
+                "fieldName": "quantity"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "encounter_id",
+          "fieldCalculatedValue": "encounter.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_occurrence_id"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "documentreference",
+      "query": "select *, id as d_id, modified_date as d_modified_date from documentreference",
+      "modifiedonField": "d_modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "note"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "d_id",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "note",
+                "fieldName": "note_id",
+                "condition": "subject.type = 'Patient'"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "date",
+          "fieldType": "date",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "note",
+                "fieldName": "note_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "dateOnly",
+          "fieldCalculatedValue": "to_date(date)",
+          "fieldType": "date",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "note",
+                "fieldName": "note_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "note_standard",
+          "fieldCalculatedValue": "concat_ws('<->', type.coding[0].code, type.coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "note_class_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "type_coding_code",
+          "fieldCalculatedValue": "type.coding.code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "note",
+                "fieldName": "note_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "description",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "note",
+                "fieldName": "note_title"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "context_encounter_id",
+          "fieldCalculatedValue": "context.encounter[0].id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_occurrence_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "content_attachment_data",
+          "fieldCalculatedValue": "cast(unbase64(content[0].attachment.data) as string)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "note",
+                "fieldName": "note_text"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "content_attachment_language",
+          "fieldCalculatedValue": "content[0].attachment.language",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "note",
+                "fieldName": "language_concept_id"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "specimen",
+      "modifiedonField": "modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "specimen"
+        }
+      ],
+      "enabled": false,
+      "sourceFields": [
+        {
+          "fieldName": "id",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "specimen",
+                "fieldName": "specimen_id",
+                "condition": "subject.type = 'Patient'"
+              },
+              {
+                "tableName": "specimen",
+                "fieldName": "specimen_source_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": false,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "specimen_standard",
+          "fieldCalculatedValue": "concat_ws('<->', type.coding[0].code, type.coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "specimen_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "specimen_standard_NH",
+          "fieldCalculatedValue": "concat_ws('<->', type.coding[0].code, type.coding[0].system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "specimen_source_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "type_coding_code",
+          "fieldCalculatedValue": "type.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "specimen",
+                "fieldName": "specimen_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "collection_collected_dateTime",
+          "fieldCalculatedValue": "collection.collectedDateTime",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "specimen",
+                "fieldName": "specimen_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "specimen_date",
+          "fieldCalculatedValue": "to_date(collection.collectedDateTime)",
+          "fieldType": "date",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "specimen",
+                "fieldName": "specimen_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "collection_quantity_value",
+          "fieldCalculatedValue": "collection.quantity.value",
+          "fieldType": "float",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "specimen",
+                "fieldName": "quantity"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "specimen_unit_standard",
+          "fieldCalculatedValue": "concat_ws('<->', collection.quantity.unit, 'http://unitsofmeasure.org')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "unit_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "collection_quantity_unit",
+          "fieldCalculatedValue": "collection.quantity.unit",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "specimen",
+                "fieldName": "unit_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "anatomic_site_standard",
+          "fieldCalculatedValue": "concat_ws('<->', collection.bodySite.coding[0].code, collection.bodySite.coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "anatomic_site_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "collection_bodySite_coding_code",
+          "fieldCalculatedValue": "collection.bodySite.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "specimen",
+                "fieldName": "anatomic_site_source_value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "imagingstudy",
+      "query": "select *, meta_lastUpdated as is_modified_date, explode(series) as exp_series, exp_series.uid as series_uid from imagingstudy where subject.type='Patient'",
+      "modifiedonField": "is_modified_date",
+      "targetAnchorTables": [
+        {
+          "tableName": "image_occurrence"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "series_uid",
+          "fieldType": "string",
+          "isPrimaryKey": true,
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "image_occurrence",
+                "fieldName": "image_occurrence_id"
+              },
+              {
+                "tableName": "image_occurrence",
+                "fieldName": "image_series_uid"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "patient_id",
+          "fieldCalculatedValue": "subject.identifier.value",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "local_path",
+          "fieldCalculatedValue": "to_json(transform(exp_series.instance, x -> map('instanceid', x.uid, 'local_path', from_json(x.extension, 'array<struct<valueUrl:string,url:string>>')[0].valueUrl)))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "image_occurrence",
+                "fieldName": "local_path"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "started_date",
+          "fieldCalculatedValue": "to_date(exp_series.started)",
+          "fieldType": "date",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "image_occurrence",
+                "fieldName": "image_occurrence_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "series_modality_source",
+          "fieldCalculatedValue": "exp_series.modality.code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "image_occurrence",
+                "fieldName": "modality_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "series_modality_standard",
+          "fieldCalculatedValue": "concat_ws('<->', exp_series.modality.code, exp_series.modality.system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "modality_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "series_modality_NH",
+          "fieldCalculatedValue": "concat_ws('<->', exp_series.modality.code, exp_series.modality.system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "modality_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "study_uid",
+          "fieldCalculatedValue": "identifier[0].value",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "image_occurrence",
+                "fieldName": "image_study_uid"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

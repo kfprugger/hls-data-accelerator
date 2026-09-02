@@ -1,0 +1,101 @@
+{
+    "Clinical": [
+        {
+            "format": "FHIR-NDJSON",
+            "folder_path": "Clinical/FHIR-NDJSON",
+            "file_extensions": ["*.ndjson"],
+            "namespaces": ["Fabric.HDS","AHDS"]
+        }
+    ],
+    "Claims": [
+      {
+        "format": "CCLF",
+        "folder_path": "Claims/CCLF",
+        "file_extensions": [
+          "*.T1000001",
+          "*.T1000002",
+          "*.T1000003",
+          "*.T1000004",
+          "*.T1000005",
+          "*.T1000006",
+          "*.T1000007",
+          "*.T1000008",
+          "*.T1000009"
+        ],
+        "namespaces": [ "Fabric.HDS" ]
+      }
+    ],
+    "Imaging": [
+        {
+            "format": "DICOM",
+            "folder_path": "Imaging/DICOM",
+            "file_extensions": ["*.dcm"],
+            "namespaces": ["Fabric.HDS"]
+        },
+        {
+            "format": "OPERATIONS",
+            "folder_path": "Imaging/OPERATIONS",
+            "file_extensions": ["*.ndjson"],
+            "namespaces": ["Fabric.HDS"]
+        }
+    ],
+    "SDOH": [
+        {
+            "format": "xlsx",
+            "folder_path": "SDOH/XLSX",
+            "file_extensions": [
+                "*.xlsx"
+            ],
+            "namespaces": []
+        },
+        {
+            "format": "xls",
+            "folder_path": "SDOH/XLS",
+            "file_extensions": [
+                "*.xls"
+            ],
+            "namespaces": []
+        },
+        {
+            "format": "csv",
+            "folder_path": "SDOH/CSV",
+            "file_extensions": [
+                "*.csv"
+            ],
+            "namespaces": []
+        }
+    ],
+    "AIEnrichments": [
+        {
+            "format": "Text",
+            "folder_path": "AIEnrichments/Text",
+            "file_extensions": ["*.ndjson", "*.json"],
+            "namespaces": ["Fabric.HDS", "External"]
+        },
+        {
+            "format": "Object",
+            "folder_path": "AIEnrichments/Object",
+            "file_extensions": ["*.ndjson", "*.json"],
+            "namespaces": ["Fabric.HDS", "External"]
+        },
+        {
+            "format": "Embedding",
+            "folder_path": "AIEnrichments/Embedding",
+            "file_extensions": ["*.ndjson", "*.json"],
+            "namespaces": ["Fabric.HDS", "External"]
+        },
+        {
+            "format": "Segmentation2D",
+            "folder_path": "AIEnrichments/Segmentation2D",
+            "file_extensions": ["*.ndjson", "*.json"],
+            "namespaces": ["Fabric.HDS", "External"]
+        },
+        {
+            "format": "Segmentation3D",
+            "folder_path": "AIEnrichments/Segmentation3D",
+            "file_extensions": ["*.ndjson", "*.json"],
+            "namespaces": ["Fabric.HDS", "External"]
+        }
+
+    ]
+}

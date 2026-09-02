@@ -1,0 +1,63 @@
+{
+  "name": "patient address column configuration",
+  "autoFlattenStruct": false,
+  "retainSourceColumns": false,
+  "stringifyComplexTypes": false,
+  "extendWithDefaultRules": false,
+  "explode": {
+    "name": "address_expl",
+    "expression": "address"
+  },
+  "columns": [
+    {
+      "name": "Id",
+      "style": "expr",
+      "expression": "concat(id_orig,'-',index)"
+    },
+    {
+      "name": "PatientId",
+      "style": "expr",
+      "expression": "id_orig"
+    },
+    {
+      "name": "Type",
+      "style": "expr",
+      "expression": "address_expl.type"
+    },
+    {
+      "name": "AddressCity",
+      "style": "expr",
+      "expression": "address_expl.city"
+    },
+    {
+      "name": "AddressState",
+      "style": "expr",
+      "expression": "address_expl.state"
+    },
+    {
+      "name": "AddressCountry",
+      "style": "expr",
+      "expression": "address_expl.country"
+    },
+    {
+      "name": "AddressPostalCode",
+      "style": "expr",
+      "expression": "address_expl.postalCode"
+    },
+    {
+      "name": "AddressLine",
+      "style": "expr",
+      "expression": "concat_ws(' ',address_expl.line)"
+    },
+    {
+      "name": "AddressDistrict",
+      "style": "expr",
+      "expression": "address_expl.district"
+    },
+    {
+      "name": "LastUpdated",
+      "style": "col",
+      "expression": "meta.lastUpdated"
+  }
+  ]
+}

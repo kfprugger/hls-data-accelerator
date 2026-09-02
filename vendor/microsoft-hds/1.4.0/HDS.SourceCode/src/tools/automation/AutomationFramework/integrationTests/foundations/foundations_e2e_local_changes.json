@@ -1,0 +1,557 @@
+{
+    "name": "Foundations Ingestion E2E Local Changes",
+    "description": "An integration test for clinical foundations E2E. Raw -> Bronze -> Silver -> OMOP",
+    "initial_context": {
+        "targetEnvironment": "msit",
+        "workspaceDisplayName": "HDS_IT_Foundations_Dev_E2E",
+        "uniquePrefix": "healthcare1",
+        "dist_path": "dist",
+        "validation_notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/clinical"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws"
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "PublishEnvironment",
+            "description": "Creating and publishing a new test environment",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "TestEnv1",
+                "dist_path": "$dist_path",
+                "workspace": "$workspace",
+                "libraries_relative_path": "/healthcare-libraries/1.2.0/",
+                "environment_yml_path": "src/tools/automation/AutomationFramework/resources/configs/environment.yml",
+                "environment_spark_compute_settings": {
+                    "instancePool": {
+                        "name": "Starter Pool",
+                        "type": "Workspace"
+                    },
+                    "driverCores": 4,
+                    "driverMemory": "56g",
+                    "executorCores": 4,
+                    "executorMemory": "56g",
+                    "dynamicExecutorAllocation": {
+                        "enabled": "False",
+                        "minExecutors": 1,
+                        "maxExecutors": 1
+                    },
+                    "sparkProperties": {},
+                    "runtimeVersion": "1.2"
+                }
+            },
+            "outputs": [
+                "test_environment"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Config Lakehouse with folders",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Config",
+                "description": "A config lakehouse",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "config_lakehouse"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Bronze Lakehouse with folders",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Bronze",
+                "description": "A sample bronze lakehouse",
+                "workspace": "$workspace",
+                "subfolders": [
+                    "Ingest/Clinical/FHIR-NDJSON/Fabric-HDS",
+                    "Process/Clinical/FHIR-NDJSON/Fabric-HDS",
+                    "Failed/Clinical/FHIR-NDJSON/Fabric-HDS",
+                    "External/Clinical/FHIR-NDJSON/AHDS",
+                    "ReferenceData/Clinical/OMOP/Vocab-HDS"
+                ]
+            },
+            "outputs": [
+                "bronze_lakehouse"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "ignore": "false",
+            "description": "Creating Silver Lakehouse",
+            "parameters": {
+                "displayName": "Silver",
+                "description": "A silver lakehouse",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "silver_lakehouse"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "ignore": "false",
+            "description": "Creating Administration Lakehouse",
+            "parameters": {
+                "displayName": "Administration",
+                "description": "An admin lakehouse",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "administration_lakehouse"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating an OMOP lakehouse",
+            "parameters": {
+                "displayName": "OMOP",
+                "description": "A lakehouse for OMOP",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "omop_lakehouse"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Test lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Test",
+                "description": "A lakehouse for test artifacts",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "test_lakehouse"
+            ]
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up config notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "dist/healthcare-artifacts/1.2.0/relational-fhir-data-foundations/Notebooks",
+                "notebookName": "msft_dm4h_setup_and_config_notebook",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "Config",
+                    "known_lakehouses": [
+                        "Config"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_name": "%%workspace_id%%",
+                    "solution_name": "%%config_lakehouse_id%%",
+                    "one_lake_endpoint": "onelake.dfs.fabric.microsoft.com",
+                    "bronze_database_name": "%%bronze_lakehouse_id%%",
+                    "silver_database_name": "%%silver_lakehouse_id%%",
+                    "omop_database_name": "%%omop_lakehouse_id%%",
+                    "administration_database_name": "%%administration_lakehouse_id%%",
+                    "enable_hds_logs": "True",
+                    "enable_packages_mount": "True",
+                    "enable_spark_setup": "False",
+                    "is_config_in_workload": "False",
+                    "packages_mount_name": "/hds_packages",
+                    "temp_packages_folder_path": "tmp/hds_packages"
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up Bronze ingestion notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebookName": "msft_dm4h_raw_bronze_ingestion",
+                "notebooks_path": "dist/healthcare-artifacts/1.2.0/relational-fhir-data-foundations/Notebooks",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "Bronze",
+                    "known_lakehouses": [
+                        "Config",
+                        "Bronze"
+                    ]
+                },
+                "notebook_parameters": {}
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up Silver ingestion notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebookName": "msft_dm4h_bronze_silver_flatten",
+                "notebooks_path": "dist/healthcare-artifacts/1.2.0/relational-fhir-data-foundations/Notebooks",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "Silver",
+                    "known_lakehouses": [
+                        "Config",
+                        "Bronze",
+                        "Silver"
+                    ]
+                },
+                "notebook_parameters": {}
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up Raw process movement notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebookName": "msft_raw_process_movement",
+                "notebooks_path": "dist/healthcare-artifacts/1.2.0/relational-fhir-data-foundations/Notebooks",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "Bronze",
+                    "known_lakehouses": [
+                        "Config",
+                        "Bronze"
+                    ]
+                },
+                "parameters": {}
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up OMOP transformation notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebookName": "msft_dm4h_silver_omop",
+                "notebooks_path": "dist/healthcare-artifacts/1.2.0/omop-analytics/Notebooks",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "OMOP",
+                    "known_lakehouses": [
+                        "Config",
+                        "Silver"
+                    ]
+                },
+                "parameters": {}
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up capability deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "$validation_notebooks_path",
+                "notebookName": "hds_clinical_foundations_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                  "default_lakehouse_name": "Bronze",
+                  "known_lakehouses": [
+                    "Bronze"
+                  ]
+                },
+                "notebook_parameters": {
+                  "workspace_id": "%%workspace_id%%",
+                  "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                  "destination_lakehouse_id": "%%config_lakehouse_id%%",
+                  "destination_lakehouse_path": "Files/Tests/Clinical/clinical_foundations_deployment_tests_results.xml",
+                  "deployment_environment": "$targetEnvironment",
+                  "prefix": "$uniquePrefix",
+                  "expected_installed_capabilities" : { "relational-fhir-data-foundations": "1.2.0", "sample-data": "1.0.0" }
+                }
+            }, 
+            "outputs": [
+                "hds_clinical_foundations_deployment_tests_notebook_id"
+            ]
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up data validation notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "$validation_notebooks_path",
+                "notebookName": "hds_clinical_foundations_data_validation_tests.ipynb",
+                "lakehouseConfig": {
+                  "default_lakehouse_name": "Silver",
+                  "known_lakehouses": [
+                    "Silver"
+                  ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%config_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/Clinical/clinical_data_validation.xml",
+                    "databases": ["Silver"],
+                    "deployment_environment": "$targetEnvironment"
+                  }
+            }, 
+            "outputs": [
+                "hds_clinical_foundations_data_validation_notebook_id"
+            ]
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up generic execution summary tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "$validation_notebooks_path",
+                "notebookName": "hds_generic_execution_summary_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "Administration",
+                    "known_lakehouses": [
+                      "Administration"
+                    ]
+                  },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "admin_lakehouse_id": "%%administration_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/Clinical/generic_execution_summary_test_results.xml",
+                    "target_environment": "$targetEnvironment"
+                  }
+            }, 
+            "outputs": [
+                "hds_generic_execution_summary_tests_notebook_id"
+            ]
+        },
+        {
+            "type": "UploadDeploymentParameters",
+            "description": "Updating and uploading deployment parameters",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "template_path": "src/tools/automation/AutomationFramework/resources/configs/clinical/system_config/localDeploymentParametersConfiguration.json",
+                "target_lakehouse_name": "Administration",
+                "target_lakehouse_path": "system-configurations/deploymentParametersConfiguration.json"
+            }
+        },
+        {
+            "type": "CopyFromStorageAccount",
+            "description": "Copy clinical sample data into Bronze Lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "blob_storage_account_url": "https://dmhdevsharedsa.blob.core.windows.net/",
+                "container_name": "sample-data",
+                "source_subpath": "/msft_dmh_sample_data/5_dataset/5_dataset",
+                "destination_lakehouse_name": "Bronze",
+                "destination_subpath": "Files/Ingest/Clinical/FHIR-NDJSON/FHIR-HDS"
+            }
+        },
+        {
+            "type": "CopyFromStorageAccount",
+            "description": "Copy reference sample data into Bronze Lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "blob_storage_account_url": "https://dmhdevsharedsa.blob.core.windows.net/",
+                "container_name": "sample-data",
+                "source_subpath": "/msft_dmh_omop_vocab_data",
+                "destination_lakehouse_name": "Bronze",
+                "destination_subpath": "Files/ReferenceData/Clinical/OMOP/Vocab-HDS/"
+            }
+        },
+        {
+            "type": "UploadConfigurationFiles",
+            "description": "Uploading configuration files",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "dist_path": "$dist_path"
+            }
+        },
+        {
+            "type": "CreateDataPipeline",
+            "description": "Uploading foundations data pipeline",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "displayName": "msft_omop_analytics",
+                "data_pipeline_path": "/datapipelines/msft_omop_analytics.json",
+                "data_pipeline_configuration": {
+                    "pipeline_name": "msft_omop_analytics",
+                    "pipeline_description": "clinical foundations pipeline",
+                    "activities": [
+                        {
+                            "activity_name": "raw_process_movement",
+                            "notebook_name": "msft_raw_process_movement",
+                            "parameters": {
+                                "inline_params": {
+                                    "value": "{\"modality\":\"Clinical\",\"pipeline_runId\":\"@{pipeline().RunId}\", \"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        {
+                            "activity_name": "fhir_ndjson_bronze_ingestion",
+                            "notebook_name": "msft_dm4h_raw_bronze_ingestion",
+                            "parameters": {
+                                "inline_params": {
+                                    "value": "{\"modality\":\"Clinical\",\"pipeline_runId\":\"@{pipeline().RunId}\", \"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        {
+                            "activity_name": "bronze_silver_flatten",
+                            "notebook_name": "msft_dm4h_bronze_silver_flatten",
+                            "parameters": {
+                                "inline_params": {
+                                    "value": "{\"modality\":\"Clinical\",\"pipeline_runId\":\"@{pipeline().RunId}\", \"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        {
+                            "activity_name": "omop_silver_gold_transformation",
+                            "notebook_name": "msft_dm4h_silver_omop",
+                            "parameters": {
+                                "inline_params": {
+                                    "value": "{\"modality\":\"Clinical\",\"pipeline_runId\":\"@{pipeline().RunId}\", \"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "type": "WaitForEnvironmentPublish",
+            "description": "Waiting for test env to publish",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment"
+            }
+        },
+        {
+            "type": "RunDataPipeline",
+            "description": "Running foundations pipeline",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "dataPipelineName": "msft_omop_analytics",
+                "pipelineParameters": {}
+            },
+            "outputs": [
+                "data_pipeline_id",
+                "pipeline_run_id"
+            ]
+        },
+        {
+            "type": "PollDataPipeline",
+            "description": "Poll data pipeline completion",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$data_pipeline_id",
+                "job_id": "$pipeline_run_id"
+            },
+            "outputs": [
+                "data_pipeline_activity_details"
+            ]
+        },
+        {
+            "type": "RunNotebook",
+            "description": "Running clinical foundations deployment tests notebook",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebook_id": "$hds_clinical_foundations_deployment_tests_notebook_id",
+                "default_lakehouse": "$bronze_lakehouse"
+            },
+            "outputs": [
+                "hds_clinical_foundations_deployment_tests_notebook_run_id"
+            ]
+        },
+        {
+            "type": "RunNotebook",
+            "description": "Running data validation tests notebook",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebook_id": "$hds_clinical_foundations_data_validation_notebook_id",
+                "default_lakehouse": "$bronze_lakehouse"
+            },
+            "outputs": [
+                "hds_clinical_foundations_data_validation_notebook_run_id"
+            ]
+        },
+        {
+            "type": "RunNotebook",
+            "description": "Running generic execution summary tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebook_id": "$hds_generic_execution_summary_tests_notebook_id",
+                "default_lakehouse": "$administration_lakehouse"
+            },
+            "outputs": [
+                "hds_generic_execution_summary_tests_notebook_run_id"
+            ]
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Polling deployment notebook completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$hds_clinical_foundations_deployment_tests_notebook_id",
+                "job_id": "$hds_clinical_foundations_deployment_tests_notebook_run_id"
+            }
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Polling data validation notebook completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$hds_clinical_foundations_data_validation_notebook_id",
+                "job_id": "$hds_clinical_foundations_data_validation_notebook_run_id"
+            }
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Polling execution summary test notebook completion",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$hds_generic_execution_summary_tests_notebook_id",
+                "job_id": "$hds_generic_execution_summary_tests_notebook_run_id"
+            }
+        },
+        {
+            "type": "ParseTestResults",
+            "ignore": "false",
+            "description": "Polling clinical tests completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse": "$test_lakehouse",
+                "deployment_environment": "$targetEnvironment",
+                "test_name": "Clinical foundations integration"
+            }
+        }
+    ]
+}

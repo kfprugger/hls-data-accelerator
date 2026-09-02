@@ -1,0 +1,81 @@
+{
+    "SocialDeterminant": [
+        {
+            "sourcefield": "Social_Determinant_Description",
+            "targetfield": "SocialDeterminantDescription",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Social_Determinant_Name",
+            "targetfield": "SocialDeterminantName",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Social_Determinant_Value",
+            "targetfield": "SocialDeterminantValue",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Unit_Of_Measure",
+            "targetfield": "UnitOfMeasureId",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Social_Determinant_SubCategory_Id",
+            "targetfield": "SocialDeterminantSubCategoryId",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Harmonization_Key",
+            "targetfield": "HarmonizationKey",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Social_Determinant_Id",
+            "targetfield": "SocialDeterminantId",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Location_JSON_String",
+            "targetfield": "LocationJson",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Location_Value",
+            "targetfield": "LocationValue",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        }, 
+        {
+            "sourcefield": "Location_type",
+            "targetfield": "LocationType",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        }, 
+        {
+            "sourcefield": "DataSet_Metadata_Id",
+            "targetfield": "DataSetMetadataId",
+            "targettable": "SocialDeterminant",
+            "fieldType": "string",
+            "targetField": null
+        }
+    ]
+}

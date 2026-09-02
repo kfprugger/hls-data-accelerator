@@ -1,0 +1,1587 @@
+{
+  "type": "record",
+  "name": "SubstanceDefinition",
+  "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+  "namespace": "org.hl7.fhir",
+  "fields": [
+    {
+      "name": "resourceType",
+      "type": "string"
+    },
+    {
+      "name": "id",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "extension",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "meta",
+      "type": {
+        "type": "record",
+        "name": "Meta",
+        "doc": "The metadata about a resource. This is content in the resource that is maintained by the infrastructure. Changes to the content might not always be associated with version changes to the resource.",
+        "namespace": "org.hl7.fhir",
+        "fields": [
+          {
+            "name": "extension",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "id",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "versionId",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "lastUpdated",
+            "type": [
+              "null",
+              {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+              }
+            ],
+            "default": null
+          },
+          {
+            "name": "source",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "profile",
+            "type": {
+              "type": "array",
+              "items": {
+                "name": "profile",
+                "type": "string"
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "security",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "Coding",
+                "doc": "A reference to a code defined by a terminology system.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "system",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "version",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "code",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "display",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "userSelected",
+                    "type": [
+                      "null",
+                      "boolean"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "tag",
+            "type": {
+              "type": "array",
+              "items": "org.hl7.fhir.Coding",
+              "default": []
+            },
+            "default": []
+          }
+        ],
+        "default": {}
+      },
+      "default": {}
+    },
+    {
+      "name": "implicitRules",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "language",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "text",
+      "type": {
+        "type": "record",
+        "name": "Narrative",
+        "doc": "A human-readable summary of the resource conveying the essential clinical and business information for the resource.",
+        "namespace": "org.hl7.fhir",
+        "fields": [
+          {
+            "name": "extension",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "id",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "status",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "div",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          }
+        ],
+        "default": {}
+      },
+      "default": {}
+    },
+    {
+      "name": "contained",
+      "type": {
+        "type": "array",
+        "items": {
+          "name": "resourcelist",
+          "type": "string"
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "identifier",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Identifier",
+          "doc": "An identifier - identifies some entity uniquely and unambiguously. Typically this is used for business identifiers.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "use",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "value",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "system",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "type",
+              "type": {
+                "type": "record",
+                "name": "CodeableConcept",
+                "doc": "A concept that may be defined by a formal reference to a terminology or ontology or may be provided by text.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "coding",
+                    "type": {
+                      "type": "array",
+                      "items": "org.hl7.fhir.Coding",
+                      "default": []
+                    },
+                    "default": []
+                  },
+                  {
+                    "name": "text",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            },
+            {
+              "name": "period",
+              "type": {
+                "type": "record",
+                "name": "Period",
+                "doc": "A time period defined by a start and end date and optionally time.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "start",
+                    "type": [
+                      "null",
+                      {
+                        "type": "long",
+                        "logicalType": "timestamp-micros"
+                      }
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "end",
+                    "type": [
+                      "null",
+                      {
+                        "type": "long",
+                        "logicalType": "timestamp-micros"
+                      }
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            },
+            {
+              "name": "assigner",
+              "type": {
+                "type": "record",
+                "name": "Reference",
+                "doc": "A Reference",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "reference",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "type",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "identifier",
+                    "type": {
+                      "type": "record",
+                      "name": "IdentifierRef",
+                      "doc": "A Identifier",
+                      "namespace": "org.hl7.fhir",
+                      "fields": [
+                        {
+                          "name": "extension",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "use",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "type",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "value",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "system",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "period",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "assigner",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        }
+                      ],
+                      "default": {}
+                    },
+                    "default": {}
+                  },
+                  {
+                    "name": "display",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "version",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "type": "org.hl7.fhir.CodeableConcept",
+      "name": "status",
+      "default": {}
+    },
+    {
+      "name": "classification",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.CodeableConcept",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "type": "org.hl7.fhir.CodeableConcept",
+      "name": "domain",
+      "default": {}
+    },
+    {
+      "name": "grade",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.CodeableConcept",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "description",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "informationSource",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.Reference",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "note",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Annotation",
+          "doc": "A  text note which also  contains information about who made the statement and when.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.Reference",
+              "name": "authorReference",
+              "default": {}
+            },
+            {
+              "name": "authorString",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "time",
+              "type": [
+                "null",
+                {
+                  "type": "long",
+                  "logicalType": "timestamp-micros"
+                }
+              ],
+              "default": null
+            },
+            {
+              "name": "text",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "manufacturer",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.Reference",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "supplier",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.Reference",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "moiety",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "SubstanceDefinition_Moiety",
+          "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "role",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.Identifier",
+              "name": "identifier",
+              "default": {}
+            },
+            {
+              "name": "name",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "stereochemistry",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "opticalActivity",
+              "default": {}
+            },
+            {
+              "name": "molecularFormula",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "amountQuantity",
+              "type": {
+                "type": "record",
+                "name": "Quantity",
+                "doc": "A measured amount (or an amount that can potentially be measured). Note that measured amounts include amounts that are not precisely quantified, including amounts involving arbitrary units and floating currencies.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "value",
+                    "type": [
+                      "null",
+                      {
+                        "type": "bytes",
+                        "logicalType": "decimal",
+                        "precision": 18,
+                        "scale": 5
+                      }
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "comparator",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "unit",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "system",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "code",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            },
+            {
+              "name": "amountString",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "measurementType",
+              "default": {}
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "property",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "SubstanceDefinition_Property",
+          "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "type",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "valueCodeableConcept",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.Quantity",
+              "name": "valueQuantity",
+              "default": {}
+            },
+            {
+              "name": "valueDate",
+              "type": [
+                "null",
+                {
+                  "type": "int",
+                  "logicalType": "date"
+                }
+              ],
+              "default": null
+            },
+            {
+              "name": "valueBoolean",
+              "type": [
+                "null",
+                "boolean"
+              ],
+              "default": null
+            },
+            {
+              "name": "valueAttachment",
+              "type": {
+                "type": "record",
+                "name": "Attachment",
+                "doc": "For referring to data content defined in other formats.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "contentType",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "language",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "data",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "url",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "size",
+                    "type": [
+                      "null",
+                      "int"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "hash",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "title",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "creation",
+                    "type": [
+                      "null",
+                      {
+                        "type": "long",
+                        "logicalType": "timestamp-micros"
+                      }
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "molecularWeight",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "SubstanceDefinition_MolecularWeight",
+          "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "method",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "type",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.Quantity",
+              "name": "amount",
+              "default": {}
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "structure",
+      "type": {
+        "type": "record",
+        "name": "SubstanceDefinition_Structure",
+        "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+        "namespace": "org.hl7.fhir",
+        "fields": [
+          {
+            "name": "extension",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "id",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "type": "org.hl7.fhir.CodeableConcept",
+            "name": "stereochemistry",
+            "default": {}
+          },
+          {
+            "type": "org.hl7.fhir.CodeableConcept",
+            "name": "opticalActivity",
+            "default": {}
+          },
+          {
+            "name": "molecularFormula",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "molecularFormulaByMoiety",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "type": "org.hl7.fhir.SubstanceDefinition_MolecularWeight",
+            "name": "molecularWeight",
+            "default": {}
+          },
+          {
+            "name": "technique",
+            "type": {
+              "type": "array",
+              "items": "org.hl7.fhir.CodeableConcept",
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "sourceDocument",
+            "type": {
+              "type": "array",
+              "items": "org.hl7.fhir.Reference",
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "representation",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "SubstanceDefinition_Representation",
+                "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.CodeableConcept",
+                    "name": "type",
+                    "default": {}
+                  },
+                  {
+                    "name": "representation",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.CodeableConcept",
+                    "name": "format",
+                    "default": {}
+                  },
+                  {
+                    "type": "org.hl7.fhir.Reference",
+                    "name": "document",
+                    "default": {}
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          }
+        ],
+        "default": {}
+      },
+      "default": {}
+    },
+    {
+      "name": "code",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "SubstanceDefinition_Code",
+          "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "code",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "status",
+              "default": {}
+            },
+            {
+              "name": "statusDate",
+              "type": [
+                "null",
+                {
+                  "type": "long",
+                  "logicalType": "timestamp-micros"
+                }
+              ],
+              "default": null
+            },
+            {
+              "name": "note",
+              "type": {
+                "type": "array",
+                "items": "org.hl7.fhir.Annotation",
+                "default": []
+              },
+              "default": []
+            },
+            {
+              "name": "source",
+              "type": {
+                "type": "array",
+                "items": "org.hl7.fhir.Reference",
+                "default": []
+              },
+              "default": []
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "name",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "SubstanceDefinition_Name",
+          "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "type",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "status",
+              "default": {}
+            },
+            {
+              "name": "preferred",
+              "type": [
+                "null",
+                "boolean"
+              ],
+              "default": null
+            },
+            {
+              "name": "language",
+              "type": {
+                "type": "array",
+                "items": "org.hl7.fhir.CodeableConcept",
+                "default": []
+              },
+              "default": []
+            },
+            {
+              "name": "domain",
+              "type": {
+                "type": "array",
+                "items": "org.hl7.fhir.CodeableConcept",
+                "default": []
+              },
+              "default": []
+            },
+            {
+              "name": "jurisdiction",
+              "type": {
+                "type": "array",
+                "items": "org.hl7.fhir.CodeableConcept",
+                "default": []
+              },
+              "default": []
+            },
+            {
+              "name": "synonym",
+              "type": {
+                "type": "array",
+                "items": {
+                  "name": "synonym",
+                  "type": "string"
+                },
+                "default": []
+              },
+              "default": []
+            },
+            {
+              "name": "translation",
+              "type": {
+                "type": "array",
+                "items": {
+                  "name": "translation",
+                  "type": "string"
+                },
+                "default": []
+              },
+              "default": []
+            },
+            {
+              "name": "official",
+              "type": {
+                "type": "array",
+                "items": {
+                  "type": "record",
+                  "name": "SubstanceDefinition_Official",
+                  "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+                  "namespace": "org.hl7.fhir",
+                  "fields": [
+                    {
+                      "name": "extension",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "type": "org.hl7.fhir.CodeableConcept",
+                      "name": "authority",
+                      "default": {}
+                    },
+                    {
+                      "type": "org.hl7.fhir.CodeableConcept",
+                      "name": "status",
+                      "default": {}
+                    },
+                    {
+                      "name": "date",
+                      "type": [
+                        "null",
+                        {
+                          "type": "long",
+                          "logicalType": "timestamp-micros"
+                        }
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": []
+              },
+              "default": []
+            },
+            {
+              "name": "source",
+              "type": {
+                "type": "array",
+                "items": "org.hl7.fhir.Reference",
+                "default": []
+              },
+              "default": []
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "relationship",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "SubstanceDefinition_Relationship",
+          "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.Reference",
+              "name": "substanceDefinitionReference",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "substanceDefinitionCodeableConcept",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "type",
+              "default": {}
+            },
+            {
+              "name": "isDefining",
+              "type": [
+                "null",
+                "boolean"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.Quantity",
+              "name": "amountQuantity",
+              "default": {}
+            },
+            {
+              "name": "amountRatio",
+              "type": {
+                "type": "record",
+                "name": "Ratio",
+                "doc": "A relationship of two Quantity values - expressed as a numerator and a denominator.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.Quantity",
+                    "name": "numerator",
+                    "default": {}
+                  },
+                  {
+                    "type": "org.hl7.fhir.Quantity",
+                    "name": "denominator",
+                    "default": {}
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            },
+            {
+              "name": "amountString",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.Ratio",
+              "name": "ratioHighLimitAmount",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "comparator",
+              "default": {}
+            },
+            {
+              "name": "source",
+              "type": {
+                "type": "array",
+                "items": "org.hl7.fhir.Reference",
+                "default": []
+              },
+              "default": []
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "sourceMaterial",
+      "type": {
+        "type": "record",
+        "name": "SubstanceDefinition_SourceMaterial",
+        "doc": "The detailed description of a substance, typically at a level beyond what is used for prescribing.",
+        "namespace": "org.hl7.fhir",
+        "fields": [
+          {
+            "name": "extension",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "id",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "type": "org.hl7.fhir.CodeableConcept",
+            "name": "type",
+            "default": {}
+          },
+          {
+            "type": "org.hl7.fhir.CodeableConcept",
+            "name": "genus",
+            "default": {}
+          },
+          {
+            "type": "org.hl7.fhir.CodeableConcept",
+            "name": "species",
+            "default": {}
+          },
+          {
+            "type": "org.hl7.fhir.CodeableConcept",
+            "name": "part",
+            "default": {}
+          },
+          {
+            "name": "countryOfOrigin",
+            "type": {
+              "type": "array",
+              "items": "org.hl7.fhir.CodeableConcept",
+              "default": []
+            },
+            "default": []
+          }
+        ],
+        "default": {}
+      },
+      "default": {}
+    }
+  ],
+  "default": null
+}

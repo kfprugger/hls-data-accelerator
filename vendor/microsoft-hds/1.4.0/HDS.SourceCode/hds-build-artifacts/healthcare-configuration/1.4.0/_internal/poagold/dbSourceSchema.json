@@ -1,0 +1,2053 @@
+[
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "INTERNAL_ID",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "EXTERNAL_ID",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "ADRM_ID",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "Idmmarketingcampaigntask_id_mapping",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "InboundOutboundCommunicationIndicator",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationQueueTime",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationMethodId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationDescription",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationText",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationTypeId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "IsoLanguageId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationStartTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationEndTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationNote",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceTable",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationPriorityId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceModifiedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationHoldTime",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "IdmCommunication",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "CommunicationId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceModifiedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "MarketingCampaignId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "MarketingCampaignTaskCommunicationNote",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceTable",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "IdmMarketingCampaignTaskCommunication",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "resourceType",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "id",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "extension",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "implicitRules",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "language",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "text",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "contained",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "identifier",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "active",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "name",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "telecom",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "gender",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "birthDate",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "deceasedBoolean",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "deceasedDateTime",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "address",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "maritalStatus",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "multipleBirthBoolean",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "multipleBirthInteger",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "photo",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "contact",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "communication",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "generalPractitioner",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "managingOrganization",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "link",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "created_date",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta_lastUpdated",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta_lastUpdated_orig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "idOrig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "birthDate_orig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "deceasedDateTime_orig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "extension_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "text_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "contained_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "identifier_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "name_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "telecom_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "address_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "maritalStatus_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "photo_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "contact_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "communication_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "generalPractitioner_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "managingOrganization_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "link_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "modified_date",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "Patient",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "SmsFromTelephoneNumber",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CommunicationId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceTable",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceModifiedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SmsToTelephoneNumber",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "IdmSmsCommunication",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "resourceType",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "id",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "extension",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "implicitRules",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "language",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "text",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "contained",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "identifier",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "status",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "cancelationReason",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "serviceCategory",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "serviceType",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "specialty",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "appointmentType",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "reasonCode",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "reasonReference",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "priority",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "description",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "supportingInformation",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "start",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "end",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "minutesDuration",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "slot",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "created",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "comment",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "patientInstruction",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "basedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "participant",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "requestedPeriod",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "created_date",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta_lastUpdated",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta_lastUpdated_orig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "idOrig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "start_orig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "end_orig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "created_orig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "extension_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "text_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "contained_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "identifier_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "cancelationReason_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "serviceCategory_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "serviceType_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "specialty_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "appointmentType_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "reasonCode_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "reasonReference_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "supportingInformation_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "slot_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "basedOn_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "participant_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "requestedPeriod_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "modified_date",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "Appointment",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "RelatedTaskId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskRelationshipTypeId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "MarketingCampaignTaskRelationshipNote",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceModifiedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "MandatoryOrOptionalPrecedenceIndicator",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskRelationshipLagDays",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "MarketingCampaignId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskPrecedenceNote",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "RelatedMarketingCampaignId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceTable",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "IdmRelatedMarketingCampaignTask",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "PatientName",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "ServiceProviderId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "PatientEnrollmentTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "PatientOwnBirthEventCountTypeId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "PatientSystemAccessOptOut",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "PartyId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CorrelationId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "OrganDonorTypeId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "RacialCategoryId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SexId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "GenderId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceTable",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceModifiedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "PatientUserId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "PatientId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "LivingWillTypeId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CaseManagerId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "BirthTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "EthnicCategoryId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "DeathTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SpeciesId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "IdmPatient",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "EmailId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SentByPartyEmailAddress",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "DocumentId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "EmailSubject",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceTable",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "ReceivedByPartyEmailAddress",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "ReceivedByPartyIpAddress",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "EmailReceivedTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "EmailTypeId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceModifiedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SentByPartyIpAddress",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "IdmEmailCommunication",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "PartyName",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "GlobalLocationNumber",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "PartyTypeId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "PartyId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceTable",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceModifiedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "IdmParty",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "TaskStatusTypeId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskStatusTypeName",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskStatusTypeDescription",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "IdmTaskStatusType",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "resourceType",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "id",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "extension",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "implicitRules",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "language",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "text",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "contained",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "identifier",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "status",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "operationalStatus",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "name",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "alias",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "description",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "mode",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "type",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "telecom",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "address",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "physicalType",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "position",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "managingOrganization",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "partOf",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "hoursOfOperation",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "availabilityExceptions",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "endpoint",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "created_date",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta_lastUpdated",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta_lastUpdated_orig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "idOrig",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "extension_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "meta_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "text_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "contained_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "identifier_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "operationalStatus_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "alias_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "type_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "telecom_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "address_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "physicalType_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "position_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "managingOrganization_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "partOf_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "hoursOfOperation_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "endpoint_string",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "modified_date",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "Location",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    },
+    {
+        "namespace": {
+            "databaseName": "DeltaLake table"
+        },
+        "tableType": "EXTERNAL",
+        "storageDescriptor": {
+            "columns": [
+                {
+                    "name": "TaskNote",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "PlannedNumberManhours",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskLatestCompletionTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskLatestStartTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CriticalPathTaskIndicator",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SequenceNumber",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskActualStartDate",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskFloatHours",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskEarliestCompletionTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskSpecificationStatement",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "MarketingCampaignId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "MarketingCampaignTaskTypeId",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceTable",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "ActualManhoursExpended",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "MilestoneIndicator",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskPlannedStartDate",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "SourceModifiedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskActualFinishDate",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskPlannedFinishDate",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskEarliestStartTimestamp",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskDescription",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "TaskName",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                },
+                {
+                    "name": "CreatedOn",
+                    "originDataTypeName": {
+                        "typeName": "string",
+                        "isNullable": true
+                    }
+                }
+            ]
+        },
+        "name": "IdmMarketingCampaignTask",
+        "entityType": "TABLE",
+        "properties": {
+            "businessArea": "",
+            "path": "",
+            "description": "",
+            "displayName": "",
+            "isDay0Entity": "",
+            "fromBusinessAreas": "",
+            "industries": ""
+        }
+    }
+]

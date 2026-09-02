@@ -1,0 +1,1211 @@
+#!/usr/bin/env pwsh
+# ============================================================================
+# deploy-data-agents.ps1
+# Creates (or updates) Fabric Data Agents for the Medical Device Emulator project.
+#
+# Architecture:
+#   - KQL datasource: TelemetryRaw + AlertHistory (native tables only)
+#   - Lakehouse datasource: Silver Lakehouse (Patient, Condition, Device, etc.)
+#   - Inline KQL query patterns in AI instructions and few-shot examples
+#   No functions, no materialized tables, no external tables as KQL elements.
+#
+# Agents:
+#   1. Patient 360      — Unified patient view across FHIR + real-time telemetry
+#   2. Clinical Triage   — Alert prioritization and risk-based triage support
+#
+# Usage:
+#   .\deploy-data-agents.ps1                        # Deploy both agents
+#   .\deploy-data-agents.ps1 -Patient360Only        # Deploy Patient 360 only
+#   .\deploy-data-agents.ps1 -TriageOnly            # Deploy Clinical Triage only
+#
+# Prerequisites:
+#   - az login completed
+#   - Phase 1 + Phase 2 deployed (Eventhouse, KQL DB, Silver Lakehouse shortcuts)
+#   - Data Agent tenant settings enabled in Fabric admin portal
+# ============================================================================
+
+[CmdletBinding()]
+param (
+    [string]$FabricWorkspaceName = "med-device-rti-hds",
+    [string]$FabricApiBase      = "https://api.fabric.microsoft.com/v1",
+    [switch]$Patient360Only,
+    [switch]$TriageOnly,
+    [switch]$IncludeDicomImaging
+)
+
+$ErrorActionPreference = "Stop"
+
+# ============================================================================
+# AUTH HELPERS (same pattern as deploy-fabric-rti.ps1)
+# ============================================================================
+
+function Get-AccessTokenForResource {
+    param ([string]$ResourceUrl)
+    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl
+    $rawToken = $tokenObj.Token
+    if ($rawToken -is [System.Security.SecureString]) {
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
+        try { return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    }
+    elseif ($rawToken -is [string]) { return $rawToken }
+    else { return $rawToken | ConvertFrom-SecureString -AsPlainText }
+}
+
+function Get-FabricAccessToken { return Get-AccessTokenForResource -ResourceUrl "https://api.fabric.microsoft.com" }
+
+function Invoke-FabricApi {
+    param (
+        [string]$Method   = "GET",
+        [string]$Endpoint,
+        [object]$Body     = $null,
+        [int]$MaxRetries   = 3
+    )
+    $token   = Get-FabricAccessToken
+    $headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" }
+    $uri     = "$FabricApiBase$Endpoint"
+    $bodyJson = if ($Body) { $Body | ConvertTo-Json -Depth 20 -Compress } else { $null }
+
+    for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
+        try {
+            $params = @{ Method = $Method; Uri = $uri; Headers = $headers }
+            if ($bodyJson -and $Method -ne "GET") { $params["Body"] = $bodyJson }
+            return (Invoke-RestMethod @params)
+        }
+        catch {
+            $statusCode = $null
+            try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+            $errBody = ""
+            try { $errBody = $_.ErrorDetails.Message } catch {}
+            if (($statusCode -eq 429 -or $statusCode -ge 500 -or ($statusCode -eq 403 -and $errBody -match "RequestDeniedByInboundPolicy")) -and $attempt -lt $MaxRetries) {
+                $retryAfter = [Math]::Min(120, 10 * [Math]::Pow(2, $attempt - 1))
+                if ($statusCode -eq 429) {
+                    try { $retryAfter = [int]$_.Exception.Response.Headers["Retry-After"] } catch {}
+                }
+                Write-Host "  Fabric API transient HTTP ${statusCode}. Waiting ${retryAfter}s... (attempt $attempt/$MaxRetries)" -ForegroundColor Yellow
+                Start-Sleep -Seconds $retryAfter
+                continue
+            }
+            # 202 long-running operation - poll for completion
+            if ($statusCode -eq 202 -and $attempt -lt $MaxRetries) {
+                $location = $null
+                try { $location = $_.Exception.Response.Headers.Location.ToString() } catch {}
+                if (-not $location) {
+                    try { $location = $_.Exception.Response.Headers["Location"] } catch {}
+                }
+                if ($location) {
+                    Write-Host "  Long-running operation, polling..." -ForegroundColor Gray
+                    Start-Sleep -Seconds 5
+                    try { return (Invoke-RestMethod -Uri $location -Headers $headers -Method GET) } catch {}
+                }
+                Start-Sleep -Seconds 5
+                continue
+            }
+            throw $_
+        }
+    }
+}
+
+function ConvertTo-Base64 {
+    param ([string]$Text)
+    [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Text))
+}
+
+function New-OntologyDatasourceIfAvailable {
+    param(
+        [Parameter(Mandatory)][string]$OntologyName,
+        [Parameter(Mandatory)][string]$UserDescription,
+        [Parameter(Mandatory)][string]$Instructions
+    )
+
+    try {
+        $ontologies = (Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/ontologies").value
+        $ontology = $ontologies | Where-Object { $_.displayName -eq $OntologyName } | Select-Object -First 1
+        if (-not $ontology) { return $null }
+
+        $datasourceJson = (@{
+            '$schema'              = "1.0.0"
+            artifactId             = $ontology.id
+            workspaceId            = $workspaceId
+            displayName            = $OntologyName
+            type                   = "ontology"
+            userDescription        = $UserDescription
+            dataSourceInstructions = $Instructions
+        } | ConvertTo-Json -Depth 10)
+        $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = @() } | ConvertTo-Json -Depth 5)
+        return @{ FolderName = "ontology-$OntologyName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson }
+    } catch {
+        Write-Host "  ⚠ Could not attach ontology datasource '$OntologyName': $($_.Exception.Message)" -ForegroundColor Yellow
+        return $null
+    }
+}
+
+
+# ============================================================================
+# DISCOVER WORKSPACE + KQL DATABASE + SILVER LAKEHOUSE
+# ============================================================================
+
+Write-Host ""
+Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║           FABRIC DATA AGENTS — Deploy                       ║" -ForegroundColor Cyan
+Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host ""
+
+# Find workspace
+$workspaces = Invoke-FabricApi -Endpoint "/workspaces"
+$ws = $workspaces.value | Where-Object { $_.displayName -eq $FabricWorkspaceName }
+if (-not $ws) {
+    Write-Host "ERROR: Workspace '$FabricWorkspaceName' not found." -ForegroundColor Red
+    exit 1
+}
+$workspaceId = $ws.id
+Write-Host "  ✓ Workspace: $FabricWorkspaceName ($workspaceId)" -ForegroundColor Green
+
+# Find KQL Database
+$eventhouseName = "MasimoEventhouse"
+$kqlDbs = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/kqlDatabases"
+$kqlDb  = $kqlDbs.value | Where-Object { $_.displayName -eq $eventhouseName }
+if (-not $kqlDb) {
+    # Fallback: try MasimoKQLDB
+    $kqlDb = $kqlDbs.value | Where-Object { $_.displayName -eq "MasimoKQLDB" }
+}
+if (-not $kqlDb) {
+    Write-Host "ERROR: KQL Database not found. Run Phase 1 first." -ForegroundColor Red
+    exit 1
+}
+$kqlDbId          = $kqlDb.id
+$kqlDbDisplayName = $kqlDb.displayName
+Write-Host "  ✓ KQL Database: $kqlDbDisplayName ($kqlDbId)" -ForegroundColor Green
+
+# Find Silver Lakehouse
+$lakehouses = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/lakehouses"
+$silverLh = $lakehouses.value | Where-Object { $_.displayName -match "[Ss]ilver" }
+if ($silverLh) {
+    if ($silverLh -is [array]) { $silverLh = $silverLh[0] }
+    $silverLhId   = $silverLh.id
+    $silverLhName = $silverLh.displayName
+    Write-Host "  ✓ Silver Lakehouse: $silverLhName ($silverLhId)" -ForegroundColor Green
+} else {
+    Write-Host "  ✗ Silver Lakehouse not found. Agents require the Silver Lakehouse for FHIR data." -ForegroundColor Red
+    Write-Host "    Deploy Healthcare Data Solutions first, then re-run this script." -ForegroundColor Red
+    exit 1
+}
+Write-Host ""
+
+# ============================================================================
+# KQL ELEMENTS: ONLY native tables (no functions, no external tables)
+# ============================================================================
+
+$kqlElements = @(
+    @{ id = [guid]::NewGuid().ToString(); display_name = "TelemetryRaw";  type = "kusto.table"; is_selected = $true },
+    @{ id = [guid]::NewGuid().ToString(); display_name = "AlertHistory";  type = "kusto.table"; is_selected = $true }
+)
+
+# ============================================================================
+# LAKEHOUSE ELEMENTS: Silver tables under dbo schema
+# Matches the working Cohorting Agent pattern: flat schema → table structure,
+# no random GUIDs, type = lakehouse_tables (not "lakehouse")
+# ============================================================================
+
+$silverTables = @(
+    'Patient', 'Condition', 'Device', 'Location', 'Encounter',
+    'Basic', 'Observation', 'MedicationRequest', 'Procedure',
+    'Immunization'
+)
+if ($IncludeDicomImaging) { $silverTables += 'ImagingStudy' }
+$lakehouseElements = @(
+    @{
+        display_name = 'dbo'
+        type         = 'lakehouse_tables.schema'
+        is_selected  = $true
+        children     = @($silverTables | ForEach-Object {
+            @{
+                display_name = $_
+                type         = 'lakehouse_tables.table'
+                is_selected  = $true
+            }
+        })
+    }
+)
+
+# ============================================================================
+# SHARED LAKEHOUSE DATASOURCE INSTRUCTIONS + FEW-SHOTS
+# ============================================================================
+
+$lhDsInstructions = @"
+FHIR R4 clinical data. Query with SQL.
+Tables: dbo.Patient, dbo.Condition, dbo.Device, dbo.Basic, dbo.Location, dbo.Encounter,
+        dbo.Observation, dbo.MedicationRequest, dbo.Procedure, dbo.Immunization, dbo.ImagingStudy.
+
+CRITICAL — dbo.Basic device-to-patient linking:
+- Filter: WHERE JSON_VALUE(code_string, '`$.coding[0].code') = 'device-assoc'
+  The code is 'device-assoc'. NOT 'ASSIGNED'. NOT 'device-association'.
+  NOTE: code_string is a JSON OBJECT not an array. Do NOT use `$[0] prefix. Use `$.coding[0].code
+- Device ref: JSON_VALUE(extension, '`$[0].valueReference.reference') -> 'Device/MASIMO-RADIUS7-NNNN'
+- Patient name: JSON_VALUE(subject_string, '`$.display') -> patient name directly (no Patient join needed for names!)
+- Patient id: JSON_VALUE(subject_string, '`$.idOrig') -> patient UUID for joining to Condition table
+
+Other relationships:
+- dbo.Condition links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(subject_string, '`$.idOrig'), '')) = Patient.idOrig. Condition name: JSON_VALUE(code_string, '`$.coding[0].display')
+- JOIN Basic to Condition (find conditions for device-associated patients):
+    ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), ''))
+    Basic.subject_string.idOrig is a bare UUID; HDS clinical references may be typed (Patient/<uuid>) in msftSourceReference, so strip the prefix before joining.
+- dbo.Patient has patient demographics.
+  IMPORTANT — Patient name extraction from dbo.Patient:
+    name_string is a dynamic column. The FHIR HumanName type does NOT have a 'display' field.
+    It has 'family' and 'given' (array). To extract patient full name:
+      CAST(name_string AS VARCHAR(MAX)) to convert dynamic to string first, then:
+      JSON_VALUE(CAST(name_string AS VARCHAR(MAX)), '$[0].given[0]') AS first_name
+      JSON_VALUE(CAST(name_string AS VARCHAR(MAX)), '$[0].family') AS last_name
+    Or combine: CONCAT(JSON_VALUE(CAST(name_string AS VARCHAR(MAX)), '$[0].given[0]'), ' ', JSON_VALUE(CAST(name_string AS VARCHAR(MAX)), '$[0].family')) AS full_name
+    SHORTCUT: For device-associated patients, use dbo.Basic subject_string.display instead — it already has the full name!
+- dbo.Observation (approx. 2.8M rows): Vital signs, lab results. Links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(subject_string, '`$.idOrig'), '')). Key: code_string (LOINC), valueQuantity_value, valueQuantity_unit, effectiveDateTime.
+- dbo.MedicationRequest (approx. 250K rows): Medication orders. Links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(subject_string, '`$.idOrig'), '')). Key: medicationCodeableConcept_string, status, authoredOn.
+- dbo.Procedure (approx. 1M rows): Surgical/clinical procedures. Links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(subject_string, '`$.idOrig'), '')). Key: code_string (SNOMED), performedDateTime, status.
+- dbo.Immunization (approx. 116K rows): Vaccination records. Links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(patient_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(patient_string, '`$.idOrig'), '')). NOTE: uses patient_string not subject_string. Key: vaccineCode_string, occurrenceDateTime, status.
+- dbo.ImagingStudy: DICOM imaging studies. Links to Patient via COALESCE(NULLIF(JSON_VALUE(subject_string, '`$.identifier.value'), ''), REPLACE(NULLIF(JSON_VALUE(subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(subject_string, '`$.idOrig'), '')). Key: modality, description, started.
+- For unfamiliar tables, run SELECT TOP 5 * FROM dbo.<TableName> first to discover exact column names.
+
+Patient location rules:
+- Patient home/location demographics live in dbo.Patient.address_string, not dbo.Location. dbo.Location is facility/encounter location.
+- For "Atlanta" or "Atlanta area" patient filters, join dbo.Basic to dbo.Patient with JSON_VALUE(b.subject_string, '`$.idOrig') = p.idOrig, then filter/extract address from CAST(p.address_string AS VARCHAR(MAX)).
+- Extract city/state with JSON_VALUE(CAST(p.address_string AS VARCHAR(MAX)), '`$[0].city') and JSON_VALUE(CAST(p.address_string AS VARCHAR(MAX)), '`$[0].state'), and keep CAST(p.address_string AS VARCHAR(MAX)) as fallback when a generated patient uses a nearby metro city instead of literal Atlanta.
+
+If the user asks about SpO2, vitals, pulse rate, or alerts, you MUST ALSO query the KQL datasource. This datasource has NO telemetry.
+"@
+
+$lhFewShots = @(
+    @{
+        id       = "c1c2c3c4-1111-4000-c000-000000000001"
+        question = "List all patients"
+        query    = "SELECT TOP 100 * FROM dbo.Patient"
+    },
+    @{
+        id       = "c1c2c3c4-2222-4000-c000-000000000002"
+        question = "What conditions do patients have?"
+        query    = "SELECT TOP 100 * FROM dbo.Condition"
+    },
+    @{
+        id       = "c1c2c3c4-3333-4000-c000-000000000003"
+        question = "Show device association records that link devices to patients"
+        query    = "SELECT JSON_VALUE(extension, '`$[0].valueReference.reference') AS device_ref, JSON_VALUE(subject_string, '`$.display') AS patient_name, JSON_VALUE(subject_string, '`$.idOrig') AS patient_id FROM dbo.Basic WHERE JSON_VALUE(code_string, '`$.coding[0].code') = 'device-assoc'"
+    },
+    @{
+        id       = "c1c2c3c4-4444-4000-c000-000000000004"
+        question = "Show all devices"
+        query    = "SELECT TOP 100 * FROM dbo.Device"
+    },
+    @{
+        id       = "c1c2c3c4-5555-4000-c000-000000000005"
+        question = "Find patients linked to specific devices like MASIMO-RADIUS7-0033"
+        query    = "SELECT JSON_VALUE(b.extension, '`$[0].valueReference.display') AS device_name, JSON_VALUE(b.subject_string, '`$.display') AS patient_name FROM dbo.Basic b WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%'"
+    },
+    @{
+        id       = "c1c2c3c4-6666-4000-c000-000000000006"
+        question = "Find patients and their conditions for alerting devices MASIMO-RADIUS7-0021 and MASIMO-RADIUS7-0085"
+        query    = "SELECT JSON_VALUE(b.extension, '`$[0].valueReference.reference') AS device_ref, JSON_VALUE(b.subject_string, '`$.display') AS patient_name, JSON_VALUE(c.code_string, '`$.coding[0].display') AS condition_name FROM dbo.Basic b INNER JOIN dbo.Condition c ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND (JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0021%' OR JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0085%')"
+    },
+    @{
+        id       = "c1c2c3c4-7777-4000-c000-000000000007"
+        question = "List all conditions for patients linked to any device"
+        query    = "SELECT JSON_VALUE(b.extension, '`$[0].valueReference.reference') AS device_ref, JSON_VALUE(b.subject_string, '`$.display') AS patient_name, JSON_VALUE(c.code_string, '`$.coding[0].display') AS condition_name, c.onsetDateTime FROM dbo.Basic b INNER JOIN dbo.Condition c ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' ORDER BY patient_name, c.onsetDateTime DESC"
+    },
+    @{
+        id       = "c1c2c3c4-8888-4000-c000-000000000008"
+        question = "Show recent observations or lab results"
+        query    = "SELECT TOP 50 JSON_VALUE(code_string, '`$.coding[0].display') AS observation_type, JSON_VALUE(valueQuantity_string, '`$.value') AS value, JSON_VALUE(valueQuantity_string, '`$.unit') AS unit, effectiveDateTime FROM dbo.Observation ORDER BY effectiveDateTime DESC"
+    },
+    @{
+        id       = "c1c2c3c4-9999-4000-c000-000000000009"
+        question = "What medications are prescribed for patients linked to devices?"
+        query    = "SELECT JSON_VALUE(b.extension, '`$[0].valueReference.reference') AS device_ref, JSON_VALUE(b.subject_string, '`$.display') AS patient_name, JSON_VALUE(m.medicationCodeableConcept_string, '`$.coding[0].display') AS medication, m.status, m.authoredOn FROM dbo.Basic b INNER JOIN dbo.MedicationRequest m ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(m.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(m.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' ORDER BY patient_name, m.authoredOn DESC"
+    },
+    @{
+        id       = "c1c2c3c4-aaaa-4000-c000-000000000010"
+        question = "Show procedure history for patients"
+        query    = "SELECT TOP 50 JSON_VALUE(code_string, '`$.coding[0].display') AS procedure_name, performedDateTime, status FROM dbo.[Procedure] ORDER BY performedDateTime DESC"
+    },
+    @{
+        id       = "c1c2c3c4-bbbb-4000-c000-000000000011"
+        question = "Show immunization history for patients linked to monitoring devices"
+        query    = "SELECT JSON_VALUE(b.extension, '`$[0].valueReference.reference') AS device_ref, JSON_VALUE(b.subject_string, '`$.display') AS patient_name, JSON_VALUE(i.vaccineCode_string, '`$.coding[0].display') AS vaccine, i.occurrenceDateTime, i.status FROM dbo.Basic b INNER JOIN dbo.Immunization i ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(i.patient_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(i.patient_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' ORDER BY patient_name, i.occurrenceDateTime DESC"
+    },
+    @{
+        id       = "c1c2c3c4-cccc-4000-c000-000000000012"
+        question = "How many immunizations does each monitored patient have?"
+        query    = "SELECT JSON_VALUE(b.extension, '`$[0].valueReference.reference') AS device_ref, JSON_VALUE(b.subject_string, '`$.display') AS patient_name, COUNT(*) AS total_immunizations, MAX(i.occurrenceDateTime) AS most_recent_immunization FROM dbo.Basic b INNER JOIN dbo.Immunization i ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(i.patient_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(i.patient_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND i.status = 'completed' GROUP BY JSON_VALUE(b.extension, '`$[0].valueReference.reference'), JSON_VALUE(b.subject_string, '`$.display') ORDER BY total_immunizations ASC"
+    },
+    @{
+        id       = "c1c2c3c4-dddd-4000-c000-000000000013"
+        question = "Show conditions and immunizations together for a specific device like MASIMO-RADIUS7-0033"
+        query    = "SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Condition' AS record_type, JSON_VALUE(c.code_string, '`$.coding[0].display') AS description, c.onsetDateTime AS date_recorded FROM dbo.Basic b INNER JOIN dbo.Condition c ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' UNION ALL SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Immunization' AS record_type, JSON_VALUE(i.vaccineCode_string, '`$.coding[0].display') AS description, i.occurrenceDateTime AS date_recorded FROM dbo.Basic b INNER JOIN dbo.Immunization i ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(i.patient_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(i.patient_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' ORDER BY patient_name, date_recorded DESC"
+    },
+    @{
+        id       = "c1c2c3c4-eeee-4000-c000-000000000014"
+        question = "Which monitored patients with respiratory conditions are missing pneumococcal vaccine?"
+        query    = "SELECT DISTINCT JSON_VALUE(b.extension, '`$[0].valueReference.reference') AS device_ref, JSON_VALUE(b.subject_string, '`$.display') AS patient_name, JSON_VALUE(c.code_string, '`$.coding[0].display') AS respiratory_condition FROM dbo.Basic b INNER JOIN dbo.Condition c ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND (c.code_string LIKE '%asthma%' OR c.code_string LIKE '%copd%' OR c.code_string LIKE '%pneumonia%' OR c.code_string LIKE '%respiratory%') AND JSON_VALUE(b.subject_string, '`$.idOrig') NOT IN (SELECT COALESCE(REPLACE(NULLIF(JSON_VALUE(i.patient_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(i.patient_string, '`$.idOrig'), '')) FROM dbo.Immunization i WHERE i.vaccineCode_string LIKE '%Pneumococcal%')"
+    },
+    @{
+        id       = "c1c2c3c4-ffff-4000-c000-000000000015"
+        question = "Show imaging studies"
+        query    = "SELECT TOP 50 * FROM dbo.ImagingStudy ORDER BY started DESC"
+    },
+    @{
+        id       = "c1c2c3c4-0016-4000-c000-000000000016"
+        question = "Get patient demographics and device info for device MASIMO-RADIUS7-0033"
+        query    = "SELECT JSON_VALUE(b.extension, '`$[0].valueReference.reference') AS device_ref, JSON_VALUE(b.subject_string, '`$.display') AS patient_name, JSON_VALUE(b.subject_string, '`$.idOrig') AS patient_id, p.gender, p.birthDate, p.address_string FROM dbo.Basic b LEFT JOIN dbo.Patient p ON JSON_VALUE(b.subject_string, '`$.idOrig') = p.idOrig WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%'"
+    },
+    @{
+        id       = "c1c2c3c4-0018-4000-c000-000000000018"
+        question = "Find patient assignments and Atlanta-area addresses for urgent alert devices MASIMO-RADIUS7-0021 and MASIMO-RADIUS7-0085"
+        query    = "SELECT REPLACE(JSON_VALUE(b.extension, '`$[0].valueReference.reference'), 'Device/', '') AS device_id, JSON_VALUE(b.subject_string, '`$.display') AS patient_name, JSON_VALUE(b.subject_string, '`$.idOrig') AS patient_id, p.gender, p.birthDate, JSON_VALUE(CAST(p.address_string AS VARCHAR(MAX)), '`$[0].city') AS city, JSON_VALUE(CAST(p.address_string AS VARCHAR(MAX)), '`$[0].state') AS state, CAST(p.address_string AS VARCHAR(MAX)) AS address_json FROM dbo.Basic b LEFT JOIN dbo.Patient p ON JSON_VALUE(b.subject_string, '`$.idOrig') = p.idOrig WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND (JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0021%' OR JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0085%') AND (CAST(p.address_string AS VARCHAR(MAX)) LIKE '%Atlanta%' OR CAST(p.address_string AS VARCHAR(MAX)) LIKE '%Georgia%' OR JSON_VALUE(CAST(p.address_string AS VARCHAR(MAX)), '`$[0].state') = 'GA') ORDER BY device_id"
+    },
+    @{
+        id       = "c1c2c3c4-0017-4000-c000-000000000017"
+        question = "Full patient summary: demographics, conditions, medications, procedures, immunizations, and imaging for device MASIMO-RADIUS7-0033"
+        query    = "SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Condition' AS record_type, JSON_VALUE(c.code_string, '`$.coding[0].display') AS description, c.onsetDateTime AS date_recorded FROM dbo.Basic b INNER JOIN dbo.Condition c ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' UNION ALL SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Medication' AS record_type, JSON_VALUE(m.medicationCodeableConcept_string, '`$.coding[0].display') AS description, m.authoredOn AS date_recorded FROM dbo.Basic b INNER JOIN dbo.MedicationRequest m ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(m.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(m.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' UNION ALL SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Procedure' AS record_type, JSON_VALUE(pr.code_string, '`$.coding[0].display') AS description, pr.performedDateTime AS date_recorded FROM dbo.Basic b INNER JOIN dbo.[Procedure] pr ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(pr.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(pr.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' UNION ALL SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Immunization' AS record_type, JSON_VALUE(i.vaccineCode_string, '`$.coding[0].display') AS description, i.occurrenceDateTime AS date_recorded FROM dbo.Basic b INNER JOIN dbo.Immunization i ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(i.patient_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(i.patient_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' UNION ALL SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'ImagingStudy' AS record_type, COALESCE(img.description, JSON_VALUE(img.modality_string, '`$[0].code')) AS description, img.started AS date_recorded FROM dbo.Basic b INNER JOIN dbo.ImagingStudy img ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(NULLIF(JSON_VALUE(img.subject_string, '`$.identifier.value'), ''), REPLACE(NULLIF(JSON_VALUE(img.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(img.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' ORDER BY patient_name, record_type, date_recorded DESC"
+    }
+)
+
+function Remove-DicomAgentText {
+    param([string]$Text)
+    return ($Text `
+        -replace ', dbo\.ImagingStudy', '' `
+        -replace ', ImagingStudy', '' `
+        -replace ', and imaging studies', '' `
+        -replace ', imaging studies', '' `
+        -replace ', imaging \(ImagingStudy\)', '' `
+        -replace ', imaging, DICOM, radiology, ImagingStudy', '' `
+        -replace 'imaging studies\.', 'clinical records.' `
+        -replace 'imaging studies', 'clinical records' `
+        -replace 'imaging \(ImagingStudy\)', 'clinical records' `
+        -replace 'imaging for ', 'clinical records for ')
+}
+
+if (-not $IncludeDicomImaging) {
+    $lhFewShots = @($lhFewShots | Where-Object { $_.question -notmatch '(?i)imaging|DICOM|ImagingStudy' -and $_.query -notmatch '(?i)ImagingStudy' })
+    $lhDsInstructions = Remove-DicomAgentText $lhDsInstructions
+    Write-Host "  ℹ DICOM ImagingStudy datasource content excluded; enable the DICOM imaging toolkit to deploy DICOM-dependent agent portions." -ForegroundColor Yellow
+}
+
+$lakehouseUserDescription = if ($IncludeDicomImaging) {
+    "FHIR R4 Silver Lakehouse with Patient, Condition, Device, Location, Encounter, Basic, Observation, MedicationRequest, Procedure, Immunization, ImagingStudy tables"
+} else {
+    "FHIR R4 Silver Lakehouse with Patient, Condition, Device, Location, Encounter, Basic, Observation, MedicationRequest, Procedure, Immunization tables"
+}
+
+# ============================================================================
+# HELPER: Create or update a Data Agent
+# ============================================================================
+
+function Deploy-DataAgent {
+    param (
+        [string]$Name,
+        [string]$AiInstructions,
+        [array]$DataSources,  # Array of @{ FolderName; DatasourceJson; FewShotsJson }
+        [string]$Description = ""
+    )
+
+    Write-Host "──────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+    Write-Host "  Deploying Data Agent: $Name" -ForegroundColor White
+    Write-Host "──────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+
+    # --- Check for existing agent ---
+    $agentId = $null
+    try {
+        $existingItems = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/items?type=DataAgent"
+        $existing = $existingItems.value | Where-Object { $_.displayName -eq $Name }
+        if ($existing) { $agentId = $existing.id }
+    } catch {
+        Write-Host "  ⚠ Could not list DataAgent items (type may differ). Trying creation..." -ForegroundColor Yellow
+    }
+
+    if ($agentId) {
+        Write-Host "  ✓ Data Agent already exists: $Name ($agentId)" -ForegroundColor Green
+    } else {
+        Write-Host "  Creating Data Agent item '$Name'..." -ForegroundColor White
+        try {
+            $createBody = @{ displayName = $Name; type = "DataAgent" }
+            if (-not [string]::IsNullOrWhiteSpace($Description)) { $createBody["description"] = $Description }
+            $resp = Invoke-FabricApi -Method POST -Endpoint "/workspaces/$workspaceId/items" -Body $createBody
+            $agentId = $resp.id
+            Write-Host "  ✓ Created: $Name ($agentId)" -ForegroundColor Green
+        } catch {
+            $errBody = $_.ErrorDetails.Message
+            Write-Host "  ✗ Failed to create Data Agent: $errBody" -ForegroundColor Red
+            Write-Host "    $($_.Exception.Message)" -ForegroundColor DarkRed
+            throw "Failed to create Data Agent '$Name'"
+        }
+    }
+
+    # --- Build definition parts ---
+
+    # 1) Top-level data_agent.json
+    $dataAgentJson = @{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataAgent/2.1.0/schema.json" } | ConvertTo-Json -Depth 5
+
+    # 2) Stage config (AI instructions)
+    $stageConfigJson = @{
+        '$schema'      = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/stageConfiguration/1.0.0/schema.json"
+        aiInstructions = $AiInstructions
+    } | ConvertTo-Json -Depth 5
+
+    # 3) Assemble definition parts from all data sources
+    $parts = [System.Collections.ArrayList]@(
+        @{
+            path        = "Files/Config/data_agent.json"
+            payload     = (ConvertTo-Base64 $dataAgentJson)
+            payloadType = "InlineBase64"
+        },
+        @{
+            path        = "Files/Config/draft/stage_config.json"
+            payload     = (ConvertTo-Base64 $stageConfigJson)
+            payloadType = "InlineBase64"
+        }
+    )
+
+    foreach ($ds in $DataSources) {
+        $null = $parts.Add(@{
+            path        = "Files/Config/draft/$($ds.FolderName)/datasource.json"
+            payload     = (ConvertTo-Base64 $ds.DatasourceJson)
+            payloadType = "InlineBase64"
+        })
+        $null = $parts.Add(@{
+            path        = "Files/Config/draft/$($ds.FolderName)/fewshots.json"
+            payload     = (ConvertTo-Base64 $ds.FewShotsJson)
+            payloadType = "InlineBase64"
+        })
+    }
+
+    $definition = @{ definition = @{ parts = @($parts) } }
+
+    # --- Apply definition ---
+    Write-Host "  Applying definition (AI instructions + data sources + few-shot examples)..." -ForegroundColor White
+    try {
+        $null = Invoke-FabricApi -Method POST `
+            -Endpoint "/workspaces/$workspaceId/items/$agentId/updateDefinition" `
+            -Body $definition `
+            -MaxRetries 8
+        Write-Host "  ✓ Definition applied successfully" -ForegroundColor Green
+    } catch {
+        $errBody = $_.ErrorDetails.Message
+        Write-Host "  ⚠ Definition update failed: $errBody" -ForegroundColor Yellow
+        Write-Host "    The agent was created but may need manual configuration." -ForegroundColor Yellow
+        Write-Host "    Open it in Fabric portal to add datasources." -ForegroundColor Yellow
+        throw "Definition update failed for Data Agent '$Name'"
+    }
+
+    Write-Host "  ✓ Agent URL: https://app.fabric.microsoft.com/groups/$workspaceId/aiskills/$agentId" -ForegroundColor Cyan
+    Write-Host ""
+    return $agentId
+}
+
+# ============================================================================
+# AGENT 1: PATIENT 360
+# ============================================================================
+
+if (-not $TriageOnly) {
+
+    $patient360Instructions = @"
+You are a Patient 360 clinical assistant for a medical device monitoring system.
+You help clinicians get a unified, comprehensive view of any patient by combining
+FHIR R4 clinical data with real-time pulse oximeter telemetry.
+
+======================================================================
+QUERY ROUTING RULES (READ FIRST)
+======================================================================
+You have TWO datasources. Route queries based on these rules:
+
+KEYWORDS THAT REQUIRE KQL ($kqlDbDisplayName):
+  SpO2, oxygen, saturation, pulse rate, heart rate, vitals, readings,
+  telemetry, device status, online, offline, alerts, trend, waveform
+  -> ALWAYS query KQL for these. Never skip KQL when these words appear.
+
+KEYWORDS THAT REQUIRE LAKEHOUSE ($silverLhName):
+  patient, name, demographics, condition, diagnosis, respiratory,
+  encounter, location, device assignment, FHIR, medication, prescription,
+  procedure, surgery, immunization, vaccination, observation, lab result,
+  imaging, DICOM, radiology, ImagingStudy
+  -> ALWAYS query Lakehouse for these.
+
+WHEN BOTH KEYWORD TYPES APPEAR IN ONE QUESTION:
+  You MUST query BOTH datasources in separate steps. Do NOT stop after
+  querying just one. Example: "patients with respiratory conditions and
+  low SpO2" contains BOTH respiratory (lakehouse) AND SpO2 (KQL), so
+  you MUST run TWO queries: one SQL against lakehouse, one KQL query.
+
+ORDER: For questions mentioning vitals/SpO2/alerts, query KQL FIRST
+  to get the real-time data, then query Lakehouse for patient context.
+  For questions focused on patient demographics, query Lakehouse first.
+
+======================================================================
+DATASOURCE 1: KQL Database ($kqlDbDisplayName)
+======================================================================
+Contains real-time Masimo pulse oximeter telemetry.
+Tables: TelemetryRaw, AlertHistory
+
+TelemetryRaw columns:
+  - device_id (string): e.g. "MASIMO-RADIUS7-0001"
+  - timestamp (STRING — ALWAYS wrap with todatetime(timestamp))
+  - telemetry (dynamic bag): spo2, pr, pi, pvi, sphb, signal_iq
+  Extract values: todouble(telemetry.spo2), toint(telemetry.pr), etc.
+
+KQL QUERY PATTERNS:
+
+1) LATEST READINGS PER DEVICE:
+   TelemetryRaw
+   | summarize arg_max(todatetime(timestamp), *) by device_id
+   | project device_id, last_reading_est = datetime_add('hour', -5, todatetime(timestamp)), spo2 = todouble(telemetry.spo2), pr = toint(telemetry.pr), pi = todouble(telemetry.pi), pvi = toint(telemetry.pvi), sphb = todouble(telemetry.sphb), signal_iq = toint(telemetry.signal_iq)
+
+2) DEVICE STATUS — ONLINE/STALE/OFFLINE:
+   TelemetryRaw
+   | summarize last_seen = max(todatetime(timestamp)) by device_id
+   | extend status = case(datetime_diff('second', now(), last_seen) < 30, "ONLINE",
+                          datetime_diff('second', now(), last_seen) < 120, "STALE", "OFFLINE")
+
+3) VITALS TREND (replace Xm with e.g. 30m):
+   TelemetryRaw | where todatetime(timestamp) > ago(Xm)
+   | summarize readings=count(), avg_spo2=round(avg(todouble(telemetry.spo2)),1), min_spo2=round(min(todouble(telemetry.spo2)),1), max_spo2=round(max(todouble(telemetry.spo2)),1), avg_pr=round(avg(todouble(telemetry.pr)),0), min_pr=min(toint(telemetry.pr)), max_pr=max(toint(telemetry.pr)), last_reading_est=datetime_add('hour', -5, max(todatetime(timestamp))) by device_id
+
+4) SPO2 ALERTS (devices with SpO2 < 94):
+   TelemetryRaw | where todatetime(timestamp) > ago(5m)
+   | summarize min_spo2=round(min(todouble(telemetry.spo2)),1), avg_spo2=round(avg(todouble(telemetry.spo2)),1), readings=count(), last_reading_est=datetime_add('hour', -5, max(todatetime(timestamp))) by device_id
+   | where min_spo2 < 94
+   | extend alert_tier = case(min_spo2 < 85, "CRITICAL", min_spo2 < 90, "URGENT", "WARNING")
+
+5) PULSE RATE ALERTS (brady/tachycardia):
+   TelemetryRaw | where todatetime(timestamp) > ago(5m)
+   | summarize min_pr=min(toint(telemetry.pr)), max_pr=max(toint(telemetry.pr)), readings=count(), last_reading_est=datetime_add('hour', -5, max(todatetime(timestamp))) by device_id
+   | where max_pr > 110 or min_pr < 50
+   | extend alert_tier = case(max_pr > 150 or min_pr < 40, "CRITICAL", max_pr > 130 or min_pr < 45, "URGENT", "WARNING")
+
+ALERT THRESHOLDS: SpO2: CRITICAL <85%, URGENT 85-89%, WARNING 90-93%. PR: CRITICAL >150/<40, URGENT 120-150/40-50.
+
+======================================================================
+DATASOURCE 2: Silver Lakehouse ($silverLhName)
+======================================================================
+Contains FHIR R4 clinical data. Query with SQL.
+
+TABLES AND RELATIONSHIPS:
+  dbo.Patient — Patient demographics (approx. 7,800). Key columns: id, idOrig, name (Object), name_string (String/JSON), gender, birthDate
+  dbo.Condition — Diagnoses/conditions (approx. 244K). Key columns: code (Object), code_string (String/JSON), subject (Object), subject_string (String/JSON)
+  dbo.Device — Device records (approx. 100): identifier, type_coding, serialNumber, status
+  dbo.Basic — DeviceAssociation records linking devices to patients (approx. 100). This is THE key table for device-patient mapping.
+  dbo.Location — Facility/location info
+  dbo.Encounter — Patient visits/admissions (approx. 363K). Key columns: class, type_string, period_start, period_end, subject_string
+  dbo.Observation — Vital signs, lab results (approx. 2.8M). Key cols: code_string (LOINC), valueQuantity_value, valueQuantity_unit, effectiveDateTime, subject_string. Links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(subject_string, '`$.idOrig'), '')).
+  dbo.MedicationRequest — Medication orders (approx. 250K). Key cols: medicationCodeableConcept_string, status, authoredOn, subject_string. Links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(subject_string, '`$.idOrig'), '')).
+  dbo.Procedure — Surgical/clinical procedures (approx. 1M). Key cols: code_string (SNOMED), performedDateTime, status, subject_string. Links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(subject_string, '`$.idOrig'), '')).
+  dbo.Immunization — Vaccination records (approx. 116K). Key cols: vaccineCode_string, occurrenceDateTime, status, patient_string. Links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(patient_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(patient_string, '`$.idOrig'), '')). NOTE: uses patient_string not subject_string.
+  dbo.ImagingStudy — DICOM imaging studies. Key cols: modality, description, started, numberOfSeries, numberOfInstances, subject_string. Links to Patient via COALESCE(NULLIF(JSON_VALUE(subject_string, '`$.identifier.value'), ''), REPLACE(NULLIF(JSON_VALUE(subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(subject_string, '`$.idOrig'), '')).
+
+  JOINING NEW TABLES TO DEVICE-ASSOCIATED PATIENTS:
+  To find Observations/Medications/Procedures/Immunizations for device-linked patients:
+    SELECT ... FROM dbo.Basic b
+    INNER JOIN dbo.<Table> t ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(t.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(t.subject_string, '`$.idOrig'), ''))
+    WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc'
+  For Immunization, use patient_string instead of subject_string:
+    INNER JOIN dbo.Immunization i ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(i.patient_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(i.patient_string, '`$.idOrig'), ''))
+
+  DISCOVERING TABLE SCHEMAS:
+  For tables you haven't queried before, run SELECT TOP 5 * FROM dbo.<TableName> first to discover the exact column names.
+
+DEVICE-TO-PATIENT LINKING VIA dbo.Basic (CRITICAL):
+  The Basic table has 100 DeviceAssociation records. Key columns:
+  - code_string: JSON object (NOT array) containing the code. The code value is 'device-assoc' (NOT 'ASSIGNED', NOT 'device-association')
+    Example: {"coding":[{"code":"device-assoc","display":"Device Association",...}],...}
+  - extension: STRING containing JSON array with the device reference.
+    Example: [{"url":"...associated-device","valueReference":{"reference":"Device/MASIMO-RADIUS7-0099","display":"Masimo Radius-7 (MASIMO-RADIUS7-0099)"}},...] 
+    To extract device_id: look for 'Device/' in the valueReference.reference and strip the prefix.
+  - subject_string: JSON containing patient info INCLUDING the patient name directly in the display field!
+    Example: {"display":"Gail741 Zack583 Lowe577","idOrig":"12a89f61-...","msftSourceReference":"Patient/12a89f61-..."}
+    You can get patient name directly from subject_string display field WITHOUT joining to dbo.Patient!
+
+  EXAMPLE SQL for device-patient mapping:
+  SELECT
+    JSON_VALUE(b.extension, '`$[0].valueReference.reference') AS device_ref,
+    JSON_VALUE(b.subject_string, '`$.display') AS patient_name,
+    JSON_VALUE(b.subject_string, '`$.idOrig') AS patient_id
+  FROM dbo.Basic b
+  WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc'
+
+  To match specific device IDs from KQL results:
+  SELECT
+    JSON_VALUE(b.extension, '`$[0].valueReference.reference') AS device_ref,
+    JSON_VALUE(b.subject_string, '`$.display') AS patient_name
+  FROM dbo.Basic b
+  WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc'
+    AND JSON_VALUE(b.extension, '`$[0].valueReference.display') LIKE '%MASIMO-RADIUS7-0033%'
+
+CONDITION LOOKUP:
+  dbo.Condition links to Patient via COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) = p.idOrig
+  Condition names are in code_string JSON: JSON_VALUE(code_string, '`$.coding[0].display')
+  For text match: code_string LIKE '%asthma%' OR code_string LIKE '%copd%' OR code_string LIKE '%pneumonia%' etc.
+  For respiratory conditions, search for: asthma, copd, pneumonia, lung, respiratory, bronchitis
+
+======================================================================
+CROSS-DATASOURCE WORKFLOW (CRITICAL)
+======================================================================
+When a question involves BOTH patient clinical data AND device telemetry,
+you MUST query BOTH datasources in separate steps. Examples:
+
+  Q: "Which patients with respiratory conditions have low SpO2?"
+  STEP 1 — Query KQL: Get devices with SpO2 < 94% from TelemetryRaw
+  STEP 2 — Query LAKEHOUSE: Get device-to-patient mapping from Basic (filter code = 'device-assoc'), join Condition for respiratory
+  STEP 3 — Correlate device IDs between the two result sets
+
+  Q: "Give me a full patient summary for Smith"
+  STEP 1 — Query LAKEHOUSE: Get patient demographics, conditions, device assignments from Basic
+  STEP 2 — Query KQL: Get latest vitals for the patient's assigned device
+  STEP 3 — Present unified 360 view
+
+  Q: "Check SpO2 and look up patient info"
+  STEP 1 — Query KQL: Get SpO2 data from TelemetryRaw
+  STEP 2 — Query LAKEHOUSE: Look up patient info from Basic table (code = 'device-assoc'), patient name is in subject_string display
+
+  Q: "Give me a complete clinical summary for a patient"
+  STEP 1 — Query LAKEHOUSE: Get patient demographics from dbo.Patient
+  STEP 2 — Query LAKEHOUSE: Get conditions (Condition), medications (MedicationRequest), procedures (Procedure), immunizations (Immunization), imaging (ImagingStudy) — all joined via patient idOrig
+  STEP 3 — Query LAKEHOUSE: Get device assignment from dbo.Basic (code = 'device-assoc')
+  STEP 4 — Query KQL: Get latest vitals for the patient's assigned device
+  STEP 5 — Present unified comprehensive 360 view
+
+DEVICE ID FORMAT: MASIMO-RADIUS7-NNNN (e.g., MASIMO-RADIUS7-0001, MASIMO-RADIUS7-0033)
+  This format appears in TelemetryRaw.device_id (KQL) and Basic.extension valueReference (Lakehouse).
+
+IMPORTANT:
+- All queries are read-only. Never INSERT, UPDATE, or DELETE.
+- For ANY question involving patients + vitals/telemetry, ALWAYS query BOTH datasources.
+- Query the KQL datasource for: vitals, telemetry, SpO2, pulse rate, device status, alerts.
+- Query the Lakehouse datasource for: patient demographics, conditions, diagnoses, devices, encounters, locations, observations, medications, procedures, immunizations, imaging studies.
+- Do NOT try to query patient data from KQL — it is only in the Lakehouse.
+- Do NOT try to query telemetry from the Lakehouse — it is only in KQL.
+- NEVER answer a question about SpO2, vitals, or alerts without querying KQL.
+- NEVER stop after querying only one datasource if the question spans both clinical and telemetry domains.
+- In dbo.Basic, the code for device associations is 'device-assoc'. NOT 'ASSIGNED', NOT 'device-association'.
+
+VITAL SIGNS TIMESTAMP RULE (MANDATORY — READ CAREFULLY):
+Whenever you return ANY Masimo vital sign data (SpO2, pulse rate, PI, PVI, SpHb, signal IQ)
+in your response — whether in a table, bullet list, or narrative text — you MUST ALWAYS
+include the timestamp of when those vitals were last collected from the Masimo device.
+- Convert ALL timestamps to Eastern Standard Time (EST / UTC-5) before displaying.
+- Format as: "Last collected: <timestamp> EST" or include a "Last Reading (EST)" column.
+- In KQL queries, project the timestamp and convert: last_reading_est = datetime_add('hour', -5, todatetime(timestamp))
+- NEVER present vital sign values without their collection timestamp in EST.
+- NEVER summarize vitals as just "SpO2=94%, PR=72" — ALWAYS add when it was measured.
+- This applies to ALL responses: latest readings, alerts, trends, triage boards, and
+  cross-datasource patient summaries that mention any Masimo metric.
+- If the query already returns a timestamp/last_time/last_reading column, display it.
+  If not, re-query to get it.
+"@
+    if (-not $IncludeDicomImaging) { $patient360Instructions = Remove-DicomAgentText $patient360Instructions }
+
+    $p360KqlDsInstructions = @"
+Real-time Masimo pulse oximeter telemetry. Tables: TelemetryRaw, AlertHistory.
+timestamp is STRING — ALWAYS wrap with todatetime(timestamp).
+Telemetry values are in a dynamic bag: todouble(telemetry.spo2), toint(telemetry.pr), etc.
+ALWAYS query this datasource when the user asks about: SpO2, oxygen, pulse rate, heart rate, vitals, readings, telemetry, device status, alerts, trends.
+If the question ALSO mentions patients/conditions/diagnoses, query this datasource FIRST for the vitals data, THEN query the Lakehouse for patient context. NEVER skip this datasource for vitals questions.
+
+TIMESTAMP RULE: EVERY query you write against this datasource MUST project the collection timestamp.
+Always include: last_reading_est = datetime_add('hour', -5, todatetime(timestamp)) to convert to Eastern Standard Time.
+When presenting results to the user, ALWAYS show this timestamp as "Last Reading (EST)" — never omit it.
+Example: | project device_id, spo2, pr, last_reading_est = datetime_add('hour', -5, todatetime(timestamp))
+"@
+
+    $p360FewShots = @(
+        @{
+            id       = "a1b2c3d4-1111-4000-a000-000000000001"
+            question = "Show me the latest vital signs for all devices"
+            query    = @"
+TelemetryRaw
+| summarize arg_max(todatetime(timestamp), *) by device_id
+| project device_id,
+          last_reading_est = datetime_add('hour', -5, todatetime(timestamp)),
+          spo2 = todouble(telemetry.spo2),
+          pr = toint(telemetry.pr),
+          pi = todouble(telemetry.pi),
+          pvi = toint(telemetry.pvi),
+          sphb = todouble(telemetry.sphb),
+          signal_iq = toint(telemetry.signal_iq)
+| order by device_id asc
+"@
+        },
+        @{
+            id       = "a1b2c3d4-2222-4000-a000-000000000002"
+            question = "How many devices are currently online vs offline?"
+            query    = @"
+TelemetryRaw
+| summarize last_seen = max(todatetime(timestamp)) by device_id
+| extend status = case(
+    datetime_diff('second', now(), last_seen) < 30, "ONLINE",
+    datetime_diff('second', now(), last_seen) < 120, "STALE",
+    "OFFLINE")
+| summarize count() by status
+"@
+        },
+        @{
+            id       = "a1b2c3d4-3333-4000-a000-000000000003"
+            question = "Show the vitals trend for device MASIMO-RADIUS7-0001 over the last 30 minutes"
+            query    = @"
+TelemetryRaw
+| where device_id == "MASIMO-RADIUS7-0001"
+| where todatetime(timestamp) > ago(30m)
+| project reading_time_est = datetime_add('hour', -5, todatetime(timestamp)),
+          spo2 = todouble(telemetry.spo2),
+          pr = toint(telemetry.pr),
+          pi = todouble(telemetry.pi),
+          pvi = toint(telemetry.pvi),
+          sphb = todouble(telemetry.sphb),
+          signal_iq = toint(telemetry.signal_iq)
+| order by reading_time_est asc
+"@
+        },
+        @{
+            id       = "a1b2c3d4-4444-4000-a000-000000000004"
+            question = "Which devices have SpO2 alerts right now?"
+            query    = @"
+TelemetryRaw
+| where todatetime(timestamp) > ago(5m)
+| summarize
+    min_spo2 = round(min(todouble(telemetry.spo2)), 1),
+    avg_spo2 = round(avg(todouble(telemetry.spo2)), 1),
+    readings = count(),
+    last_reading_est = datetime_add('hour', -5, max(todatetime(timestamp)))
+  by device_id
+| where min_spo2 < 94
+| extend alert_tier = case(min_spo2 < 85, "CRITICAL", min_spo2 < 90, "URGENT", "WARNING")
+| project device_id, alert_tier, min_spo2, avg_spo2, readings, last_reading_est
+| order by alert_tier asc, min_spo2 asc
+"@
+        },
+        @{
+            id       = "a1b2c3d4-5555-4000-a000-000000000005"
+            question = "Show rolling vitals statistics for all devices over the last 10 minutes"
+            query    = @"
+TelemetryRaw
+| where todatetime(timestamp) > ago(10m)
+| summarize
+    readings = count(),
+    avg_spo2 = round(avg(todouble(telemetry.spo2)), 1),
+    min_spo2 = round(min(todouble(telemetry.spo2)), 1),
+    max_spo2 = round(max(todouble(telemetry.spo2)), 1),
+    avg_pr = round(avg(todouble(telemetry.pr)), 0),
+    min_pr = min(toint(telemetry.pr)),
+    max_pr = max(toint(telemetry.pr)),
+    last_reading = max(todatetime(timestamp))
+  by device_id
+| extend last_reading_est = datetime_add('hour', -5, last_reading),
+         minutes_since_last = round(datetime_diff('second', now(), last_reading) / 60.0, 1)
+| order by device_id asc
+"@
+        }
+    )
+
+    # --- Build data sources ---
+    $kqlDatasourceJson = (@{
+        '$schema'              = "1.0.0"
+        artifactId             = $kqlDbId
+        workspaceId            = $workspaceId
+        displayName            = $kqlDbDisplayName
+        type                   = "kusto"
+        userDescription        = "KQL database with Masimo telemetry, clinical alerts, device status, and alert-history tables for clinical device workflows"
+        dataSourceInstructions = $p360KqlDsInstructions
+        elements               = $kqlElements
+    } | ConvertTo-Json -Depth 10)
+
+    $kqlFewShotsJson = (@{
+        '$schema' = "1.0.0"
+        fewShots  = $p360FewShots
+    } | ConvertTo-Json -Depth 10)
+
+    $lhDatasourceJson = (@{
+        '$schema'              = "1.0.0"
+        artifactId             = $silverLhId
+        workspaceId            = $workspaceId
+        displayName            = $silverLhName
+        type                   = "lakehouse_tables"
+        userDescription        = $lakehouseUserDescription
+        dataSourceInstructions = $lhDsInstructions
+        elements               = $lakehouseElements
+    } | ConvertTo-Json -Depth 20)
+
+    $lhFewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $lhFewShots } | ConvertTo-Json -Depth 10)
+
+    $p360DataSources = @(
+        @{ FolderName = "kusto-$kqlDbDisplayName";          DatasourceJson = $kqlDatasourceJson; FewShotsJson = $kqlFewShotsJson },
+        @{ FolderName = "lakehouse_tables-$silverLhName";   DatasourceJson = $lhDatasourceJson;  FewShotsJson = $lhFewShotsJson }
+    )
+    $clinicalOntologyDs = New-OntologyDatasourceIfAvailable `
+        -OntologyName "ClinicalDeviceOntology" `
+        -UserDescription "Clinical device semantic layer for patients, devices, conditions, encounters, observations, imaging, telemetry, and alerts." `
+        -Instructions "Use this ontology for clinical device vocabulary and relationship grounding only. It maps Patient↔Device, Patient→Encounter, Patient→Condition, Patient→Observation, Patient→MedicationRequest, Patient→ImagingStudy, Device→DeviceTelemetry, and Device→ClinicalAlert, but the actual patient-device assignment rows and patient home/location demographics must still be queried from the Lakehouse dbo.Basic and dbo.Patient tables. Do not use it for payer or claims reasoning."
+    if ($clinicalOntologyDs) { $p360DataSources += $clinicalOntologyDs }
+
+
+    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Magenta
+    Write-Host "  AGENT 1: Patient 360" -ForegroundColor Magenta
+    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Magenta
+    $p360Id = Deploy-DataAgent `
+        -Name "Patient 360" `
+        -AiInstructions $patient360Instructions `
+        -DataSources $p360DataSources `
+        -Description "Clinical device agent for patient summaries that federate FHIR/HDS Silver clinical context, Masimo telemetry, DICOM imaging context, and ClinicalDeviceOntology."
+}
+
+# ============================================================================
+# AGENT 2: CLINICAL TRIAGE
+# ============================================================================
+
+if (-not $Patient360Only) {
+
+    $triageInstructions = @"
+You are a Clinical Triage Assistant for a hospital device monitoring system.
+You help clinical staff prioritize patients based on real-time vital sign alerts
+and alert severity. Your role is to support rapid triage decisions by presenting
+the most critical situations first.
+
+DATA SOURCES:
+- TelemetryRaw (KQL table): Real-time Masimo pulse oximeter data. Columns: device_id (string), timestamp (STRING — always wrap with todatetime(timestamp)), telemetry (dynamic bag with: spo2, pr, pi, pvi, sphb, signal_iq).
+- AlertHistory (KQL table): Historical alert records. NOTE: AlertHistory may be empty or stale. ALWAYS prefer TelemetryRaw for current alert detection.
+- $silverLhName (Lakehouse): FHIR R4 patient data. This is the ONLY source for patient-device mapping, patient names, clinical conditions, medications, procedures, immunizations, observations, and imaging studies.
+
+CRITICAL: timestamp is STRING. ALWAYS use todatetime(timestamp).
+CRITICAL: Telemetry values are in a dynamic bag. Extract: todouble(telemetry.spo2), toint(telemetry.pr), etc.
+CRITICAL: Patient-device associations are ONLY in the Lakehouse (dbo.Basic table), NOT in KQL. AlertHistory does NOT have patient information.
+
+ALERT TIER THRESHOLDS:
+- SpO2: CRITICAL <85%, URGENT 85-89%, WARNING 90-93%
+- Pulse Rate: CRITICAL >150 or <40 bpm, URGENT 120-150 or 40-50, WARNING mildly abnormal
+- MULTI_METRIC: Both SpO2 and PR abnormal simultaneously (highest priority)
+
+COMMON QUERY PATTERNS — GUIDANCE FOR TRIAGE:
+
+**IMPORTANT: When "Run a clinical triage" is requested, use SEPARATE simple queries
+rather than complex multi-let statements. Run 2-3 separate queries and combine results.**
+
+1) FOR FULL TRIAGE — Run these THREE queries separately:
+   
+   QUERY 1 - SpO2 alerts:
+   TelemetryRaw | where todatetime(timestamp) > ago(Xm)
+   | summarize min_spo2 = round(min(todouble(telemetry.spo2)),1), avg_spo2 = round(avg(todouble(telemetry.spo2)),1), last_reading_est = datetime_add('hour', -5, max(todatetime(timestamp))) by device_id
+   | where min_spo2 < 94
+   | extend spo2_tier = case(min_spo2 < 85, "CRITICAL", min_spo2 < 90, "URGENT", "WARNING")
+   | project device_id, spo2_tier, min_spo2, avg_spo2, last_reading_est
+
+   QUERY 2 - Pulse rate alerts:
+   TelemetryRaw | where todatetime(timestamp) > ago(Xm)
+   | summarize min_pr = min(toint(telemetry.pr)), max_pr = max(toint(telemetry.pr)), last_reading_est = datetime_add('hour', -5, max(todatetime(timestamp))) by device_id
+   | where max_pr > 110 or min_pr < 50
+   | extend pr_tier = case(max_pr > 150 or min_pr < 40, "CRITICAL", max_pr > 130 or min_pr < 45, "URGENT", "WARNING")
+   | project device_id, pr_tier, min_pr, max_pr, last_reading_est
+
+   QUERY 3 - Latest vitals for alerting devices:
+   TelemetryRaw | where todatetime(timestamp) > ago(Xm)
+   | summarize arg_max(todatetime(timestamp), *) by device_id
+   | project device_id, last_reading_est = datetime_add('hour', -5, todatetime(timestamp)), spo2 = todouble(telemetry.spo2), pr = toint(telemetry.pr), pi = todouble(telemetry.pi), sphb = todouble(telemetry.sphb)
+
+   Then COMBINE the results programmatically to identify MULTI_METRIC alerts and prioritize by tier.
+
+2) SPO2 ALERTS ONLY:
+   TelemetryRaw | where todatetime(timestamp) > ago(Xm)
+   | summarize min_spo2 = round(min(todouble(telemetry.spo2)),1), avg_spo2 = round(avg(todouble(telemetry.spo2)),1), readings = count(), last_reading_est = datetime_add('hour', -5, max(todatetime(timestamp))) by device_id
+   | where min_spo2 < 94
+   | extend alert_tier = case(min_spo2 < 85, "CRITICAL", min_spo2 < 90, "URGENT", "WARNING")
+
+3) PULSE RATE ALERTS ONLY:
+   TelemetryRaw | where todatetime(timestamp) > ago(Xm)
+   | summarize min_pr = min(toint(telemetry.pr)), max_pr = max(toint(telemetry.pr)), readings = count(), last_reading_est = datetime_add('hour', -5, max(todatetime(timestamp))) by device_id
+   | where max_pr > 110 or min_pr < 50
+   | extend alert_tier = case(max_pr > 150 or min_pr < 40, "CRITICAL", max_pr > 130 or min_pr < 45, "URGENT", "WARNING")
+
+4) LATEST READINGS:
+   TelemetryRaw
+   | summarize arg_max(todatetime(timestamp), *) by device_id
+   | project device_id, last_reading_est = datetime_add('hour', -5, todatetime(timestamp)), spo2 = todouble(telemetry.spo2), pr = toint(telemetry.pr), pi = todouble(telemetry.pi), sphb = todouble(telemetry.sphb), signal_iq = toint(telemetry.signal_iq)
+
+5) DEVICE STATUS:
+   TelemetryRaw
+   | summarize last_seen = max(todatetime(timestamp)) by device_id
+   | extend status = case(datetime_diff('second', now(), last_seen) < 30, "ONLINE", datetime_diff('second', now(), last_seen) < 120, "STALE", "OFFLINE")
+
+TRIAGE GUIDANCE:
+- **FOR "Run a clinical triage" OR "triage summary"**: Execute SEPARATE simple queries for SpO2 and PR alerts (see patterns above), then combine results in your response. DO NOT use complex multi-let queries with joins.
+- Always present CRITICAL alerts first, then URGENT, then WARNING
+- Highlight MULTI_METRIC alerts (both SpO2 + PR abnormal) as highest priority
+- For "triage summary", show counts by tier, then list CRITICAL devices, then URGENT
+- All queries are read-only. Never attempt INSERT, UPDATE, or DELETE.
+- For triaged patients, also check dbo.MedicationRequest for drugs affecting vitals (beta-blockers → bradycardia, opioids → respiratory depression/low SpO2)
+- Check dbo.Procedure for recent surgeries that increase risk context
+- Check dbo.Observation for historical vital sign baselines to determine if current alerts are acute vs chronic
+- Check dbo.Immunization for immunocompromised status that may affect triage priority
+- Check dbo.ImagingStudy for recent imaging that may indicate underlying conditions
+
+CROSS-DATASOURCE WORKFLOW (for patient identification + condition lookups):
+When a question asks about BOTH vitals/alerts AND patient info or conditions:
+1. FIRST: Query TelemetryRaw (KQL) to find alerting device IDs and their vitals.
+2. THEN: Query the Lakehouse with those EXACT device IDs to find patients and conditions.
+   IMPORTANT: You MUST pass the actual device IDs (e.g. MASIMO-RADIUS7-0001, MASIMO-RADIUS7-0033)
+   from the KQL results into the Lakehouse query. Do NOT use placeholder values or temp table references.
+   The Lakehouse is a separate SQL endpoint — it cannot access KQL tables or results directly.
+3. Combine the results to present a unified clinical picture.
+
+URGENT ALERTS + ATLANTA-AREA PATIENT ASSIGNMENTS:
+- Do not ask the user to contact an administrator just because the ontology is attached. The ontology is a semantic map only; the real assignment/location rows are in the Lakehouse.
+- Step 1 KQL: find URGENT devices from TelemetryRaw and project concrete device_id values.
+- Step 2 SQL: query dbo.Basic for those exact device IDs, LEFT JOIN dbo.Patient on JSON_VALUE(b.subject_string, '`$.idOrig') = p.idOrig, then filter/extract Atlanta-area address from CAST(p.address_string AS VARCHAR(MAX)).
+- Use dbo.Location only for facility/encounter location questions. For where assigned patients live, use dbo.Patient.address_string.
+- If the exact device-id filter returns no rows, run a diagnostic SELECT TOP 20 from dbo.Basic with code='device-assoc' and the extracted device reference before claiming assignment data is unavailable.
+
+Example cross-datasource flow:
+- KQL finds MASIMO-RADIUS7-0021 has SpO2=88% (URGENT)
+- Lakehouse query 1: SELECT ... FROM dbo.Basic b JOIN dbo.Condition c ... WHERE ... extension LIKE '%MASIMO-RADIUS7-0021%'
+- Lakehouse query 2: SELECT ... FROM dbo.Basic b JOIN dbo.MedicationRequest m ... to check for respiratory-depressant medications
+- Lakehouse query 3: SELECT ... FROM dbo.Basic b JOIN dbo.Procedure p ... to check for recent surgical procedures
+- Result: Patient John Smith has diabetes, hypertension, is on opioid pain medication (respiratory depression risk), had surgery 2 days ago
+
+VITAL SIGNS TIMESTAMP RULE (MANDATORY — READ CAREFULLY):
+Whenever you return ANY Masimo vital sign data (SpO2, pulse rate, PI, PVI, SpHb, signal IQ)
+in your response — whether in a table, bullet list, or narrative text — you MUST ALWAYS
+include the timestamp of when those vitals were last collected from the Masimo device.
+- Convert ALL timestamps to Eastern Standard Time (EST / UTC-5) before displaying.
+- Format as: "Last collected: <timestamp> EST" or include a "Last Reading (EST)" column.
+- In KQL queries, project the timestamp and convert: last_reading_est = datetime_add('hour', -5, todatetime(timestamp))
+- NEVER present vital sign values without their collection timestamp in EST.
+- NEVER summarize vitals as just "SpO2=94%, PR=72" — ALWAYS add when it was measured.
+- This applies to ALL responses: latest readings, alerts, trends, triage boards, and
+  cross-datasource patient summaries that mention any Masimo metric.
+- If the query already returns a timestamp/last_time/last_reading column, display it.
+  If not, re-query to get it.
+"@
+    if (-not $IncludeDicomImaging) { $triageInstructions = Remove-DicomAgentText $triageInstructions }
+
+    $triageKqlDsInstructions = @"
+This KQL database has real-time Masimo pulse oximeter data in TelemetryRaw and historical alerts in AlertHistory. The timestamp column is STRING — always wrap with todatetime(timestamp). Telemetry values are in a dynamic bag: todouble(telemetry.spo2), toint(telemetry.pr), etc. Write inline KQL queries against TelemetryRaw for alerts, triage, and device status — do not call functions.
+
+TIMESTAMP RULE: EVERY query you write against this datasource MUST project the collection timestamp.
+Always include: last_reading_est = datetime_add('hour', -5, todatetime(timestamp)) to convert to Eastern Standard Time.
+When presenting results to the user, ALWAYS show this timestamp as "Last Reading (EST)" — never omit it.
+Example: | project device_id, spo2, pr, last_reading_est = datetime_add('hour', -5, todatetime(timestamp))
+"@
+
+    $triageFewShots = @(
+        @{
+            id       = "b1b2c3d4-1111-4000-b000-000000000001"
+            question = "Show me all critical SpO2 alerts in the last 10 minutes"
+            query    = @"
+TelemetryRaw
+| where todatetime(timestamp) > ago(10m)
+| summarize min_spo2 = round(min(todouble(telemetry.spo2)), 1), avg_spo2 = round(avg(todouble(telemetry.spo2)), 1), readings = count(), last_reading_est = datetime_add('hour', -5, max(todatetime(timestamp))) by device_id
+| where min_spo2 < 85
+| extend alert_tier = "CRITICAL"
+| project device_id, alert_tier, min_spo2, avg_spo2, readings, last_reading_est
+| order by min_spo2 asc
+"@
+        },
+        @{
+            id       = "b1b2c3d4-2222-4000-b000-000000000002"
+            question = "How many SpO2 alerts are there by severity level?"
+            query    = @"
+TelemetryRaw
+| where todatetime(timestamp) > ago(10m)
+| summarize min_spo2 = min(todouble(telemetry.spo2)) by device_id
+| where min_spo2 < 94
+| extend alert_tier = case(min_spo2 < 85, "CRITICAL", min_spo2 < 90, "URGENT", "WARNING")
+| summarize alert_count = count() by alert_tier
+| order by alert_tier asc
+"@
+        },
+        @{
+            id       = "b1b2c3d4-3333-4000-b000-000000000003"
+            question = "Which devices have low SpO2 right now?"
+            query    = @"
+TelemetryRaw
+| where todatetime(timestamp) > ago(5m)
+| summarize
+    min_spo2 = round(min(todouble(telemetry.spo2)), 1),
+    avg_spo2 = round(avg(todouble(telemetry.spo2)), 1),
+    readings = count(),
+    last_reading_est = datetime_add('hour', -5, max(todatetime(timestamp)))
+  by device_id
+| where min_spo2 < 94
+| extend alert_tier = case(min_spo2 < 85, "CRITICAL", min_spo2 < 90, "URGENT", "WARNING")
+| project device_id, alert_tier, min_spo2, avg_spo2, readings, last_reading_est
+| order by alert_tier asc, min_spo2 asc
+"@
+        },
+        @{
+            id       = "b1b2c3d4-4444-4000-b000-000000000004"
+            question = "Show me the alert summary for the last 5 minutes"
+            query    = @"
+TelemetryRaw
+| where todatetime(timestamp) > ago(5m)
+| summarize min_spo2 = min(todouble(telemetry.spo2)), min_pr = min(toint(telemetry.pr)), max_pr = max(toint(telemetry.pr)), last_reading_est = datetime_add('hour', -5, max(todatetime(timestamp))) by device_id
+| extend has_spo2_alert = min_spo2 < 94, has_pr_alert = (max_pr > 110 or min_pr < 50)
+| where has_spo2_alert or has_pr_alert
+| extend alert_tier = case(min_spo2 < 85 or max_pr > 150 or min_pr < 40, "CRITICAL",
+                            min_spo2 < 90 or max_pr > 130 or min_pr < 45, "URGENT", "WARNING"),
+         alert_type = case(has_spo2_alert and has_pr_alert, "MULTI_METRIC",
+                           has_spo2_alert, "SPO2_LOW", "PR_ABNORMAL")
+| summarize count() by alert_tier, alert_type
+| order by alert_tier asc, alert_type asc
+"@
+        },
+        @{
+            id       = "b1b2c3d4-5555-4000-b000-000000000005"
+            question = "Show the latest readings for all devices"
+            query    = @"
+TelemetryRaw
+| summarize arg_max(todatetime(timestamp), *) by device_id
+| project device_id,
+          last_reading_est = datetime_add('hour', -5, todatetime(timestamp)),
+          spo2 = todouble(telemetry.spo2),
+          pr = toint(telemetry.pr),
+          pi = todouble(telemetry.pi),
+          pvi = toint(telemetry.pvi),
+          sphb = todouble(telemetry.sphb),
+          signal_iq = toint(telemetry.signal_iq)
+| order by device_id asc
+"@
+        },
+        @{
+            id       = "b1b2c3d4-6666-4000-b000-000000000006"
+            question = "Which devices have pulse rate anomalies?"
+            query    = @"
+TelemetryRaw
+| where todatetime(timestamp) > ago(5m)
+| summarize
+    min_pr = min(toint(telemetry.pr)),
+    max_pr = max(toint(telemetry.pr)),
+    avg_pr = round(avg(todouble(telemetry.pr)), 0),
+    readings = count(),
+    last_reading_est = datetime_add('hour', -5, max(todatetime(timestamp)))
+  by device_id
+| where max_pr > 110 or min_pr < 50
+| extend alert_tier = case(max_pr > 150 or min_pr < 40, "CRITICAL",
+                            max_pr > 130 or min_pr < 45, "URGENT", "WARNING"),
+         alert_type = case(max_pr > 110 and min_pr < 50, "PR_BOTH",
+                           max_pr > 110, "PR_HIGH", "PR_LOW")
+| project device_id, alert_tier, alert_type, min_pr, max_pr, avg_pr, readings, last_reading_est
+| order by alert_tier asc
+"@
+        }
+    )
+
+    # --- Build data sources ---
+    $kqlDatasourceJson = (@{
+        '$schema'              = "1.0.0"
+        artifactId             = $kqlDbId
+        workspaceId            = $workspaceId
+        displayName            = $kqlDbDisplayName
+        type                   = "kusto"
+        userDescription        = "KQL database with Masimo telemetry, clinical alerts, device status, and alert-history tables for clinical triage workflows"
+        dataSourceInstructions = $triageKqlDsInstructions
+        elements               = $kqlElements
+    } | ConvertTo-Json -Depth 10)
+
+    $kqlFewShotsJson = (@{
+        '$schema' = "1.0.0"
+        fewShots  = $triageFewShots
+    } | ConvertTo-Json -Depth 10)
+
+    $lhDatasourceJson = (@{
+        '$schema'              = "1.0.0"
+        artifactId             = $silverLhId
+        workspaceId            = $workspaceId
+        displayName            = $silverLhName
+        type                   = "lakehouse_tables"
+        userDescription        = $lakehouseUserDescription
+        dataSourceInstructions = $lhDsInstructions
+        elements               = $lakehouseElements
+    } | ConvertTo-Json -Depth 20)
+
+    $lhFewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $lhFewShots } | ConvertTo-Json -Depth 10)
+
+    $triageDataSources = @(
+        @{ FolderName = "kusto-$kqlDbDisplayName";          DatasourceJson = $kqlDatasourceJson; FewShotsJson = $kqlFewShotsJson },
+        @{ FolderName = "lakehouse_tables-$silverLhName";   DatasourceJson = $lhDatasourceJson;  FewShotsJson = $lhFewShotsJson }
+    )
+    $clinicalOntologyDs = New-OntologyDatasourceIfAvailable `
+        -OntologyName "ClinicalDeviceOntology" `
+        -UserDescription "Clinical device semantic layer for patients, devices, conditions, encounters, observations, imaging, telemetry, and alerts." `
+        -Instructions "Use this ontology for clinical device triage vocabulary and relationship grounding only. It maps patient-device assignments, diagnoses, encounters, clinical context, telemetry, and alerts, but the actual patient-device assignment rows and patient locations must still be queried from the Lakehouse dbo.Basic and dbo.Patient tables. Do not use it for payer or claims reasoning."
+    if ($clinicalOntologyDs) { $triageDataSources += $clinicalOntologyDs }
+
+
+    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Magenta
+    Write-Host "  AGENT 2: Clinical Triage" -ForegroundColor Magenta
+    Write-Host "═══════════════════════════════════════════════════════════════" -ForegroundColor Magenta
+    $triageId = Deploy-DataAgent `
+        -Name "Clinical Triage" `
+        -AiInstructions $triageInstructions `
+        -DataSources $triageDataSources `
+        -Description "Clinical triage agent for Masimo device alerts, vitals, patient context, diagnoses, imaging, and ClinicalDeviceOntology-guided prioritization."
+}
+
+# ============================================================================
+# SUMMARY
+# ============================================================================
+
+$p360Id = if (Get-Variable -Name p360Id -ErrorAction SilentlyContinue) { $p360Id } else { $null }
+$triageId = if (Get-Variable -Name triageId -ErrorAction SilentlyContinue) { $triageId } else { $null }
+$blockingFailures = @()
+if (-not $TriageOnly -and -not $p360Id) { $blockingFailures += 'Patient 360 Data Agent was not deployed' }
+if (-not $Patient360Only -and -not $triageId) { $blockingFailures += 'Clinical Triage Data Agent was not deployed' }
+if ($blockingFailures.Count -gt 0) {
+    Write-Host ""
+    Write-Host "✗ Data Agent deployment incomplete:" -ForegroundColor Red
+    foreach ($failure in $blockingFailures) { Write-Host "  - $failure" -ForegroundColor Red }
+    exit 1
+}
+
+
+Write-Host ""
+Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Green
+Write-Host "║  DEPLOYMENT COMPLETE                                        ║" -ForegroundColor Green
+Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Green
+Write-Host ""
+Write-Host "  Architecture:" -ForegroundColor White
+Write-Host "    KQL: TelemetryRaw + AlertHistory (inline query patterns)" -ForegroundColor Green
+Write-Host "    Lakehouse: $silverLhName ($($silverTables -join ', '))" -ForegroundColor Green
+
+Write-Host ""
+if ($p360Id) {
+    Write-Host "  Patient 360:     https://app.fabric.microsoft.com/groups/$workspaceId/aiskills/$p360Id" -ForegroundColor Cyan
+}
+if ($triageId) {
+    Write-Host "  Clinical Triage: https://app.fabric.microsoft.com/groups/$workspaceId/aiskills/$triageId" -ForegroundColor Cyan
+}
+Write-Host ""
+Write-Host "  SAMPLE QUESTIONS — Patient 360:" -ForegroundColor Yellow
+Write-Host "    KQL only:" -ForegroundColor DarkGray
+Write-Host "    - Show me the latest vital signs for all devices" -ForegroundColor Gray
+Write-Host "    - Which devices have SpO2 alerts right now?" -ForegroundColor Gray
+Write-Host "    Lakehouse only:" -ForegroundColor DarkGray
+Write-Host "    - List all patients with respiratory conditions linked to monitoring devices" -ForegroundColor Gray
+if ($IncludeDicomImaging) { Write-Host "    - Show imaging studies for device MASIMO-RADIUS7-0033" -ForegroundColor Gray }
+Write-Host "    Cross-datasource (KQL + Lakehouse):" -ForegroundColor DarkGray
+Write-Host "    - Give me a full patient summary for device MASIMO-RADIUS7-0033" -ForegroundColor Gray
+Write-Host "    - Which patients with respiratory conditions have low SpO2 right now?" -ForegroundColor Gray
+Write-Host "    - Show the latest vitals and all conditions for the patient on device MASIMO-RADIUS7-0001" -ForegroundColor Gray
+if ($IncludeDicomImaging) {
+    Write-Host "    Cross-datasource + Imaging (KQL + Lakehouse + DICOM):" -ForegroundColor DarkGray
+    Write-Host "    - Show imaging studies and current vitals for the patient on device MASIMO-RADIUS7-0033" -ForegroundColor Gray
+    Write-Host "    - Which monitored patients have chest CT imaging? Show their latest SpO2 too" -ForegroundColor Gray
+    Write-Host "    - Give me a complete clinical summary with imaging history for device MASIMO-RADIUS7-0001" -ForegroundColor Gray
+}
+Write-Host ""
+Write-Host "  SAMPLE QUESTIONS — Clinical Triage:" -ForegroundColor Yellow
+Write-Host "    KQL only:" -ForegroundColor DarkGray
+Write-Host "    - Which devices have SpO2 alerts right now?" -ForegroundColor Gray
+Write-Host "    - Show devices with abnormal pulse rate in the last 5 minutes" -ForegroundColor Gray
+Write-Host "    Cross-datasource (KQL + Lakehouse):" -ForegroundColor DarkGray
+Write-Host "    - Run a clinical triage" -ForegroundColor Gray
+Write-Host "    - Which devices have low SpO2 right now? Look up the patients and their conditions." -ForegroundColor Gray
+Write-Host "    - Show the 5 devices with the lowest SpO2 and get their patient info and diagnoses" -ForegroundColor Gray
+Write-Host "    - Find patients with COPD or asthma whose SpO2 is below 93%%" -ForegroundColor Gray
+if ($IncludeDicomImaging) {
+    Write-Host "    Cross-datasource + Imaging (KQL + Lakehouse + DICOM):" -ForegroundColor DarkGray
+    Write-Host "    - Show patients with SpO2 alerts who also have radiology imaging studies" -ForegroundColor Gray
+    Write-Host "    - Which patients with low SpO2 have had a chest CT? Include their diagnoses" -ForegroundColor Gray
+}
+Write-Host ""

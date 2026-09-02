@@ -1,0 +1,29 @@
+FROM mcr.microsoft.com/openjdk/jdk:17-ubuntu@sha256:9ddf45a14ac58263b6e2b791fbe0e75d460857d15e889caf3580ebe7709b02b9
+
+# Install wget, unzip, and Azure CLI
+# Note: lsb-release was removed in Ubuntu 22.04; use /etc/os-release instead
+RUN apt-get update && apt-get install -y wget unzip curl apt-transport-https gnupg ca-certificates \
+    && curl -sL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/trusted.gpg.d/microsoft.gpg \
+    && . /etc/os-release && echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ ${UBUNTU_CODENAME} main" > /etc/apt/sources.list.d/azure-cli.list \
+    && apt-get update && apt-get install -y azure-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and extract Synthea
+WORKDIR /synthea
+RUN wget -q https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+
+# Copy configuration files
+COPY synthea.properties /synthea/synthea.properties
+COPY atlanta_providers.json /synthea/atlanta_providers.json
+COPY run-synthea.sh /synthea/run-synthea.sh
+
+RUN sed -i 's/\r$//' /synthea/run-synthea.sh && chmod +x /synthea/run-synthea.sh
+
+# Create output directory
+RUN mkdir -p /output
+
+# Set environment variables
+ENV PATIENT_COUNT=10000
+ENV JAVA_OPTS="-Xms4g -Xmx7g"
+
+ENTRYPOINT ["/synthea/run-synthea.sh"]

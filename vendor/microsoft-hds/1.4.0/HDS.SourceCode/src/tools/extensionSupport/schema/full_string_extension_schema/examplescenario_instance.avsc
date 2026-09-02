@@ -1,0 +1,155 @@
+{
+  "type": "record",
+  "name": "ExampleScenario_Instance",
+  "doc": "Example of workflow instance.",
+  "namespace": "org.hl7.fhir",
+  "fields": [
+    {
+      "name": "id",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "extension",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "resourceId",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "resourceType",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "name",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "description",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "version",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "ExampleScenario_Version",
+          "doc": "Example of workflow instance.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "versionId",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "description",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "containedInstance",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "ExampleScenario_ContainedInstance",
+          "doc": "Example of workflow instance.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "resourceId",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "versionId",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    }
+  ],
+  "default": null
+}

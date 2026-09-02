@@ -1,0 +1,47 @@
+{
+    "partitionRules": [
+    {
+      "name": "prYear",
+      "fields": [
+
+      ],
+      "rule": "year({})",
+      "type": "integer",
+      "enabled": true
+    },
+    {
+      "name": "prMonth",
+      "fields": [
+      ],
+      "rule": "month({})",
+      "type": "integer",
+      "enabled": true
+    },
+    {
+      "name": "prDay",
+      "fields": [
+      ],
+      "rule": "day({})",
+      "type": "integer",
+      "enabled": true
+    },
+    {
+      "name": "prPersonId",
+      "fields": [
+        
+      ],
+      "rule": "{}/200000",
+      "type": "integer",
+      "enabled": true
+    },
+    {
+        "name": "prLocationId",
+        "fields": [
+          
+        ],
+        "rule": "{}/200000",
+        "type": "integer",
+        "enabled": true
+      }
+  ]
+}

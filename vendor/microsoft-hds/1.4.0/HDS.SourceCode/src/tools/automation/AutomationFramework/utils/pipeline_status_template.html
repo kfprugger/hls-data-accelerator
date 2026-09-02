@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integration Tests</title>
+    <style>
+        table {
+            width: 90%;
+            padding: 20px;
+            border-collapse: collapse;
+        }
+        div.main {
+            width: 100%;
+            padding: 50px;
+        }
+        div.dropdown {
+            padding-top: 10px;
+            padding-bottom: 10px;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        td.description {
+            min-width: 10%;
+        }
+    </style>
+</head>
+<body>
+    <div class="main">
+        <div class="pipelines">
+            <h1>Pipeline Status</h1>
+            <table id="pipeline-status-table">
+                <thead>
+                    <tr>
+                        <th style="width: 250px">Pipeline Id</th>
+                        <th>Config Name</th>
+                        <th style="width: 75px">State</th>
+                        <th style="width: 50px">Task Progress</th>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th style="width: 50px">Duration</th>
+                        <th>Current Task Name</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {pipeline_table_rows}
+                </tbody>
+            </table>
+        </div>
+        <div class="tasks">
+            <h1>Task History</h1>
+            <div class="dropdown">
+                <label for="task-filter">Filter by Pipeline ID:</label>
+                <select id="task-filter" onchange="filterTaskHistory()">
+                    <option value="all">All</option>
+                </select>
+            </div>
+
+            <table id="task-history-table">
+                <thead>
+                    <tr>
+                        <th style="width: 250px">Pipeline Id</th>
+                        <th style="width: 150px">Task Name</th>
+                        <th>Details</th>
+                        <th style="width: 75px">State</th>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th style="width: 100px">Duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {task_history_rows}
+                </tbody>
+            </table>
+        </div>
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                populateTaskFilter();
+            });
+    
+            function populateTaskFilter() {
+                const pipelineIds = new Set();
+                const rows = document.querySelectorAll("#task-history-table tbody tr");
+    
+                rows.forEach(row => {
+                    const pipelineIdCell = row.querySelector("td:nth-child(1)");
+                    if (pipelineIdCell) {
+                        pipelineIds.add(pipelineIdCell.textContent.trim());
+                    }
+                });
+    
+                const filter = document.getElementById("task-filter");
+                pipelineIds.forEach(id => {
+                    const option = document.createElement("option");
+                    option.value = id;
+                    option.textContent = id;
+                    filter.appendChild(option);
+                });
+            }
+    
+            function filterTaskHistory() {
+                const filterValue = document.getElementById("task-filter").value;
+                const rows = document.querySelectorAll("#task-history-table tbody tr");
+    
+                rows.forEach(row => {
+                    const pipelineIdCell = row.querySelector("td:nth-child(1)");
+                    if (pipelineIdCell) {
+                        const pipelineId = pipelineIdCell.textContent.trim();
+                        if (filterValue === "all" || pipelineId === filterValue) {
+                            row.style.display = "";
+                        } else {
+                            row.style.display = "none";
+                        }
+                    }
+                });
+            }
+        </script>
+    </div>
+</body>
+</html>

@@ -1,0 +1,92 @@
+{
+  "type": "record",
+  "name": "ClinicalFhir",
+  "fields": [
+    {
+      "name": "id",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "resourceType",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "fhirContent",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "meta",
+      "type": {
+        "type": "record",
+        "name": "Meta",
+        "doc": "The metadata about a resource. This is content in the resource that is maintained by the infrastructure. Changes to the content might not always be associated with version changes to the resource.",
+        "fields": [
+          {
+            "name": "extension",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "id",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "versionId",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "lastUpdated",
+            "type": [
+              "null",
+              {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+              }
+            ],
+            "default": null
+          },
+          {
+            "name": "source",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "profile",
+            "type": {
+              "type": "array",
+              "items": "string"
+            },
+            "default": []
+          }
+        ]
+      },
+      "default": {}
+    }
+  ]
+}

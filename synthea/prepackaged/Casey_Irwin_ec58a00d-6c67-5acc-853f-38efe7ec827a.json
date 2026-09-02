@@ -1,0 +1,1878 @@
+{
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a",
+      "resource": {
+        "active": true,
+        "address": [
+          {
+            "city": "Atlanta",
+            "country": "US",
+            "line": [
+              "182 Synthetic Care Way"
+            ],
+            "postalCode": "30303",
+            "state": "GA",
+            "use": "home"
+          }
+        ],
+        "birthDate": "1959-07-01",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2028-9",
+                  "display": "Asian",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Asian"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+          },
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2186-5",
+                  "display": "Not Hispanic or Latino",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Not Hispanic or Latino"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+          }
+        ],
+        "gender": "female",
+        "id": "ec58a00d-6c67-5acc-853f-38efe7ec827a",
+        "identifier": [
+          {
+            "system": "https://brakekat.example/fhir/synthetic-mrn",
+            "type": {
+              "text": "Synthetic MRN"
+            },
+            "value": "SYN-000083"
+          }
+        ],
+        "name": [
+          {
+            "family": "Irwin",
+            "given": [
+              "Casey"
+            ],
+            "text": "Casey Irwin",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:48935169-381d-5863-88b6-d515ddc0de28",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "48935169-381d-5863-88b6-d515ddc0de28",
+        "location": [
+          {
+            "location": {
+              "display": "Grady Memorial Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+            }
+          }
+        ],
+        "period": {
+          "end": "2024-07-12T12:00:00Z",
+          "start": "2024-07-11T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Grady Memorial Hospital",
+          "reference": "Organization/grady-memorial-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f611b395-e3fd-5583-b31c-c714b1862f38",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "f611b395-e3fd-5583-b31c-c714b1862f38",
+        "location": [
+          {
+            "location": {
+              "display": "Grady Memorial Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-01-07T18:00:00Z",
+          "start": "2025-01-07T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Grady Memorial Hospital",
+          "reference": "Organization/grady-memorial-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f3dad7fe-1090-56b6-a710-6803d594ea70",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "f3dad7fe-1090-56b6-a710-6803d594ea70",
+        "location": [
+          {
+            "location": {
+              "display": "Grady Memorial Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-04T12:00:00Z",
+          "start": "2025-07-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Grady Memorial Hospital",
+          "reference": "Organization/grady-memorial-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7c2ec725-e58a-5d15-80e2-a284e969dc77",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "7c2ec725-e58a-5d15-80e2-a284e969dc77",
+        "location": [
+          {
+            "location": {
+              "display": "Grady Memorial Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-18T12:00:00Z",
+          "start": "2025-07-16T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Grady Memorial Hospital",
+          "reference": "Organization/grady-memorial-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0823325a-b983-5411-83ab-2fc98d18993a",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "0823325a-b983-5411-83ab-2fc98d18993a",
+        "location": [
+          {
+            "location": {
+              "display": "Grady Memorial Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Grady Memorial Hospital",
+          "reference": "Organization/grady-memorial-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4bb4d0cf-2b55-5851-89dd-429f7c40b907",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "4bb4d0cf-2b55-5851-89dd-429f7c40b907",
+        "location": [
+          {
+            "location": {
+              "display": "Grady Memorial Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-04-02T16:48:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Grady Memorial Hospital",
+          "reference": "Organization/grady-memorial-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "6d00aa78-91e1-543d-afe0-c936cb5e14fa",
+        "location": [
+          {
+            "location": {
+              "display": "Grady Memorial Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-06-05T12:00:00Z",
+          "start": "2026-06-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Grady Memorial Hospital",
+          "reference": "Organization/grady-memorial-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e0688715-1e64-5897-9a25-db7380e97016",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "84114007",
+              "display": "Heart failure",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Heart failure"
+        },
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "e0688715-1e64-5897-9a25-db7380e97016",
+        "onsetDateTime": "2025-07-01T12:00:00Z",
+        "recordedDate": "2026-06-01T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:03b79105-2361-59e6-b9af-c72b1bead496",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "13645005",
+              "display": "Chronic obstructive lung disease",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Chronic obstructive lung disease"
+        },
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "03b79105-2361-59e6-b9af-c72b1bead496",
+        "onsetDateTime": "2024-07-01T12:00:00Z",
+        "recordedDate": "2026-05-31T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:9f6162f2-8856-52e4-8aac-f31dc310f97e",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "4548-4",
+              "display": "Hemoglobin A1c",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "effectiveDateTime": "2026-06-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "9f6162f2-8856-52e4-8aac-f31dc310f97e",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 10.1
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c0ee8f9b-08dd-5828-a8de-25e8a79e5a23",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8480-6",
+              "display": "Systolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Systolic blood pressure"
+        },
+        "effectiveDateTime": "2026-05-06T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "c0ee8f9b-08dd-5828-a8de-25e8a79e5a23",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 148
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c70382bf-d9b7-5493-8e70-1a8cac6d1add",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8462-4",
+              "display": "Diastolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Diastolic blood pressure"
+        },
+        "effectiveDateTime": "2026-04-08T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "c70382bf-d9b7-5493-8e70-1a8cac6d1add",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 94
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:745bbac8-b6b0-574e-a5e2-70c2f29ae47c",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "39156-5",
+              "display": "Body mass index",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Body mass index"
+        },
+        "effectiveDateTime": "2026-03-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "745bbac8-b6b0-574e-a5e2-70c2f29ae47c",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "valueQuantity": {
+          "code": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "unit": "kg/m2",
+          "value": 29.5
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a1aecedd-9c21-578f-a9f7-0ca7a4ac2335",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "14959-1",
+              "display": "Microalbumin/Creatinine",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Microalbumin/Creatinine"
+        },
+        "effectiveDateTime": "2026-02-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "a1aecedd-9c21-578f-a9f7-0ca7a4ac2335",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "valueQuantity": {
+          "code": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mg/g",
+          "value": 27
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2d9b4d5c-f8f6-5933-ae1d-e6c739fe2bb9",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "2708-6",
+              "display": "Oxygen saturation",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "effectiveDateTime": "2026-01-14T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "2d9b4d5c-f8f6-5933-ae1d-e6c739fe2bb9",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 93
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a3a6a7d0-77d1-5e55-a925-09fc55c79666",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "a3a6a7d0-77d1-5e55-a925-09fc55c79666",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:dbb75b2d-7665-5ba6-ae6f-5256c3744992",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "dbb75b2d-7665-5ba6-ae6f-5256c3744992",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:560942a6-4c96-5a10-bc66-32b4c6860594",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "560942a6-4c96-5a10-bc66-32b4c6860594",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3960a787-51f4-5530-97dd-bcf010c8b4f7",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "3960a787-51f4-5530-97dd-bcf010c8b4f7",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5c402680-03c6-5b39-9b2d-ce8d14042c7b",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "5c402680-03c6-5b39-9b2d-ce8d14042c7b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:1d112fc6-ab5c-521a-9d4f-7a87bc23594a",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "1d112fc6-ab5c-521a-9d4f-7a87bc23594a",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7f900bf3-490a-58d0-a1c5-09fefb463bb4",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "7f900bf3-490a-58d0-a1c5-09fefb463bb4",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ab7972e2-e796-5a61-bca2-97362bafc955",
+      "resource": {
+        "authoredOn": "2025-12-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "ab7972e2-e796-5a61-bca2-97362bafc955",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2bb49f66-9a3d-5da8-9867-301184003b2f",
+      "resource": {
+        "authoredOn": "2025-11-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "2bb49f66-9a3d-5da8-9867-301184003b2f",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0e476beb-4c1b-5534-a472-4e974d3ea7b6",
+      "resource": {
+        "authoredOn": "2025-10-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "0e476beb-4c1b-5534-a472-4e974d3ea7b6",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0c94c31c-e20c-5daa-ad50-208806498f7f",
+      "resource": {
+        "authoredOn": "2025-09-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "0c94c31c-e20c-5daa-ad50-208806498f7f",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3b52b174-7f88-51af-bf87-dc7a2b64faa8",
+      "resource": {
+        "authoredOn": "2025-08-05T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "3b52b174-7f88-51af-bf87-dc7a2b64faa8",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:69d81cfa-9dfb-5885-8b2d-fc1f0d49ff69",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "69d81cfa-9dfb-5885-8b2d-fc1f0d49ff69",
+        "occurrenceDateTime": "2026-03-03T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "133",
+              "display": "Pneumococcal conjugate PCV 13",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:98bac410-d1b4-57ff-96d2-356676633332",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "98bac410-d1b4-57ff-96d2-356676633332",
+        "occurrenceDateTime": "2026-05-02T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "140",
+              "display": "Influenza seasonal injectable",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ff05a7dd-f9e8-5e6d-a21c-4f3d247cd1e9",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "43075005",
+              "display": "Inhalation therapy",
+              "system": "http://snomed.info/sct"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "id": "ff05a7dd-f9e8-5e6d-a21c-4f3d247cd1e9",
+        "performedDateTime": "2026-06-17T12:00:00Z",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:payer-commercial",
+      "resource": {
+        "active": true,
+        "id": "payer-commercial",
+        "name": "BrakeKat Synthetic Commercial",
+        "resourceType": "Organization",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "pay",
+                "display": "Payer",
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:38ea1e13-2df4-51ea-aca7-f968be5f7bb3",
+      "resource": {
+        "beneficiary": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "id": "38ea1e13-2df4-51ea-aca7-f968be5f7bb3",
+        "payor": [
+          {
+            "display": "BrakeKat Synthetic Commercial",
+            "reference": "Organization/payer-commercial"
+          }
+        ],
+        "period": {
+          "end": "2026-12-31",
+          "start": "2024-01-01"
+        },
+        "resourceType": "Coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "code": "HIP",
+              "display": "Commercial health plan",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+            }
+          ],
+          "text": "BrakeKat Synthetic Commercial"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:bb5668d6-7fe2-5755-b979-1a0c7ff7f84e",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+        },
+        "id": "bb5668d6-7fe2-5755-b979-1a0c7ff7f84e",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:38ea1e13-2df4-51ea-aca7-f968be5f7bb3"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2550.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:51926b32-5add-55de-b6f9-1f7da942d558",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:bb5668d6-7fe2-5755-b979-1a0c7ff7f84e"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+        },
+        "id": "51926b32-5add-55de-b6f9-1f7da942d558",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:38ea1e13-2df4-51ea-aca7-f968be5f7bb3"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "BrakeKat Synthetic Commercial",
+          "reference": "Organization/payer-commercial"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2091.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2550.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3ae4801e-b198-560c-b669-80c64bf9d172",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+        },
+        "id": "3ae4801e-b198-560c-b669-80c64bf9d172",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:38ea1e13-2df4-51ea-aca7-f968be5f7bb3"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3300.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:729e90ab-a537-59eb-b231-109dd2641a5c",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:3ae4801e-b198-560c-b669-80c64bf9d172"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+        },
+        "id": "729e90ab-a537-59eb-b231-109dd2641a5c",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:38ea1e13-2df4-51ea-aca7-f968be5f7bb3"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "BrakeKat Synthetic Commercial",
+          "reference": "Organization/payer-commercial"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2706.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3300.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c07511cb-a82c-5582-a841-d8031e11cbfd",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+        },
+        "id": "c07511cb-a82c-5582-a841-d8031e11cbfd",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:38ea1e13-2df4-51ea-aca7-f968be5f7bb3"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 4050.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:96e4e64b-7f52-5406-a157-6d6510b03cf0",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:c07511cb-a82c-5582-a841-d8031e11cbfd"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+        },
+        "id": "96e4e64b-7f52-5406-a157-6d6510b03cf0",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:38ea1e13-2df4-51ea-aca7-f968be5f7bb3"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "BrakeKat Synthetic Commercial",
+          "reference": "Organization/payer-commercial"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3321.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 4050.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:96a45485-38a7-5f4f-9e57-cd396145a204",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+        },
+        "id": "96a45485-38a7-5f4f-9e57-cd396145a204",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:38ea1e13-2df4-51ea-aca7-f968be5f7bb3"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 4800.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4f4bdd33-771c-50ef-bd96-8eefb5455edd",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:96a45485-38a7-5f4f-9e57-cd396145a204"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|grady-memorial-hospital"
+        },
+        "id": "4f4bdd33-771c-50ef-bd96-8eefb5455edd",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:38ea1e13-2df4-51ea-aca7-f968be5f7bb3"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "BrakeKat Synthetic Commercial",
+          "reference": "Organization/payer-commercial"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3936.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810082"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 4800.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:35d3d02f-6b28-59de-9518-172ebfffd20b",
+      "resource": {
+        "description": {
+          "text": "Maintain oxygen saturation at or above 94 percent"
+        },
+        "id": "35d3d02f-6b28-59de-9518-172ebfffd20b",
+        "lifecycleStatus": "active",
+        "resourceType": "Goal",
+        "startDate": "2026-07-01",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "target": [
+          {
+            "dueDate": "2026-09-29",
+            "measure": {
+              "text": "Maintain oxygen saturation at or above 94 percent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:871c7a9c-d832-5402-a897-d2b15a89f1c2",
+      "resource": {
+        "addresses": [
+          {
+            "reference": "urn:uuid:e0688715-1e64-5897-9a25-db7380e97016"
+          }
+        ],
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ],
+            "text": "Assessment and Plan of Treatment"
+          }
+        ],
+        "encounter": {
+          "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+        },
+        "goal": [
+          {
+            "reference": "urn:uuid:35d3d02f-6b28-59de-9518-172ebfffd20b"
+          }
+        ],
+        "id": "871c7a9c-d832-5402-a897-d2b15a89f1c2",
+        "intent": "plan",
+        "period": {
+          "end": "2026-12-31",
+          "start": "2026-01-01"
+        },
+        "resourceType": "CarePlan",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "title": "Synthetic chronic care plan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:14ac9dc5-a8cc-5a83-a53e-9ed7143b918f",
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U3ludGhldGljIGNsaW5pY2FsIHN1bW1hcnku"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "urn:uuid:6d00aa78-91e1-543d-afe0-c936cb5e14fa"
+            }
+          ]
+        },
+        "date": "2026-07-01T12:00:00Z",
+        "id": "14ac9dc5-a8cc-5a83-a53e-9ed7143b918f",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "urn:uuid:ec58a00d-6c67-5acc-853f-38efe7ec827a"
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "34133-9",
+              "display": "Summary of episode note",
+              "system": "http://loinc.org"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "resourceType": "Bundle",
+  "type": "transaction"
+}

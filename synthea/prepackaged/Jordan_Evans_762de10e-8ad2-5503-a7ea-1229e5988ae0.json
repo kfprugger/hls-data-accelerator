@@ -1,0 +1,1930 @@
+{
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0",
+      "resource": {
+        "active": true,
+        "address": [
+          {
+            "city": "Atlanta",
+            "country": "US",
+            "line": [
+              "149 Synthetic Care Way"
+            ],
+            "postalCode": "30309",
+            "state": "GA",
+            "use": "home"
+          }
+        ],
+        "birthDate": "1942-07-01",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2106-3",
+                  "display": "White",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "White"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+          },
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2135-2",
+                  "display": "Hispanic or Latino",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Hispanic or Latino"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+          }
+        ],
+        "gender": "male",
+        "id": "762de10e-8ad2-5503-a7ea-1229e5988ae0",
+        "identifier": [
+          {
+            "system": "https://brakekat.example/fhir/synthetic-mrn",
+            "type": {
+              "text": "Synthetic MRN"
+            },
+            "value": "SYN-000050"
+          }
+        ],
+        "name": [
+          {
+            "family": "Evans",
+            "given": [
+              "Jordan"
+            ],
+            "text": "Jordan Evans",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:dbf86f5a-76cc-5968-8320-29d0250127b8",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "dbf86f5a-76cc-5968-8320-29d0250127b8",
+        "location": [
+          {
+            "location": {
+              "display": "Piedmont Atlanta Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+            }
+          }
+        ],
+        "period": {
+          "end": "2024-07-12T12:00:00Z",
+          "start": "2024-07-11T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Piedmont Atlanta Hospital",
+          "reference": "Organization/piedmont-atlanta-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d405a4d6-ae00-5639-8aff-28625cd2edaa",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "d405a4d6-ae00-5639-8aff-28625cd2edaa",
+        "location": [
+          {
+            "location": {
+              "display": "Piedmont Atlanta Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-01-07T18:00:00Z",
+          "start": "2025-01-07T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Piedmont Atlanta Hospital",
+          "reference": "Organization/piedmont-atlanta-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:17050c6b-1f34-5d5f-be58-8e813abef70d",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "17050c6b-1f34-5d5f-be58-8e813abef70d",
+        "location": [
+          {
+            "location": {
+              "display": "Piedmont Atlanta Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-04T12:00:00Z",
+          "start": "2025-07-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Piedmont Atlanta Hospital",
+          "reference": "Organization/piedmont-atlanta-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e8ecaa75-0c27-5dc7-ad12-b564887be2d6",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "e8ecaa75-0c27-5dc7-ad12-b564887be2d6",
+        "location": [
+          {
+            "location": {
+              "display": "Piedmont Atlanta Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-18T12:00:00Z",
+          "start": "2025-07-16T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Piedmont Atlanta Hospital",
+          "reference": "Organization/piedmont-atlanta-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8336738f-7d4a-5790-882f-159cd506e937",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "8336738f-7d4a-5790-882f-159cd506e937",
+        "location": [
+          {
+            "location": {
+              "display": "Piedmont Atlanta Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Piedmont Atlanta Hospital",
+          "reference": "Organization/piedmont-atlanta-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f2fbeb0d-724c-5320-817a-8a828311d0a2",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "f2fbeb0d-724c-5320-817a-8a828311d0a2",
+        "location": [
+          {
+            "location": {
+              "display": "Piedmont Atlanta Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-04-02T16:48:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Piedmont Atlanta Hospital",
+          "reference": "Organization/piedmont-atlanta-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "2da61733-5626-5de6-8a0d-44e2a510af65",
+        "location": [
+          {
+            "location": {
+              "display": "Piedmont Atlanta Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-06-05T12:00:00Z",
+          "start": "2026-06-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Piedmont Atlanta Hospital",
+          "reference": "Organization/piedmont-atlanta-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:61cb12a5-db07-5c10-bdaa-efdcbe462022",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "254637007",
+              "display": "Lung cancer",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Lung cancer"
+        },
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "61cb12a5-db07-5c10-bdaa-efdcbe462022",
+        "onsetDateTime": "2025-07-01T12:00:00Z",
+        "recordedDate": "2026-06-01T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:25969ee4-0aca-5476-95e7-5e226e7be6f4",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "44054006",
+              "display": "Type 2 diabetes mellitus",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Type 2 diabetes mellitus"
+        },
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "25969ee4-0aca-5476-95e7-5e226e7be6f4",
+        "onsetDateTime": "2024-07-01T12:00:00Z",
+        "recordedDate": "2026-05-31T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4e05a093-19a3-52e1-ab57-3a2182a48d25",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "4548-4",
+              "display": "Hemoglobin A1c",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "effectiveDateTime": "2026-06-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "4e05a093-19a3-52e1-ab57-3a2182a48d25",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 7.2
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f2896585-c8c5-533b-bc17-b7f2441bceb6",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8480-6",
+              "display": "Systolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Systolic blood pressure"
+        },
+        "effectiveDateTime": "2026-05-06T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "f2896585-c8c5-533b-bc17-b7f2441bceb6",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 128
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fce84437-523f-5b2b-81fb-63acaa3caa51",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8462-4",
+              "display": "Diastolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Diastolic blood pressure"
+        },
+        "effectiveDateTime": "2026-04-08T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "fce84437-523f-5b2b-81fb-63acaa3caa51",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 78
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c8632adf-8181-59b9-8689-4fac227100cc",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "39156-5",
+              "display": "Body mass index",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Body mass index"
+        },
+        "effectiveDateTime": "2026-03-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "c8632adf-8181-59b9-8689-4fac227100cc",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "valueQuantity": {
+          "code": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "unit": "kg/m2",
+          "value": 28.5
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6b817da2-aea3-59a1-b267-999bc6f9ffe5",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "14959-1",
+              "display": "Microalbumin/Creatinine",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Microalbumin/Creatinine"
+        },
+        "effectiveDateTime": "2026-02-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "6b817da2-aea3-59a1-b267-999bc6f9ffe5",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "valueQuantity": {
+          "code": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mg/g",
+          "value": 24
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:caee7734-eb74-5102-9fb4-d17475ae9555",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "2708-6",
+              "display": "Oxygen saturation",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "effectiveDateTime": "2026-01-14T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "caee7734-eb74-5102-9fb4-d17475ae9555",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 93
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c30dc215-784b-5129-b2cb-60de8fa0b97b",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "c30dc215-784b-5129-b2cb-60de8fa0b97b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:aaecb982-ae54-5fce-82e3-1a7dbd2441a3",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "aaecb982-ae54-5fce-82e3-1a7dbd2441a3",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:27a03b65-68de-53da-93fa-443b4768a9cb",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "27a03b65-68de-53da-93fa-443b4768a9cb",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:96178ef1-ef78-58af-8de3-f90708fae3df",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "96178ef1-ef78-58af-8de3-f90708fae3df",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c589f57b-c3a1-502c-8fbf-b1f3c5a51c89",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "c589f57b-c3a1-502c-8fbf-b1f3c5a51c89",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d7a4a078-861f-5660-9509-200d2ec6d818",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "d7a4a078-861f-5660-9509-200d2ec6d818",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:717f151f-d761-5550-8f58-0914f5441260",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "717f151f-d761-5550-8f58-0914f5441260",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6f25b21d-e1c3-5e24-8c7c-9c02232e72f5",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "6f25b21d-e1c3-5e24-8c7c-9c02232e72f5",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:77cfd837-0f15-57d2-b38c-dc7942ac7f51",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "77cfd837-0f15-57d2-b38c-dc7942ac7f51",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6b495588-0063-5b86-81c5-ee8ebfbc7c85",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "6b495588-0063-5b86-81c5-ee8ebfbc7c85",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6f84ac94-61d2-5278-ab93-54b19624a793",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "6f84ac94-61d2-5278-ab93-54b19624a793",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:299d75f4-9b7f-562b-bb9a-5bc6cc5935a8",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "299d75f4-9b7f-562b-bb9a-5bc6cc5935a8",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:429e0a6f-ea87-5353-a2aa-12793bb793cb",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "429e0a6f-ea87-5353-a2aa-12793bb793cb",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:64a56bbc-9892-55fe-bd55-75e5e1867710",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "64a56bbc-9892-55fe-bd55-75e5e1867710",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7c08ee9c-0205-572d-8dec-e7c70b063d11",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "7c08ee9c-0205-572d-8dec-e7c70b063d11",
+        "occurrenceDateTime": "2026-03-03T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "133",
+              "display": "Pneumococcal conjugate PCV 13",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d31afd3d-c5ac-5686-a700-a6d3d96d66f2",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "d31afd3d-c5ac-5686-a700-a6d3d96d66f2",
+        "occurrenceDateTime": "2026-05-02T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "140",
+              "display": "Influenza seasonal injectable",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e6426d29-6bda-5fa1-9b7a-62cab75e4a03",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "43075005",
+              "display": "Inhalation therapy",
+              "system": "http://snomed.info/sct"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "id": "e6426d29-6bda-5fa1-9b7a-62cab75e4a03",
+        "performedDateTime": "2026-06-17T12:00:00Z",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:payer-medicaid",
+      "resource": {
+        "active": true,
+        "id": "payer-medicaid",
+        "name": "Georgia Medicaid",
+        "resourceType": "Organization",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "pay",
+                "display": "Payer",
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:48bd3811-b8fb-57ac-9d7b-26093278f89d",
+      "resource": {
+        "beneficiary": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "id": "48bd3811-b8fb-57ac-9d7b-26093278f89d",
+        "payor": [
+          {
+            "display": "Georgia Medicaid",
+            "reference": "Organization/payer-medicaid"
+          }
+        ],
+        "period": {
+          "end": "2026-12-31",
+          "start": "2024-01-01"
+        },
+        "resourceType": "Coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "code": "MCPOL",
+              "display": "Medicaid managed care",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+            }
+          ],
+          "text": "Georgia Medicaid"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5f8e0aca-dbbc-5ed3-b615-4b189e0e7f4f",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+        },
+        "id": "5f8e0aca-dbbc-5ed3-b615-4b189e0e7f4f",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:48bd3811-b8fb-57ac-9d7b-26093278f89d"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 1725.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6eadd02c-2328-5063-a0cd-69430ceb1ec4",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:5f8e0aca-dbbc-5ed3-b615-4b189e0e7f4f"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+        },
+        "id": "6eadd02c-2328-5063-a0cd-69430ceb1ec4",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:48bd3811-b8fb-57ac-9d7b-26093278f89d"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Georgia Medicaid",
+          "reference": "Organization/payer-medicaid"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 1414.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 1725.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:276fa0bf-abee-5154-aaa1-c773fe98a2ac",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+        },
+        "id": "276fa0bf-abee-5154-aaa1-c773fe98a2ac",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:48bd3811-b8fb-57ac-9d7b-26093278f89d"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2475.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fc150cb9-08a2-5f77-a122-a0140f77207a",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:276fa0bf-abee-5154-aaa1-c773fe98a2ac"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+        },
+        "id": "fc150cb9-08a2-5f77-a122-a0140f77207a",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:48bd3811-b8fb-57ac-9d7b-26093278f89d"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Georgia Medicaid",
+          "reference": "Organization/payer-medicaid"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2029.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2475.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:941026bc-6e28-5a98-b4d0-1fe2473cf701",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+        },
+        "id": "941026bc-6e28-5a98-b4d0-1fe2473cf701",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:48bd3811-b8fb-57ac-9d7b-26093278f89d"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3225.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:30766bba-9fa0-589a-909a-a67053ee7309",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:941026bc-6e28-5a98-b4d0-1fe2473cf701"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+        },
+        "id": "30766bba-9fa0-589a-909a-a67053ee7309",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:48bd3811-b8fb-57ac-9d7b-26093278f89d"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Georgia Medicaid",
+          "reference": "Organization/payer-medicaid"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2644.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3225.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d4a94f8f-2733-51f6-925f-b0e178d45927",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+        },
+        "id": "d4a94f8f-2733-51f6-925f-b0e178d45927",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:48bd3811-b8fb-57ac-9d7b-26093278f89d"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3975.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a5a3695f-35f5-557d-b47e-7075506be87d",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:d4a94f8f-2733-51f6-925f-b0e178d45927"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|piedmont-atlanta-hospital"
+        },
+        "id": "a5a3695f-35f5-557d-b47e-7075506be87d",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:48bd3811-b8fb-57ac-9d7b-26093278f89d"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Georgia Medicaid",
+          "reference": "Organization/payer-medicaid"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3259.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810049"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3975.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:96087c66-393f-5225-90b9-861a5576d0a3",
+      "resource": {
+        "description": {
+          "text": "Maintain oxygen saturation at or above 94 percent"
+        },
+        "id": "96087c66-393f-5225-90b9-861a5576d0a3",
+        "lifecycleStatus": "active",
+        "resourceType": "Goal",
+        "startDate": "2026-07-01",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "target": [
+          {
+            "dueDate": "2026-09-29",
+            "measure": {
+              "text": "Maintain oxygen saturation at or above 94 percent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:002b5333-c382-5732-8445-36813d10e481",
+      "resource": {
+        "addresses": [
+          {
+            "reference": "urn:uuid:61cb12a5-db07-5c10-bdaa-efdcbe462022"
+          }
+        ],
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ],
+            "text": "Assessment and Plan of Treatment"
+          }
+        ],
+        "encounter": {
+          "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+        },
+        "goal": [
+          {
+            "reference": "urn:uuid:96087c66-393f-5225-90b9-861a5576d0a3"
+          }
+        ],
+        "id": "002b5333-c382-5732-8445-36813d10e481",
+        "intent": "plan",
+        "period": {
+          "end": "2026-12-31",
+          "start": "2026-01-01"
+        },
+        "resourceType": "CarePlan",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "title": "Synthetic chronic care plan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:1868ed98-5a8e-5de6-ae08-592eab65aa8f",
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U3ludGhldGljIGNsaW5pY2FsIHN1bW1hcnku"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "urn:uuid:2da61733-5626-5de6-8a0d-44e2a510af65"
+            }
+          ]
+        },
+        "date": "2026-07-01T12:00:00Z",
+        "id": "1868ed98-5a8e-5de6-ae08-592eab65aa8f",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "urn:uuid:762de10e-8ad2-5503-a7ea-1229e5988ae0"
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "34133-9",
+              "display": "Summary of episode note",
+              "system": "http://loinc.org"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "resourceType": "Bundle",
+  "type": "transaction"
+}

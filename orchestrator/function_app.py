@@ -1,0 +1,511 @@
+"""Azure Durable Functions app — Deployment Orchestrator.
+
+HTTP triggers expose the REST API for the React frontend.
+Orchestrator functions manage phase sequencing with checkpointing.
+Activity functions execute individual deployment phases.
+"""
+
+import json
+import logging
+from datetime import timedelta
+from typing import Optional
+
+import azure.durable_functions as df
+import azure.functions as func
+
+from shared.models import DeploymentConfig, DeploymentState, PhaseResult, PhaseStatus
+
+# ── App setup ──────────────────────────────────────────────────────────
+
+app = df.DFApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+logger = logging.getLogger(__name__)
+
+# Standard retry policy for activity functions
+RETRY_POLICY = df.RetryOptions(
+    first_retry_interval_in_milliseconds=60_000,  # 60s
+    max_number_of_attempts=3,
+)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# HTTP TRIGGERS (API Layer)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@app.route(route="deploy/start", methods=["POST"])
+@app.durable_client_input(client_name="client")
+async def start_deployment(req: func.HttpRequest, client: df.DurableOrchestrationClient) -> func.HttpResponse:
+    """Start a new deployment orchestration.
+
+    Request body: DeploymentConfig JSON.
+    Returns: { "instanceId": "...", "statusUrl": "..." }
+    """
+    try:
+        body = req.get_json()
+    except ValueError:
+        return func.HttpResponse(
+            json.dumps({"error": "Invalid JSON body"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    # Validate config
+    try:
+        config = DeploymentConfig(**body)
+    except Exception as e:
+        return func.HttpResponse(
+            json.dumps({"error": f"Invalid config: {e}"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    instance_id = await client.start_new(
+        "deploy_all_orchestrator",
+        client_input=config.model_dump(),
+    )
+
+    logger.info("Deployment started: %s", instance_id)
+
+    return func.HttpResponse(
+        json.dumps({
+            "instanceId": instance_id,
+            "statusUrl": f"/api/deploy/{instance_id}/status",
+        }),
+        status_code=202,
+        mimetype="application/json",
+    )
+
+
+@app.route(route="deploy/{instanceId}/status", methods=["GET"])
+@app.durable_client_input(client_name="client")
+async def get_deployment_status(req: func.HttpRequest, client: df.DurableOrchestrationClient) -> func.HttpResponse:
+    """Get the status of a deployment orchestration."""
+    instance_id = req.route_params.get("instanceId", "")
+    if not instance_id:
+        return func.HttpResponse(
+            json.dumps({"error": "instanceId required"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    status = await client.get_status(instance_id, show_history=True, show_history_output=True)
+
+    if not status:
+        return func.HttpResponse(
+            json.dumps({"error": "Instance not found"}),
+            status_code=404,
+            mimetype="application/json",
+        )
+
+    return func.HttpResponse(
+        json.dumps({
+            "instanceId": instance_id,
+            "runtimeStatus": status.runtime_status.value if status.runtime_status else "Unknown",
+            "output": status.output,
+            "customStatus": status.custom_status,
+            "createdTime": str(status.created_time) if status.created_time else None,
+            "lastUpdatedTime": str(status.last_updated_time) if status.last_updated_time else None,
+        }),
+        mimetype="application/json",
+    )
+
+
+
+@app.route(route="deploy/{instanceId}/cancel", methods=["POST"])
+@app.durable_client_input(client_name="client")
+async def cancel_deployment(req: func.HttpRequest, client: df.DurableOrchestrationClient) -> func.HttpResponse:
+    """Cancel a running deployment."""
+    instance_id = req.route_params.get("instanceId", "")
+    if not instance_id:
+        return func.HttpResponse(
+            json.dumps({"error": "instanceId required"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    await client.terminate(instance_id, "Cancelled by user")
+    return func.HttpResponse(
+        json.dumps({"message": "Deployment cancelled."}),
+        mimetype="application/json",
+    )
+
+
+@app.route(route="teardown/start", methods=["POST"])
+@app.durable_client_input(client_name="client")
+async def start_teardown(req: func.HttpRequest, client: df.DurableOrchestrationClient) -> func.HttpResponse:
+    """Start a teardown orchestration."""
+    try:
+        body = req.get_json()
+    except ValueError:
+        return func.HttpResponse(
+            json.dumps({"error": "Invalid JSON body"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
+    instance_id = await client.start_new(
+        "teardown_orchestrator",
+        client_input=body,
+    )
+
+    return func.HttpResponse(
+        json.dumps({
+            "instanceId": instance_id,
+            "statusUrl": f"/api/deploy/{instance_id}/status",
+        }),
+        status_code=202,
+        mimetype="application/json",
+    )
+
+
+@app.route(route="deployments", methods=["GET"])
+@app.durable_client_input(client_name="client")
+async def list_deployments(req: func.HttpRequest, client: df.DurableOrchestrationClient) -> func.HttpResponse:
+    """List recent deployment orchestrations."""
+    instances = await client.get_status_all()
+
+    results = []
+    for inst in instances:
+        results.append({
+            "instanceId": inst.instance_id,
+            "name": inst.name,
+            "runtimeStatus": inst.runtime_status.value if inst.runtime_status else "Unknown",
+            "createdTime": str(inst.created_time) if inst.created_time else None,
+            "lastUpdatedTime": str(inst.last_updated_time) if inst.last_updated_time else None,
+            "customStatus": inst.custom_status,
+        })
+
+    return func.HttpResponse(
+        json.dumps(results),
+        mimetype="application/json",
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# ORCHESTRATOR FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _effective_deployment_config(config: dict) -> dict:
+    effective = dict(config)
+    if effective.get("scaffolding_only"):
+        effective.update(
+            reuse_patients=False,
+            reseed_data=False,
+            use_cached_synthea=False,
+            skip_synthea=True,
+            skip_device_assoc=True,
+            skip_dicom=True,
+            skip_fhir_export=True,
+            skip_rti_phase2=True,
+            skip_hds_source=False,
+            skip_hds_pipelines=True,
+            skip_data_agents=True,
+            skip_imaging=True,
+            skip_ontology=True,
+            skip_activator=True,
+            skip_quality_measures=True,
+            skip_payer_activator=True,
+        )
+    elif effective.get("reseed_data"):
+        effective.update(
+            reuse_patients=False,
+            skip_fhir=False,
+            skip_synthea=False,
+            skip_device_assoc=False,
+            skip_fhir_export=False,
+            skip_hds_pipelines=False,
+        )
+    return effective
+
+
+@app.orchestration_trigger(context_name="context")
+def deploy_all_orchestrator(context):
+    """Main deployment orchestrator — maps to Deploy-All.ps1.
+
+    Phase sequence:
+      1a. Fabric Workspace + identity (inline in Deploy-All.ps1)
+      1b. Base Azure Infrastructure (phase-1/deploy.ps1)
+      1c. FHIR Service + Synthea + FHIR Loader (phase-1/deploy-fhir.ps1)
+      1d. DICOM Loader + ImagingStudy linkage (phase-1/deploy-fhir.ps1 -RunDicom)
+      2a. Fabric RTI ingest: Eventhouse, KQL, Eventstream, dashboard, FHIR $export
+      3a. Microsoft HDS/DTT v1.4.0 source deployment and validation
+      2b. Fabric RTI enrichment (deploy-fabric-rti.ps1 -Phase2)
+      3b. DICOM Shortcut + HDS pipelines and row gates
+      4b. ClinicalDeviceOntology + DeviceAssociation
+      4c. Ontology-aware Data Agents
+      6. CMS Quality & Claims
+    """
+    config: dict = _effective_deployment_config(context.get_input())
+    resources: dict = {}
+    phases: list[dict] = []
+
+    def update_status(phase_name: str, status: str, detail: str = ""):
+        context.set_custom_status({
+            "currentPhase": phase_name,
+            "status": status,
+            "detail": detail,
+            "completedPhases": len([p for p in phases if p.get("status") == "succeeded"]),
+            "totalPhases": 11,
+            "resources": resources,
+        })
+
+    # ── Phase 1a: Fabric Workspace ────────────────────────────────
+    update_status("Phase 1: Fabric Workspace", "running")
+    result = yield context.call_activity_with_retry(
+        "activity_provision_workspace", RETRY_POLICY, config
+    )
+    resources.update(result.get("resources", {}))
+    phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+
+    # ── Phase 1b: Base Azure Infrastructure ───────────────────────
+    if not config.get("skip_base_infra"):
+        update_status("Phase 1: Base Azure Infrastructure", "running")
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_azure_infra", RETRY_POLICY, config
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 1: Base Azure Infrastructure", "status": "skipped"})
+
+    # ── Phase 1c: FHIR Service + Data Loading ─────────────────────
+    if not config.get("skip_fhir"):
+        update_status("Phase 1: FHIR Service + Synthea + Loader", "running")
+        phase1c_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_fhir", RETRY_POLICY, phase1c_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 1: FHIR Service + Synthea + Loader", "status": "skipped"})
+
+    # ── Phase 1d: DICOM Loader ────────────────────────────────────
+    if not config.get("skip_dicom") and not config.get("skip_fhir"):
+        update_status("Phase 1: DICOM Loader", "running")
+        phase1d_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_dicom", RETRY_POLICY, phase1d_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 1: DICOM Loader", "status": "skipped"})
+
+    # ── Phase 2a: Fabric RTI ingest ───────────────────────────────
+    if not config.get("skip_fabric"):
+        update_status("Phase 2: Fabric RTI", "running")
+        phase2a_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_fabric_rti", RETRY_POLICY, phase2a_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 2: Fabric RTI", "status": "skipped"})
+
+    # ── Phase 3a: Microsoft HDS source deployment ────────────────
+    if not config.get("skip_hds_source"):
+        update_status("Phase 3: HDS Source Deployment", "running")
+        hds_source_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_hds_source", RETRY_POLICY, hds_source_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": "Phase 3: HDS Source Deployment", "status": "succeeded"})
+    else:
+        phases.append({"phase": "Phase 3: HDS Source Deployment", "status": "skipped"})
+
+    # ── Phase 2b: Fabric RTI enrichment ───────────────────────────
+    if not config.get("skip_fabric") and not config.get("skip_rti_phase2"):
+        update_status("Phase 2: Fabric RTI Enrichment", "running")
+        phase2b_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_rti_phase2", RETRY_POLICY, phase2b_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 2: Fabric RTI Enrichment", "status": "skipped"})
+
+    # ── Phase 3b: HDS Pipeline Triggers ───────────────────────────
+    if not config.get("skip_hds_pipelines"):
+        update_status("Phase 3: DICOM Shortcut + HDS Pipelines", "running")
+        phase3b_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_hds_pipelines", RETRY_POLICY, phase3b_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 3: DICOM Shortcut + HDS Pipelines", "status": "skipped"})
+
+    # ── Phase 4b: Ontology ────────────────────────────────────────
+    if not config.get("skip_ontology"):
+        update_status("Phase 4: Ontology", "running")
+        phase4b_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_ontology", RETRY_POLICY, phase4b_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 4: Ontology", "status": "skipped"})
+
+    # ── Phase 4c: Data Agents ─────────────────────────────────────
+    if not config.get("skip_data_agents"):
+        update_status("Phase 4: Ontology-Aware Data Agents", "running")
+        phase4c_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_data_agents", RETRY_POLICY, phase4c_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 4: Ontology-Aware Data Agents", "status": "skipped"})
+
+    # ── Phase 6: CMS Quality & Claims ─────────────────────────────
+    if not config.get("skip_quality_measures"):
+        update_status("Phase 6: CMS Quality & Claims", "running")
+        phase6_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_quality_measures", RETRY_POLICY, phase6_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 6: CMS Quality & Claims", "status": "skipped"})
+
+    # ── Phase 7: Payer RTI & Ops ──────────────────────────────────
+    if not config.get("skip_phase7") and not config.get("skip_fabric"):
+        update_status("Phase 7: Payer RTI & Ops", "running")
+        phase7_input = {"config": config, "resources": resources}
+        result = yield context.call_activity_with_retry(
+            "activity_deploy_payer_rti", RETRY_POLICY, phase7_input
+        )
+        resources.update(result.get("resources", {}))
+        phases.append({"phase": result["phase"], "status": "succeeded", "duration": result["duration_seconds"]})
+    else:
+        phases.append({"phase": "Phase 7: Payer RTI & Ops", "status": "skipped"})
+
+
+    # ── Complete ──────────────────────────────────────────────────
+    update_status("Deployment Complete", "succeeded")
+
+    return {
+        "status": "succeeded",
+        "phases": phases,
+        "resources": resources,
+    }
+
+
+@app.orchestration_trigger(context_name="context")
+def teardown_orchestrator(context):
+    """Teardown orchestrator — maps to Remove-AllResources.ps1."""
+    config = context.get_input()
+
+    context.set_custom_status({"currentPhase": "Teardown", "status": "running"})
+
+    result = yield context.call_activity("activity_teardown", config)
+
+    context.set_custom_status({"currentPhase": "Teardown", "status": "succeeded"})
+
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# ACTIVITY FUNCTIONS (wrappers calling into activities/ modules)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@app.activity_trigger(input_name="config")
+def activity_deploy_azure_infra(config: dict) -> dict:
+    """Phase 1: Base Azure Infrastructure."""
+    from activities.deploy_azure_infra import run
+    return run(config)
+
+
+@app.activity_trigger(input_name="config")
+def activity_provision_workspace(config: dict) -> dict:
+    """Phase 1b: Fabric Workspace."""
+    from activities.provision_workspace import run
+    return run(config)
+
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_fhir(input_data: dict) -> dict:
+    """Phase 1: FHIR Service + Synthea + Loader."""
+    from activities.deploy_fhir import run
+    return run(input_data["config"], input_data["resources"])
+
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_dicom(input_data: dict) -> dict:
+    """Phase 1: DICOM Loader."""
+    from activities.deploy_dicom import run
+    return run(input_data["config"], input_data["resources"])
+
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_fabric_rti(input_data: dict) -> dict:
+    """Phase 2: Fabric RTI ingest."""
+    from activities.deploy_fabric_rti import run
+    return run(input_data["config"], input_data["resources"])
+
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_rti_phase2(input_data: dict) -> dict:
+    """Phase 2: Fabric RTI Enrichment."""
+    from activities.deploy_rti_phase2 import run
+    return run(input_data["config"], input_data["resources"])
+
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_hds_source(input_data: dict) -> dict:
+    """Phase 3: Deploy Microsoft HDS/DTT v1.4.0 source."""
+    from activities.deploy_hds_source import run
+    return run(input_data["config"], input_data["resources"])
+
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_hds_pipelines(input_data: dict) -> dict:
+    """Phase 3: DICOM Shortcut + HDS Pipelines."""
+    from activities.deploy_hds_pipelines import run
+    return run(input_data["config"], input_data["resources"])
+
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_data_agents(input_data: dict) -> dict:
+    """Phase 4: Ontology-Aware Data Agents."""
+    from activities.deploy_data_agents import run
+    return run(input_data["config"], input_data["resources"])
+
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_ontology(input_data: dict) -> dict:
+    """Phase 4: Ontology."""
+    from activities.deploy_ontology import run
+    return run(input_data["config"], input_data["resources"])
+
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_quality_measures(input_data: dict) -> dict:
+    """Phase 6: CMS Quality & Claims."""
+    from activities.deploy_quality_measures import run
+    return run(input_data["config"], input_data["resources"])
+
+@app.activity_trigger(input_name="input_data")
+def activity_deploy_payer_rti(input_data: dict) -> dict:
+    """Phase 7: Payer RTI and operations agents."""
+    from activities.deploy_payer_rti import run
+    return run(input_data["config"], input_data["resources"])
+
+
+@app.activity_trigger(input_name="config")
+def activity_teardown(config: dict) -> dict:
+    """Teardown all resources."""
+    from activities.teardown import run
+    return run(config)
+
+

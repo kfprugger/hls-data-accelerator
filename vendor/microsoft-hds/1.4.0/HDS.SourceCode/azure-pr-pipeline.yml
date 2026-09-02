@@ -1,0 +1,105 @@
+# Azure DevOps PR Validation Pipeline for HDS.Template-OpenSource
+# Purpose: Build validation + linting + unit tests + artifact publishing
+# Standalone pipeline — no OneBranch or internal dependencies
+
+pr:
+  branches:
+    include:
+      - features/migration
+
+parameters:
+  - name: runPreCommit
+    displayName: 'Run Pre-commit Checks'
+    type: boolean
+    default: false
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    displayName: Checkout repository
+
+  - task: UsePythonVersion@0
+    displayName: Setup Python 3.12
+    inputs:
+      versionSpec: "3.12"
+      addToPath: true
+
+  - task: UseDotNet@2
+    displayName: Setup .NET 8 SDK
+    inputs:
+      packageType: 'sdk'
+      version: '8.x'
+
+  - script: |
+      python --version
+      python -m pip install --upgrade pip
+    displayName: Upgrade pip
+
+  - script: |
+      test -n "$JAVA_HOME_11_X64" || { echo "❌ JAVA_HOME_11_X64 not set"; exit 1; }
+      echo "##vso[task.setvariable variable=JAVA_HOME]$JAVA_HOME_11_X64"
+      echo "##vso[task.prependpath]$JAVA_HOME_11_X64/bin"
+      "$JAVA_HOME_11_X64/bin/java" -version
+    displayName: Setup Java 11
+
+  - script: |
+      pwsh -NoProfile -Command '$PSVersionTable.PSVersion'
+    displayName: Verify PowerShell
+
+  - script: python azure_pipeline_scripts.py setup
+    displayName: Install dependencies
+
+  - script: python azure_pipeline_scripts.py build
+    displayName: Build
+
+  - ${{ if eq(parameters.runPreCommit, true) }}:
+    - script: |
+        source .venv/bin/activate
+        python -m pip install pre-commit
+        pre-commit run --all-files
+      displayName: Run Pre-commit Checks (Optional)
+
+  - script: python azure_pipeline_scripts.py lint
+    displayName: Run linter
+
+
+  - task: DownloadBuildArtifacts@1
+    displayName: Download DTT wheel from DTT pipeline
+    continueOnError: true
+    inputs:
+      buildType: 'specific'
+      project: 'Solutions'
+      pipeline: '31378'
+      buildVersionToDownload: 'latestFromBranch'
+      branchName: 'refs/heads/features/download_center'
+      downloadType: 'single'
+      artifactName: 'dtt-wheel'
+      downloadPath: '$(Pipeline.Workspace)/dtt'
+
+  - script: |
+      set -e
+      if ls "$(Pipeline.Workspace)"/dtt/dtt-wheel/*.whl 1>/dev/null 2>&1; then
+        cp "$(Pipeline.Workspace)"/dtt/dtt-wheel/*.whl dist/healthcare-libraries/1.4.0/
+        echo "DTT wheel copied:"
+      else
+        echo "##vso[task.logissue type=warning]DTT wheel not found - skipping (DTT pipeline may not have a successful build on features/download_center)"
+      fi
+      ls -la dist/healthcare-libraries/1.4.0/
+    displayName: Copy DTT wheel to build output
+
+  - script: |
+      test -d dist || { echo "❌ dist/ directory not found"; exit 1; }
+      mkdir -p "$(Build.ArtifactStagingDirectory)/dist"
+      cp -r dist/* "$(Build.ArtifactStagingDirectory)/dist/" 
+    displayName: Stage build artifacts
+    condition: succeededOrFailed()
+
+  - task: PublishBuildArtifacts@1
+    displayName: Upload build artifacts
+    condition: succeededOrFailed()
+    inputs:
+      PathtoPublish: "$(Build.ArtifactStagingDirectory)/dist"
+      ArtifactName: hds-build-artifacts
+      publishLocation: Container

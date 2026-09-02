@@ -1,0 +1,53 @@
+{
+    "activitiesGlobalParameters": {
+        "administration_lakehouse_id": "{administration_lakehouse_id}",
+        "bronze_lakehouse_id": "{bronze_lakehouse_id}",
+        "silver_lakehouse_id": "{silver_lakehouse_id}",
+        "enable_hds_logs": "true",
+        "movement_config_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{administration_lakehouse_id}/Files/system-configurations/fileOrchestrationConfig.json",
+        "omop_lakehouse_id": "{omop_lakehouse_id}"
+    },
+    "activities": [
+        {
+            "name": "msft_dm4h_raw_bronze_ingestion",
+            "parameters": {
+                "source_path_pattern": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{bronze_lakehouse_id}/Files/Process/Clinical/FHIR-NDJSON",
+                "move_failed_files_enabled": "true",
+                "compression_enabled": "true",
+                "target_table_name": "ClinicalFhir",
+                "target_tables_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{bronze_lakehouse_id}/Tables",
+                "max_files_per_trigger": "1000",
+                "max_structured_streaming_queries": "1",
+                "checkpoint_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{config_lakehouse_id}/DMHCheckpoint/{bronze_lakehouse_id}",
+                "schema_dir_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{config_lakehouse_id}/DMHConfiguration/_internal/fhir4/schema/bronze",
+                "validation_config_key": "bronze",
+                "file_extension": "ndjson"
+            }
+        },
+        {
+            "name": "msft_dm4h_bronze_silver_flatten",
+            "parameters": {
+                "source_table_name": "ClinicalFhir",
+                "config_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{config_lakehouse_id}/DMHConfiguration/_internal/fhir4/transformation/flatten/flatten_config.json",
+                "source_tables_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{bronze_lakehouse_id}/Tables",
+                "target_tables_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{silver_lakehouse_id}/Tables",
+                "checkpoint_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{config_lakehouse_id}/DMHCheckpoint/{silver_lakehouse_id}",
+                "schema_dir_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{config_lakehouse_id}/DMHConfiguration/_internal/fhir4/schema/silver",
+                "max_files_per_trigger": "1000",
+                "max_bytes_per_trigger": "1000000000",
+                "max_structured_streaming_queries": "3",
+                "optimize_write_bin_size": "256m",
+                "shuffle_partitions": "800",
+                "max_partition_bytes": "64m"
+            }
+        },
+        {
+            "name": "msft_dm4h_silver_omop",
+            "parameters": {
+                "vocab_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{bronze_lakehouse_id}/Files/ReferenceData/Clinical/OMOP/Vocab-HDS",
+                "vocab_checkpoint_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{config_lakehouse_id}/DMHCheckpoint/vocab",
+                "omop_config_path": "abfss://{workspace_id}@msit-onelake.dfs.fabric.microsoft.com/{config_lakehouse_id}/DMHConfiguration/_internal/fhir4/transformation/omop"
+            }
+        }
+    ]
+}

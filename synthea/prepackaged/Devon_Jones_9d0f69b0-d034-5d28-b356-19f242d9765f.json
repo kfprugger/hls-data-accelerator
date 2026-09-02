@@ -1,0 +1,2112 @@
+{
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f",
+      "resource": {
+        "active": true,
+        "address": [
+          {
+            "city": "Atlanta",
+            "country": "US",
+            "line": [
+              "193 Synthetic Care Way"
+            ],
+            "postalCode": "30322",
+            "state": "GA",
+            "use": "home"
+          }
+        ],
+        "birthDate": "2015-07-01",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2076-8",
+                  "display": "Native Hawaiian or Other Pacific Islander",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Native Hawaiian or Other Pacific Islander"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+          },
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2186-5",
+                  "display": "Not Hispanic or Latino",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Not Hispanic or Latino"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+          }
+        ],
+        "gender": "male",
+        "id": "9d0f69b0-d034-5d28-b356-19f242d9765f",
+        "identifier": [
+          {
+            "system": "https://brakekat.example/fhir/synthetic-mrn",
+            "type": {
+              "text": "Synthetic MRN"
+            },
+            "value": "SYN-000094"
+          }
+        ],
+        "name": [
+          {
+            "family": "Jones",
+            "given": [
+              "Devon"
+            ],
+            "text": "Devon Jones",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a4201b71-68b6-530a-b1a0-4661cb2b4471",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "a4201b71-68b6-530a-b1a0-4661cb2b4471",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Egleston",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+            }
+          }
+        ],
+        "period": {
+          "end": "2024-07-12T12:00:00Z",
+          "start": "2024-07-11T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Egleston",
+          "reference": "Organization/choa-egleston"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:93b5b37f-a398-5264-a182-9c17c7543372",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "93b5b37f-a398-5264-a182-9c17c7543372",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Egleston",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-01-07T18:00:00Z",
+          "start": "2025-01-07T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Egleston",
+          "reference": "Organization/choa-egleston"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f361c0f2-ede8-5fb4-8010-a8da8721bb8c",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "f361c0f2-ede8-5fb4-8010-a8da8721bb8c",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Egleston",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-04T12:00:00Z",
+          "start": "2025-07-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Egleston",
+          "reference": "Organization/choa-egleston"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8decd993-4c5e-5fac-beca-c1e5659725c8",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "8decd993-4c5e-5fac-beca-c1e5659725c8",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Egleston",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-18T12:00:00Z",
+          "start": "2025-07-16T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Egleston",
+          "reference": "Organization/choa-egleston"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a055ee0f-0d18-50c3-890e-c51ed3717a16",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "a055ee0f-0d18-50c3-890e-c51ed3717a16",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Egleston",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Egleston",
+          "reference": "Organization/choa-egleston"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f646f4dc-bb63-57a1-9f56-363d5be48fd3",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "f646f4dc-bb63-57a1-9f56-363d5be48fd3",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Egleston",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-04-02T16:48:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Egleston",
+          "reference": "Organization/choa-egleston"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "be5e91a3-1670-5aa6-9c5c-41bcc65cc05e",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Egleston",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-06-05T12:00:00Z",
+          "start": "2026-06-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Egleston",
+          "reference": "Organization/choa-egleston"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8e3b456f-c595-5514-9719-f8c99daad311",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "13645005",
+              "display": "Chronic obstructive lung disease",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Chronic obstructive lung disease"
+        },
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "8e3b456f-c595-5514-9719-f8c99daad311",
+        "onsetDateTime": "2025-07-01T12:00:00Z",
+        "recordedDate": "2026-06-01T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:1f85ccec-dbaf-5385-aa33-bdf096a9d044",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "195967001",
+              "display": "Asthma",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Asthma"
+        },
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "1f85ccec-dbaf-5385-aa33-bdf096a9d044",
+        "onsetDateTime": "2024-07-01T12:00:00Z",
+        "recordedDate": "2026-05-31T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:9b776e03-2986-5519-ab1b-798b28573573",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "4548-4",
+              "display": "Hemoglobin A1c",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "effectiveDateTime": "2026-06-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "9b776e03-2986-5519-ab1b-798b28573573",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 7.2
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:358fbc01-3554-5967-beb4-1ac342d7d36e",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8480-6",
+              "display": "Systolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Systolic blood pressure"
+        },
+        "effectiveDateTime": "2026-05-06T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "358fbc01-3554-5967-beb4-1ac342d7d36e",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 128
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4650f659-f309-57d3-b98c-e9cf46cfb88d",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8462-4",
+              "display": "Diastolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Diastolic blood pressure"
+        },
+        "effectiveDateTime": "2026-04-08T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "4650f659-f309-57d3-b98c-e9cf46cfb88d",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 78
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7a2b92fb-959b-519d-842b-8b2d532dde97",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "39156-5",
+              "display": "Body mass index",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Body mass index"
+        },
+        "effectiveDateTime": "2026-03-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "7a2b92fb-959b-519d-842b-8b2d532dde97",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "valueQuantity": {
+          "code": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "unit": "kg/m2",
+          "value": 32.5
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:66f8f8e9-0801-557e-a355-2e5efcabaa1b",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "14959-1",
+              "display": "Microalbumin/Creatinine",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Microalbumin/Creatinine"
+        },
+        "effectiveDateTime": "2026-02-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "66f8f8e9-0801-557e-a355-2e5efcabaa1b",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "valueQuantity": {
+          "code": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mg/g",
+          "value": 23
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:864dbc6d-7e4b-50dc-947a-f237eeca0e35",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "2708-6",
+              "display": "Oxygen saturation",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "effectiveDateTime": "2026-01-14T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "864dbc6d-7e4b-50dc-947a-f237eeca0e35",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 93
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c9760ccb-2d32-58ae-a79a-659a0233cec2",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "c9760ccb-2d32-58ae-a79a-659a0233cec2",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5bbf3925-3896-57d4-babc-d81fcf35ebde",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "5bbf3925-3896-57d4-babc-d81fcf35ebde",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b434b055-1be4-5049-b7e6-df2bdcaa1574",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "b434b055-1be4-5049-b7e6-df2bdcaa1574",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c23058d9-5538-5032-bbea-699d0591650b",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "c23058d9-5538-5032-bbea-699d0591650b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6e78ff56-2387-5e48-b825-d55f7c394dcc",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "6e78ff56-2387-5e48-b825-d55f7c394dcc",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a54d6b7b-72c1-5f6d-9962-7c19656b3823",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "a54d6b7b-72c1-5f6d-9962-7c19656b3823",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cbce82c5-56aa-5a82-aaff-877af99e42dc",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "cbce82c5-56aa-5a82-aaff-877af99e42dc",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f179da73-dabf-5b33-9897-9c8751548111",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "f179da73-dabf-5b33-9897-9c8751548111",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8594bace-e0d7-56fd-bd22-44316196ffd7",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "8594bace-e0d7-56fd-bd22-44316196ffd7",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cac61af8-dcad-5021-bcf2-e63bcfa13058",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "cac61af8-dcad-5021-bcf2-e63bcfa13058",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c36b226b-a3d1-56de-bb6c-ad40f996e774",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "c36b226b-a3d1-56de-bb6c-ad40f996e774",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:32046c89-8943-5a20-b157-2ad30e83fd17",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "32046c89-8943-5a20-b157-2ad30e83fd17",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7acf7021-3be0-5d1f-8fe0-895caa0417df",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "7acf7021-3be0-5d1f-8fe0-895caa0417df",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:21fa663d-0d7f-5a9d-94b8-eb7774952644",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "21fa663d-0d7f-5a9d-94b8-eb7774952644",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ea75325e-ccd4-5dd8-b722-a48dcde64eed",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "ea75325e-ccd4-5dd8-b722-a48dcde64eed",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:743c7a46-6f91-5245-a994-db6e72cc0742",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "743c7a46-6f91-5245-a994-db6e72cc0742",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:737d9616-3ce4-5fab-b824-495688b3d5b1",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "737d9616-3ce4-5fab-b824-495688b3d5b1",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:35d2d9ec-6ed5-5ffd-9ed8-5218e7c5ad09",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "35d2d9ec-6ed5-5ffd-9ed8-5218e7c5ad09",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f0c10a09-7a04-5e86-b482-1f3601821ed8",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "f0c10a09-7a04-5e86-b482-1f3601821ed8",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:95d40da1-dd16-58be-a246-e35301d3053e",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "95d40da1-dd16-58be-a246-e35301d3053e",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8a02b81c-9a3d-5807-9f28-f0f9f2ea1482",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "8a02b81c-9a3d-5807-9f28-f0f9f2ea1482",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b3b2b120-0259-570a-94ef-2c2761bb0b67",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "b3b2b120-0259-570a-94ef-2c2761bb0b67",
+        "occurrenceDateTime": "2026-03-03T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "133",
+              "display": "Pneumococcal conjugate PCV 13",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fe5f127b-f692-5d36-bd4c-d2375df0da0c",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "fe5f127b-f692-5d36-bd4c-d2375df0da0c",
+        "occurrenceDateTime": "2026-05-02T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "140",
+              "display": "Influenza seasonal injectable",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:44f4a2f4-f3ff-52e0-83a7-f175929e385d",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "43075005",
+              "display": "Inhalation therapy",
+              "system": "http://snomed.info/sct"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "id": "44f4a2f4-f3ff-52e0-83a7-f175929e385d",
+        "performedDateTime": "2026-06-17T12:00:00Z",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:payer-medicaid",
+      "resource": {
+        "active": true,
+        "id": "payer-medicaid",
+        "name": "Georgia Medicaid",
+        "resourceType": "Organization",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "pay",
+                "display": "Payer",
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:83899562-ca62-5257-9ba4-178849ef6d5e",
+      "resource": {
+        "beneficiary": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "id": "83899562-ca62-5257-9ba4-178849ef6d5e",
+        "payor": [
+          {
+            "display": "Georgia Medicaid",
+            "reference": "Organization/payer-medicaid"
+          }
+        ],
+        "period": {
+          "end": "2026-12-31",
+          "start": "2024-01-01"
+        },
+        "resourceType": "Coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "code": "MCPOL",
+              "display": "Medicaid managed care",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+            }
+          ],
+          "text": "Georgia Medicaid"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7a0ea63d-3923-52b6-b7f9-94ca793c9e02",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+        },
+        "id": "7a0ea63d-3923-52b6-b7f9-94ca793c9e02",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:83899562-ca62-5257-9ba4-178849ef6d5e"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2825.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4a17e925-d433-5c12-b861-fe012df59d3b",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:7a0ea63d-3923-52b6-b7f9-94ca793c9e02"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+        },
+        "id": "4a17e925-d433-5c12-b861-fe012df59d3b",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:83899562-ca62-5257-9ba4-178849ef6d5e"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Georgia Medicaid",
+          "reference": "Organization/payer-medicaid"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2316.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2825.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4203c36d-3775-5b63-a63c-955a0953a003",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+        },
+        "id": "4203c36d-3775-5b63-a63c-955a0953a003",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:83899562-ca62-5257-9ba4-178849ef6d5e"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3575.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:834e7da6-f924-53be-99cc-70daa1f4b805",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:4203c36d-3775-5b63-a63c-955a0953a003"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+        },
+        "id": "834e7da6-f924-53be-99cc-70daa1f4b805",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:83899562-ca62-5257-9ba4-178849ef6d5e"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Georgia Medicaid",
+          "reference": "Organization/payer-medicaid"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2931.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3575.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:daa64571-3654-5841-80d8-48b83f736ef1",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+        },
+        "id": "daa64571-3654-5841-80d8-48b83f736ef1",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:83899562-ca62-5257-9ba4-178849ef6d5e"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 4325.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:963a9149-187b-560b-abfb-ac83a76c1cdb",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:daa64571-3654-5841-80d8-48b83f736ef1"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+        },
+        "id": "963a9149-187b-560b-abfb-ac83a76c1cdb",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:83899562-ca62-5257-9ba4-178849ef6d5e"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Georgia Medicaid",
+          "reference": "Organization/payer-medicaid"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3546.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 4325.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ea7f76e8-6abc-5b62-9f9f-ed055d21307b",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+        },
+        "id": "ea7f76e8-6abc-5b62-9f9f-ed055d21307b",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:83899562-ca62-5257-9ba4-178849ef6d5e"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 5075.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:89540091-e387-51fc-ab9a-519a19708021",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:ea7f76e8-6abc-5b62-9f9f-ed055d21307b"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-egleston"
+        },
+        "id": "89540091-e387-51fc-ab9a-519a19708021",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Georgia Medicaid",
+              "reference": "urn:uuid:83899562-ca62-5257-9ba4-178849ef6d5e"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Georgia Medicaid",
+          "reference": "Organization/payer-medicaid"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 4161.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810093"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 5075.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7b5ecd04-349a-5fce-abc9-573c49de8240",
+      "resource": {
+        "description": {
+          "text": "Maintain oxygen saturation at or above 94 percent"
+        },
+        "id": "7b5ecd04-349a-5fce-abc9-573c49de8240",
+        "lifecycleStatus": "active",
+        "resourceType": "Goal",
+        "startDate": "2026-07-01",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "target": [
+          {
+            "dueDate": "2026-09-29",
+            "measure": {
+              "text": "Maintain oxygen saturation at or above 94 percent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3c86c9d5-997b-5212-86dc-92faa2ff9bf6",
+      "resource": {
+        "addresses": [
+          {
+            "reference": "urn:uuid:8e3b456f-c595-5514-9719-f8c99daad311"
+          }
+        ],
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ],
+            "text": "Assessment and Plan of Treatment"
+          }
+        ],
+        "encounter": {
+          "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+        },
+        "goal": [
+          {
+            "reference": "urn:uuid:7b5ecd04-349a-5fce-abc9-573c49de8240"
+          }
+        ],
+        "id": "3c86c9d5-997b-5212-86dc-92faa2ff9bf6",
+        "intent": "plan",
+        "period": {
+          "end": "2026-12-31",
+          "start": "2026-01-01"
+        },
+        "resourceType": "CarePlan",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "title": "Synthetic chronic care plan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:eccd06b8-857c-5092-85bd-1649b334f6a5",
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U3ludGhldGljIGNsaW5pY2FsIHN1bW1hcnku"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "urn:uuid:be5e91a3-1670-5aa6-9c5c-41bcc65cc05e"
+            }
+          ]
+        },
+        "date": "2026-07-01T12:00:00Z",
+        "id": "eccd06b8-857c-5092-85bd-1649b334f6a5",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "urn:uuid:9d0f69b0-d034-5d28-b356-19f242d9765f"
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "34133-9",
+              "display": "Summary of episode note",
+              "system": "http://loinc.org"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "resourceType": "Bundle",
+  "type": "transaction"
+}

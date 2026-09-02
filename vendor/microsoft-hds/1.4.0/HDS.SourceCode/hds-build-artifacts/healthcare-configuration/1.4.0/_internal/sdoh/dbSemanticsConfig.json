@@ -1,0 +1,338 @@
+{
+	"partitionRules": [
+		{
+			"name": "prYear",
+			"fields": [
+				"BankTransaction.TransactionCompletedTimestamp",
+				"CustomerAccountActivitySummary.CustomerAccountActivityTimestamp",
+				"CustomerAccountBalance.Timestamp",
+				"CustomerAccountBankProduct.PeriodEndDate",
+				"CustomerAccountCurrencyConversion.CurrencyConversionTimestamp",
+				"CustomerAccountDisbursement.DisbursementTimestamp",
+				"CustomerAccountLimit.Timestamp",
+				"CustomerAccountMarginInterestRate.PeriodEndDate",
+				"CustomerAccountPaymentCard.PeriodEndTimestamp",
+				"CustomerAccountPaymentMethod.PeriodEndDate",
+				"CustomerAccountPaymentSchedule.PaymentDate",
+				"CustomerAccountPeriodBalance.PeriodEndDate",
+				"CustomerAccountPortfolioPerformance.PeriodEndDate",
+				"CustomerAccountPosition.Timestamp",
+				"CustomerAccountRelatedChannel.PeriodEndDate",
+				"CustomerAccountRelatedEmployee.PeriodEndTimestamp",
+				"CustomerAccountStatement.DateIssued",
+				"CustomerAccountStatus.PeriodEndTimestamp",
+				"CustomerEvent.EventTimestamp",
+				"CustomerFinancialProfile.Date",
+				"CustomerStatus.PeriodEndTimestamp",
+				"ExchangeFinancialProductDailySummary.Date",
+				"PayeeAccountOrder.PeriodEndDate",
+				"PayeeAccountOrderRequest.PaymentRequestedDate",
+				"PayeeAccountTransaction.TransactionDate",
+				"PaymentCardStatus.PeriodEndTimestamp",
+				"RelatedCustomerAccount.PeriodEndTimestamp",
+				"RelatedCustomer.PeriodEndDate",
+				"TransactionFee.Timestamp",
+				"TransactionStatus.Timestamp"
+			],
+			"rule": "year({})",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prMonth",
+			"fields": [
+				"BankTransaction.TransactionCompletedTimestamp",
+				"CustomerAccountActivitySummary.CustomerAccountActivityTimestamp",
+				"CustomerAccountBalance.Timestamp",
+				"CustomerAccountCurrencyConversion.CurrencyConversionTimestamp",
+				"CustomerAccountDisbursement.DisbursementTimestamp",
+				"CustomerAccountLimit.Timestamp",
+				"CustomerAccountPeriodBalance.PeriodEndDate",
+				"CustomerAccountPosition.Timestamp",
+				"CustomerAccountStatement.DateIssued",
+				"CustomerAccountStatus.PeriodEndTimestamp",
+				"CustomerStatus.PeriodEndTimestamp",
+				"PayeeAccountOrderRequest.PaymentRequestedDate",
+				"PayeeAccountTransaction.TransactionDate",
+				"TransactionFee.Timestamp",
+				"TransactionStatus.Timestamp"
+			],
+			"rule": "month({})",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prDay",
+			"fields": [
+				"BankTransaction.TransactionCompletedTimestamp",
+				"CustomerAccountActivitySummary.CustomerAccountActivityTimestamp",
+				"CustomerAccountBalance.Timestamp",
+				"CustomerAccountCurrencyConversion.CurrencyConversionTimestamp",
+				"CustomerAccountDisbursement.DisbursementTimestamp",
+				"CustomerAccountLimit.Timestamp",
+				"CustomerAccountPeriodBalance.PeriodEndDate",
+				"CustomerAccountPosition.Timestamp",
+				"CustomerAccountStatement.DateIssued",
+				"CustomerAccountStatus.PeriodEndTimestamp",
+				"CustomerStatus.PeriodEndTimestamp",
+				"PayeeAccountOrderRequest.PaymentRequestedDate",
+				"PayeeAccountTransaction.TransactionDate",
+				"TransactionFee.Timestamp",
+				"TransactionStatus.Timestamp"
+			],
+			"rule": "day({})",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prAssetId",
+			"fields": [
+				"Vehicle.AssetId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prCdId",
+			"fields": [
+				"CdAccount.CdId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prCustomerAccountId",
+			"fields": [
+				"Collateral.CustomerAccountId",
+				"CustomerAccount.CustomerAccountId",
+				"CustomerAccountAction.CustomerAccountId",
+				"CustomerAccountActivitySummary.CustomerAccountID",
+				"CustomerAccountBankProduct.CustomerAccountId",
+				"CustomerAccountCreditScore.CustomerAccountId",
+				"CustomerAccountDocument.CustomerAccountId",
+				"CustomerAccountExpenseIncome.CustomerAccountId",
+				"CustomerAccountFee.CustomerAccountId",
+				"CustomerAccountInstruction.CustomerAccountId",
+				"CustomerAccountInvestmentObjective.CustomerAccountId",
+				"CustomerAccountInvestmentRiskProfile.CustomerAccountId",
+				"CustomerAccountMarginInterestRate.CustomerAccountId",
+				"CustomerAccountPaymentCard.CustomerAccountId",
+				"CustomerAccountPaymentMethod.CustomerAccountId",
+				"CustomerAccountPaymentSchedule.CustomerAccountId",
+				"CustomerAccountPortfolioPerformance.CustomerAccountId",
+				"CustomerAccountPosition.CustomerAccountId",
+				"CustomerAccountPurpose.CustomerAccountId",
+				"CustomerAccountRelatedChannel.CustomerAccountId",
+				"CustomerAccountRelatedEmployee.CustomerAccountId",
+				"CustomerAccountReview.CustomerAccountId",
+				"CustomerAccountSource.CustomerAccountId",
+				"CustomerAccountStatement.CustomerAccountId",
+				"CustomerAccountStatus.CustomerAccountId",
+				"CustomerAsset.CustomerAccountId",
+				"PayeeAccountOrder.CustomerAccountId",
+				"PersonalLoan.CustomerAccountId",
+				"RelatedCustomerAccount.CustomerAccountId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prCustomerAssetId",
+			"fields": [
+				"CustomerAssetFinancialAssessment.CustomerAssetId",
+				"CustomerAssetOwnership.CustomerAssetId",
+				"LienAttachedCustomerAsset.CustomerAssetId",
+				"OtherCustomerAssets.CustomerAssetId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prCustomerId",
+			"fields": [
+				"Customer.CustomerId",
+				"CustomerAction.CustomerId",
+				"CustomerCharacteristic.CustomerId",
+				"CustomerContactPurpose.CustomerId",
+				"CustomerCreditScore.CustomerId",
+				"CustomerCurrencyUsage.CustomerId",
+				"CustomerEducation.CustomerId",
+				"CustomerEmail.CustomerId",
+				"CustomerEmployment.CustomerId",
+				"CustomerEvent.CustomerId",
+				"CustomerFinancialProfile.CustomerId",
+				"CustomerGender.CustomerId",
+				"CustomerIdentification.CustomerId",
+				"CustomerLocation.CustomerId",
+				"CustomerMaritalStatus.CustomerId",
+				"CustomerRelatedChannel.CustomerId",
+				"CustomerRelatedParty.CustomerId",
+				"CustomerStatus.CustomerId",
+				"CustomerTelephoneNumber.CustomerId",
+				"IndividualCustomer.CustomerId",
+				"RelatedCustomer.CustomerId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prDocumentId",
+			"fields": [
+				"Document.DocumentId",
+				"DocumentEvent.DocumentId",
+				"DocumentRelatedParty.DocumentId",
+				"DocumentStatus.DocumentId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prEmployerId",
+			"fields": [
+				"Employer.EmployerId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prFinancialProductId",
+			"fields": [
+				"ExchangeFinancialProductDailySummary.FinancialProductId",
+				"FinancialProductIdentification.FinancialProductId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prHouseholdId",
+			"fields": [
+				"HouseholdMember.HouseholdId",
+				"HouseholdRelatedCustomerAccount.HouseholdId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prIdentificationId",
+			"fields": [
+				"Identification.IdentificationId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prInvestmentId",
+			"fields": [
+				"InvestmentHeld.InvestmentId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prLienId",
+			"fields": [
+				"Lien.LienId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prLocationId",
+			"fields": [
+				"Location.LocationId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prLocationId",
+			"fields": [
+				"UsaLocation.LocationId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prMortgageLoanId",
+			"fields": [
+				"MortgageLoan.MortgageLoanId",
+				"MortgageLoanRefinance.MortgageLoanId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prPayeeId",
+			"fields": [
+				"Payee.PayeeId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prPaymentCardId",
+			"fields": [
+				"PaymentCard.PaymentCardId",
+				"PaymentCardStatus.PaymentCardId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prProductId",
+			"fields": [
+				"ProductIndicator.ProductId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prPropertyId",
+			"fields": [
+				"Property.PropertyId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		},
+		{
+			"name": "prStockId",
+			"fields": [
+				"StockDividendDeclaration.StockId"
+			],
+			"rule": "{}/200000",
+			"type": "integer",
+			"enabled": true
+		}
+	],
+	"statusTables": [ "CustomerStatus", "CustomerAccountStatus" ],
+	"partyTables": [ "Party" ],
+	"partyTypes": [
+		{
+			"type": "Patient",
+			"table": "IdmPatient"
+		},
+		{
+			"type": "Practitioner",
+			"table": "ServiceProvider"
+		}
+	]
+}

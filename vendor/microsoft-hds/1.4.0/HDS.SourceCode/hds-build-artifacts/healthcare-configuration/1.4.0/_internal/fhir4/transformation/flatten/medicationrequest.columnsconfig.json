@@ -1,0 +1,25 @@
+{
+    "name": "Medication Request column configuration",
+    "columns": [
+      {
+        "name": "dispenseRequest_validityPeriod_start",
+        "style": "expr",
+        "expression": "dispenseRequest.validityPeriod.start"
+      },
+      {
+        "name": "dispenseRequest_validityPeriod_end",
+        "style": "expr",
+        "expression": "dispenseRequest.validityPeriod.end"
+      }
+    ],
+    "normalization": [
+      {
+        "name": "dispenseRequest_validityPeriod_start",
+        "type": "date"
+      },
+      {
+        "name": "dispenseRequest_validityPeriod_end",
+        "type": "date"
+      }
+    ]
+  }

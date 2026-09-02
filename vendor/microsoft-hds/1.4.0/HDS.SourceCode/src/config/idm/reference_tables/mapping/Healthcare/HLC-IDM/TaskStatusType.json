@@ -1,0 +1,109 @@
+{
+	"$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceMapping_schema.json",
+	"values": [
+		{
+			"targetKey": 1,
+			"sourceKeys": [ 1 ]
+		},
+		{
+			"targetKey": 2,
+			"sourceKeys": [ 2 ]
+		},
+		{
+			"targetKey": 3,
+			"sourceKeys": [ 3 ]
+		},
+		{
+			"targetKey": 4,
+			"sourceKeys": [ 4 ]
+		},
+		{
+			"targetKey": 5,
+			"sourceKeys": [ 5 ]
+		},
+		{
+			"targetKey": 6,
+			"sourceKeys": [ 6 ]
+		},
+		{
+			"targetKey": 7,
+			"sourceKeys": [ 7 ]
+		},
+		{
+			"targetKey": 8,
+			"sourceKeys": [ 8,534121001,"Completed" ]
+		},
+		{
+			"targetKey": 9,
+			"sourceKeys": [ 534121000,"Inprogress" ]
+		},
+		{
+			"targetKey": 10,
+			"sourceKeys": [ 534121002,"CancelledByExitEvent" ]
+		},
+		{
+			"targetKey": 11,
+			"sourceKeys": [ 534121003,"CancelledBySupressionSegment" ]
+		},
+		{
+			"targetKey": 12,
+			"sourceKeys": [ 534121004,"CancelledByJourneyStopped" ]
+		},
+		{
+			"targetKey": 13,
+			"sourceKeys": [ 534121005,"CancelledByActionFailure" ]
+		},
+		{
+			"targetKey": 14,
+			"sourceKeys": [ "Inflow" ]
+		},
+		{
+			"targetKey": 15,
+			"sourceKeys": [ "Processed" ]
+		},
+		{
+			"targetKey": 16,
+			"sourceKeys": [ "EntryProcessed" ]
+		},
+		{
+			"targetKey": 17,
+			"sourceKeys": [ "Dropoff" ]
+		},
+		{
+			"targetKey": 18,
+			"sourceKeys": [ "Postponed" ]
+		},
+		{
+			"targetKey": 19,
+			"sourceKeys": [ "Resumed" ]
+		},
+		{
+			"targetKey": 20,
+			"sourceKeys": [ "SystemFailure" ]
+		},
+		{
+			"targetKey": 21,
+			"sourceKeys": [ "EntrySystemFailure" ]
+		},
+		{
+			"targetKey": 22,
+			"sourceKeys": [ "Exited" ]
+		},
+		{
+			"targetKey": 23,
+			"sourceKeys": [ "PreEntryDropoff" ]
+		},
+		{
+			"targetKey": 24,
+			"sourceKeys": [ "ProfileResolvedWithRetry" ]
+		},
+		{
+			"targetKey": 25,
+			"sourceKeys": [ "ProfileUnresolved" ]
+		},
+		{
+			"targetKey": 26,
+			"sourceKeys": [ "Undefined" ]
+		}
+	]
+}

@@ -1,0 +1,63 @@
+{
+  "name": "DocumentReferenceContent column configuration",
+  "retainSourceColumns": false,
+  "explode": {
+    "name": "content_expl",
+    "expression": "content"
+  },
+  "columns": [
+    {
+      "name": "id",
+      "style": "col",
+      "expression": "id"
+    },
+    {
+      "name": "meta_source",
+      "style": "col",
+      "expression": "meta.source"
+    },
+    {
+      "name": "meta_lastUpdated",
+      "style": "col",
+      "expression": "meta.lastUpdated"
+    },
+    {
+      "name": "meta_versionId",
+      "style": "col",
+      "expression": "meta.versionId"
+    },
+    {
+      "name": "content_attachment_data",
+      "style": "expr",
+      "expression": "cast(unbase64(content_expl.attachment.data) as string)"
+    },
+    {
+      "name": "content_attachment_language",
+      "style": "expr",
+      "expression": "content_expl.attachment.language"
+    },
+    {
+      "name": "content_format_code",
+      "style": "expr",
+      "expression": "content_expl.format.code"
+    },
+    {
+      "name": "content_format_system",
+      "style": "expr",
+      "expression": "content_expl.format.system"
+    }
+  ],
+  "normalization": [
+    {
+      "name": "id",
+      "type": "resource",
+      "resourceId": "id",
+      "resourceType": "'DocumentReference'",
+      "sourceSystem": "meta_source"
+    },
+    {
+      "name": "meta_lastUpdated",
+      "type": "date"
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+{
+  "activitiesGlobalParameters": {
+    "administration_lakehouse_id": "%%administration_lakehouse_id%%",
+    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+    "silver_lakehouse_id": "%%silver_lakehouse_id%%",
+    "enable_hds_logs": "true",
+    "movement_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/system-configurations/fileOrchestrationConfig.json",
+    "enable_summary_metrics": "true",
+    "metrics_polling_interval": "120",
+    "parquet_date_rebase_mode_in_write": "CORRECTED",
+    "parquet_datetime_rebase_mode_in_write": "CORRECTED",
+    "claims_checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/claims_data_ingestions",
+    "bronze_imaging_delta_table_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Tables",
+    "bronze_imaging_table_schema_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/medical_imaging/dicom/table_schema.json",
+    "omop_lakehouse_id": "%%omop_lakehouse_id%%",
+    "customer_insights_lakehouse_id": "%%customer_insights_lakehouse_id%%",
+    "patient_outreach_lakehouse_id": "%%patient_outreach_lakehouse_id%%",
+    "care_management_analytics_lakehouse_id": "%%care_management_analytics_lakehouse_id%%"
+  },
+  "activities": {
+    "%%fhir_ndjson_bronze_ingestion_notebook_id%%": {
+      "name": "msft_fhir_ndjson_bronze_ingestion",
+      "parameters": {
+        "source_path_pattern": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/Process/Clinical/FHIR-NDJSON",
+        "move_failed_files_enabled": "true",
+        "compression_enabled": "true",
+        "target_table_name": "ClinicalFhir",
+        "target_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Tables",
+        "max_files_per_trigger": "1000",
+        "max_structured_streaming_queries": "1",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/%%bronze_lakehouse_id%%",
+        "schema_dir_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/fhir4/schema/bronze",
+        "validation_config_key": "bronze",
+        "file_extension": "ndjson",
+        "delta_log_retention_duration": "90 days",
+        "delta_deleted_file_retention_duration": "90 days"
+      }
+    },
+    "%%bronze_silver_flatten_notebook_id%%": {
+      "name": "msft_bronze_silver_flatten",
+      "parameters": {
+        "source_table_name": "ClinicalFhir",
+        "config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/fhir4/transformation/flatten/flatten_config.json",
+        "source_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Tables",
+        "target_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%silver_lakehouse_id%%/Tables",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/%%silver_lakehouse_id%%",
+        "schema_dir_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/fhir4/schema/silver",
+        "max_files_per_trigger": "1000",
+        "max_bytes_per_trigger": "1000000000",
+        "max_structured_streaming_queries": "3",
+        "optimize_write_bin_size": "256m",
+        "shuffle_partitions": "800",
+        "max_partition_bytes": "64m"
+      }
+    },
+    "%%claims_extract_bronze_ingestion_notebook_id%%": {
+      "name": "msft_claims_extract_bronze_ingestion",
+      "parameters": {
+        "cms_cclf_files_drop_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/Process/Claims/CCLF/",
+        "cclf_files_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/claims/cclf/cclf_file_config.json",
+        "target_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Tables",
+        "max_files_per_trigger": "1000",
+        "source_type": "CCLF"
+      }
+    },
+    "%%claims_fhir_conversion_notebook_id%%": {
+      "name": "msft_claims_fhir_conversion",
+      "parameters": {
+        "cclf_to_fhir_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/claims/cclf/cclf_fhir_mapping.json",
+        "avro_schema_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/fhir4/schema/silver",
+        "fhir_ndjson_files_root_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/Process/Clinical/FHIR-NDJSON",
+        "fhir_namespace": "Fabric.HDS",
+        "delta_table_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Tables",
+        "max_records_per_ndjson": "1000",
+        "source_type": "CCLF"
+      }
+    },
+    "%%imaging_dicom_extract_bronze_ingestion_notebook_id%%": {
+      "name": "msft_imaging_dicom_extract_bronze_ingestion",
+      "parameters": {
+        "ingestion_pattern": "0",
+        "inventory_folder_name": "InventoryFiles",
+        "azure_blob_storage_inventory": "true",
+        "external_source_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/External/Imaging/DICOM",
+        "process_source_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/Process/Imaging/DICOM",
+        "inventory_source_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/Inventory/Imaging/DICOM",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/medical_imaging/dicom_metadata_extraction",
+        "move_failed_files": "true",
+        "compression_enabled": "true",
+        "max_files_per_trigger": "100000",
+        "max_bytes_per_trigger": "1000000000",
+        "num_retries": "1",
+        "rows_per_partition": "250",
+        "dicom_extract_lib_params": "{'stop_before_pixels': False, 'suppress_validation_tags': False}"
+      }
+    },
+    "%%imaging_dicom_patch_file_bronze_ingestion_notebook_id%%": {
+      "name": "msft_imaging_dicom_patch_file_bronze_ingestion",
+      "parameters": {
+        "ingestion_pattern": "0",
+        "external_source_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/External/Imaging/OPERATIONS",
+        "process_source_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/Process/Imaging/OPERATIONS",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/medical_imaging/patch_file_ingestion",
+        "move_failed_files": "false",
+        "compression_enabled": "false",
+        "business_event_table_logging_enabled": "true",
+        "max_files_per_trigger": "100000",
+        "max_bytes_per_trigger": "1000000000"
+      }
+    },
+    "%%imaging_dicom_silver_metastore_transformation_notebook_id%%": {
+      "name": "msft_imaging_dicom_silver_metastore_transformation",
+      "parameters": {
+        "dicom_to_fhir_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/medical_imaging/dicom/metadata_fhir_mapping.json",
+        "target_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%silver_lakehouse_id%%/Tables",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/medical_imaging/imagingmetastore",
+        "max_files_per_trigger": "100000",
+        "max_bytes_per_trigger": "1000000000"
+      }
+    },
+    "%%imaging_dicom_fhir_conversion_notebook_id%%": {
+      "name": "msft_imaging_dicom_fhir_conversion",
+      "parameters": {
+        "fhir_ndjson_files_root_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/Process/Clinical/FHIR-NDJSON",
+        "avro_schema_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/fhir4/schema/silver",
+        "dicom_to_fhir_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/medical_imaging/dicom/metadata_fhir_mapping.json",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/medical_imaging/dicom_to_fhir",
+        "metastore_table_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%silver_lakehouse_id%%/Tables",
+        "max_records_per_ndjson": "1000",
+        "max_files_per_trigger": "10",
+        "max_bytes_per_trigger": "2000000000"
+      }
+    },
+    "%%omop_silver_gold_transformation_notebook_id%%": {
+      "name": "msft_omop_silver_gold_transformation",
+      "parameters": {
+        "vocab_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/ReferenceData/Clinical/OMOP/Vocab-HDS",
+        "vocab_checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/vocab",
+        "omop_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/fhir4/transformation/omop",
+        "source_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%silver_lakehouse_id%%/Tables",
+        "target_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%omop_lakehouse_id%%/Tables"
+      }
+    },
+    "%%sdoh_raw_extract_bronze_ingestion_notebook_id%%": {
+      "name": "msft_sdoh_raw_extract_bronze_ingestion",
+      "parameters": {
+        "sdoh_process_folder_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Files/Process/SDOH",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/streaming_checkpoint_data"
+      }
+    },
+    "%%sdoh_bronze_silver_flatten_notebook_id%%": {
+      "name": "msft_sdoh_bronze_silver_flatten",
+      "parameters": {
+        "sdoh_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/sdoh"
+      }
+    },
+    "%%ci_silver_customerinsights_transformation_notebook_id%%": {
+      "name": "msft_ci_silver_customerinsights_transformation",
+      "parameters": { "adsl_shortcut_name": "main" }
+    },
+    "%%poa_bronze_silver_transformation_notebook_id%%": {
+      "name": "msft_poa_bronze_silver_transformation",
+      "parameters": {
+        "ci_profile_id": "",
+        "idm_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/idm"
+      }
+    },
+    "%%poa_silver_gold_tranformation_notebook_id%%": {
+      "name": "msft_poa_silver_gold_tranformation",
+      "parameters": {
+        "days_from_journey": "30",
+        "poagold_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/poagold"
+      }
+    },
+    "%%cma_silver_gold_transformation_notebook_id%%": {
+      "name": "msft_cma_silver_gold_transformation",
+      "parameters": {
+        "cma_gold_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/cma/transformation/clinical",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/cma/"
+      }
+    },
+    "%%dax_bronze_ingestion_notebook_id%%": {
+      "name": "msft_dax_bronze_ingestion",
+      "parameters": {
+        "max_files_per_trigger": "1000",
+        "target_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Tables",
+        "dax_target_table_name": "DaxCopilotData",
+        "max_structured_streaming_queries": "1",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/%%bronze_lakehouse_id%%"
+      }
+    },
+    "%%dax_silver_ingestion_notebook_id%%": {
+      "name": "msft_dax_silver_ingestion",
+      "parameters": {
+        "max_files_per_trigger": "1000",
+        "max_bytes_per_trigger": "1000000000",
+        "dax_source_table_name": "DaxCopilotData",
+        "dax_config_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/dax/enrichments/dax_config.json",
+        "target_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%silver_lakehouse_id%%/Tables",
+        "source_tables_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%bronze_lakehouse_id%%/Tables",
+        "checkpoint_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHCheckpoint/%%silver_lakehouse_id%%",
+        "max_structured_streaming_queries": "1",
+        "dax_resource_schema_path": "abfss://%%workspace_id%%@%%endpoint_uri%%/%%administration_lakehouse_id%%/Files/HealthDataManager/DMHConfiguration/_internal/dax/resources"
+      }
+    }
+  }
+}

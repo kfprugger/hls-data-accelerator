@@ -1,0 +1,34 @@
+{
+    "name": "Practitioner column configuration",
+    "autoFlattenStruct": false,
+    "retainSourceColumns": false,
+    "stringifyComplexTypes": false,
+    "extendWithDefaultRules": false,
+    "columns": [
+        {
+            "name": "Id",
+            "style": "expr",
+            "expression": "id_orig"
+        },
+        {
+            "name": "GivenName",
+            "style": "expr",
+            "expression": "name[0].given[0]"
+        },
+        {
+            "name": "LastName",
+            "style": "expr",
+            "expression": "name[0].family"
+        },
+        {
+            "name": "Gender",
+            "style": "expr",
+            "expression": "gender"
+        },
+        {
+            "name": "LastUpdated",
+            "style": "col",
+            "expression": "meta.lastUpdated"
+        }
+    ]
+}

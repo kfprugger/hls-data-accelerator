@@ -1,0 +1,1878 @@
+{
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f",
+      "resource": {
+        "active": true,
+        "address": [
+          {
+            "city": "Atlanta",
+            "country": "US",
+            "line": [
+              "132 Synthetic Care Way"
+            ],
+            "postalCode": "30322",
+            "state": "GA",
+            "use": "home"
+          }
+        ],
+        "birthDate": "1959-07-01",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2028-9",
+                  "display": "Asian",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Asian"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+          },
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2186-5",
+                  "display": "Not Hispanic or Latino",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Not Hispanic or Latino"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+          }
+        ],
+        "gender": "female",
+        "id": "911c4af9-94c2-5251-92d8-351c27de878f",
+        "identifier": [
+          {
+            "system": "https://brakekat.example/fhir/synthetic-mrn",
+            "type": {
+              "text": "Synthetic MRN"
+            },
+            "value": "SYN-000033"
+          }
+        ],
+        "name": [
+          {
+            "family": "Diaz",
+            "given": [
+              "Casey"
+            ],
+            "text": "Casey Diaz",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:925bff1a-f9f9-591b-a3de-3b106f41a9f4",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "925bff1a-f9f9-591b-a3de-3b106f41a9f4",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+            }
+          }
+        ],
+        "period": {
+          "end": "2024-07-12T12:00:00Z",
+          "start": "2024-07-11T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e287d17e-594e-5552-bfdf-06ada9001b2b",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "e287d17e-594e-5552-bfdf-06ada9001b2b",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-01-07T18:00:00Z",
+          "start": "2025-01-07T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2bbf08ca-ba29-5c10-95b6-72072726d8f2",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "2bbf08ca-ba29-5c10-95b6-72072726d8f2",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-04T12:00:00Z",
+          "start": "2025-07-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:68f57232-a0ef-593c-b8be-1712bc4366c7",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "68f57232-a0ef-593c-b8be-1712bc4366c7",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-18T12:00:00Z",
+          "start": "2025-07-16T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e166b80b-aaaf-5e90-bcf3-d86b90c5b8f8",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "e166b80b-aaaf-5e90-bcf3-d86b90c5b8f8",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2467a2ea-d018-57a2-9ba6-c5aecf37ecb2",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "2467a2ea-d018-57a2-9ba6-c5aecf37ecb2",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-04-02T16:48:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "edc27d6a-4f17-5139-90f5-dd171aac2954",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-06-05T12:00:00Z",
+          "start": "2026-06-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:40b087fe-b726-5066-82de-a646dcff1880",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "195967001",
+              "display": "Asthma",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Asthma"
+        },
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "40b087fe-b726-5066-82de-a646dcff1880",
+        "onsetDateTime": "2025-07-01T12:00:00Z",
+        "recordedDate": "2026-06-01T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8a205ac3-3242-54d3-b86e-5b683dd7940e",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "13645005",
+              "display": "Chronic obstructive lung disease",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Chronic obstructive lung disease"
+        },
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "8a205ac3-3242-54d3-b86e-5b683dd7940e",
+        "onsetDateTime": "2024-07-01T12:00:00Z",
+        "recordedDate": "2026-05-31T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d49d5ffe-891e-5ba1-9482-cb50006de980",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "4548-4",
+              "display": "Hemoglobin A1c",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "effectiveDateTime": "2026-06-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "d49d5ffe-891e-5ba1-9482-cb50006de980",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 10.1
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:861db67d-0b18-5a07-ae78-59cdab3db97d",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8480-6",
+              "display": "Systolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Systolic blood pressure"
+        },
+        "effectiveDateTime": "2026-05-06T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "861db67d-0b18-5a07-ae78-59cdab3db97d",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 148
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c4a7fd60-875a-5243-b364-0e57e230f972",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8462-4",
+              "display": "Diastolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Diastolic blood pressure"
+        },
+        "effectiveDateTime": "2026-04-08T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "c4a7fd60-875a-5243-b364-0e57e230f972",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 94
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:73f5982f-f73a-5382-a392-e0ea9bb86799",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "39156-5",
+              "display": "Body mass index",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Body mass index"
+        },
+        "effectiveDateTime": "2026-03-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "73f5982f-f73a-5382-a392-e0ea9bb86799",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "valueQuantity": {
+          "code": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "unit": "kg/m2",
+          "value": 27.5
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b4c7aa4b-a92e-5263-8fd1-456f1f135ae6",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "14959-1",
+              "display": "Microalbumin/Creatinine",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Microalbumin/Creatinine"
+        },
+        "effectiveDateTime": "2026-02-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "b4c7aa4b-a92e-5263-8fd1-456f1f135ae6",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "valueQuantity": {
+          "code": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mg/g",
+          "value": 22
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f096276d-a89f-55a4-9d0a-195939afc686",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "2708-6",
+              "display": "Oxygen saturation",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "effectiveDateTime": "2026-01-14T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "f096276d-a89f-55a4-9d0a-195939afc686",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 98
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:042d62dd-e299-5671-bf2a-cd8e9e007989",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "042d62dd-e299-5671-bf2a-cd8e9e007989",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:62369936-9cfe-5cf1-824d-a17b4149fcd4",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "62369936-9cfe-5cf1-824d-a17b4149fcd4",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2f5e436b-43c8-598f-902e-561cc0ccbf3d",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "2f5e436b-43c8-598f-902e-561cc0ccbf3d",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:426f77bb-f3eb-5edf-8ec5-9e70a70f7256",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "426f77bb-f3eb-5edf-8ec5-9e70a70f7256",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:76805a9b-2d56-591e-89a4-64a27dbd609c",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "76805a9b-2d56-591e-89a4-64a27dbd609c",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:58abbad8-c76d-580c-acf7-68cb126caed9",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "58abbad8-c76d-580c-acf7-68cb126caed9",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:56a288d4-8d5a-5c7c-a593-3e8da470bbeb",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "56a288d4-8d5a-5c7c-a593-3e8da470bbeb",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:aea56b3c-cca7-568f-a90a-52003dbb8179",
+      "resource": {
+        "authoredOn": "2025-12-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "aea56b3c-cca7-568f-a90a-52003dbb8179",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ba06b32a-ad95-5ec2-8ad8-7278f98f826d",
+      "resource": {
+        "authoredOn": "2025-11-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "ba06b32a-ad95-5ec2-8ad8-7278f98f826d",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a901c841-b273-588a-b87b-38fc485f15d9",
+      "resource": {
+        "authoredOn": "2025-10-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "a901c841-b273-588a-b87b-38fc485f15d9",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7da2a36e-55da-5cf6-8979-439d807e64b5",
+      "resource": {
+        "authoredOn": "2025-09-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "7da2a36e-55da-5cf6-8979-439d807e64b5",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d7c1d286-1838-5543-8c1a-57afbbb299a8",
+      "resource": {
+        "authoredOn": "2025-08-05T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "d7c1d286-1838-5543-8c1a-57afbbb299a8",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d6708898-ff38-5f15-bb27-229b4ee8f346",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "d6708898-ff38-5f15-bb27-229b4ee8f346",
+        "occurrenceDateTime": "2026-03-03T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "133",
+              "display": "Pneumococcal conjugate PCV 13",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:9ef37b30-cee0-5012-9bbc-aa71885ef600",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "9ef37b30-cee0-5012-9bbc-aa71885ef600",
+        "occurrenceDateTime": "2026-05-02T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "140",
+              "display": "Influenza seasonal injectable",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0b850fa4-30ed-5426-b8b4-fe30e60af0ab",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "43075005",
+              "display": "Inhalation therapy",
+              "system": "http://snomed.info/sct"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "id": "0b850fa4-30ed-5426-b8b4-fe30e60af0ab",
+        "performedDateTime": "2026-06-17T12:00:00Z",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:payer-medicare",
+      "resource": {
+        "active": true,
+        "id": "payer-medicare",
+        "name": "Medicare",
+        "resourceType": "Organization",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "pay",
+                "display": "Payer",
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:18ef4ebd-61d5-5ed1-995f-3778f27e574f",
+      "resource": {
+        "beneficiary": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "id": "18ef4ebd-61d5-5ed1-995f-3778f27e574f",
+        "payor": [
+          {
+            "display": "Medicare",
+            "reference": "Organization/payer-medicare"
+          }
+        ],
+        "period": {
+          "end": "2026-12-31",
+          "start": "2024-01-01"
+        },
+        "resourceType": "Coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "code": "EHCPOL",
+              "display": "Medicare policy",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+            }
+          ],
+          "text": "Medicare"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:77034d30-9a13-5c3a-94bb-1fa56ccde723",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "77034d30-9a13-5c3a-94bb-1fa56ccde723",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:18ef4ebd-61d5-5ed1-995f-3778f27e574f"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 1300.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6127af01-13ef-5b36-a451-92560c962578",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:77034d30-9a13-5c3a-94bb-1fa56ccde723"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "6127af01-13ef-5b36-a451-92560c962578",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:18ef4ebd-61d5-5ed1-995f-3778f27e574f"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 1066.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 1300.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:08fbd29f-de8a-5857-b43b-1102b6ddfaec",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "08fbd29f-de8a-5857-b43b-1102b6ddfaec",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:18ef4ebd-61d5-5ed1-995f-3778f27e574f"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2050.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e7b35e2e-6264-5834-a82e-782c706fdad9",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:08fbd29f-de8a-5857-b43b-1102b6ddfaec"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "e7b35e2e-6264-5834-a82e-782c706fdad9",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:18ef4ebd-61d5-5ed1-995f-3778f27e574f"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 1681.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2050.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:82c61956-19c9-5815-a9f2-bb36961453dd",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "82c61956-19c9-5815-a9f2-bb36961453dd",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:18ef4ebd-61d5-5ed1-995f-3778f27e574f"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2800.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b876a4cb-4d15-5af4-aae7-291b5a08a969",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:82c61956-19c9-5815-a9f2-bb36961453dd"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "b876a4cb-4d15-5af4-aae7-291b5a08a969",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:18ef4ebd-61d5-5ed1-995f-3778f27e574f"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2296.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2800.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2b5c2d92-54d8-50c1-b2da-f514bb981e00",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "2b5c2d92-54d8-50c1-b2da-f514bb981e00",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:18ef4ebd-61d5-5ed1-995f-3778f27e574f"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3550.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a6bf498d-c3b8-5495-9b84-579a4184a159",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:2b5c2d92-54d8-50c1-b2da-f514bb981e00"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "a6bf498d-c3b8-5495-9b84-579a4184a159",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:18ef4ebd-61d5-5ed1-995f-3778f27e574f"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2911.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810032"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3550.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c5a2d6ab-74d5-5492-8449-1e8655c893ad",
+      "resource": {
+        "description": {
+          "text": "Maintain oxygen saturation at or above 94 percent"
+        },
+        "id": "c5a2d6ab-74d5-5492-8449-1e8655c893ad",
+        "lifecycleStatus": "active",
+        "resourceType": "Goal",
+        "startDate": "2026-07-01",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "target": [
+          {
+            "dueDate": "2026-09-29",
+            "measure": {
+              "text": "Maintain oxygen saturation at or above 94 percent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b8c8ab3d-cebe-5508-ae97-6eb124267c9f",
+      "resource": {
+        "addresses": [
+          {
+            "reference": "urn:uuid:40b087fe-b726-5066-82de-a646dcff1880"
+          }
+        ],
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ],
+            "text": "Assessment and Plan of Treatment"
+          }
+        ],
+        "encounter": {
+          "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+        },
+        "goal": [
+          {
+            "reference": "urn:uuid:c5a2d6ab-74d5-5492-8449-1e8655c893ad"
+          }
+        ],
+        "id": "b8c8ab3d-cebe-5508-ae97-6eb124267c9f",
+        "intent": "plan",
+        "period": {
+          "end": "2026-12-31",
+          "start": "2026-01-01"
+        },
+        "resourceType": "CarePlan",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "title": "Synthetic chronic care plan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:37e313a5-293c-567c-91cf-dfcd527d8fb5",
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U3ludGhldGljIGNsaW5pY2FsIHN1bW1hcnku"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "urn:uuid:edc27d6a-4f17-5139-90f5-dd171aac2954"
+            }
+          ]
+        },
+        "date": "2026-07-01T12:00:00Z",
+        "id": "37e313a5-293c-567c-91cf-dfcd527d8fb5",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "urn:uuid:911c4af9-94c2-5251-92d8-351c27de878f"
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "34133-9",
+              "display": "Summary of episode note",
+              "system": "http://loinc.org"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "resourceType": "Bundle",
+  "type": "transaction"
+}

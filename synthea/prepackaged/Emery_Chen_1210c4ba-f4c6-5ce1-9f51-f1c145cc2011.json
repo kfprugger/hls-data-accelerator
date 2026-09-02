@@ -1,0 +1,2502 @@
+{
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011",
+      "resource": {
+        "active": true,
+        "address": [
+          {
+            "city": "Atlanta",
+            "country": "US",
+            "line": [
+              "124 Synthetic Care Way"
+            ],
+            "postalCode": "30322",
+            "state": "GA",
+            "use": "home"
+          }
+        ],
+        "birthDate": "1967-07-01",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2106-3",
+                  "display": "White",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "White"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+          },
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2135-2",
+                  "display": "Hispanic or Latino",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Hispanic or Latino"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+          }
+        ],
+        "gender": "female",
+        "id": "1210c4ba-f4c6-5ce1-9f51-f1c145cc2011",
+        "identifier": [
+          {
+            "system": "https://brakekat.example/fhir/synthetic-mrn",
+            "type": {
+              "text": "Synthetic MRN"
+            },
+            "value": "SYN-000025"
+          }
+        ],
+        "name": [
+          {
+            "family": "Chen",
+            "given": [
+              "Emery"
+            ],
+            "text": "Emery Chen",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e1c59bd0-dd48-55fd-8494-1f69b497c9c1",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "e1c59bd0-dd48-55fd-8494-1f69b497c9c1",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+            }
+          }
+        ],
+        "period": {
+          "end": "2024-07-12T12:00:00Z",
+          "start": "2024-07-11T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c0fae7c5-fc54-5d41-9d3c-26edfc4baf60",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "c0fae7c5-fc54-5d41-9d3c-26edfc4baf60",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-01-07T18:00:00Z",
+          "start": "2025-01-07T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e44e7997-430c-5e69-93bf-5466f60459c0",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "e44e7997-430c-5e69-93bf-5466f60459c0",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-04T12:00:00Z",
+          "start": "2025-07-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:762cc38b-0477-54df-b95f-0f01e67a9644",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "762cc38b-0477-54df-b95f-0f01e67a9644",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-18T12:00:00Z",
+          "start": "2025-07-16T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4b3cfb6e-f582-572a-8f8e-0aaca295ed45",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "4b3cfb6e-f582-572a-8f8e-0aaca295ed45",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a72c3968-808d-50e1-833d-0e513df28621",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "a72c3968-808d-50e1-833d-0e513df28621",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-04-02T16:48:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "c57d3e16-518a-537d-bc51-d6cc5bee269a",
+        "location": [
+          {
+            "location": {
+              "display": "Emory University Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-06-05T12:00:00Z",
+          "start": "2026-06-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Emory University Hospital",
+          "reference": "Organization/emory-university-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c950489c-5e31-566d-9103-6868a7c1b1ab",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "195967001",
+              "display": "Asthma",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Asthma"
+        },
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "c950489c-5e31-566d-9103-6868a7c1b1ab",
+        "onsetDateTime": "2025-07-01T12:00:00Z",
+        "recordedDate": "2026-06-01T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:43a24239-a2cc-54ee-8f22-287ab58433b2",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "162864005",
+              "display": "Body mass index 30+ - obesity",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Body mass index 30+ - obesity"
+        },
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "43a24239-a2cc-54ee-8f22-287ab58433b2",
+        "onsetDateTime": "2024-07-01T12:00:00Z",
+        "recordedDate": "2026-05-31T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:083a644b-1907-503d-999f-8e2a3d33fdcf",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "4548-4",
+              "display": "Hemoglobin A1c",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "effectiveDateTime": "2026-06-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "083a644b-1907-503d-999f-8e2a3d33fdcf",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 10.1
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:133d8863-aa86-56ee-98a3-f8297022ce8f",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8480-6",
+              "display": "Systolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Systolic blood pressure"
+        },
+        "effectiveDateTime": "2026-05-06T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "133d8863-aa86-56ee-98a3-f8297022ce8f",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 148
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4594eae3-2159-56e3-9f8b-4af48ef1edd1",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8462-4",
+              "display": "Diastolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Diastolic blood pressure"
+        },
+        "effectiveDateTime": "2026-04-08T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "4594eae3-2159-56e3-9f8b-4af48ef1edd1",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 94
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d4a50918-9c0d-58f1-a8ff-d4bbf8478000",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "39156-5",
+              "display": "Body mass index",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Body mass index"
+        },
+        "effectiveDateTime": "2026-03-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "d4a50918-9c0d-58f1-a8ff-d4bbf8478000",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "valueQuantity": {
+          "code": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "unit": "kg/m2",
+          "value": 27.5
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7153be33-77f8-564e-8237-d961dbf5d99a",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "14959-1",
+              "display": "Microalbumin/Creatinine",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Microalbumin/Creatinine"
+        },
+        "effectiveDateTime": "2026-02-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "7153be33-77f8-564e-8237-d961dbf5d99a",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "valueQuantity": {
+          "code": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mg/g",
+          "value": 29
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:79d9d701-9c65-5186-860d-4327279337fa",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "2708-6",
+              "display": "Oxygen saturation",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "effectiveDateTime": "2026-01-14T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "79d9d701-9c65-5186-860d-4327279337fa",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 90
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:bf739fdf-fef4-5fe1-b489-c822df7ba18b",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "bf739fdf-fef4-5fe1-b489-c822df7ba18b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2870208c-0dee-5cad-9ae6-1e8e23d1ba5c",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "2870208c-0dee-5cad-9ae6-1e8e23d1ba5c",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:32dc2eb5-2abd-5e84-a34c-d5d4b103c397",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "32dc2eb5-2abd-5e84-a34c-d5d4b103c397",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:91a70c0e-0d54-5f70-b862-bd8f3e97a774",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "91a70c0e-0d54-5f70-b862-bd8f3e97a774",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2f418201-1f2e-548a-a3b0-e94214022d3e",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "2f418201-1f2e-548a-a3b0-e94214022d3e",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:34765720-e347-5066-bb1d-4855bb6a4c41",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "34765720-e347-5066-bb1d-4855bb6a4c41",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3d76124f-367b-5fe4-9906-698dda651501",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "3d76124f-367b-5fe4-9906-698dda651501",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cfcfe563-f3d7-5947-bfb3-ff054f896a48",
+      "resource": {
+        "authoredOn": "2025-12-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "cfcfe563-f3d7-5947-bfb3-ff054f896a48",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:059f283b-1fd4-56b2-b772-58546caca9a3",
+      "resource": {
+        "authoredOn": "2025-11-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "059f283b-1fd4-56b2-b772-58546caca9a3",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b3339cff-0987-507f-b41b-ac5803c1f9a3",
+      "resource": {
+        "authoredOn": "2025-10-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "b3339cff-0987-507f-b41b-ac5803c1f9a3",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e36e1282-c8ed-5533-a833-8a83a7c1c98e",
+      "resource": {
+        "authoredOn": "2025-09-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "e36e1282-c8ed-5533-a833-8a83a7c1c98e",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6895e7ea-05c1-5fd3-8f30-5f85ba51cacc",
+      "resource": {
+        "authoredOn": "2025-08-05T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "6895e7ea-05c1-5fd3-8f30-5f85ba51cacc",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0ed4f86f-6fde-5e2f-850a-63c33bc2151f",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "0ed4f86f-6fde-5e2f-850a-63c33bc2151f",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6a7d70e6-1cdb-54bd-950e-c2b120522215",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "6a7d70e6-1cdb-54bd-950e-c2b120522215",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:bf6d73b5-c863-52f5-b071-a0c3c607efbc",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "bf6d73b5-c863-52f5-b071-a0c3c607efbc",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2ad29e8a-dfca-5fb2-b2c4-01f88e82581b",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "2ad29e8a-dfca-5fb2-b2c4-01f88e82581b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:401b624b-a4e7-5224-9380-2478eb449cdd",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "401b624b-a4e7-5224-9380-2478eb449cdd",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:413755d6-6d82-5ae4-bf1d-7bb585cf1ee7",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "413755d6-6d82-5ae4-bf1d-7bb585cf1ee7",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b417a94e-aa99-59b3-8c1d-cc1a77c67efc",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "b417a94e-aa99-59b3-8c1d-cc1a77c67efc",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d9de0d92-0e42-5d4e-8f8d-8ac29a4e32e9",
+      "resource": {
+        "authoredOn": "2025-12-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "d9de0d92-0e42-5d4e-8f8d-8ac29a4e32e9",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:333613e1-77b0-5b61-bf77-a2fceb92bdd2",
+      "resource": {
+        "authoredOn": "2025-11-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "333613e1-77b0-5b61-bf77-a2fceb92bdd2",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a96c84bf-f5b3-5787-80f3-78454c384740",
+      "resource": {
+        "authoredOn": "2025-10-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "a96c84bf-f5b3-5787-80f3-78454c384740",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:46802669-52f5-55b0-93cc-7ce9aa5ddfc5",
+      "resource": {
+        "authoredOn": "2025-09-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "46802669-52f5-55b0-93cc-7ce9aa5ddfc5",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8c47ee81-a6ac-5b11-89d5-13fdc12a44da",
+      "resource": {
+        "authoredOn": "2025-08-05T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "8c47ee81-a6ac-5b11-89d5-13fdc12a44da",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4302167d-0db5-53a8-8eab-b4f1b1d1bcc8",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "4302167d-0db5-53a8-8eab-b4f1b1d1bcc8",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3b0a0fdc-3a51-592d-8c00-0578017dcd2b",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "3b0a0fdc-3a51-592d-8c00-0578017dcd2b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:904743c5-e19a-5f66-94be-740433ef223b",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "904743c5-e19a-5f66-94be-740433ef223b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:23f51bcc-a507-58ad-8840-7bf5168575f4",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "23f51bcc-a507-58ad-8840-7bf5168575f4",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:194a5366-4753-5628-a198-b8a5d9e858a6",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "194a5366-4753-5628-a198-b8a5d9e858a6",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:09082d1e-67af-50a3-b561-58177130a692",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "09082d1e-67af-50a3-b561-58177130a692",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:21af5365-f543-599a-86e0-527957766173",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "21af5365-f543-599a-86e0-527957766173",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e23ce6c6-a0c6-5dd1-aa2a-de79cc257f8a",
+      "resource": {
+        "authoredOn": "2025-12-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "e23ce6c6-a0c6-5dd1-aa2a-de79cc257f8a",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cf6f0b2d-0e04-55b8-86e3-a989feac307a",
+      "resource": {
+        "authoredOn": "2025-11-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "cf6f0b2d-0e04-55b8-86e3-a989feac307a",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:42b46bfa-5fa4-555f-a075-0e7678f4403f",
+      "resource": {
+        "authoredOn": "2025-10-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "42b46bfa-5fa4-555f-a075-0e7678f4403f",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c6567739-e373-57f4-adfb-ec24b87855d5",
+      "resource": {
+        "authoredOn": "2025-09-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "c6567739-e373-57f4-adfb-ec24b87855d5",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2f987ed8-84d1-5776-a62f-570936e5247b",
+      "resource": {
+        "authoredOn": "2025-08-05T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "2f987ed8-84d1-5776-a62f-570936e5247b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c33fd358-b20b-59ed-9b0d-30183d62f534",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "c33fd358-b20b-59ed-9b0d-30183d62f534",
+        "occurrenceDateTime": "2026-03-03T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "133",
+              "display": "Pneumococcal conjugate PCV 13",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f72c3542-3e84-5779-98f5-39b0a29a1a5a",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "f72c3542-3e84-5779-98f5-39b0a29a1a5a",
+        "occurrenceDateTime": "2026-05-02T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "140",
+              "display": "Influenza seasonal injectable",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c0e88e0b-fe87-55d9-aca4-cd892f7a8e94",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "43075005",
+              "display": "Inhalation therapy",
+              "system": "http://snomed.info/sct"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "id": "c0e88e0b-fe87-55d9-aca4-cd892f7a8e94",
+        "performedDateTime": "2026-06-17T12:00:00Z",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:payer-medicare",
+      "resource": {
+        "active": true,
+        "id": "payer-medicare",
+        "name": "Medicare",
+        "resourceType": "Organization",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "pay",
+                "display": "Payer",
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b46e2fc1-7764-5c30-82ce-2d3011f16253",
+      "resource": {
+        "beneficiary": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "id": "b46e2fc1-7764-5c30-82ce-2d3011f16253",
+        "payor": [
+          {
+            "display": "Medicare",
+            "reference": "Organization/payer-medicare"
+          }
+        ],
+        "period": {
+          "end": "2026-12-31",
+          "start": "2024-01-01"
+        },
+        "resourceType": "Coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "code": "EHCPOL",
+              "display": "Medicare policy",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+            }
+          ],
+          "text": "Medicare"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ca52193d-34fb-56a2-a5ae-a8ce387e12ac",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "ca52193d-34fb-56a2-a5ae-a8ce387e12ac",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b46e2fc1-7764-5c30-82ce-2d3011f16253"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 1100.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d34c0435-ecc5-5c77-8fbe-740d5d554d46",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:ca52193d-34fb-56a2-a5ae-a8ce387e12ac"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "d34c0435-ecc5-5c77-8fbe-740d5d554d46",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b46e2fc1-7764-5c30-82ce-2d3011f16253"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 902.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 1100.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0a46f3c4-f336-5fda-b066-a0c2e5edfffc",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "0a46f3c4-f336-5fda-b066-a0c2e5edfffc",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b46e2fc1-7764-5c30-82ce-2d3011f16253"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 1850.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:53bd3add-5cd3-553b-81c9-69e1b5290878",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:0a46f3c4-f336-5fda-b066-a0c2e5edfffc"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "53bd3add-5cd3-553b-81c9-69e1b5290878",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b46e2fc1-7764-5c30-82ce-2d3011f16253"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 1517.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 1850.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3c0320b5-0a0c-57ff-8b20-a99c33c0f764",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "3c0320b5-0a0c-57ff-8b20-a99c33c0f764",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b46e2fc1-7764-5c30-82ce-2d3011f16253"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2600.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:20da84ed-a064-5ab7-a47b-f338b1735785",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:3c0320b5-0a0c-57ff-8b20-a99c33c0f764"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "20da84ed-a064-5ab7-a47b-f338b1735785",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b46e2fc1-7764-5c30-82ce-2d3011f16253"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2132.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2600.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4624cd56-3f58-5443-99ee-eabee44b45cd",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "4624cd56-3f58-5443-99ee-eabee44b45cd",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b46e2fc1-7764-5c30-82ce-2d3011f16253"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3350.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:59faf449-2b05-57e9-97d3-e83c4cde4627",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:4624cd56-3f58-5443-99ee-eabee44b45cd"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|emory-university-hospital"
+        },
+        "id": "59faf449-2b05-57e9-97d3-e83c4cde4627",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b46e2fc1-7764-5c30-82ce-2d3011f16253"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2747.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810024"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3350.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:1416890d-43f3-5059-add2-1eca4b2f7d4c",
+      "resource": {
+        "description": {
+          "text": "Maintain oxygen saturation at or above 94 percent"
+        },
+        "id": "1416890d-43f3-5059-add2-1eca4b2f7d4c",
+        "lifecycleStatus": "active",
+        "resourceType": "Goal",
+        "startDate": "2026-07-01",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "target": [
+          {
+            "dueDate": "2026-09-29",
+            "measure": {
+              "text": "Maintain oxygen saturation at or above 94 percent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:28182517-5659-5d0c-b164-ea37192791a3",
+      "resource": {
+        "addresses": [
+          {
+            "reference": "urn:uuid:c950489c-5e31-566d-9103-6868a7c1b1ab"
+          }
+        ],
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ],
+            "text": "Assessment and Plan of Treatment"
+          }
+        ],
+        "encounter": {
+          "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+        },
+        "goal": [
+          {
+            "reference": "urn:uuid:1416890d-43f3-5059-add2-1eca4b2f7d4c"
+          }
+        ],
+        "id": "28182517-5659-5d0c-b164-ea37192791a3",
+        "intent": "plan",
+        "period": {
+          "end": "2026-12-31",
+          "start": "2026-01-01"
+        },
+        "resourceType": "CarePlan",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "title": "Synthetic chronic care plan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e683ba0f-9251-5372-8fca-d5547fb063c0",
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U3ludGhldGljIGNsaW5pY2FsIHN1bW1hcnku"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "urn:uuid:c57d3e16-518a-537d-bc51-d6cc5bee269a"
+            }
+          ]
+        },
+        "date": "2026-07-01T12:00:00Z",
+        "id": "e683ba0f-9251-5372-8fca-d5547fb063c0",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "urn:uuid:1210c4ba-f4c6-5ce1-9f51-f1c145cc2011"
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "34133-9",
+              "display": "Summary of episode note",
+              "system": "http://loinc.org"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "resourceType": "Bundle",
+  "type": "transaction"
+}

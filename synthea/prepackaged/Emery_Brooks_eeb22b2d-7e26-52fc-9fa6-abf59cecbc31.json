@@ -1,0 +1,1878 @@
+{
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31",
+      "resource": {
+        "active": true,
+        "address": [
+          {
+            "city": "Atlanta",
+            "country": "US",
+            "line": [
+              "114 Synthetic Care Way"
+            ],
+            "postalCode": "30342",
+            "state": "GA",
+            "use": "home"
+          }
+        ],
+        "birthDate": "2014-07-01",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2106-3",
+                  "display": "White",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "White"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+          },
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2135-2",
+                  "display": "Hispanic or Latino",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Hispanic or Latino"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+          }
+        ],
+        "gender": "female",
+        "id": "eeb22b2d-7e26-52fc-9fa6-abf59cecbc31",
+        "identifier": [
+          {
+            "system": "https://brakekat.example/fhir/synthetic-mrn",
+            "type": {
+              "text": "Synthetic MRN"
+            },
+            "value": "SYN-000015"
+          }
+        ],
+        "name": [
+          {
+            "family": "Brooks",
+            "given": [
+              "Emery"
+            ],
+            "text": "Emery Brooks",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:00beafd3-7749-59dd-8b25-a59a91b491f7",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "00beafd3-7749-59dd-8b25-a59a91b491f7",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Scottish Rite",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+            }
+          }
+        ],
+        "period": {
+          "end": "2024-07-12T12:00:00Z",
+          "start": "2024-07-11T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Scottish Rite",
+          "reference": "Organization/choa-scottish-rite"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:bfbe6543-6c48-5dee-84cf-02946c3a929c",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "bfbe6543-6c48-5dee-84cf-02946c3a929c",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Scottish Rite",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-01-07T18:00:00Z",
+          "start": "2025-01-07T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Scottish Rite",
+          "reference": "Organization/choa-scottish-rite"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:45fefaff-312f-5500-99ad-ef4c4fdcf3c5",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "45fefaff-312f-5500-99ad-ef4c4fdcf3c5",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Scottish Rite",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-04T12:00:00Z",
+          "start": "2025-07-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Scottish Rite",
+          "reference": "Organization/choa-scottish-rite"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4bb2ce82-75a3-5f7c-8768-5908b2c9e071",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "4bb2ce82-75a3-5f7c-8768-5908b2c9e071",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Scottish Rite",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-18T12:00:00Z",
+          "start": "2025-07-16T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Scottish Rite",
+          "reference": "Organization/choa-scottish-rite"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:493c8f51-7211-5e4f-8488-15b9c6ca3e36",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "493c8f51-7211-5e4f-8488-15b9c6ca3e36",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Scottish Rite",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Scottish Rite",
+          "reference": "Organization/choa-scottish-rite"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b5862882-6a25-52b5-ab3b-f851f69d80a8",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "b5862882-6a25-52b5-ab3b-f851f69d80a8",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Scottish Rite",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-04-02T16:48:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Scottish Rite",
+          "reference": "Organization/choa-scottish-rite"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "4f944927-fab5-5a93-8e3a-e30bca4cb436",
+        "location": [
+          {
+            "location": {
+              "display": "Choa Scottish Rite",
+              "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-06-05T12:00:00Z",
+          "start": "2026-06-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Choa Scottish Rite",
+          "reference": "Organization/choa-scottish-rite"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:189bb54c-c587-5730-9f34-bb0da6ce7ccb",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "195967001",
+              "display": "Asthma",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Asthma"
+        },
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "189bb54c-c587-5730-9f34-bb0da6ce7ccb",
+        "onsetDateTime": "2025-07-01T12:00:00Z",
+        "recordedDate": "2026-06-01T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fe501189-50b2-5e70-b2c8-9ce82c3e411f",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "162864005",
+              "display": "Body mass index 30+ - obesity",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Body mass index 30+ - obesity"
+        },
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "fe501189-50b2-5e70-b2c8-9ce82c3e411f",
+        "onsetDateTime": "2024-07-01T12:00:00Z",
+        "recordedDate": "2026-05-31T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3b4569e2-c47f-56ad-8a31-da6c904a6416",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "4548-4",
+              "display": "Hemoglobin A1c",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "effectiveDateTime": "2026-06-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "3b4569e2-c47f-56ad-8a31-da6c904a6416",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 10.1
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:df29c72f-617e-5f1d-b58d-cdc9120e5d4a",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8480-6",
+              "display": "Systolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Systolic blood pressure"
+        },
+        "effectiveDateTime": "2026-05-06T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "df29c72f-617e-5f1d-b58d-cdc9120e5d4a",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 148
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b2557e90-802f-5074-b515-eca0a62b271b",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8462-4",
+              "display": "Diastolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Diastolic blood pressure"
+        },
+        "effectiveDateTime": "2026-04-08T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "b2557e90-802f-5074-b515-eca0a62b271b",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 94
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5b912f30-819d-5134-9f34-d2a346984c54",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "39156-5",
+              "display": "Body mass index",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Body mass index"
+        },
+        "effectiveDateTime": "2026-03-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "5b912f30-819d-5134-9f34-d2a346984c54",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "valueQuantity": {
+          "code": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "unit": "kg/m2",
+          "value": 33.5
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3f41a98b-70b4-58e7-88d7-68a3c97a3cbf",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "14959-1",
+              "display": "Microalbumin/Creatinine",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Microalbumin/Creatinine"
+        },
+        "effectiveDateTime": "2026-02-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "3f41a98b-70b4-58e7-88d7-68a3c97a3cbf",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "valueQuantity": {
+          "code": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mg/g",
+          "value": 34
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e19fd3dd-ae21-55dd-afa8-5915e204cdb2",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "2708-6",
+              "display": "Oxygen saturation",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "effectiveDateTime": "2026-01-14T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "e19fd3dd-ae21-55dd-afa8-5915e204cdb2",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 91
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fd4054bd-a9e2-5857-b1a4-a321e53a787e",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "fd4054bd-a9e2-5857-b1a4-a321e53a787e",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:00da34fb-4369-5c01-a7cb-24e8d72bd438",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "00da34fb-4369-5c01-a7cb-24e8d72bd438",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2daaddf5-cd13-58af-b790-e4c0dc03ada9",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "2daaddf5-cd13-58af-b790-e4c0dc03ada9",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c76e8ce2-64c2-5bf9-b8a2-291adc2fdfe6",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "c76e8ce2-64c2-5bf9-b8a2-291adc2fdfe6",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:860f4c27-29ec-5a4d-9741-69e83556509f",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "860f4c27-29ec-5a4d-9741-69e83556509f",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4a79e0ee-3c36-5dad-af2a-f01d0d0e4d29",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "4a79e0ee-3c36-5dad-af2a-f01d0d0e4d29",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c2c30c41-ede1-539d-b066-69369db358bb",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "c2c30c41-ede1-539d-b066-69369db358bb",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f1a3d7f1-9306-5c43-94c8-f3f027da3b6a",
+      "resource": {
+        "authoredOn": "2025-12-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "f1a3d7f1-9306-5c43-94c8-f3f027da3b6a",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:bc94739e-a65f-508e-a784-5e0a6169312c",
+      "resource": {
+        "authoredOn": "2025-11-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "bc94739e-a65f-508e-a784-5e0a6169312c",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:244c1c36-62b9-5924-b663-a492c2a367a2",
+      "resource": {
+        "authoredOn": "2025-10-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "244c1c36-62b9-5924-b663-a492c2a367a2",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8f14168f-bc08-5cb3-93ce-2e51179d5953",
+      "resource": {
+        "authoredOn": "2025-09-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "8f14168f-bc08-5cb3-93ce-2e51179d5953",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6224b16d-fb11-5175-8c57-2df20ebfe041",
+      "resource": {
+        "authoredOn": "2025-08-05T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "6224b16d-fb11-5175-8c57-2df20ebfe041",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:39704882-d34d-59f7-850c-32f843d0e989",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "39704882-d34d-59f7-850c-32f843d0e989",
+        "occurrenceDateTime": "2026-03-03T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "133",
+              "display": "Pneumococcal conjugate PCV 13",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f2bcbf3c-9193-501c-9c65-d67d6dd93117",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "f2bcbf3c-9193-501c-9c65-d67d6dd93117",
+        "occurrenceDateTime": "2026-05-02T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "140",
+              "display": "Influenza seasonal injectable",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:86af6b17-352b-5e91-a5b8-bbd03908e731",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "43075005",
+              "display": "Inhalation therapy",
+              "system": "http://snomed.info/sct"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "id": "86af6b17-352b-5e91-a5b8-bbd03908e731",
+        "performedDateTime": "2026-06-17T12:00:00Z",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:payer-commercial",
+      "resource": {
+        "active": true,
+        "id": "payer-commercial",
+        "name": "BrakeKat Synthetic Commercial",
+        "resourceType": "Organization",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "pay",
+                "display": "Payer",
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:4f91a3fd-2acb-5acf-b917-fc46e25e04c4",
+      "resource": {
+        "beneficiary": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "id": "4f91a3fd-2acb-5acf-b917-fc46e25e04c4",
+        "payor": [
+          {
+            "display": "BrakeKat Synthetic Commercial",
+            "reference": "Organization/payer-commercial"
+          }
+        ],
+        "period": {
+          "end": "2026-12-31",
+          "start": "2024-01-01"
+        },
+        "resourceType": "Coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "code": "HIP",
+              "display": "Commercial health plan",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+            }
+          ],
+          "text": "BrakeKat Synthetic Commercial"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5c2a5858-7663-5f2f-a58b-06df19ea2ecf",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+        },
+        "id": "5c2a5858-7663-5f2f-a58b-06df19ea2ecf",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:4f91a3fd-2acb-5acf-b917-fc46e25e04c4"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 850.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6065136c-b111-5e1f-9317-ee6f2b25c2f5",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:5c2a5858-7663-5f2f-a58b-06df19ea2ecf"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+        },
+        "id": "6065136c-b111-5e1f-9317-ee6f2b25c2f5",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:4f91a3fd-2acb-5acf-b917-fc46e25e04c4"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "BrakeKat Synthetic Commercial",
+          "reference": "Organization/payer-commercial"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 697.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 850.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5ea83dfa-f850-52f2-8faf-4043535e5cde",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+        },
+        "id": "5ea83dfa-f850-52f2-8faf-4043535e5cde",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:4f91a3fd-2acb-5acf-b917-fc46e25e04c4"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 1600.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e1d1fe33-47dc-542a-ab23-7344b45f2be6",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:5ea83dfa-f850-52f2-8faf-4043535e5cde"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+        },
+        "id": "e1d1fe33-47dc-542a-ab23-7344b45f2be6",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:4f91a3fd-2acb-5acf-b917-fc46e25e04c4"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "BrakeKat Synthetic Commercial",
+          "reference": "Organization/payer-commercial"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 1312.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 1600.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ab09a1c6-fb05-53ef-995e-cc381544b100",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+        },
+        "id": "ab09a1c6-fb05-53ef-995e-cc381544b100",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:4f91a3fd-2acb-5acf-b917-fc46e25e04c4"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2350.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b5205b2d-27cf-5b9d-b0be-4d034340cb08",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:ab09a1c6-fb05-53ef-995e-cc381544b100"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+        },
+        "id": "b5205b2d-27cf-5b9d-b0be-4d034340cb08",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:4f91a3fd-2acb-5acf-b917-fc46e25e04c4"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "BrakeKat Synthetic Commercial",
+          "reference": "Organization/payer-commercial"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 1927.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2350.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5f676125-30a2-5219-92bb-0cd0eba15cf2",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+        },
+        "id": "5f676125-30a2-5219-92bb-0cd0eba15cf2",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:4f91a3fd-2acb-5acf-b917-fc46e25e04c4"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3100.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ad279906-54a3-5356-9518-22bb1718370c",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:5f676125-30a2-5219-92bb-0cd0eba15cf2"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|choa-scottish-rite"
+        },
+        "id": "ad279906-54a3-5356-9518-22bb1718370c",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "BrakeKat Synthetic Commercial",
+              "reference": "urn:uuid:4f91a3fd-2acb-5acf-b917-fc46e25e04c4"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "BrakeKat Synthetic Commercial",
+          "reference": "Organization/payer-commercial"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2542.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810014"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3100.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:15b2499a-f8c4-5755-8e5a-455d094c6b63",
+      "resource": {
+        "description": {
+          "text": "Maintain oxygen saturation at or above 94 percent"
+        },
+        "id": "15b2499a-f8c4-5755-8e5a-455d094c6b63",
+        "lifecycleStatus": "active",
+        "resourceType": "Goal",
+        "startDate": "2026-07-01",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "target": [
+          {
+            "dueDate": "2026-09-29",
+            "measure": {
+              "text": "Maintain oxygen saturation at or above 94 percent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7a3b9423-1303-5fa5-a0c3-c108b7b11f8f",
+      "resource": {
+        "addresses": [
+          {
+            "reference": "urn:uuid:189bb54c-c587-5730-9f34-bb0da6ce7ccb"
+          }
+        ],
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ],
+            "text": "Assessment and Plan of Treatment"
+          }
+        ],
+        "encounter": {
+          "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+        },
+        "goal": [
+          {
+            "reference": "urn:uuid:15b2499a-f8c4-5755-8e5a-455d094c6b63"
+          }
+        ],
+        "id": "7a3b9423-1303-5fa5-a0c3-c108b7b11f8f",
+        "intent": "plan",
+        "period": {
+          "end": "2026-12-31",
+          "start": "2026-01-01"
+        },
+        "resourceType": "CarePlan",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "title": "Synthetic chronic care plan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:40c079d8-4ffa-5c09-a047-159fae04393c",
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U3ludGhldGljIGNsaW5pY2FsIHN1bW1hcnku"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "urn:uuid:4f944927-fab5-5a93-8e3a-e30bca4cb436"
+            }
+          ]
+        },
+        "date": "2026-07-01T12:00:00Z",
+        "id": "40c079d8-4ffa-5c09-a047-159fae04393c",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "urn:uuid:eeb22b2d-7e26-52fc-9fa6-abf59cecbc31"
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "34133-9",
+              "display": "Summary of episode note",
+              "system": "http://loinc.org"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "resourceType": "Bundle",
+  "type": "transaction"
+}

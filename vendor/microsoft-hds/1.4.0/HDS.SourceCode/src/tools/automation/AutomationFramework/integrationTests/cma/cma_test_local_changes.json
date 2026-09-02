@@ -1,0 +1,206 @@
+{
+    "name": "CMA Data Ingestion E2E",
+    "description": "A test for CMA data ingestion",
+    "initial_context": {
+        "targetEnvironment": "MSIT",
+        "workspaceDisplayName": "HDS_IT_CMA",
+        "uniquePrefix": "healthcare1",
+        "dist_path": "dist"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": true
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateHdsItem",
+            "description": "Create a new hds item",
+            "parameters": {
+                "workspace": "$workspace",
+                "solution_display_name": "healthcare1"
+            },
+            "outputs": [
+                "solution_artifact_id"
+            ]
+        },
+        {
+            "type": "DeployHdsCapabilities",
+            "description": "Deploy foundations capablity",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id",
+                "capabilities": [
+                    {
+                        "capabilityKey": "relational-fhir-data-foundations",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "sample-data",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "claims-data-ingestion",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "care-management-analytics",
+                        "userParameters": []
+                    }
+                ],
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": []
+        },
+        {
+            "type": "PollCapabilityDeployment",
+            "description": "Poll capability deployment",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id"
+            },
+            "outputs": []
+        },
+        {
+            "type": "GetSolutionEnvironment",
+            "description": "Get deployed environment",
+            "parameters": {
+                "workspace": "$workspace",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "environment"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Add deployed bronze lakehouse to the runtime context",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "bronze",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "bronze_lakehouse"
+            ]
+        },
+        {
+            "type": "RemoveEnvironmentLibraries",
+            "description": "Removing libraries from default environment",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$environment"
+            }
+        },
+        {
+            "type": "PublishEnvironment",
+            "description": "Publishing an environment with local libraries",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$environment",
+                "dist_path": "$dist_path",
+                "libraries_relative_path": "/healthcare-libraries/1.1.0/",
+                "environment_yml_path": "src/tools/automation/AutomationFramework/resources/configs/environment.yml"
+            },
+            "outputs": []
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Test lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Test",
+                "description": "A lakehouse for test artifacts",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "test_lakehouse"
+            ]
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up notebook to copy sample data",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$environment",
+                "notebooks_path": "/src/tools/automation/AutomationFramework/resources/notebooks/",
+                "notebookName": "copy_folder.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "source_path": "/Files/SampleData/Clinical/FHIR-NDJSON/FHIR-HDS/51KSyntheticPatients",
+                    "destination_directory_path": "/Files/Ingest/Clinical/FHIR-NDJSON/FHIR-HDS",
+                    "action": "copy"
+                }
+            },
+            "outputs": [
+                "copy_sample_data_notebook_id"
+            ]
+        },
+        {
+            "type": "RunNotebook",
+            "description": "Running copy sample data notebook",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$environment",
+                "notebook_id": "$copy_sample_data_notebook_id",
+                "default_lakehouse": "$bronze_lakehouse"
+            },
+            "outputs": [
+                "copy_sample_data_notebook_run_id"
+            ]
+        },
+        {
+            "type": "WaitForEnvironmentPublish",
+            "description": "Waiting for test env to publish",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$environment"
+            }
+        },
+        {
+            "type": "RunDataPipeline",
+            "description": "Running CMA with clinical foundation ingestion pipeline",
+            "parameters": {
+                "workspace": "$workspace",
+                "dataPipelineName": "healthcare1_msft_cma",
+                "pipelineParameters": {}
+            },
+            "outputs": [
+                "data_pipeline_id",
+                "pipeline_run_id"
+            ]
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Poll pipeline completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$data_pipeline_id",
+                "job_id": "$pipeline_run_id"
+            },
+            "outputs": []
+        }
+    ]
+}

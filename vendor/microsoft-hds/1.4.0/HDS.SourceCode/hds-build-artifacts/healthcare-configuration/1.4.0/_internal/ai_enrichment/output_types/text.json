@@ -1,0 +1,40 @@
+{
+  "fields": [
+    {
+      "metadata": {},
+      "name": "value",
+      "nullable": true,
+      "type": "string",
+      "description": "The value of the text enrichment."
+    },
+    {
+      "metadata": {},
+      "name": "domain",
+      "nullable": true,
+      "type": "string",
+      "description": "Domain of the value."
+    },
+    {
+      "metadata": {},
+      "name": "reasoning",
+      "nullable": true,
+      "type": "string",
+      "description": "Reasoning behind the value."
+    },
+    {
+      "metadata": {},
+      "name": "evidence",
+      "nullable": true,
+      "type": "string",
+      "description": "List of 'evidence' values that support the value."
+    },
+    {
+      "metadata": {},
+      "name": "terminology",
+      "nullable": true,
+      "type": "string",
+      "description": "Terminology used to describe the value."
+    }
+  ],
+  "type": "struct"
+}

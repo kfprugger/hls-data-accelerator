@@ -1,0 +1,2112 @@
+{
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f",
+      "resource": {
+        "active": true,
+        "address": [
+          {
+            "city": "Atlanta",
+            "country": "US",
+            "line": [
+              "175 Synthetic Care Way"
+            ],
+            "postalCode": "30342",
+            "state": "GA",
+            "use": "home"
+          }
+        ],
+        "birthDate": "1966-07-01",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2106-3",
+                  "display": "White",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "White"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+          },
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2186-5",
+                  "display": "Not Hispanic or Latino",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Not Hispanic or Latino"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+          }
+        ],
+        "gender": "male",
+        "id": "dc066042-8c41-5e11-9512-c3ae4709a99f",
+        "identifier": [
+          {
+            "system": "https://brakekat.example/fhir/synthetic-mrn",
+            "type": {
+              "text": "Synthetic MRN"
+            },
+            "value": "SYN-000076"
+          }
+        ],
+        "name": [
+          {
+            "family": "Hayes",
+            "given": [
+              "Frankie"
+            ],
+            "text": "Frankie Hayes",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a9caaa2d-104e-560f-a602-30d200ef5a72",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "a9caaa2d-104e-560f-a602-30d200ef5a72",
+        "location": [
+          {
+            "location": {
+              "display": "Northside Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+            }
+          }
+        ],
+        "period": {
+          "end": "2024-07-12T12:00:00Z",
+          "start": "2024-07-11T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Northside Hospital",
+          "reference": "Organization/northside-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c10aa5f8-0d6d-5c12-b7f4-d5355e1e780d",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "c10aa5f8-0d6d-5c12-b7f4-d5355e1e780d",
+        "location": [
+          {
+            "location": {
+              "display": "Northside Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-01-07T18:00:00Z",
+          "start": "2025-01-07T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Northside Hospital",
+          "reference": "Organization/northside-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:3cacc9e7-e952-58e7-b26e-8d64047fd790",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "3cacc9e7-e952-58e7-b26e-8d64047fd790",
+        "location": [
+          {
+            "location": {
+              "display": "Northside Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-04T12:00:00Z",
+          "start": "2025-07-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Northside Hospital",
+          "reference": "Organization/northside-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e8a0323d-115d-5137-9b8b-83f549529130",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "e8a0323d-115d-5137-9b8b-83f549529130",
+        "location": [
+          {
+            "location": {
+              "display": "Northside Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-18T12:00:00Z",
+          "start": "2025-07-16T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Northside Hospital",
+          "reference": "Organization/northside-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cbbf5da7-6e6b-50a1-be25-35c159ba4e86",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "cbbf5da7-6e6b-50a1-be25-35c159ba4e86",
+        "location": [
+          {
+            "location": {
+              "display": "Northside Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Northside Hospital",
+          "reference": "Organization/northside-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:90d9d205-c177-5096-862d-aa84a4b28e3d",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "90d9d205-c177-5096-862d-aa84a4b28e3d",
+        "location": [
+          {
+            "location": {
+              "display": "Northside Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-04-02T16:48:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Northside Hospital",
+          "reference": "Organization/northside-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "0b70cca3-b9b2-5683-983b-47c1001c3da3",
+        "location": [
+          {
+            "location": {
+              "display": "Northside Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-06-05T12:00:00Z",
+          "start": "2026-06-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Northside Hospital",
+          "reference": "Organization/northside-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:10941caf-e80f-5dd0-ab8f-88699210605d",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "162864005",
+              "display": "Body mass index 30+ - obesity",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Body mass index 30+ - obesity"
+        },
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "10941caf-e80f-5dd0-ab8f-88699210605d",
+        "onsetDateTime": "2025-07-01T12:00:00Z",
+        "recordedDate": "2026-06-01T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f240d732-8d3e-5ec5-8a8d-1288ad9311b1",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "233604007",
+              "display": "Pneumonia",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Pneumonia"
+        },
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "f240d732-8d3e-5ec5-8a8d-1288ad9311b1",
+        "onsetDateTime": "2024-07-01T12:00:00Z",
+        "recordedDate": "2026-05-31T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:242fc902-841d-50da-909c-ab41f2524b4a",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "4548-4",
+              "display": "Hemoglobin A1c",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "effectiveDateTime": "2026-06-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "242fc902-841d-50da-909c-ab41f2524b4a",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 7.2
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2b5fc5e9-7a93-5f03-9691-3f34f5a7f3b5",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8480-6",
+              "display": "Systolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Systolic blood pressure"
+        },
+        "effectiveDateTime": "2026-05-06T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "2b5fc5e9-7a93-5f03-9691-3f34f5a7f3b5",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 128
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:11334759-76e5-5f09-ac2e-125318dd73fe",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8462-4",
+              "display": "Diastolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Diastolic blood pressure"
+        },
+        "effectiveDateTime": "2026-04-08T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "11334759-76e5-5f09-ac2e-125318dd73fe",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 78
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b7c2d7d2-162c-506f-8c9e-163f33c3a9e7",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "39156-5",
+              "display": "Body mass index",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Body mass index"
+        },
+        "effectiveDateTime": "2026-03-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "b7c2d7d2-162c-506f-8c9e-163f33c3a9e7",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "valueQuantity": {
+          "code": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "unit": "kg/m2",
+          "value": 30.5
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:838af323-ced4-507b-92cb-006b76b90241",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "14959-1",
+              "display": "Microalbumin/Creatinine",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Microalbumin/Creatinine"
+        },
+        "effectiveDateTime": "2026-02-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "838af323-ced4-507b-92cb-006b76b90241",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "valueQuantity": {
+          "code": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mg/g",
+          "value": 20
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a9408407-9dc1-58fb-a378-b0efeea1a137",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "2708-6",
+              "display": "Oxygen saturation",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "effectiveDateTime": "2026-01-14T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "a9408407-9dc1-58fb-a378-b0efeea1a137",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 97
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:73e99f40-bb0e-51c6-823d-f225e00c578b",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "73e99f40-bb0e-51c6-823d-f225e00c578b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:1901f75c-cce3-5dbe-a13c-c37af3ad88a3",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "1901f75c-cce3-5dbe-a13c-c37af3ad88a3",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f62e1bff-edc9-56b3-867d-eafb0ef9509b",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "f62e1bff-edc9-56b3-867d-eafb0ef9509b",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6e8e475f-4cf9-55a2-84e1-c477ac3bc94d",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "6e8e475f-4cf9-55a2-84e1-c477ac3bc94d",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8881991a-1cd4-5a51-bf1e-c31eaff35a58",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "8881991a-1cd4-5a51-bf1e-c31eaff35a58",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:78bd0f2d-18fa-5b80-b760-b04e2270311d",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "78bd0f2d-18fa-5b80-b760-b04e2270311d",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:1ec915ad-241b-5e78-9714-a1d3833166b0",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "1ec915ad-241b-5e78-9714-a1d3833166b0",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "860975",
+              "display": "Metformin 500 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Metformin 500 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c6c800cc-ecd8-54eb-92eb-3ce5295fb0df",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "c6c800cc-ecd8-54eb-92eb-3ce5295fb0df",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2214581e-48e3-51aa-9194-741bc15923a9",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "2214581e-48e3-51aa-9194-741bc15923a9",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:af503377-3265-569b-9111-c222214aee3c",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "af503377-3265-569b-9111-c222214aee3c",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a5ef4d48-0c97-5462-8cf3-0bf7f0472927",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "a5ef4d48-0c97-5462-8cf3-0bf7f0472927",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e9574892-ccbd-5830-9b37-52b52f17ecb3",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "e9574892-ccbd-5830-9b37-52b52f17ecb3",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2d7c3054-7a27-5225-b47c-405e819cfb27",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "2d7c3054-7a27-5225-b47c-405e819cfb27",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:bb82ce60-dfc4-5d54-99de-d3f8f4e534d1",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "bb82ce60-dfc4-5d54-99de-d3f8f4e534d1",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "314076",
+              "display": "Lisinopril 10 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Lisinopril 10 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5aa17fba-af55-55d2-96e0-5c8a38e8f7d8",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "5aa17fba-af55-55d2-96e0-5c8a38e8f7d8",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2f1fcb1a-9c65-591a-b01d-c50d932755c1",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "2f1fcb1a-9c65-591a-b01d-c50d932755c1",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d52667e5-e9d0-5a16-996f-247628969ceb",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "d52667e5-e9d0-5a16-996f-247628969ceb",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f950f84a-b519-5191-9daf-abe2c687bce8",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "f950f84a-b519-5191-9daf-abe2c687bce8",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a9a96641-1b1d-563f-9dbb-a4d49bd10fc1",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "a9a96641-1b1d-563f-9dbb-a4d49bd10fc1",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:142ee88a-68e5-5734-a240-334627e900cd",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "142ee88a-68e5-5734-a240-334627e900cd",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a5ac07e6-5d68-548c-ad48-247b7c0b2a5d",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "a5ac07e6-5d68-548c-ad48-247b7c0b2a5d",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e508f8c1-3f32-5c23-8bc1-cc6c45fec59e",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "e508f8c1-3f32-5c23-8bc1-cc6c45fec59e",
+        "occurrenceDateTime": "2026-03-03T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "133",
+              "display": "Pneumococcal conjugate PCV 13",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fad4326b-85a9-5775-a54a-dd117fef9bff",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "fad4326b-85a9-5775-a54a-dd117fef9bff",
+        "occurrenceDateTime": "2026-05-02T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "140",
+              "display": "Influenza seasonal injectable",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c79fb0ea-a64d-5896-8cc3-d61e08b43d5d",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "43075005",
+              "display": "Inhalation therapy",
+              "system": "http://snomed.info/sct"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "id": "c79fb0ea-a64d-5896-8cc3-d61e08b43d5d",
+        "performedDateTime": "2026-06-17T12:00:00Z",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:payer-uninsured",
+      "resource": {
+        "active": true,
+        "id": "payer-uninsured",
+        "name": "Self Pay",
+        "resourceType": "Organization",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "pay",
+                "display": "Payer",
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ce39d26b-c1a0-57f9-a509-05da57c9f61a",
+      "resource": {
+        "beneficiary": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "id": "ce39d26b-c1a0-57f9-a509-05da57c9f61a",
+        "payor": [
+          {
+            "display": "Self Pay",
+            "reference": "Organization/payer-uninsured"
+          }
+        ],
+        "period": {
+          "end": "2026-12-31",
+          "start": "2024-01-01"
+        },
+        "resourceType": "Coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "code": "SELF-PAY",
+              "display": "Self pay",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+            }
+          ],
+          "text": "Self Pay"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a2d8fc18-0933-52a0-8722-38b6fa2786db",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+        },
+        "id": "a2d8fc18-0933-52a0-8722-38b6fa2786db",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:ce39d26b-c1a0-57f9-a509-05da57c9f61a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2375.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d3b7f5e0-7af3-50c2-8ea2-3128a5d51afd",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:a2d8fc18-0933-52a0-8722-38b6fa2786db"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+        },
+        "id": "d3b7f5e0-7af3-50c2-8ea2-3128a5d51afd",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:ce39d26b-c1a0-57f9-a509-05da57c9f61a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Self Pay",
+          "reference": "Organization/payer-uninsured"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 1947.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2375.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:52d9c1c8-ceec-5f14-96a2-dbc75d7dd3cf",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+        },
+        "id": "52d9c1c8-ceec-5f14-96a2-dbc75d7dd3cf",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:ce39d26b-c1a0-57f9-a509-05da57c9f61a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3125.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a3ef25e8-ea8f-58df-885c-eea0055538a1",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:52d9c1c8-ceec-5f14-96a2-dbc75d7dd3cf"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+        },
+        "id": "a3ef25e8-ea8f-58df-885c-eea0055538a1",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:ce39d26b-c1a0-57f9-a509-05da57c9f61a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Self Pay",
+          "reference": "Organization/payer-uninsured"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2562.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3125.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cb8c8a7e-1184-56e5-887c-5cf53784417d",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+        },
+        "id": "cb8c8a7e-1184-56e5-887c-5cf53784417d",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:ce39d26b-c1a0-57f9-a509-05da57c9f61a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3875.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:2ee0eda7-23e9-5e97-9ab3-5150c0930341",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:cb8c8a7e-1184-56e5-887c-5cf53784417d"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+        },
+        "id": "2ee0eda7-23e9-5e97-9ab3-5150c0930341",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:ce39d26b-c1a0-57f9-a509-05da57c9f61a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Self Pay",
+          "reference": "Organization/payer-uninsured"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3177.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3875.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5acae201-9149-529d-a9ac-b44ad26fd45b",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+        },
+        "id": "5acae201-9149-529d-a9ac-b44ad26fd45b",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:ce39d26b-c1a0-57f9-a509-05da57c9f61a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 4625.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0ef9511a-3538-5830-9ec5-ced23f86c69a",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:5acae201-9149-529d-a9ac-b44ad26fd45b"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|northside-hospital"
+        },
+        "id": "0ef9511a-3538-5830-9ec5-ced23f86c69a",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Self Pay",
+              "reference": "urn:uuid:ce39d26b-c1a0-57f9-a509-05da57c9f61a"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Self Pay",
+          "reference": "Organization/payer-uninsured"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3792.5
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810075"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 4625.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0070fa17-03ed-5ae7-839c-f1b5c7ef2974",
+      "resource": {
+        "description": {
+          "text": "Maintain oxygen saturation at or above 94 percent"
+        },
+        "id": "0070fa17-03ed-5ae7-839c-f1b5c7ef2974",
+        "lifecycleStatus": "active",
+        "resourceType": "Goal",
+        "startDate": "2026-07-01",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "target": [
+          {
+            "dueDate": "2026-09-29",
+            "measure": {
+              "text": "Maintain oxygen saturation at or above 94 percent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a14abd9f-3be2-5eee-b0cd-6c36ef1e1819",
+      "resource": {
+        "addresses": [
+          {
+            "reference": "urn:uuid:10941caf-e80f-5dd0-ab8f-88699210605d"
+          }
+        ],
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ],
+            "text": "Assessment and Plan of Treatment"
+          }
+        ],
+        "encounter": {
+          "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+        },
+        "goal": [
+          {
+            "reference": "urn:uuid:0070fa17-03ed-5ae7-839c-f1b5c7ef2974"
+          }
+        ],
+        "id": "a14abd9f-3be2-5eee-b0cd-6c36ef1e1819",
+        "intent": "plan",
+        "period": {
+          "end": "2026-12-31",
+          "start": "2026-01-01"
+        },
+        "resourceType": "CarePlan",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "title": "Synthetic chronic care plan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cb119934-1aad-531e-a0b4-6ab7563483c1",
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U3ludGhldGljIGNsaW5pY2FsIHN1bW1hcnku"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "urn:uuid:0b70cca3-b9b2-5683-983b-47c1001c3da3"
+            }
+          ]
+        },
+        "date": "2026-07-01T12:00:00Z",
+        "id": "cb119934-1aad-531e-a0b4-6ab7563483c1",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "urn:uuid:dc066042-8c41-5e11-9512-c3ae4709a99f"
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "34133-9",
+              "display": "Summary of episode note",
+              "system": "http://loinc.org"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "resourceType": "Bundle",
+  "type": "transaction"
+}

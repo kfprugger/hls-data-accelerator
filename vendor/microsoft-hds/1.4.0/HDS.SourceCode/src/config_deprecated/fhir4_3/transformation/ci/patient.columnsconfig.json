@@ -1,0 +1,49 @@
+{
+  "name": "patient column configuration",
+  "autoFlattenStruct": false,
+  "retainSourceColumns": false,
+  "stringifyComplexTypes": false,
+  "extendWithDefaultRules": false,
+  "columns": [
+    {
+      "name": "Id",
+      "style": "expr",
+      "expression": "id_orig"
+    },
+    {
+      "name": "GivenName",
+      "style": "expr",
+      "expression": "name[0].given[0]"
+    },
+    {
+      "name": "LastName",
+      "style": "expr",
+      "expression": "name[0].family"
+    },
+    {
+      "name": "Gender",
+      "style": "expr",
+      "expression": "gender"
+    },
+    {
+      "name": "Race",
+      "style": "expr",
+      "expression": "parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race,ombCategory', 'valueCoding', 'display')"
+    },
+    {
+      "name": "Ethnicity",
+      "style": "expr",
+      "expression": "parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity,ombCategory', 'valueCoding', 'display')"
+    },
+    {
+        "name":"Phone",
+        "style": "expr",
+        "expression": "filter(telecom,ex->ex.system='phone')[0].value"
+    },
+    {
+      "name": "LastUpdated",
+      "style": "col",
+      "expression": "meta.lastUpdated"
+  }
+  ]
+}

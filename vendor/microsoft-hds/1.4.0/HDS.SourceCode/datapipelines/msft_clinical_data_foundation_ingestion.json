@@ -1,0 +1,68 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "name": "raw_process_movement",
+        "description": "This notebook will leverage the Healthcare Data Solutions library to move/extract (extract ZIP files and move) files for multiple HDS modalities, which contain various namespaces and file extensions. This framework will move/extract (extract ZIP files and move) files based on the 'file_orchestration_config' configuration, which contains mapping details such as modality, modality_format, extension etc.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "typeProperties": {
+          "notebookId": "%%raw_process_movement_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+          "parameters": {
+            "inline_params": {
+              "value": "{\"modality\":\"Clinical\",\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "fhir_ndjson_bronze_ingestion",
+        "description": "This notebook activity facilitates the ingestion of FHIR ndjson data into Delta tables within the bronze lakehouse.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "raw_process_movement",
+            "dependencyConditions": [
+              "Completed"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%fhir_ndjson_bronze_ingestion_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+          "parameters": {
+            "inline_params": {
+              "value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "bronze_silver_flatten",
+        "description": "This notebook activity transforms and flattens the data from the bronze lakehouse and ingests the data into the silver lakehouse.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "fhir_ndjson_bronze_ingestion",
+            "dependencyConditions": [
+              "Completed"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%bronze_silver_flatten_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+          "parameters": {
+            "inline_params": {
+              "value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+              "type": "string"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

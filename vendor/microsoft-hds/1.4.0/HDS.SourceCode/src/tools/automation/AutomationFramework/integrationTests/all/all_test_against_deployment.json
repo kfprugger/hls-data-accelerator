@@ -1,0 +1,559 @@
+{
+    "name": "All modalities deployment tests",
+    "description": "A test for all modalities data ingestion",
+    "initial_context": {
+        "targetEnvironment": "msit",
+        "workspaceDisplayName": "HDS_DEP_ALL",
+        "uniquePrefix": "healthcare1",
+        "dist_path": "dist",
+        "execution_summary_notebook_path": "src/tools/automation/AutomationFramework/resources/notebooks/clinical"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": true
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateHdsItem",
+            "description": "Create a new hds item",
+            "parameters": {
+                "workspace": "$workspace",
+                "solution_display_name": "healthcare1"
+            },
+            "outputs": [
+                "solution_artifact_id"
+            ]
+        },
+        {
+            "type": "PublishEnvironment",
+            "description": "Creating an environment used by test notebooks",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "TestEnvironment",
+                "dist_path": "$dist_path",
+                "workspace": "$workspace",
+                "upload_local_libraries": false,
+                "environment_yml_path": "src/tools/automation/AutomationFramework/resources/configs/environment.yml"
+            },
+            "outputs": [
+                "test_environment"
+            ]
+        },
+        {
+            "type": "DeployHdsCapabilities",
+            "description": "Deploy all the HDS capabilities",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id",
+                "capabilities": [
+                    {
+                        "capabilityKey": "relational-fhir-data-foundations",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "sample-data",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "social-determinants-of-health",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "patient-outreach-analytics",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "claims-data-ingestion",
+                        "userParameters": []
+                    },
+                    
+                    {
+                        "capabilityKey": "omop-analytics",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "dicom-data-ingestion",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "patient-outreach-analytics-advanced",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "care-management-analytics",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "dax-conversational-data-enrichments",
+                        "userParameters": [
+                            {
+                                "name": "keyvault_name",
+                                "value": "dmh-dev-sharedkv",
+                                "type": "Global"
+                            },
+                            {
+                                "name": "azure_open_ai_model_name",
+                                "value": "gpt-4o-3",
+                                "type": "Local"
+                            },
+                            {
+                                "name": "azure_open_ai_api_version",
+                                "value": "2024-08-01-preview",
+                                "type": "Local"
+                            },
+                            {
+                                "name": "dax_landing_zone_lakehouse_id",
+                                "value": "",
+                                "type": "Local"
+                            },
+                            {
+                                "capabilityKey": "omop-analytics",
+                                "userParameters": []
+                            }
+                        ]
+                    }
+                ],
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": []
+        },
+        {
+            "type": "PollCapabilityDeployment",
+            "description": "Poll capability deployment",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id"
+            },
+            "outputs": []
+        },
+        {
+            "type": "GetSolutionEnvironment",
+            "description": "Get deployed environment",
+            "parameters": {
+                "workspace": "$workspace",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "solution_environment"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Test lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Test",
+                "description": "A lakehouse for test artifacts",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "test_lakehouse"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Add deployed bronze lakehouse to the runtime context",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "bronze",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "bronze_lakehouse"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Add the deployed admin lakehouse to the runtime context",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "admin",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "administration_lakehouse"
+            ]
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up foundation capability deployment tests notebook",
+            "include_when": [],
+            "exclude_when": [
+                "do_not_run_tests"
+            ],
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/clinical",
+                "notebookName": "hds_clinical_foundations_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/Clinical/clinical_foundations_deployment_tests_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities": {
+                        "relational-fhir-data-foundations": "1.3.0",
+                        "sample-data": "1.2.0",
+                        "social-determinants-of-health": "1.2.0",
+                        "patient-outreach-analytics": "1.0.0",
+                        "claims-data-ingestion": "1.2.1",
+                        "care-management-analytics": "1.2.0",
+                        "omop-analytics": "1.2.0",
+                        "dax-conversational-data-enrichments": "1.2.1"
+                    }
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up CI capability deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/ci",
+                "notebookName": "ci_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/SampleData/CI/ci_deployment_tests_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities":{
+                        "relational-fhir-data-foundations": "1.3.0",
+                        "sample-data": "1.2.0",
+                        "patient-outreach-analytics": "1.0.0"
+                        }
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up Claims deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/claims",
+                "notebookName": "claims_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/Claims/claims_deployment_tests_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities": {
+                        "relational-fhir-data-foundations": "1.3.0",
+                        "sample-data": "1.2.0",
+                        "claims-data-ingestion": "1.2.1"
+                    }
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up CMA deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/cma",
+                "notebookName": "cma_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/CMA/cma_deployment_tests_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities": {
+                        "relational-fhir-data-foundations": "1.3.0",
+                        "care-management-analytics": "1.2.0",
+                        "sample-data": "1.2.0"
+                       
+                    }
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up dax deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/dax",
+                "notebookName": "dax_conversational_data_enrichments_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/DAX/dax_conversational_data_enrichments_deployment_test_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities":  {
+                        "relational-fhir-data-foundations": "1.3.0",
+						"sample-data": "1.2.0",
+						"social-determinants-of-health": "1.2.0",
+						"patient-outreach-analytics": "1.0.0",
+						"claims-data-ingestion": "1.2.1",
+						"care-management-analytics": "1.2.0",
+						"omop-analytics": "1.2.0"
+                    }
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up Omop deployment tests notebook",
+            "include_when": [],
+            "exclude_when": [
+                "do_not_run_tests"
+            ],
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/omop",
+                "notebookName": "omop_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_gold_omop",
+                    "known_lakehouses": [
+                        "healthcare1_msft_gold_omop"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/omop/omop_deployment_test_results.xml",
+                    "expected_installed_capabilities":  {
+                        "relational-fhir-data-foundations": "1.3.0",
+                        "sample-data": "1.2.0",
+                        "social-determinants-of-health": "1.2.0",
+                        "patient-outreach-analytics": "1.0.0",
+                        "claims-data-ingestion": "1.2.1",
+                        "care-management-analytics": "1.2.0",
+                        "omop-analytics":"1.2.0"
+                },
+                    "pipeline_run_id": "$pipeline_run_id",
+                    "prefix": "$uniquePrefix",
+                    "deployment_environment": "$targetEnvironment"
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up imaging capability deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/imaging",
+                "notebookName": "imaging_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/Imaging/imaging_deployment_tests_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities": {
+                        "relational-fhir-data-foundations": "1.3.0",
+                        "dicom-data-ingestion": "1.3.0",
+                        "sample-data": "1.2.0"
+                        
+                    }
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up poa deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/poa",
+                "notebookName": "poa_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/poa/poa_deployment_tests_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities": {
+                        "relational-fhir-data-foundations": "1.3.0",
+                        "patient-outreach-analytics-advanced": "1.2.0",
+                        "sample-data": "1.2.0"
+                    }
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up SDOH deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "/src/tools/automation/AutomationFramework/resources/notebooks/sdoh",
+                "notebookName": "sdoh_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/sdoh/sdoh_deployment_tests_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities": {
+                        "relational-fhir-data-foundations": "1.3.0",
+                        "sample-data": "1.2.0",
+                        "social-determinants-of-health": "1.2.0",
+                        "patient-outreach-analytics": "1.0.0",
+                        "claims-data-ingestion": "1.2.1",
+                        "care-management-analytics": "1.2.0",
+                        "omop-analytics": "1.2.0",
+                        "dax-conversational-data-enrichments": "1.2.1"
+                    }
+                }
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting all deployment tests notebook runner",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/all",
+                "notebookName": "all_deployment_validation_runner.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                }
+            },
+            "outputs": [
+                "deployment_test_runner_notebook_id"
+            ]
+        },
+        {
+            "type": "WaitForEnvironmentPublish",
+            "description": "Waiting for solution env to publish",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$solution_environment"
+            }
+        },
+        {
+            "type": "WaitForEnvironmentPublish",
+            "description": "Waiting for test env to publish",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment"
+            }
+        },
+        {
+            "type": "RunNotebook",
+            "description": "Running all validation tests notebook",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebook_id": "$deployment_test_runner_notebook_id",
+                "default_lakehouse": "$bronze_lakehouse"
+            },
+            "outputs": [
+                "deployment_test_runner_notebook_run_id"
+            ]
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Polling deployment validation notebook runner completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$deployment_test_runner_notebook_id",
+                "job_id": "$deployment_test_runner_notebook_run_id"
+            }
+        },
+        {
+            "type": "ParseTestResults",
+            "ignore": "false",
+            "description": "Parsing test results for all modalities deployment tests",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse": "$test_lakehouse",
+                "deployment_environment": "$targetEnvironment",
+                "test_name": "All modalities deployment tests"
+            }
+        }
+    ]
+}

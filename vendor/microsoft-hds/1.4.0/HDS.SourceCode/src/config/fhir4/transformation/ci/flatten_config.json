@@ -1,0 +1,91 @@
+{
+    "name": "resource configuration",
+    "resources": [
+        {
+            "name": "Patient",
+            "schema": {
+                "path": "patient.avsc"
+            },
+            "flattenSchemaFile": "patient.columnsconfig.json",
+            "children": [
+                {
+                    "name": "PatientAddress",
+                    "flattenSchemaFile": "patient.address.columnsconfig.json"
+                }
+            ]
+        },
+        {
+            "name": "Practitioner",
+            "schema": {
+                "path": "practitioner.avsc"
+            },
+            "flattenSchemaFile": "practitioner.columnsconfig.json",
+            "children": [
+                {
+                    "name": "PractitionerAddress",
+                    "flattenSchemaFile": "practitioner.address.columnsconfig.json"
+                }
+            ]
+        },
+        {
+            "name": "CarePlan",
+            "schema": {
+                "path": "careplan.avsc"
+            },
+            "flattenSchemaFile": "careplan.columnsconfig.json",
+            "children": [
+                {
+                    "name":"CarePlanCondition",
+                    "flattenSchemaFile": "careplan.conditions.columnsconfig.json"
+                }
+            ]
+        },
+        {
+            "name": "Goal",
+            "schema": {
+                "path": "goal.avsc"
+            },
+            "flattenSchemaFile": "goal.columnsconfig.json"
+        },
+        {
+            "name": "Appointment",
+            "schema": {
+                "path": "appointment.avsc"
+            },
+            "flattenSchemaFile": "appointment.columnsconfig.json",
+            "children": [
+                {
+                    "name": "AppointmentParticipant",
+                    "flattenSchemaFile": "appointmentparticipant.columnsconfig.json"
+                }
+            ]
+        },
+        {
+            "name": "Encounter",
+            "schema": {
+                "path": "encounter.avsc"
+            },
+            "flattenSchemaFile": "encounter.columnsconfig.json",
+            "children": [
+                {
+                    "name": "EncounterParticipant",
+                    "flattenSchemaFile": "encounterparticipant.columnsconfig.json"
+                }
+            ]
+        },
+        {
+            "name": "Location",
+            "schema": {
+                "path": "location.avsc"
+            },
+            "flattenSchemaFile": "location.columnsconfig.json"
+        },
+        {
+            "name": "Condition",
+            "schema": {
+                "path": "condition.avsc"
+            },
+            "flattenSchemaFile": "condition.columnsconfig.json"
+        }
+    ]
+}

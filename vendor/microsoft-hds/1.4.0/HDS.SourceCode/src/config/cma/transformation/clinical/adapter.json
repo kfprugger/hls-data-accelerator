@@ -1,0 +1,2343 @@
+{
+  "$schema": "./dmfAdapterSchema.json",
+  "name": "FHIR",
+  "description": "",
+  "version": "1.0",
+  "sourceDomain": "HDS-CMA",
+  "dbSemantics": "dbSemantics.json",
+  "dbTargetSchema": "dbTargetSchema.json",
+  "defaultReferenceValue": 0,
+  "failUponMissingReferenceValues": false,
+  "queryTables": [
+    {
+      "name": "Patient"
+    },
+    {
+      "name": "Encounter"
+    },
+    {
+      "name": "Procedure"
+    },
+    {
+      "name": "ExplanationOfBenefit"
+    },
+    {
+      "name": "Observation"
+    },
+    {
+      "name": "CarePlan"
+    },
+    { 
+      "name": "SocialDeterminant"
+    },
+    {
+      "name": "UnitOfMeasure"
+    },
+    {
+      "name": "SocialDeterminantSubCategory"
+    },
+    {
+      "name": "SocialDeterminantCategory"
+    },
+    {
+      "name": "SocialDeterminantDataSetMetadata"
+    },
+    {
+      "name": "ZipToFipsMapping"	  
+    }
+  ],
+  "sourceTables": [
+    {
+      "tableName": "Patient",
+      "query": "select *, id as p_id, msftModifiedDatetime as p_msftModifiedDatetime, cast(parse_extension(address[0].extension, 'http://hl7.org/fhir/StructureDefinition/geolocation,latitude', 'valueDecimal', '') as float) as p_latitude, cast(parse_extension(address[0].extension, 'http://hl7.org/fhir/StructureDefinition/geolocation,longitude', 'valueDecimal', '') as float) as p_longitude, parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race,ombCategory', 'valueCoding', 'code,system') as p_race_standard, parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race,ombCategory', 'valueCoding', 'code') as p_race_code, parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-race,ombCategory', 'valueCoding', 'display') as p_race_display_value,parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity,ombCategory', 'valueCoding', 'code,system') as p_ethnicity_standard, parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity,ombCategory', 'valueCoding', 'code') as p_ethnicity_code,parse_extension(extension, 'http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity,ombCategory', 'valueCoding', 'display') as p_ethnicity_display_value from Patient",
+      "modifiedonField": "p_msftModifiedDatetime",
+      "targetAnchorTables": [
+        {
+          "tableName": "person"
+        },
+        {
+          "tableName": "location"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "p_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              },
+              {
+                "tableName": "person",
+                "fieldName": "person_source_value"
+              },
+              {
+                "tableName": "death",
+                "fieldName": "person_id",
+                "condition": "isnotnull(deceasedDateTime)"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "birthDateYear",
+          "fieldCalculatedValue": "year(birthDate)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "year_of_birth"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "birthDateMonth",
+          "fieldCalculatedValue": "month(birthDate)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "month_of_birth"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "birthDateDay",
+          "fieldCalculatedValue": "day(birthDate)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "day_of_birth"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "birthDate",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "birth_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "deceased_date",
+          "fieldCalculatedValue": "to_date(deceasedDateTime)",
+          "fieldType": "date",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "death",
+                "fieldName": "death_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "deceasedDateTime",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "death",
+                "fieldName": "death_datetime",
+                "condition": "isnotnull(deceasedDateTime)"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "gender",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "gender_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_us_core_race_code",
+          "fieldCalculatedValue": "p_race_code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "race_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_us_core_race_display_value",
+          "fieldCalculatedValue": "p_race_display_value",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "race_source_display_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "ethnicity_standard",
+          "fieldCalculatedValue": "p_ethnicity_standard",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "concept",
+                "fieldName": "concept_id",
+                "targetField": "ethnicity_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_us_core_ethnicity_code",
+          "fieldCalculatedValue": "p_ethnicity_code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "ethnicity_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_us_core_display_value",
+          "fieldCalculatedValue": "p_ethnicity_display_value",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "ethnicity_source_display_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "addressId",
+          "fieldCalculatedValue": "concat_ws('', address[0].country, address[0].city, address[0].postalCode, address[0].line[0], address[0].line[1])",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "location_id"
+              },
+              {
+                "tableName": "person",
+                "fieldName": "location_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_city",
+          "fieldCalculatedValue": "address[0].city",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "city"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_line_1",
+          "fieldCalculatedValue": "address[0].line[0]",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "address_1"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_line_2",
+          "fieldCalculatedValue": "address[0].line[1]",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "address_2"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_state",
+          "fieldCalculatedValue": "address[0].state",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "state"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_country",
+          "fieldCalculatedValue": "address[0].country",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "country"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "address_postalCode",
+          "fieldCalculatedValue": "address[0].postalCode",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "zip"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_geolocation_latitude_valueDecimal",
+          "fieldCalculatedValue": "p_latitude",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "latitude"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "extension_geolocation_longitude_valueDecimal",
+          "fieldCalculatedValue": "p_longitude",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "location",
+                "fieldName": "longitude"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "Encounter",
+      "query": "select *, id as e_id, CASE WHEN hospitalization.reAdmission.text = 'Re-admission' THEN TRUE ELSE FALSE END as readmission, msftModifiedDatetime as e_msftModifiedDatetime, case when array_contains(participant.individual.type, 'Practitioner') then participant[array_position(participant.individual.type, 'Practitioner')-1].individual.id else NULL end as e_participant_individual_id, TIMESTAMPDIFF(MINUTE, period.start, period.end) as length_of_stay_minutes from Encounter",
+      "modifiedonField": "e_msftModifiedDatetime",
+      "targetAnchorTables": [
+        {
+          "tableName": "visit_occurrence"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "e_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_occurrence_id",
+                "condition": "subject.type = 'Patient'"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "class_code",
+          "fieldCalculatedValue": "class.code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_start",
+          "fieldCalculatedValue": "period.start",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_start_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_start_date",
+          "fieldCalculatedValue": "to_date(period.start)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_start_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "visitStartDateYear",
+          "fieldCalculatedValue": "year(period.start)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_start_date_year"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "visitStartDateMonth",
+          "fieldCalculatedValue": "month(period.start)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_start_date_month"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "visitStartDateQuarter",
+          "fieldCalculatedValue": "concat_ws('', 'Q',quarter(period.start))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_start_date_quarter"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_end",
+          "fieldCalculatedValue": "period.end",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_end_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_end_date",
+          "fieldCalculatedValue": "to_date(period.end)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "visitEndDateYear",
+          "fieldCalculatedValue": "year(period.end)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_end_date_year"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "visitEndDateQuarter",
+          "fieldCalculatedValue": "concat_ws('', 'Q',quarter(period.end))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_end_date_quarter"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "visitEndDateMonth",
+          "fieldCalculatedValue": "month(period.end)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_end_date_month"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "visitLengthofStay",
+          "fieldCalculatedValue": "length_of_stay_minutes",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_length_of_stay_minutes"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "participant_individual_id",
+          "fieldCalculatedValue": "e_participant_individual_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "provider",
+                "fieldName": "provider_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "serviceProvider_id",
+          "fieldCalculatedValue": "serviceProvider.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_site",
+                "fieldName": "care_site_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "hospitalization_dischargeDisposition_text",
+          "fieldCalculatedValue": "hospitalization.dischargeDisposition.text",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "discharged_to_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "readmission",
+          "fieldType": "boolean",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "readmission"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "serviceType_coding_code",
+          "fieldCalculatedValue": "serviceType.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "servicetype_to_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "serviceType_display_text",
+          "fieldCalculatedValue": "serviceType.coding[0].display",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "servicetype_to_display_text"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "Condition",
+      "modifiedonField": "msftModifiedDatetime",
+      "targetAnchorTables": [
+        {
+          "tableName": "condition_occurrence"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_occurrence_id",
+                "condition": "subject.type = 'Patient'"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "code_coding_code",
+          "fieldCalculatedValue": "code.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "code_coding_code_text",
+          "fieldCalculatedValue": "code.coding[0].display",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_text_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_start_datetime",
+          "fieldCalculatedValue": "coalesce(onsetPeriod.start, onsetDateTime)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_start_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_start_date",
+          "fieldCalculatedValue": "to_date(coalesce(onsetPeriod.start, onsetDateTime))",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_start_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_end_datetime",
+          "fieldCalculatedValue": "onsetPeriod.end",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_end_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "condition_end_date",
+          "fieldCalculatedValue": "to_date(onsetPeriod.end)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "clinicalStatus_coding_code",
+          "fieldCalculatedValue": "clinicalStatus.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "condition_occurrence",
+                "fieldName": "condition_status_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "encounter_id",
+          "fieldCalculatedValue": "encounter.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_occurrence_id"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "Procedure",
+      "query": "select *, id as p_id, msftModifiedDatetime as p_msftModifiedDatetime from Procedure",
+      "modifiedonField": "p_msftModifiedDatetime",
+      "targetAnchorTables": [
+        {
+          "tableName": "procedure_occurrence"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "p_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_occurrence_id",
+                "condition": "subject.type = 'Patient' and isnull(focalDevice)"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldCalculatedValue": "subject.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "code_coding_code",
+          "fieldCalculatedValue": "code.coding.code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "procedure_start_datetime",
+          "fieldCalculatedValue": "coalesce(performedPeriod.start, performedDateTime)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "procedure_start_date",
+          "fieldCalculatedValue": "to_date(coalesce(performedPeriod.start,performedDateTime))",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "performedPeriod_end",
+          "fieldCalculatedValue": "performedPeriod.end",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_end_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "drug_exposure_end_date",
+          "fieldCalculatedValue": "to_date(performedPeriod.end)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "procedure_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "quantity",
+          "fieldCalculatedValue": "1",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "procedure_occurrence",
+                "fieldName": "quantity"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "encounter_id",
+          "fieldCalculatedValue": "encounter.id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "visit_occurrence",
+                "fieldName": "visit_occurrence_id"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "ExplanationOfBenefit",
+      "query": "select eob.id,CASE WHEN eob.patient.id IS NULL THEN patient.id ELSE eob.patient.id END AS p_id,total[0].amount.value as total_charge_amt, billablePeriod, msftModifiedDatetime as is_msftModifiedDatetime FROM ExplanationOfBenefit eob LEFT JOIN (SELECT p.id, p.value, e.id as e_id FROM (SELECT pa.id, i.value FROM Patient pa LATERAL VIEW explode(identifier) AS i WHERE i.type.text = 'Medicare Beneficiary Identifier') p INNER JOIN (SELECT ide.value, exob.id FROM ExplanationOfBenefit exob LATERAL VIEW explode(identifier) AS ide WHERE ide.type.coding[0].display = 'Medicare Beneficiary Identifier') e ON p.value = e.value) patient ON eob.id = patient.e_id",
+      "modifiedonField": "is_msftModifiedDatetime",
+      "targetAnchorTables": [
+        {
+          "tableName": "cost"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "cost",
+                "fieldName": "cost_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "p_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id",
+                "targetField": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "total_charge_amt",
+          "fieldType": "decimal",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "cost",
+                "fieldName": "total_charge"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "billable_period_start_date",
+          "fieldCalculatedValue": "to_date(billablePeriod.start)",
+          "fieldType": "date",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "cost",
+                "fieldName": "billable_period_start_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "billable_period_end_date",
+          "fieldCalculatedValue": "to_date(billablePeriod.end)",
+          "fieldType": "date",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "cost",
+                "fieldName": "billable_period_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "billEndDateYear",
+          "fieldCalculatedValue": "year(billablePeriod.end)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "cost",
+                "fieldName": "bill_end_date_year"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "billEndDateQuarter",
+          "fieldCalculatedValue": "concat_ws('', 'Q',quarter(billablePeriod.end))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "cost",
+                "fieldName": "bill_end_date_quarter"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "billStartDateQuarter",
+          "fieldCalculatedValue": "concat_ws('', 'Q', quarter(billablePeriod.start))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "cost",
+                "fieldName": "bill_start_date_quarter"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "Observation",
+      "query": "SELECT o.*, o.id AS o_id, p.id AS p_id, e.id AS encounter_id FROM Observation o LEFT JOIN (SELECT MAX(child.id) AS id, child_i.value AS value, child_i.system AS system, child_i.type.coding.code AS type_code FROM Patient child LATERAL VIEW EXPLODE(identifier) AS child_i GROUP BY child_i.value, child_i.system, child_i.type.coding.code) p ON p.value = o.subject.identifier.value AND (p.system = o.subject.identifier.system OR (p.system IS NULL AND o.subject.identifier.system IS NULL)) AND (p.type_code = o.subject.identifier.type.coding.code OR (p.type_code IS NULL AND o.subject.identifier.type.coding.code IS NULL)) LEFT JOIN (SELECT MAX(enc.id) AS id, enc_i.value AS value, enc_i.system AS system, enc_i.type.coding.code AS type_code FROM Encounter enc LATERAL VIEW EXPLODE(identifier) AS enc_i GROUP BY enc_i.value, enc_i.system, enc_i.type.coding.code) e ON e.value = o.encounter.identifier.value AND (e.system = o.encounter.identifier.system OR (e.system IS NULL AND o.encounter.identifier.system IS NULL)) AND (e.type_code = o.encounter.identifier.type.coding.code OR (e.type_code IS NULL AND o.encounter.identifier.type.coding.code IS NULL))",
+      "modifiedonField": "msftModifiedDatetime",
+      "targetAnchorTables": [
+        {
+          "tableName": "measurement"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "o_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_id",
+                "condition": "subject.type = 'Patient' and category[0].coding[0].code == 'laboratory'"
+              },
+              {
+                "tableName": "measurement",
+                "fieldName": "msftSourceRecordId"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "p_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "person_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "observation_standard",
+          "fieldCalculatedValue": "concat_ws('<->', code.coding[0].code, code.coding[0].system)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "observation_NH",
+          "fieldCalculatedValue": "concat_ws('<->', code.coding[0].code, code.coding[0].system, 'NH')",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_source_concept_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "code_coding_code",
+          "fieldCalculatedValue": "code.coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "code_coding_code_text",
+          "fieldCalculatedValue": "code.coding[0].display",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_text_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "observation_datetime",
+          "fieldCalculatedValue": "coalesce(effectiveDateTime, effectivePeriod.end, effectiveInstant)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_datetime"
+              },
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_time"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "observation_date",
+          "fieldCalculatedValue": "to_date(coalesce(effectiveDateTime, effectivePeriod.end, effectiveInstant))",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "measurement_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "valueQuantity_unit",
+          "fieldCalculatedValue": "valueQuantity.unit",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "unit_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "encounter_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "visit_occurrence_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "value_quantity_value_calc",
+          "fieldCalculatedValue": "coalesce(valueQuantity.value, valueInteger)",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "value_as_number"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "resourceType",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "msftSourceTableName"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "o_msftModifiedDatetime",
+          "fieldCalculatedValue": "msftModifiedDatetime",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "measurement",
+                "fieldName": "msftModifiedDatetime"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "CarePlan",
+      "query": "SELECT cp.subject.type AS subject_type, cp.subject.id AS subject_id, cp.status AS status, cp.category AS category, cp.title AS title, cp.description AS description, cp.period AS period, cp.id AS id, cp.msftModifiedDatetime AS msftModifiedDatetime FROM CarePlan cp",
+      "modifiedonField": "msftModifiedDatetime",
+      "targetAnchorTables": [
+        {
+          "tableName": "care_plan"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "care_plan_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "subject_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "person",
+                "fieldName": "person_id",
+                "targetField": "person_id"
+              }
+            ]
+          }
+        },        
+        {
+          "fieldName": "status",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "status"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "category_code",
+          "fieldCalculatedValue": "category[0].coding[0].code",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "category_code"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "category_source_value",
+          "fieldCalculatedValue": "category[0].coding[0].display",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "category_source_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "title",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "title"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "description",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "description"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_start_datetime",
+          "fieldCalculatedValue": "period.start",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "period_start_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_start_date",
+          "fieldCalculatedValue": "to_date(period.start)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "period_start_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_start_date_year",
+          "fieldCalculatedValue": "year(period.start)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "period_start_date_year"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_start_date_quarter",
+          "fieldCalculatedValue": "concat_ws('', 'Q',quarter(period.start))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "period_start_date_quarter"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_end_datetime",
+          "fieldCalculatedValue": "period.end",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "period_end_datetime"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_end_date",
+          "fieldCalculatedValue": "to_date(period.end)",
+          "fieldType": "datetime",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "period_end_date"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_end_date_year",
+          "fieldCalculatedValue": "year(period.end)",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "period_end_date_year"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "period_end_date_quarter",
+          "fieldCalculatedValue": "concat_ws('', 'Q',quarter(period.end))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan",
+                "fieldName": "period_end_date_quarter"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "CarePlanActivities",
+      "query": "SELECT cp.subject.type as subject_type, cp.subject.id as subject_id, cp.id as id, cp.msftModifiedDatetime as msftModifiedDatetime, ad.kind as activity_kind, ad.status as activity_status, ad.code.coding.code[0] as activity_type, ad.code.text as activity_type_text, ad.dailyAmount.value as dailyAmount, ad.quantity.value as quantity FROM CarePlan cp LATERAL VIEW explode(cp.activity.detail) exploded_activity AS ad",
+      "modifiedonField": "msftModifiedDatetime",
+      "targetAnchorTables": [
+        {
+          "tableName": "care_plan_activities"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_activities",
+                "fieldName": "care_plan_id",
+                "condition": "subject_type = 'Patient'"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "activity_id",
+          "fieldCalculatedValue": "concat_ws('<->', coalesce(id, ''), coalesce(activity_type, 'NA'), coalesce(activity_type_text, 'NA'))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_activities",
+                "fieldName": "care_plan_activity_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "activity_kind",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_activities",
+                "fieldName": "kind"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "activity_status",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_activities",
+                "fieldName": "status"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "activity_type",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_activities",
+                "fieldName": "type_code"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "activity_type_text",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_activities",
+                "fieldName": "type_text"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "dailyAmount",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_activities",
+                "fieldName": "daily_amount_value"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "quantity",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_activities",
+                "fieldName": "quantity_value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "CarePlanAddresses",
+      "query": "SELECT cp.id as care_plan_id, conditions.id as id, conditions.idOrig as idOrig, cp.msftModifiedDatetime as msftModifiedDatetime FROM CarePlan cp LATERAL VIEW explode(cp.addresses) exploded_addresses AS conditions",
+      "modifiedonField": "msftModifiedDatetime",
+      "targetAnchorTables": [
+        { 
+          "tableName": "care_plan_addresses" 
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "care_plan_addresses_id",
+          "fieldCalculatedValue": "concat_ws('<->', coalesce(care_plan_id, ''), coalesce(idOrig, 'NA'))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_addresses",
+                "fieldName": "care_plan_addresses_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "care_plan_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "care_plan_addresses", 
+                "fieldName": "care_plan_id" 
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "care_plan_addresses", 
+                "fieldName": "condition_id" 
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "idOrig",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "care_plan_addresses", 
+                "fieldName": "condition_idOrig" 
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "CarePlanGoal",
+      "query": "SELECT cp.id as care_plan_id, goals.id as id, goals.idOrig as idOrig, cp.msftModifiedDatetime as msftModifiedDatetime FROM CarePlan cp LATERAL VIEW explode(cp.goal) exploded_goal AS goals",
+      "modifiedonField": "msftModifiedDatetime",
+      "targetAnchorTables": [
+        { 
+          "tableName": "care_plan_goal" 
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "care_plan_goal_id",
+          "fieldCalculatedValue": "concat_ws('<->', coalesce(care_plan_id, ''), coalesce(idOrig, 'NA'))",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "care_plan_goal",
+                "fieldName": "care_plan_goal_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "care_plan_id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "care_plan_goal", 
+                "fieldName": "care_plan_id" 
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "id",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "care_plan_goal", 
+                "fieldName": "goal_id" 
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "idOrig",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "care_plan_goal", 
+                "fieldName": "goal_idOrig" 
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "SocialDeterminant",
+      "query": "SELECT *, CASE WHEN SocialDeterminantValue RLIKE '^[0-9]+(\\.[0-9]+)?$' THEN CAST(SocialDeterminantValue AS DECIMAL(18,8)) ELSE NULL END AS formatted_value FROM SocialDeterminant",
+      "modifiedonField": "SourceModifiedOn",
+      "targetAnchorTables": [
+        { 
+          "tableName": "social_determinant"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "SocialDeterminantId",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "social_determinant",
+                "fieldName": "social_determinant_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "DataSetMetadataId",
+          "fieldType": "string",
+          "enabled": true,
+          "description": "Foreign key referencing SocialDeterminantDataSetMetadata.",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "social_determinant",
+                "fieldName": "sdoh_datasetmetadata_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "SocialDeterminantName",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "name"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "SocialDeterminantDescription",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "description" 
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "SocialDeterminantValue",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "value" 
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "formatted_value",
+          "fieldType": "decimal",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "value_as_number" 
+              }
+            ]
+          }
+        },
+		    {
+          "fieldName": "HarmonizationKey",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "harmonization_key" 
+              }
+            ]
+          }
+        },
+		    {
+          "fieldName": "SocialDeterminantSubCategoryId",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "category_id" 
+              }
+            ]
+          }
+        },
+		    {
+          "fieldName": "UnitOfMeasureId",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "unit_of_measure_id" 
+              }
+            ]
+          }
+        },
+		    {
+          "fieldName": "LocationType",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "location_type" 
+              }
+            ]
+          }
+        },
+		    {
+          "fieldName": "LocationValue",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "location_value" 
+              }
+            ]
+          }
+        },
+		    {
+          "fieldName": "LocationJson",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "social_determinant", 
+                "fieldName": "location_JSON" 
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "UnitOfMeasure",
+      "query": "select UnitOfMeasureId, UnitOfMeasureName,UnitOfMeasureDescription, UnitOfMeasureAbbreviation, SourceModifiedOn from UnitOfMeasure",
+      "modifiedonField": "SourceModifiedOn",
+      "targetAnchorTables": [
+        { 
+          "tableName": "sdoh_unitofmeasure"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "UnitOfMeasureId",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "sdoh_unitofmeasure",
+                "fieldName": "unit_of_measure_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "UnitOfMeasureName",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "sdoh_unitofmeasure", 
+                "fieldName": "name"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "UnitOfMeasureDescription",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "sdoh_unitofmeasure", 
+                "fieldName": "description" 
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "UnitOfMeasureAbbreviation",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "sdoh_unitofmeasure", 
+                "fieldName": "abbreviation" 
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "SocialDeterminantSubCategory",
+      "query": "SELECT sc.SourceModifiedOn as SourceModifiedOn,sc.SocialDeterminantSubCategoryId, sc.SocialDeterminantSubCategoryName, sc.SocialDeterminantSubCategoryDescription, sc.SocialDeterminantCategoryId, c.SocialDeterminantCategoryName, c.SocialDeterminantCategoryDescription FROM SocialDeterminantSubCategory sc JOIN SocialDeterminantCategory c ON sc.SocialDeterminantCategoryId = c.SocialDeterminantCategoryId",
+      "modifiedonField": "SourceModifiedOn",
+      "targetAnchorTables": [
+        { 
+          "tableName": "sdoh_category"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "SocialDeterminantSubCategoryId",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "sdoh_category",
+                "fieldName": "subcategory_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "SocialDeterminantSubCategoryName",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "sdoh_category", 
+                "fieldName": "subcategory_name"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "SocialDeterminantSubCategoryDescription",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "sdoh_category", 
+                "fieldName": "subcategory_description" 
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "SocialDeterminantCategoryId",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "sdoh_category",
+                "fieldName": "category_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "SocialDeterminantCategoryName",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "sdoh_category", 
+                "fieldName": "category_name"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "SocialDeterminantCategoryDescription",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              { 
+                "tableName": "sdoh_category", 
+                "fieldName": "category_description" 
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "SocialDeterminantDataSetMetadata",
+      "query": "select * from SocialDeterminantDataSetMetadata",
+      "modifiedonField": "SourceModifiedOn",
+      "targetAnchorTables": [
+        { 
+          "tableName": "sdoh_datasetmetadata" 
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "SocialDeterminantDataSetMetadataId",
+          "fieldType": "integer",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "sdoh_datasetmetadata",
+                "fieldName": "sdoh_datasetmetadata_id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "DatasetName",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "sdoh_datasetmetadata",
+                "fieldName": "dataset_name"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "PublisherName",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "sdoh_datasetmetadata",
+                "fieldName": "publisher_name"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "PublishedDate",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "sdoh_datasetmetadata",
+                "fieldName": "published_date"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "ZipToFipsMapping",
+      "query": "SELECT *, current_timestamp() AS SourceModifiedOn FROM ZipToFipsMapping",
+      "modifiedonField": "SourceModifiedOn",
+	    "targetAnchorTables": [
+        { 
+          "tableName": "zip_to_fips_mapping"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "id",
+          "fieldCalculatedValue": "concat_ws('<->', zip, countyFips, stateAbbreviation)",
+          "fieldType": "string",
+          "enabled": true,
+          "description": "ZIP code.",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "zip_to_fips_mapping",
+                "fieldName": "id"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "zip",
+          "fieldType": "string",
+          "enabled": true,
+          "description": "ZIP code.",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "zip_to_fips_mapping",
+                "fieldName": "zip"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "countyFips",
+          "fieldType": "string",
+          "enabled": true,
+          "description": "FIPS code for the county.",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "zip_to_fips_mapping",
+                "fieldName": "countyFips"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "countyName",
+          "fieldType": "string",
+          "enabled": true,
+          "description": "Name of the county.",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "zip_to_fips_mapping",
+                "fieldName": "countyName"
+              }
+            ]
+          }
+        },
+        {
+          "fieldName": "stateAbbreviation",
+          "fieldType": "string",
+          "enabled": true,
+          "description": "Two-letter state abbreviation.",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "zip_to_fips_mapping",
+                "fieldName": "stateAbbreviation"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "PatientLocation",
+      "query": "select distinct address[0].postalCode as zip, address[0].state as state, address[0].city as city, address[0].country as country, msftModifiedDatetime from Patient where address[0].postalCode is not null",
+      "modifiedonField": "msftModifiedDatetime",
+	  "targetAnchorTables": [
+        { 
+          "tableName": "patient_location_zip"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "zip",
+          "fieldType": "string",
+          "enabled": true,
+          "description": "ZIP code.",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "patient_location_zip",
+                "fieldName": "zip"
+              }
+            ]
+          }
+        },
+		    {
+          "fieldName": "city",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "patient_location_zip",
+                "fieldName": "city"
+              }
+            ]
+          }
+        },
+		    {
+          "fieldName": "state",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "patient_location_zip",
+                "fieldName": "state"
+              }
+            ]
+          }
+        },
+		    {
+          "fieldName": "country",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "patient_location_zip",
+                "fieldName": "country"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "tableName": "SDOHLocation",
+      "query": "SELECT DISTINCT locationValue, locationType, SourceModifiedOn FROM SocialDeterminant WHERE locationValue is not null and lower(locationType) LIKE '%fips%' ",
+      "modifiedonField": "SourceModifiedOn",
+	  "targetAnchorTables": [
+        { 
+          "tableName": "sdoh_fips"
+        }
+      ],
+      "enabled": true,
+      "sourceFields": [
+        {
+          "fieldName": "locationValue",
+          "fieldType": "string",
+          "enabled": true,
+          "description": "FIPS code.",
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "sdoh_fips",
+                "fieldName": "fips_code"
+              }
+            ]
+          }
+        },
+	      {
+          "fieldName": "locationType",
+          "fieldType": "string",
+          "enabled": true,
+          "targetFields": {
+            "fields": [
+              {
+                "tableName": "sdoh_fips",
+                "fieldName": "locationType"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

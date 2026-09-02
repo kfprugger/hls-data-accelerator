@@ -1,0 +1,51 @@
+{
+    "name": "CopyJob Sample",
+    "description": "A sample test for using a Fabric CopyJob (AzCopy)",
+    "initial_context": {
+        "targetEnvironment": "msit",
+        "workspaceDisplayName": "HDS_sample_copy_job"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": "true"
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Test lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Test",
+                "description": "A lakehouse for test artifacts",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "test_lakehouse"
+            ]
+        },
+        {
+            "type": "CreateCopyJob",
+            "description": "Copying sample data to workspace",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "copy_job_name": "CopySampleData",
+                "storage_account_name": "stghdssampledatadev",
+                "container_name": "healthcare-sampledata",
+                "source_subpath": "51KSyntheticPatients",
+                "destination_lakehouse_name": "Test",
+                "destination_subpath": "Ingest/Clinical/FHIR-NDJSON/Fabric-HDS"
+            }
+        }
+    ]
+}

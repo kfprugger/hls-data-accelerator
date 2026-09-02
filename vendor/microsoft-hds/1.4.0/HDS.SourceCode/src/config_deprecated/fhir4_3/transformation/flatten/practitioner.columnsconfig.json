@@ -1,0 +1,16 @@
+{
+    "name": "Practitioner column configuration",
+    "columns": [
+      {
+        "name": "qualification_period_start",
+        "style": "col",
+        "expression": "qualification.period.start"
+      }
+    ],
+    "normalization": [
+      {
+        "name": "qualification_period_start",
+        "type": "date"
+      }
+    ]
+  }

@@ -1,0 +1,195 @@
+{
+    "name": "Artifact Lifecycle Management E2E",
+    "description": "An integration test for basic ALM workflow",
+    "initial_context": {
+        "targetEnvironment": "MSIT",
+        "primaryWorkspaceDisplayName": "HDS_ALM_Primary",
+        "secondaryWorkspaceDisplayName": "HDS_ALM_Secondary",
+        "branchName": "users/test/alm_e2e",
+        "helper_notebook_path": "/git-samples",
+        "uniquePrefix": "healthcare1"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$primaryWorkspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": true
+            },
+            "outputs": [
+                "primary_workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$secondaryWorkspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": true
+            },
+            "outputs": [
+                "secondary_workspace",
+                "capacityId2"
+            ]
+        },
+        {
+            "type": "CreateHdsItem",
+            "description": "Create a new hds item",
+            "parameters": {
+                "workspace": "$primary_workspace",
+                "solution_display_name": "healthcare1"
+            },
+            "outputs": [
+                "solution_artifact_id"
+            ]
+        },
+        {
+            "type": "DeployHdsCapabilities",
+            "description": "Deploy foundations capablity",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$primary_workspace",
+                "solution_artifact_id": "$solution_artifact_id",
+                "capabilities": [
+                    {
+                        "capabilityKey":"relational-fhir-data-foundations",
+                        "userParameters":[]
+                    },
+                    {
+                        "capabilityKey":"sample-data",
+                        "userParameters":[]
+                    }
+                ],
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": []
+        },
+        {
+            "type": "PollCapabilityDeployment",
+            "description": "Poll capability deployment",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$primary_workspace",
+                "solution_artifact_id": "$solution_artifact_id"
+            },
+            "outputs": []
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Add the source admin lakehouse to the runtime context",
+            "parameters": {
+                "workspace": "$primary_workspace",
+                "lakehouse_name": "healthcare1_msft_admin",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "primary_admin_lakehouse"
+            ]
+        },
+        {
+            "type": "ConnectWorkspaceToGit",
+            "description": "Connect workspace to git",
+            "parameters": {
+                "workspace": "$primary_workspace",
+                "create_new_branch": true,
+                "commit_changes": true,
+                "pull_from_branch": false,
+                "branchName": "$branchName",
+                "alias": "evmiller",
+                "organizationName": "powerbi",
+                "projectName": "Trident",
+                "repositoryId": "ux-dmh"
+            }
+        },
+        {
+            "type": "ConnectWorkspaceToGit",
+            "description": "Connect workspace to git",
+            "parameters": {
+                "workspace": "$secondary_workspace",
+                "create_new_branch": false,
+                "commit_changes": false,
+                "pull_from_branch": true,
+                "branchName": "$branchName",
+                "organizationName": "powerbi",
+                "projectName": "Trident",
+                "repositoryId": "ux-dmh"
+            }
+        },
+        {
+            "type": "GetSolutionEnvironment",
+            "description": "Get deployed environment",
+            "parameters": {
+                "workspace": "$primary_workspace",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "environment"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Add the destination admin lakehouse to the runtime context",
+            "parameters": {
+                "workspace": "$secondary_workspace",
+                "lakehouse_name": "healthcare1_msft_admin",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "secondary_admin_lakehouse"
+            ]
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up alm helper notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$primary_workspace",
+                "environment": "",
+                "notebooks_path": "$helper_notebook_path",
+                "notebookName": "hds_alm_helper.ipynb",
+                "lakehouseConfig": {
+                  "default_lakehouse_name": "healthcare1_msft_admin",
+                  "known_lakehouses": [
+                    "healthcare1_msft_admin"
+                  ]
+                },
+                "notebook_parameters": {
+                    "source_workspace_id": "%%primary_workspace_id%%",
+                    "source_admin_lakehouse_id": "%%primary_admin_lakehouse_id%%",
+                    "dest_workspace_id": "%%secondary_workspace_id%%",
+                    "dest_admin_lakehouse_id": "%%secondary_admin_lakehouse_id%%",
+                    "solution_name": "healthcare1"
+                }
+            }, 
+            "outputs": [
+                "alm_helper_notebook_id"
+            ]
+        },
+        {
+            "type": "RunNotebook",
+            "description": "Running alm helper notebook",
+            "parameters": {
+                "workspace": "$primary_workspace",
+                "environment": "$environment",
+                "notebook_id": "$alm_helper_notebook_id",
+                "default_lakehouse": "$primary_admin_lakehouse"
+            },
+            "outputs": [
+                "alm_helper_notebook_id_run_id"
+            ]
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Polling helper notebook completion",
+            "parameters": {
+                "workspace": "$primary_workspace",
+                "item_id": "$alm_helper_notebook_id",
+                "job_id": "$alm_helper_notebook_id_run_id"
+            }
+        }
+    ]
+}

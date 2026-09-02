@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "rayfin": {
+      "args": [
+        "-y",
+        "@microsoft/rayfin-mcp",
+        "start"
+      ],
+      "command": "npx",
+      "type": "stdio"
+    },
+    "fcpxml": {
+      "args": [],
+      "command": "/Users/joey/.venvs/fcp-mcp-server/bin/fcp-mcp-server",
+      "env": {
+        "FCP_PROJECTS_DIR": "/Users/joey/Movies"
+      },
+      "type": "stdio"
+    },
+    "splicekit": {
+      "args": [
+        "/Users/joey/git/SpliceKit/mcp/server.py"
+      ],
+      "command": "/Users/joey/.venvs/splicekit-mcp/bin/python",
+      "type": "stdio"
+    }
+  }
+}

@@ -1,0 +1,115 @@
+{
+    "id": {
+        "tag": "StudyInstanceUID",
+        "calc": "sha1(concat_ws(' ', col('sourceSystem'), col('StudyInstanceUID'), lit('ImagingStudy')))"
+    }, 
+    "meta": {
+        "lastUpdated": "current_timestamp()"
+    },
+    "resourceType": "lit('ImagingStudy')",
+    "status": "lit('available')",
+    "identifier": [
+        {
+            "system": "lit('urn:dicom:uid')",
+            "value": "col('StudyInstanceUID')"
+        },
+        {
+            "type": {
+                "coding": [{
+                    "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+                    "code": "lit('ACSN')"
+                }]
+            },
+            "value": "col('AccessionNumber')"
+        }
+    ],
+    "contained": [
+        {
+            "resourceType": "lit('Patient')",
+            "identifier": [{
+                "type": {
+                    "coding": [{
+                        "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+                        "code": "lit('MR')"
+                    }]
+                },
+                "assigner": {
+                    "display": "col('IssuerOfPatientID')"
+                },
+                "system": "lit('urn:oid:1.2.36.146.595.217.0.1')",
+                "value": "col('PatientID')"
+            }],
+            "active": "lit('true')",
+            "birthDate": "col('PatientBirthDate')",
+            "gender": "col('PatientSex')",
+            "name": [
+                {
+                    "text": "col('PatientName')"
+                }
+            ]
+        }
+    ],
+    "started": {
+        "tag": "StudyDate,StudyTime,TimezoneOffsetFromUTC",
+        "calc": "when((length(trim(coalesce(col('StudyDate'), lit('')))) > 0) & (length(trim(coalesce(col('StudyTime'), lit('')))) > 0), concat_ws(' ', col('StudyDate'), col('StudyTime'), col('TimezoneOffsetFromUTC')).cast(TimestampType())).when(length(trim(coalesce(col('StudyDate'), lit('')))) > 0, col('StudyDate').cast(TimestampType())).otherwise(lit(None))"
+    },
+    "modality": {
+        "tag": "ModalitiesInStudy",
+        "calc": "transform(col('ModalitiesInStudy'), lambda x: struct(x.alias('code')))"
+    },
+    "description": "col('StudyDescription')",
+    "subject": {
+        "identifier": {
+            "type": {
+                "coding": [{
+                    "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+                    "code": "lit('MR')"
+                }]
+            },
+            "assigner": {
+                "display": "col('IssuerOfPatientID')"
+            },
+            "system": "lit('urn:oid:1.2.36.146.595.217.0.1')",
+            "value": "col('PatientID')"
+        },
+        "type": "lit('Patient')"
+    },
+    "numberOfInstances": "col('NumberOfStudyRelatedInstances')",
+    "numberOfSeries": "col('NumberOfStudyRelatedSeries')",
+    "series": [{
+        "uid": "col('SeriesInstanceUID')",
+        "started": {
+            "tag": "SeriesDate,SeriesTime,TimezoneOffsetFromUTC",
+            "calc": "when((length(trim(coalesce(col('SeriesDate'), lit('')))) > 0) & (length(trim(coalesce(col('SeriesTime'), lit('')))) > 0), concat_ws(' ', col('SeriesDate'), col('SeriesTime'), col('TimezoneOffsetFromUTC')).cast(TimestampType())).when(length(trim(coalesce(col('SeriesDate'), lit('')))) > 0, col('SeriesDate').cast(TimestampType())).otherwise(lit(None))"
+        },
+        "modality": {
+            "code": "col('Modality')",
+            "system": "lit('https://dicom.nema.org/resources/ontology/DCM')"
+        },
+        "laterality": {
+            "display": "col('Laterality')"
+        },
+        "bodySite": {
+            "display": "col('BodyPartExamined')"
+        },
+        "numberOfInstances": "col('NumberOfSeriesRelatedInstances')",
+        "description": "col('SeriesDescription')",
+        "number": "col('SeriesNumber')",
+        "instance": [{
+            "uid": "col('SOPInstanceUID')",
+            "sopClass": {
+                "code": "col('SOPClassUID')"
+            },
+            "number": "col('InstanceNumber')",
+            "title": "col('DocumentTitle')",
+            "extension": [{
+                "url": "lit('file_path')",
+                "valueUrl": "col('FilePath')"
+            },           
+            {
+                "url": "when(col('msftIsDeleted') == True, lit('http://azurehealthcareapis.com/data-extensions/deleted-state')).otherwise(lit(None))",
+                "valueString": "when(col('msftIsDeleted') == True, lit('soft-deleted')).otherwise(lit(None))"
+            }]
+        }]
+    }]
+}

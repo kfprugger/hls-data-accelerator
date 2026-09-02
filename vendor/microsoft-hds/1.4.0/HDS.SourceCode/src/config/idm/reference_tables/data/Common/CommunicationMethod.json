@@ -1,0 +1,32 @@
+{
+  "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceData_schema.json",
+  "adrmTableName": "CommunicationMethod",
+  "fieldMapping": [
+    {
+      "adrmFieldName": "CommunicationMethodId",
+      "referenceFieldName": "id"
+    },
+    {
+      "adrmFieldName": "CommunicationMethodName",
+      "referenceFieldName": "name"
+    },
+    {
+      "adrmFieldName": "CommunicationMethodDescription",
+      "referenceFieldName": "description"
+    }
+  ],
+  "data": [
+    {
+      "id": 1,
+      "name": "Email"
+    },
+    {
+      "id": 2,
+      "name": "SMS"
+    },
+    {
+      "id": 3,
+      "name": "Push Notification"
+    }
+  ]
+}

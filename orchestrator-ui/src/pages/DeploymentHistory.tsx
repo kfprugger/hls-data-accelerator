@@ -1,0 +1,607 @@
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Badge,
+  Button,
+  Field,
+  Input,
+  makeStyles,
+  Option,
+  Dropdown,
+  Text,
+  Title2,
+  tokens,
+  Checkbox,
+} from "@fluentui/react-components";
+import {
+  EyeRegular,
+  ArrowSyncRegular,
+  DeleteRegular,
+  DismissRegular,
+  ChevronDownRegular,
+  ChevronUpRegular,
+  OpenRegular,
+} from "@fluentui/react-icons";
+import { listDeployments, getTeardownBatch, deleteDeployment, clearAllDeployments, type DeploymentSummary } from "../api";
+import { listMockDeployments } from "../mockDeployment";
+import { MockDataBanner } from "../components/MockDataBanner";
+import { AzureBadge, FabricBadge } from "../components/TypeBadges";
+
+const useStyles = makeStyles({
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: tokens.spacingVerticalM,
+  },
+  list: {
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalS,
+    marginTop: tokens.spacingVerticalS,
+  },
+  card: {
+    backgroundColor: tokens.colorNeutralBackground1,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusMedium,
+    overflow: "hidden",
+    transition: "box-shadow 0.2s ease",
+    ":hover": {
+      boxShadow: tokens.shadow4,
+    },
+  },
+  cardRow: {
+    display: "flex",
+    alignItems: "center",
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL}`,
+    gap: tokens.spacingHorizontalM,
+  },
+  instanceId: {
+    fontFamily: "'Cascadia Code', 'Consolas', monospace",
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground2,
+    minWidth: "180px",
+  },
+  runName: {
+    fontWeight: tokens.fontWeightSemibold,
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground1,
+    minWidth: "180px",
+    cursor: "pointer",
+    transition: "color 0.2s",
+    ":hover": {
+      color: tokens.colorBrandForeground1,
+      textDecoration: "underline",
+    },
+  },
+  workspace: {
+    flex: 1,
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  actions: {
+    display: "flex",
+    gap: tokens.spacingHorizontalXS,
+    alignItems: "center",
+  },
+  infoPanel: {
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL}`,
+    backgroundColor: tokens.colorNeutralBackground3,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    display: "flex",
+    gap: tokens.spacingHorizontalXL,
+    flexWrap: "wrap",
+    fontSize: tokens.fontSizeBase200,
+  },
+  linkGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalXXS,
+  },
+  linkLabel: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase100,
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  link: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalXS,
+    color: tokens.colorBrandForeground1,
+    textDecoration: "none",
+    fontSize: tokens.fontSizeBase200,
+    ":hover": {
+      textDecoration: "underline",
+    },
+  },
+  filterRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalM,
+    marginBottom: tokens.spacingVerticalS,
+    flexWrap: "wrap" as const,
+  },
+  listHeader: {
+    display: "flex",
+    alignItems: "center",
+    padding: `0 ${tokens.spacingHorizontalL}`,
+    gap: tokens.spacingHorizontalM,
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase200,
+    fontWeight: tokens.fontWeightSemibold,
+    marginBottom: tokens.spacingVerticalXS,
+  },
+});
+
+function statusColor(
+  s: string
+): "success" | "danger" | "informative" | "warning" | "subtle" {
+  if (s === "Completed") return "success";
+  if (s === "Failed" || s === "Terminated") return "danger";
+  if (s === "Running") return "informative";
+  if (s === "Suspended") return "warning";
+  return "subtle";
+}
+
+function isRunningTeardownBatch(deployment: DeploymentSummary): boolean {
+  const cs = deployment.customStatus as Record<string, unknown> | null;
+  return cs?.runType === "teardownBatch" && deployment.runtimeStatus === "Running";
+}
+
+async function hydrateRunningTeardownBatches(deployments: DeploymentSummary[]): Promise<DeploymentSummary[]> {
+  const hydrated = await Promise.all(
+    deployments.map(async (deployment) => {
+      if (!isRunningTeardownBatch(deployment)) return deployment;
+      try {
+        const status = await getTeardownBatch(deployment.instanceId);
+        return status.batch ?? deployment;
+      } catch {
+        return deployment;
+      }
+    })
+  );
+  return hydrated;
+}
+
+export function DeploymentHistory() {
+  const styles = useStyles();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const signatureRef = useRef("");
+  const [deployments, setDeployments] = useState<DeploymentSummary[]>([]);
+  const [usingMock, setUsingMock] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
+    const raw = searchParams.get("expanded") ?? "";
+    return new Set(raw ? raw.split(",").filter(Boolean) : []);
+  });
+  const [runFilter, setRunFilter] = useState<"all" | "deployment" | "teardown">(
+    () => (searchParams.get("type") as "all" | "deployment" | "teardown") || "all"
+  );
+  const [nameFilter, setNameFilter] = useState(() => searchParams.get("q") ?? "");
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get("from") ?? "");
+  const [dateTo, setDateTo] = useState(() => searchParams.get("to") ?? "");
+  const [liveUpdates, setLiveUpdates] = useState(() => searchParams.get("live") !== "0");
+  const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
+  const [relatedFor, setRelatedFor] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const refresh = useCallback(() => {
+    setError("");
+    const mockDeps = listMockDeployments();
+    listDeployments()
+      .then(async (real) => {
+        const merged = [...mockDeps, ...(await hydrateRunningTeardownBatches(real))];
+        const nextSignature = merged
+          .map((d) => `${d.instanceId}|${d.runtimeStatus}|${d.lastUpdatedTime ?? ""}`)
+          .sort()
+          .join(";");
+        if (nextSignature !== signatureRef.current) {
+          signatureRef.current = nextSignature;
+          setDeployments(merged);
+        }
+        setUsingMock(mockDeps.length > 0 && real.length === 0);
+      })
+      .catch(() => {
+        setError("Unable to refresh deployment history from backend.");
+        const fallbackSignature = mockDeps
+          .map((d) => `${d.instanceId}|${d.runtimeStatus}|${d.lastUpdatedTime ?? ""}`)
+          .sort()
+          .join(";");
+        if (fallbackSignature !== signatureRef.current) {
+          signatureRef.current = fallbackSignature;
+          setDeployments(mockDeps);
+        }
+        setUsingMock(mockDeps.length > 0);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!liveUpdates) return;
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      refresh();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [refresh, liveUpdates]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    next.set("type", runFilter);
+    if (nameFilter) next.set("q", nameFilter); else next.delete("q");
+    if (dateFrom) next.set("from", dateFrom); else next.delete("from");
+    if (dateTo) next.set("to", dateTo); else next.delete("to");
+    if (expandedIds.size > 0) next.set("expanded", Array.from(expandedIds).join(",")); else next.delete("expanded");
+    next.set("live", liveUpdates ? "1" : "0");
+    setSearchParams(next, { replace: true });
+  }, [runFilter, nameFilter, dateFrom, dateTo, expandedIds, liveUpdates, setSearchParams]);
+
+  const handleClearAll = async () => {
+    if (!window.confirm(`Delete ALL ${deployments.length} deployment records? This cannot be undone.`)) return;
+    try { await clearAllDeployments(); } catch { setError("Failed to clear deployment history."); }
+    refresh();
+  };
+
+  const handleDelete = async (instanceId: string) => {
+    if (!window.confirm(`Delete deployment record "${instanceId}"?`)) return;
+    try { await deleteDeployment(instanceId); } catch { setError(`Failed to delete deployment ${instanceId}.`); }
+    refresh();
+  };
+
+  const toggleCompare = (instanceId: string, checked: boolean) => {
+    setCompareIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        if (next.size >= 2 && !next.has(instanceId)) next.delete(Array.from(next)[0]);
+        next.add(instanceId);
+      } else {
+        next.delete(instanceId);
+      }
+      return next;
+    });
+  };
+
+  const comparedRuns = Array.from(compareIds)
+    .map((id) => deployments.find((deployment) => deployment.instanceId === id))
+    .filter(Boolean) as DeploymentSummary[];
+
+  const filteredDeployments = deployments.filter((deployment) => {
+    const cs = deployment.customStatus as Record<string, unknown> | null;
+    const isTeardown = (cs?.runType as string) === "teardown"
+      || deployment.name === "teardown_orchestrator"
+      || deployment.instanceId.toLowerCase().startsWith("teardown");
+
+    if (runFilter === "teardown" && !isTeardown) return false;
+    if (runFilter === "deployment" && isTeardown) return false;
+
+    // Name filter: match against instanceId, workspace name, or RG name
+    if (nameFilter) {
+      const q = nameFilter.toLowerCase();
+      const ws = ((cs?.workspaceName as string) || "").toLowerCase();
+      const rg = ((cs?.resourceGroupName as string) || "").toLowerCase();
+      const displayName = ((cs?.displayName as string) || "").toLowerCase();
+      const id = deployment.instanceId.toLowerCase();
+      if (!ws.includes(q) && !rg.includes(q) && !displayName.includes(q) && !id.includes(q)) return false;
+    }
+
+    // Date range filter
+    if (dateFrom && deployment.createdTime) {
+      const created = new Date(deployment.createdTime);
+      const from = new Date(dateFrom);
+      if (created < from) return false;
+    }
+    if (dateTo && deployment.createdTime) {
+      const created = new Date(deployment.createdTime);
+      const to = new Date(dateTo);
+      to.setDate(to.getDate() + 1); // include the full end day
+      if (created >= to) return false;
+    }
+
+    return true;
+  }).sort((a, b) => {
+    const ta = a.createdTime ? new Date(a.createdTime).getTime() : 0;
+    const tb = b.createdTime ? new Date(b.createdTime).getTime() : 0;
+    return tb - ta;
+  });
+
+  return (
+    <div>
+      <div className={styles.header}>
+        {usingMock && <MockDataBanner />}
+        <Title2>Run History</Title2>
+        <div style={{ display: "flex", gap: tokens.spacingHorizontalS }}>
+          <Checkbox
+            checked={liveUpdates}
+            onChange={(_, d) => setLiveUpdates(!!d.checked)}
+            label="Live"
+          />
+          <Button appearance="subtle" icon={<ArrowSyncRegular />} onClick={refresh}>
+            Refresh
+          </Button>
+          {deployments.length > 0 && (
+            <Button appearance="subtle" icon={<DeleteRegular />} onClick={handleClearAll}>
+              Clear All
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <Text size={200} style={{ color: tokens.colorStatusDangerForeground1, marginBottom: tokens.spacingVerticalS, display: "block" }}>
+          {error}
+        </Text>
+      )}
+
+      <div className={styles.filterRow}>
+        <Field label="Type" style={{ minWidth: 160 }}>
+          <Dropdown
+            value={runFilter === "all" ? "All runs" : runFilter === "deployment" ? "Deployments" : "Teardowns"}
+            selectedOptions={[runFilter]}
+            onOptionSelect={(_, data) => setRunFilter((data.optionValue as "all" | "deployment" | "teardown") ?? "all")}
+          >
+            <Option value="all">All runs</Option>
+            <Option value="deployment">Deployments</Option>
+            <Option value="teardown">Teardowns</Option>
+          </Dropdown>
+        </Field>
+        <Field label="Search" style={{ minWidth: 200, flex: 1 }}>
+          <Input
+            value={nameFilter}
+            onChange={(_, d) => setNameFilter(d.value)}
+            placeholder="Filter by name, workspace, or RG..."
+            type="search"
+          />
+        </Field>
+        <Field label="From" style={{ minWidth: 150 }}>
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(_, d) => setDateFrom(d.value)}
+          />
+        </Field>
+        <Field label="To" style={{ minWidth: 150 }}>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(_, d) => setDateTo(d.value)}
+          />
+        </Field>
+        <Text size={200} style={{ color: tokens.colorNeutralForeground3, alignSelf: "flex-end", paddingBottom: 6 }}>
+          {filteredDeployments.length} of {deployments.length}
+        </Text>
+      </div>
+
+      {comparedRuns.length > 0 && (
+        <div className={styles.card} style={{ marginBottom: tokens.spacingVerticalM }}>
+          <div className={styles.cardRow} style={{ alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <Text weight="semibold" block>Run compare</Text>
+              <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                Select up to two runs to compare status, timings, workspace, resource group, and phase counts.
+              </Text>
+            </div>
+            <Button appearance="subtle" onClick={() => setCompareIds(new Set())}>Clear compare</Button>
+          </div>
+          <div className={styles.infoPanel}>
+            {comparedRuns.map((run) => {
+              const cs = run.customStatus as Record<string, unknown> | null;
+              return (
+                <div key={run.instanceId} className={styles.linkGroup} style={{ minWidth: 240 }}>
+                  <span className={styles.linkLabel}>{run.instanceId}</span>
+                  <Text size={200}>Status: {run.runtimeStatus}</Text>
+                  <Text size={200}>Workspace: {(cs?.workspaceName as string) || "—"}</Text>
+                  <Text size={200}>RG: {(cs?.resourceGroupName as string) || "—"}</Text>
+                  <Text size={200}>Phases: {(cs?.completedPhases as number) ?? 0}/{(cs?.totalPhases as number) ?? 0}</Text>
+                  <Text size={200}>Updated: {run.lastUpdatedTime ? new Date(run.lastUpdatedTime).toLocaleString() : "—"}</Text>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className={styles.list}>
+        {loading && (
+          <>
+            <div className={styles.card}><div className={styles.cardRow}><Text>Loading deployment history...</Text></div></div>
+            <div className={styles.card}><div className={styles.cardRow}><Text>Loading deployment history...</Text></div></div>
+            <div className={styles.card}><div className={styles.cardRow}><Text>Loading deployment history...</Text></div></div>
+          </>
+        )}
+        {!loading && filteredDeployments.length > 0 && (
+          <div className={styles.listHeader}>
+            <div style={{ width: 32 }} /> {/* Checkbox placeholder */}
+            <div style={{ minWidth: 180 }}>Deployment Name</div>
+            <div style={{ flex: 1 }}>Workspace / Resource Group</div>
+            <div style={{ width: 100 }}>Type</div>
+            <div style={{ width: 100 }}>Status</div>
+            <div style={{ width: 60 }}>Progress</div>
+            <div style={{ width: 150 }}>Created</div>
+            <div style={{ width: 120 }}>Actions</div>
+          </div>
+        )}
+        {!loading && filteredDeployments.map((d) => {
+          const cs = d.customStatus as Record<string, unknown> | null;
+          const workspace = (cs?.workspaceName as string) || "";
+          const rgName = (cs?.resourceGroupName as string) || "";
+          const isTeardown = (cs?.runType as string) === "teardown"
+            || d.name === "teardown_orchestrator"
+            || d.instanceId.toLowerCase().startsWith("teardown");
+          const displayName = (cs?.displayName as string)
+            || (workspace && rgName ? `${workspace} + ${rgName}` : workspace || rgName || "—");
+          const completed = (cs?.completedPhases as number) ?? 0;
+          const total = (cs?.totalPhases as number) ?? 0;
+          const isMock = d.instanceId.startsWith("mock-");
+          const isExpanded = expandedIds.has(d.instanceId);
+          const links = cs?.links as Record<string, string> | undefined;
+          const relatedCount = deployments.filter((other) => {
+            if (other.instanceId === d.instanceId) return false;
+            const otherCs = other.customStatus as Record<string, unknown> | null;
+            return !!(
+              (workspace && otherCs?.workspaceName === workspace) ||
+              (rgName && otherCs?.resourceGroupName === rgName)
+            );
+          }).length;
+
+          return (
+            <div key={d.instanceId} className={styles.card}>
+              <div className={styles.cardRow}>
+                <div style={{ width: 32 }}>
+                  <Checkbox
+                    checked={compareIds.has(d.instanceId)}
+                    onChange={(_, data) => toggleCompare(d.instanceId, !!data.checked)}
+                    aria-label={`Compare ${d.instanceId}`}
+                  />
+                </div>
+                <div
+                  className={styles.runName}
+                  style={{ minWidth: 180 }}
+                  onClick={() => navigate(`/monitor/${d.instanceId}`)}
+                  title="Click to view run details"
+                >
+                  {workspace || (cs?.deployConfig as any)?.fabric_workspace_name || d.instanceId}
+                  {isMock && (
+                    <Badge color="informative" size="small" style={{ marginLeft: 6 }}>mock</Badge>
+                  )}
+                </div>
+                <Text className={styles.workspace} style={{ flex: 1, cursor: isTeardown ? "pointer" : "default", textDecoration: isTeardown ? "underline" : "none" }} onClick={isTeardown ? () => navigate(`/monitor/${d.instanceId}`) : undefined}>{displayName}{relatedCount > 0 && <Button size="small" appearance="transparent" onClick={(event) => { event.stopPropagation(); setRelatedFor(d.instanceId); }} style={{ marginLeft: 6, padding: 0, minWidth: 0 }}><Badge size="small" color="informative">{relatedCount} related</Badge></Button>}</Text>
+                <div style={{ width: 100 }}>
+                  <Badge color={isTeardown ? "warning" : "brand"}>
+                    {isTeardown ? "Teardown" : "Deployment"}
+                  </Badge>
+                </div>
+                <div style={{ width: 100 }}>
+                  <Badge color={statusColor(d.runtimeStatus)}>{d.runtimeStatus}</Badge>
+                </div>
+                <div style={{ width: 60 }}>
+                  {total > 0 && (
+                    <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                      {completed}/{total}
+                    </Text>
+                  )}
+                </div>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3, width: 150 }}>
+                  {d.createdTime ? new Date(d.createdTime).toLocaleString() : "—"}
+                </Text>
+                <div className={styles.actions} style={{ width: 120 }}>
+                  <Button
+                    appearance="subtle"
+                    icon={isExpanded ? <ChevronUpRegular /> : <ChevronDownRegular />}
+                    onClick={() => toggleExpanded(d.instanceId)}
+                    size="small"
+                  >
+                    Info
+                  </Button>
+                  <Button
+                    appearance="subtle"
+                    icon={<EyeRegular />}
+                    onClick={() => navigate(`/monitor/${d.instanceId}`)}
+                    size="small"
+                  >
+                    View
+                  </Button>
+                  <Button
+                    appearance="subtle"
+                    icon={<DismissRegular />}
+                    onClick={() => handleDelete(d.instanceId)}
+                    size="small"
+                  />
+                </div>
+              </div>
+
+              {isExpanded && (
+                <div className={styles.infoPanel}>
+                  {rgName && (
+                    <div className={styles.linkGroup}>
+                      <span className={styles.linkLabel}>Azure Resource Group</span>
+                      <a
+                        href={links?.azurePortal || `https://portal.azure.com/#browse/resourcegroups/filterValue/${rgName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.link}
+                      >
+                        <AzureBadge /> {rgName} <OpenRegular fontSize={12} />
+                      </a>
+                    </div>
+                  )}
+                  {workspace && workspace !== "—" && (
+                    <div className={styles.linkGroup}>
+                      <span className={styles.linkLabel}>Fabric Workspace</span>
+                      <a
+                        href={links?.fabricWorkspace || `https://app.fabric.microsoft.com/?experience=fabric-developer`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.link}
+                      >
+                        <FabricBadge /> {workspace} <OpenRegular fontSize={12} />
+                      </a>
+                    </div>
+                  )}
+                  <div className={styles.linkGroup}>
+                    <span className={styles.linkLabel}>Instance ID</span>
+                    <Text size={200} font="monospace">{d.instanceId}</Text>
+                  </div>
+                  <div className={styles.linkGroup}>
+                    <span className={styles.linkLabel}>Created</span>
+                    <Text size={200}>
+                      {d.createdTime ? new Date(d.createdTime).toLocaleString() : "—"}
+                    </Text>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {filteredDeployments.length === 0 && (
+          <Text style={{ textAlign: "center", padding: tokens.spacingVerticalXL, color: tokens.colorNeutralForeground3 }}>
+            No runs found for the selected filter.
+          </Text>
+        )}
+      </div>
+      {relatedFor && (() => {
+        const base = deployments.find((run) => run.instanceId === relatedFor);
+        const baseCs = base?.customStatus as Record<string, unknown> | null;
+        const baseWs = (baseCs?.workspaceName as string) || "";
+        const baseRg = (baseCs?.resourceGroupName as string) || "";
+        const related = deployments.filter((run) => {
+          if (run.instanceId === relatedFor) return true;
+          const cs = run.customStatus as Record<string, unknown> | null;
+          return !!((baseWs && cs?.workspaceName === baseWs) || (baseRg && cs?.resourceGroupName === baseRg));
+        });
+        return (
+          <div style={{ position: "fixed", right: 24, top: 96, width: 420, maxHeight: "75vh", overflow: "auto", background: tokens.colorNeutralBackground1, border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusMedium, boxShadow: tokens.shadow16, zIndex: 100, padding: tokens.spacingHorizontalL }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: tokens.spacingVerticalS }}>
+              <Text weight="semibold">Related run timeline</Text>
+              <Button size="small" appearance="subtle" onClick={() => setRelatedFor(null)}>Close</Button>
+            </div>
+            <div style={{ display: "grid", gap: tokens.spacingVerticalS }}>
+              {related.map((run) => {
+                const cs = run.customStatus as Record<string, unknown> | null;
+                const label = (cs?.displayName as string) || (cs?.workspaceName as string) || (cs?.resourceGroupName as string) || run.instanceId;
+                return (
+                  <Button key={run.instanceId} appearance="subtle" onClick={() => navigate(`/monitor/${run.instanceId}`)} style={{ justifyContent: "flex-start" }}>
+                    {new Date(run.createdTime || "").toLocaleString()} · {run.runtimeStatus} · {label}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}

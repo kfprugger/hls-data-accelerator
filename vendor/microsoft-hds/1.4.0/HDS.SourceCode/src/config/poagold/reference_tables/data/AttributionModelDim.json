@@ -1,0 +1,25 @@
+{
+    "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceData_schema.json",
+    "adrmTableName": "AttributionModelDim",
+    "fieldMapping": [
+      {
+        "adrmFieldName": "AttributionModelKey",
+        "referenceFieldName": "id"
+      },
+      {
+        "adrmFieldName": "AttributionModelName",
+        "referenceFieldName": "name"
+      }
+    ],
+    "data": [
+      {
+        "id": 1,
+        "name": "Last-touch"
+      },
+      {
+        "id": 2,
+        "name": "Linear-touch"
+      }
+    ]
+  }
+  

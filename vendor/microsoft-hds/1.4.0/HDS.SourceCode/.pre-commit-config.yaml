@@ -1,0 +1,10 @@
+repos:
+  - repo: local
+    hooks:
+      - id: format-notebook
+        name: Formats notebook for easy read and removes any attached lakehouses and environments
+        entry: python pre_commit_hook.py
+        language: python
+        pass_filenames: true
+        types: [json]
+        files: \.(ipynb)$

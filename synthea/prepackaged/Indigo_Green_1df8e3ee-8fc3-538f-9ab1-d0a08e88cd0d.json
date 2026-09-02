@@ -1,0 +1,1878 @@
+{
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d",
+      "resource": {
+        "active": true,
+        "address": [
+          {
+            "city": "Atlanta",
+            "country": "US",
+            "line": [
+              "168 Synthetic Care Way"
+            ],
+            "postalCode": "30060",
+            "state": "GA",
+            "use": "home"
+          }
+        ],
+        "birthDate": "1973-07-01",
+        "extension": [
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2076-8",
+                  "display": "Native Hawaiian or Other Pacific Islander",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Native Hawaiian or Other Pacific Islander"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-race"
+          },
+          {
+            "extension": [
+              {
+                "url": "ombCategory",
+                "valueCoding": {
+                  "code": "2186-5",
+                  "display": "Not Hispanic or Latino",
+                  "system": "urn:oid:2.16.840.1.113883.6.238"
+                }
+              },
+              {
+                "url": "text",
+                "valueString": "Not Hispanic or Latino"
+              }
+            ],
+            "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-ethnicity"
+          }
+        ],
+        "gender": "female",
+        "id": "1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d",
+        "identifier": [
+          {
+            "system": "https://brakekat.example/fhir/synthetic-mrn",
+            "type": {
+              "text": "Synthetic MRN"
+            },
+            "value": "SYN-000069"
+          }
+        ],
+        "name": [
+          {
+            "family": "Green",
+            "given": [
+              "Indigo"
+            ],
+            "text": "Indigo Green",
+            "use": "official"
+          }
+        ],
+        "resourceType": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:314e6831-fc05-5bb6-b29b-897a2dc99fcc",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "314e6831-fc05-5bb6-b29b-897a2dc99fcc",
+        "location": [
+          {
+            "location": {
+              "display": "Wellstar Kennestone Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+            }
+          }
+        ],
+        "period": {
+          "end": "2024-07-12T12:00:00Z",
+          "start": "2024-07-11T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Wellstar Kennestone Hospital",
+          "reference": "Organization/wellstar-kennestone-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e17e13b6-d478-5cbd-bcb2-72b7e6f4db2e",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "e17e13b6-d478-5cbd-bcb2-72b7e6f4db2e",
+        "location": [
+          {
+            "location": {
+              "display": "Wellstar Kennestone Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-01-07T18:00:00Z",
+          "start": "2025-01-07T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Wellstar Kennestone Hospital",
+          "reference": "Organization/wellstar-kennestone-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8a85eb1f-d4c2-5b65-aad2-9de7dd61ba5c",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "8a85eb1f-d4c2-5b65-aad2-9de7dd61ba5c",
+        "location": [
+          {
+            "location": {
+              "display": "Wellstar Kennestone Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-04T12:00:00Z",
+          "start": "2025-07-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Wellstar Kennestone Hospital",
+          "reference": "Organization/wellstar-kennestone-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ff6f5252-0cf0-52c1-a49e-7c7b7c984fbc",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "ff6f5252-0cf0-52c1-a49e-7c7b7c984fbc",
+        "location": [
+          {
+            "location": {
+              "display": "Wellstar Kennestone Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+            }
+          }
+        ],
+        "period": {
+          "end": "2025-07-18T12:00:00Z",
+          "start": "2025-07-16T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Wellstar Kennestone Hospital",
+          "reference": "Organization/wellstar-kennestone-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cbcec9a2-e27c-5616-9e33-8046355ba4b2",
+      "resource": {
+        "class": {
+          "code": "AMB",
+          "display": "ambulatory",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "id": "cbcec9a2-e27c-5616-9e33-8046355ba4b2",
+        "location": [
+          {
+            "location": {
+              "display": "Wellstar Kennestone Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Wellstar Kennestone Hospital",
+          "reference": "Organization/wellstar-kennestone-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:635cd111-3182-58c0-ba72-1db93ea7f566",
+      "resource": {
+        "class": {
+          "code": "EMER",
+          "display": "emergency",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Emergency"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "635cd111-3182-58c0-ba72-1db93ea7f566",
+        "location": [
+          {
+            "location": {
+              "display": "Wellstar Kennestone Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-04-02T16:48:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Wellstar Kennestone Hospital",
+          "reference": "Organization/wellstar-kennestone-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d",
+      "resource": {
+        "class": {
+          "code": "IMP",
+          "display": "inpatient encounter",
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "text": "Physician referral"
+          },
+          "dischargeDisposition": {
+            "text": "Home"
+          },
+          "reAdmission": {
+            "text": "No readmission"
+          }
+        },
+        "id": "5683f6f4-4cd4-5a43-a3ae-1579c46f058d",
+        "location": [
+          {
+            "location": {
+              "display": "Wellstar Kennestone Hospital",
+              "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+            },
+            "status": "completed"
+          }
+        ],
+        "participant": [
+          {
+            "individual": {
+              "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+            }
+          }
+        ],
+        "period": {
+          "end": "2026-06-05T12:00:00Z",
+          "start": "2026-06-01T12:00:00Z"
+        },
+        "resourceType": "Encounter",
+        "serviceProvider": {
+          "display": "Wellstar Kennestone Hospital",
+          "reference": "Organization/wellstar-kennestone-hospital"
+        },
+        "status": "finished",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "308335008",
+                "display": "Patient encounter procedure",
+                "system": "http://snomed.info/sct"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:9b4c7c43-4aa9-5586-9c1d-64c003ae4b72",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "36923009",
+              "display": "Major depressive disorder",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Major depressive disorder"
+        },
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "9b4c7c43-4aa9-5586-9c1d-64c003ae4b72",
+        "onsetDateTime": "2025-07-01T12:00:00Z",
+        "recordedDate": "2026-06-01T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fdbea018-1b2b-5071-99d4-41784d29ab0b",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "encounter-diagnosis",
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category"
+              }
+            ]
+          }
+        ],
+        "clinicalStatus": {
+          "coding": [
+            {
+              "code": "active",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "code": "254637007",
+              "display": "Lung cancer",
+              "system": "http://snomed.info/sct"
+            }
+          ],
+          "text": "Lung cancer"
+        },
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "fdbea018-1b2b-5071-99d4-41784d29ab0b",
+        "onsetDateTime": "2024-07-01T12:00:00Z",
+        "recordedDate": "2026-05-31T12:00:00Z",
+        "resourceType": "Condition",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "code": "confirmed",
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a07509a7-b387-5cd2-8c8e-8dd6e44ee33c",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "4548-4",
+              "display": "Hemoglobin A1c",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Hemoglobin A1c"
+        },
+        "effectiveDateTime": "2026-06-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "a07509a7-b387-5cd2-8c8e-8dd6e44ee33c",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 10.1
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:01a0e06d-f965-50f8-99e2-8d53f2dda6f4",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8480-6",
+              "display": "Systolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Systolic blood pressure"
+        },
+        "effectiveDateTime": "2026-05-06T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "01a0e06d-f965-50f8-99e2-8d53f2dda6f4",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 148
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5ad96745-12c3-5ed4-8314-ff043ca46027",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "8462-4",
+              "display": "Diastolic blood pressure",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Diastolic blood pressure"
+        },
+        "effectiveDateTime": "2026-04-08T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "5ad96745-12c3-5ed4-8314-ff043ca46027",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "valueQuantity": {
+          "code": "mm[Hg]",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mm[Hg]",
+          "value": 94
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:bb933180-b52a-56a2-934e-40f822656b59",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "39156-5",
+              "display": "Body mass index",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Body mass index"
+        },
+        "effectiveDateTime": "2026-03-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "bb933180-b52a-56a2-934e-40f822656b59",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "valueQuantity": {
+          "code": "kg/m2",
+          "system": "http://unitsofmeasure.org",
+          "unit": "kg/m2",
+          "value": 31.5
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e37def22-7f68-5bf7-853d-3cc8d38b8d23",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "laboratory",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "14959-1",
+              "display": "Microalbumin/Creatinine",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Microalbumin/Creatinine"
+        },
+        "effectiveDateTime": "2026-02-11T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "e37def22-7f68-5bf7-853d-3cc8d38b8d23",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "valueQuantity": {
+          "code": "mg/g",
+          "system": "http://unitsofmeasure.org",
+          "unit": "mg/g",
+          "value": 28
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:a92c4f31-c2d6-5894-9511-fdef66e4ca9c",
+      "resource": {
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "vital-signs",
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "code": "2708-6",
+              "display": "Oxygen saturation",
+              "system": "http://loinc.org"
+            }
+          ],
+          "text": "Oxygen saturation"
+        },
+        "effectiveDateTime": "2026-01-14T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "a92c4f31-c2d6-5894-9511-fdef66e4ca9c",
+        "resourceType": "Observation",
+        "status": "final",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "valueQuantity": {
+          "code": "%",
+          "system": "http://unitsofmeasure.org",
+          "unit": "%",
+          "value": 90
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:be2fb0a2-a3e8-522d-9913-62aec1a0b131",
+      "resource": {
+        "authoredOn": "2026-07-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "be2fb0a2-a3e8-522d-9913-62aec1a0b131",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c93ed571-5a99-58ba-918a-919046f67a83",
+      "resource": {
+        "authoredOn": "2026-06-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "c93ed571-5a99-58ba-918a-919046f67a83",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:e77e6176-462e-5545-941e-de1ba0837d20",
+      "resource": {
+        "authoredOn": "2026-05-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "e77e6176-462e-5545-941e-de1ba0837d20",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:8fc23981-fb56-5e60-b741-fff37635d71f",
+      "resource": {
+        "authoredOn": "2026-04-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "8fc23981-fb56-5e60-b741-fff37635d71f",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6084d240-d98d-5f0c-b904-8da36ca55eab",
+      "resource": {
+        "authoredOn": "2026-03-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "6084d240-d98d-5f0c-b904-8da36ca55eab",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:1bc40bb7-0037-5402-ba5b-14a1038a7a3a",
+      "resource": {
+        "authoredOn": "2026-02-01T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "1bc40bb7-0037-5402-ba5b-14a1038a7a3a",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5795b9c7-4074-5e91-a09b-152a99d38251",
+      "resource": {
+        "authoredOn": "2026-01-02T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "5795b9c7-4074-5e91-a09b-152a99d38251",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:08bbd020-dc6c-5db6-809e-3bf377b5fde4",
+      "resource": {
+        "authoredOn": "2025-12-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "08bbd020-dc6c-5db6-809e-3bf377b5fde4",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:06ccd852-ca28-56b5-9404-92135b8541c8",
+      "resource": {
+        "authoredOn": "2025-11-03T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "06ccd852-ca28-56b5-9404-92135b8541c8",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:be27a7be-43ff-57b7-b29d-b1bee3f4cc3a",
+      "resource": {
+        "authoredOn": "2025-10-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "be27a7be-43ff-57b7-b29d-b1bee3f4cc3a",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:0c50c660-2c0d-594a-a59d-3ccc215e25ea",
+      "resource": {
+        "authoredOn": "2025-09-04T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "0c50c660-2c0d-594a-a59d-3ccc215e25ea",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:745ee3c3-f966-5153-91fb-96cdcc9d557c",
+      "resource": {
+        "authoredOn": "2025-08-05T12:00:00Z",
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "745ee3c3-f966-5153-91fb-96cdcc9d557c",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "code": "617314",
+              "display": "Atorvastatin 20 MG Oral Tablet",
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm"
+            }
+          ],
+          "text": "Atorvastatin 20 MG Oral Tablet"
+        },
+        "resourceType": "MedicationRequest",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:10019f41-e2c7-5759-a03a-d7d3572022ef",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "10019f41-e2c7-5759-a03a-d7d3572022ef",
+        "occurrenceDateTime": "2026-03-03T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "133",
+              "display": "Pneumococcal conjugate PCV 13",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:d3d1ac48-64e2-57da-8e46-beaa03b1f0af",
+      "resource": {
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "d3d1ac48-64e2-57da-8e46-beaa03b1f0af",
+        "occurrenceDateTime": "2026-05-02T12:00:00Z",
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "resourceType": "Immunization",
+        "status": "completed",
+        "vaccineCode": {
+          "coding": [
+            {
+              "code": "140",
+              "display": "Influenza seasonal injectable",
+              "system": "http://hl7.org/fhir/sid/cvx"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5e860338-e3f0-560f-a0e3-56d12cae3377",
+      "resource": {
+        "code": {
+          "coding": [
+            {
+              "code": "43075005",
+              "display": "Inhalation therapy",
+              "system": "http://snomed.info/sct"
+            }
+          ]
+        },
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "id": "5e860338-e3f0-560f-a0e3-56d12cae3377",
+        "performedDateTime": "2026-06-17T12:00:00Z",
+        "resourceType": "Procedure",
+        "status": "completed",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:payer-medicare",
+      "resource": {
+        "active": true,
+        "id": "payer-medicare",
+        "name": "Medicare",
+        "resourceType": "Organization",
+        "type": [
+          {
+            "coding": [
+              {
+                "code": "pay",
+                "display": "Payer",
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:b5fbe837-50eb-52a8-b126-9d942f092379",
+      "resource": {
+        "beneficiary": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "id": "b5fbe837-50eb-52a8-b126-9d942f092379",
+        "payor": [
+          {
+            "display": "Medicare",
+            "reference": "Organization/payer-medicare"
+          }
+        ],
+        "period": {
+          "end": "2026-12-31",
+          "start": "2024-01-01"
+        },
+        "resourceType": "Coverage",
+        "status": "active",
+        "type": {
+          "coding": [
+            {
+              "code": "EHCPOL",
+              "display": "Medicare policy",
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+            }
+          ],
+          "text": "Medicare"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f52a1a75-b9e9-55e4-bbcd-0a3718d0f714",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+        },
+        "id": "f52a1a75-b9e9-55e4-bbcd-0a3718d0f714",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b5fbe837-50eb-52a8-b126-9d942f092379"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2200.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6c34f0bb-e0c5-5a54-bf8a-a3c1379afcf4",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-07-02T12:00:00Z",
+          "start": "2026-07-01T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:f52a1a75-b9e9-55e4-bbcd-0a3718d0f714"
+        },
+        "created": "2026-07-01T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+        },
+        "id": "6c34f0bb-e0c5-5a54-bf8a-a3c1379afcf4",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b5fbe837-50eb-52a8-b126-9d942f092379"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 1804.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2200.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:9d1b2ee9-6296-5ea6-a027-8b16773bd405",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+        },
+        "id": "9d1b2ee9-6296-5ea6-a027-8b16773bd405",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b5fbe837-50eb-52a8-b126-9d942f092379"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 2950.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:ea2881ca-3277-561a-b722-627a53fe4da1",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-04-03T12:00:00Z",
+          "start": "2026-04-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:9d1b2ee9-6296-5ea6-a027-8b16773bd405"
+        },
+        "created": "2026-04-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+        },
+        "id": "ea2881ca-3277-561a-b722-627a53fe4da1",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b5fbe837-50eb-52a8-b126-9d942f092379"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 2419.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 2950.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cc6ac9d8-de5b-5194-9b55-91ef4fd40e4b",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+        },
+        "id": "cc6ac9d8-de5b-5194-9b55-91ef4fd40e4b",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b5fbe837-50eb-52a8-b126-9d942f092379"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 3700.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:f7e8b41e-bf26-5287-960b-d05dd620e279",
+      "resource": {
+        "billablePeriod": {
+          "end": "2026-01-03T12:00:00Z",
+          "start": "2026-01-02T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:cc6ac9d8-de5b-5194-9b55-91ef4fd40e4b"
+        },
+        "created": "2026-01-02T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+        },
+        "id": "f7e8b41e-bf26-5287-960b-d05dd620e279",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b5fbe837-50eb-52a8-b126-9d942f092379"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3034.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 3700.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "professional",
+              "display": "professional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:6cd5ffe7-0a35-5c45-bfca-b8ec8933da03",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+        },
+        "id": "6cd5ffe7-0a35-5c45-bfca-b8ec8933da03",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b5fbe837-50eb-52a8-b126-9d942f092379"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "priority": {
+          "coding": [
+            {
+              "code": "normal",
+              "system": "http://terminology.hl7.org/CodeSystem/processpriority"
+            }
+          ]
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+        },
+        "resourceType": "Claim",
+        "status": "active",
+        "total": {
+          "currency": "USD",
+          "value": 4450.0
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:c8b4d332-d57e-5ed7-8d31-abe345ebc937",
+      "resource": {
+        "billablePeriod": {
+          "end": "2025-10-05T12:00:00Z",
+          "start": "2025-10-04T12:00:00Z"
+        },
+        "claim": {
+          "reference": "urn:uuid:6cd5ffe7-0a35-5c45-bfca-b8ec8933da03"
+        },
+        "created": "2025-10-04T12:00:00Z",
+        "facility": {
+          "reference": "Location?identifier=https://brakekat.example/location|wellstar-kennestone-hospital"
+        },
+        "id": "c8b4d332-d57e-5ed7-8d31-abe345ebc937",
+        "insurance": [
+          {
+            "coverage": {
+              "display": "Medicare",
+              "reference": "urn:uuid:b5fbe837-50eb-52a8-b126-9d942f092379"
+            },
+            "focal": true,
+            "sequence": 1
+          }
+        ],
+        "insurer": {
+          "display": "Medicare",
+          "reference": "Organization/payer-medicare"
+        },
+        "outcome": "complete",
+        "patient": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "payment": {
+          "amount": {
+            "currency": "USD",
+            "value": 3649.0
+          }
+        },
+        "provider": {
+          "reference": "Practitioner?identifier=http://hl7.org/fhir/sid/us-npi|9999810068"
+        },
+        "resourceType": "ExplanationOfBenefit",
+        "status": "active",
+        "total": [
+          {
+            "amount": {
+              "currency": "USD",
+              "value": 4450.0
+            },
+            "category": {
+              "coding": [
+                {
+                  "code": "submitted"
+                }
+              ]
+            }
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "code": "institutional",
+              "display": "institutional",
+              "system": "http://terminology.hl7.org/CodeSystem/claim-type"
+            }
+          ]
+        },
+        "use": "claim"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:799bc33e-19e4-53c1-94db-950c3c901870",
+      "resource": {
+        "description": {
+          "text": "Maintain oxygen saturation at or above 94 percent"
+        },
+        "id": "799bc33e-19e4-53c1-94db-950c3c901870",
+        "lifecycleStatus": "active",
+        "resourceType": "Goal",
+        "startDate": "2026-07-01",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "target": [
+          {
+            "dueDate": "2026-09-29",
+            "measure": {
+              "text": "Maintain oxygen saturation at or above 94 percent"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:fa05b26a-e94f-56af-bad4-aeac5b243c13",
+      "resource": {
+        "addresses": [
+          {
+            "reference": "urn:uuid:9b4c7c43-4aa9-5586-9c1d-64c003ae4b72"
+          }
+        ],
+        "category": [
+          {
+            "coding": [
+              {
+                "code": "assess-plan",
+                "display": "Assessment and Plan of Treatment"
+              }
+            ],
+            "text": "Assessment and Plan of Treatment"
+          }
+        ],
+        "encounter": {
+          "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+        },
+        "goal": [
+          {
+            "reference": "urn:uuid:799bc33e-19e4-53c1-94db-950c3c901870"
+          }
+        ],
+        "id": "fa05b26a-e94f-56af-bad4-aeac5b243c13",
+        "intent": "plan",
+        "period": {
+          "end": "2026-12-31",
+          "start": "2026-01-01"
+        },
+        "resourceType": "CarePlan",
+        "status": "active",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "title": "Synthetic chronic care plan"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:7209a366-08d1-581d-9056-3115f03099e1",
+      "resource": {
+        "content": [
+          {
+            "attachment": {
+              "contentType": "text/plain",
+              "data": "U3ludGhldGljIGNsaW5pY2FsIHN1bW1hcnku"
+            }
+          }
+        ],
+        "context": {
+          "encounter": [
+            {
+              "reference": "urn:uuid:5683f6f4-4cd4-5a43-a3ae-1579c46f058d"
+            }
+          ]
+        },
+        "date": "2026-07-01T12:00:00Z",
+        "id": "7209a366-08d1-581d-9056-3115f03099e1",
+        "resourceType": "DocumentReference",
+        "status": "current",
+        "subject": {
+          "reference": "urn:uuid:1df8e3ee-8fc3-538f-9ab1-d0a08e88cd0d"
+        },
+        "type": {
+          "coding": [
+            {
+              "code": "34133-9",
+              "display": "Summary of episode note",
+              "system": "http://loinc.org"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "resourceType": "Bundle",
+  "type": "transaction"
+}

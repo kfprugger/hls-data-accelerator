@@ -1,0 +1,38 @@
+{
+    "bronze": {
+        "validations": [
+            {
+                "validationType": "exists",
+                "attributeName": "lastUpdated",
+                "validationMessage": "Last Updated does not exist",
+                "severity": "error",
+                "tableName": ["ClinicalFhir"]
+            },
+            {
+                "validationType": "exists",
+                "attributeName": "id",
+                "validationMessage": "ID does not exist",
+                "severity": "error",
+                "tableName": ["ClinicalFhir"]
+            },
+            {
+                "validationType": "exists",
+                "attributeName": "patient_id",
+                "validationMessage": "Patient ID does not exist",
+                "severity": "error",
+                "tableName": ["AIEnrichments"]
+            },
+			{
+                "validationType": "exists",
+                "attributeName": "context",
+                "validationMessage": "Context details are missing",
+                "severity": "error",
+                "tableName": ["AIEnrichments"]
+            }
+
+        ],
+        "recordIdentifier": {
+            "attributeName": "id"
+        }
+    }
+}

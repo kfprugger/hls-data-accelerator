@@ -1,0 +1,473 @@
+<#
+.SYNOPSIS
+    Destroys all Azure resources and Fabric workspace items for the Medical Device FHIR Integration Platform.
+
+.DESCRIPTION
+    This script performs a complete teardown:
+    1. Deletes the Azure resource group (async — FHIR, storage, ACR, ACI, Event Hub, Key Vault, managed identity)
+    2. Deletes ALL Fabric workspace items (Eventhouse, Eventstream, KQL DB, dashboards, agents, lakehouses,
+       HDS solution, notebooks, pipelines, environment, ontology, connections)
+    3. Optionally deletes the Fabric workspace itself (-DeleteWorkspace)
+
+    Items are deleted in dependency order to avoid conflicts:
+    Agents/Dashboards → Streams → Eventhouse → Notebooks → Pipelines → Lakehouses → HDS → Environment
+
+.PARAMETER ResourceGroupName
+    Azure resource group to delete. Default: "rg-medtech-rti-fhir"
+
+.PARAMETER FabricWorkspaceName
+    Fabric workspace to clean. Default: "med-device-rti-hds"
+
+.PARAMETER SkipAzure
+    Skip Azure resource group deletion (Fabric-only cleanup).
+
+.PARAMETER SkipFabric
+    Skip Fabric workspace cleanup (Azure-only teardown).
+
+.PARAMETER Force
+    Skip confirmation prompts.
+
+.PARAMETER Wait
+    Block until Azure RG deletion completes.
+
+.PARAMETER DeleteWorkspace
+    Also delete the Fabric workspace itself (not just its items).
+
+.EXAMPLE
+    .\cleanup\Remove-AllResources.ps1 -Force
+    .\cleanup\Remove-AllResources.ps1 -SkipAzure -Force     # Fabric only
+    .\cleanup\Remove-AllResources.ps1 -SkipFabric -Force     # Azure only
+    .\cleanup\Remove-AllResources.ps1 -Force -Wait           # Block until Azure RG is gone
+    .\cleanup\Remove-AllResources.ps1 -Force -DeleteWorkspace # Also delete the workspace
+#>
+
+param(
+    [Parameter(Mandatory)][string]$ResourceGroupName,
+    [Parameter(Mandatory)][string]$FabricWorkspaceName,
+    [switch]$SkipAzure,
+    [switch]$SkipFabric,
+    [switch]$Force,
+    [switch]$Wait,
+    [switch]$DeleteWorkspace
+)
+
+$ErrorActionPreference = "Stop"
+
+Write-Host ""
+Write-Host "+============================================================+" -ForegroundColor Red
+Write-Host "|          FULL TEARDOWN — ALL RESOURCES                     |" -ForegroundColor Red
+Write-Host "+============================================================+" -ForegroundColor Red
+Write-Host ""
+Write-Host "  Azure Resource Group: $ResourceGroupName" -ForegroundColor White
+Write-Host "  Fabric Workspace:    $FabricWorkspaceName" -ForegroundColor White
+Write-Host "  Skip Azure:          $SkipAzure" -ForegroundColor White
+Write-Host "  Skip Fabric:         $SkipFabric" -ForegroundColor White
+Write-Host "  Delete Workspace:    $DeleteWorkspace" -ForegroundColor White
+Write-Host ""
+
+if (-not $Force) {
+    Write-Host "  THIS WILL PERMANENTLY DELETE:" -ForegroundColor Yellow
+    if (-not $SkipAzure) {
+        Write-Host "    - All Azure resources in '$ResourceGroupName'" -ForegroundColor Yellow
+    }
+    if (-not $SkipFabric) {
+        Write-Host "    - ALL items in Fabric workspace '$FabricWorkspaceName'" -ForegroundColor Yellow
+        Write-Host "      (Eventhouse, Eventstream, dashboards, agents, lakehouses," -ForegroundColor Yellow
+        Write-Host "       HDS solution, notebooks, pipelines, environment, etc.)" -ForegroundColor Yellow
+    }
+    if ($DeleteWorkspace) {
+        Write-Host "    - The Fabric workspace '$FabricWorkspaceName' ITSELF" -ForegroundColor Red
+    }
+    Write-Host ""
+    $confirm = Read-Host "  Type 'yes' to confirm"
+    if ($confirm -ne 'yes') {
+        Write-Host "  Aborted." -ForegroundColor Yellow
+        exit 0
+    }
+    Write-Host ""
+}
+
+$overallTimer = [System.Diagnostics.Stopwatch]::StartNew()
+
+# ═══════════════════════════════════════════════════════════════════════
+# STEP 1: DELETE AZURE RESOURCE GROUP
+# ═══════════════════════════════════════════════════════════════════════
+
+if (-not $SkipAzure) {
+    Write-Host "─── Step 1: Azure Resource Group ───" -ForegroundColor Cyan
+
+    $rgExists = az group exists -n $ResourceGroupName 2>$null
+    if ($rgExists -eq 'true') {
+        Write-Host "  Deleting resource group '$ResourceGroupName'..." -ForegroundColor Yellow
+        az group delete --name $ResourceGroupName --yes --no-wait 2>&1 | Out-Null
+        Write-Host "  Azure RG deletion initiated (async)." -ForegroundColor Green
+
+        if ($Wait) {
+            Write-Host "  Waiting for Azure RG deletion to complete..." -ForegroundColor Yellow
+            while ($true) {
+                $exists = az group exists -n $ResourceGroupName 2>$null
+                if ($exists -eq 'false') {
+                    Write-Host "  Azure RG deleted." -ForegroundColor Green
+                    break
+                }
+                Write-Host "    Still deleting..." -ForegroundColor DarkGray
+                Start-Sleep -Seconds 30
+            }
+        }
+    } else {
+        Write-Host "  Resource group '$ResourceGroupName' does not exist. Skipping." -ForegroundColor DarkGray
+    }
+} else {
+    Write-Host "─── Step 1: SKIPPED (Azure) ───" -ForegroundColor DarkGray
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# STEP 2: DELETE ALL FABRIC WORKSPACE ITEMS
+# ═══════════════════════════════════════════════════════════════════════
+
+if (-not $SkipFabric) {
+    Write-Host ""
+    Write-Host "─── Step 2: Fabric Workspace Items ───" -ForegroundColor Cyan
+
+    $token = (az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken -o tsv)
+    $headers = @{ Authorization = "Bearer $token" }
+
+    # Resolve workspace ID with better diagnostics
+    Write-Host "  Fetching workspaces..." -ForegroundColor DarkGray
+    try {
+        $wsResp = Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces" -Headers $headers
+        $workspaces = $wsResp.value
+        Write-Host "    Found $($workspaces.Count) workspace(s)" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "  ✗ Failed to fetch workspaces: $($_.Exception.Message)" -ForegroundColor Red
+        $workspaces = @()
+    }
+
+    $ws = $workspaces | Where-Object { $_.displayName -eq $FabricWorkspaceName } | Select-Object -First 1
+    if (-not $ws) {
+        Write-Host "  Workspace '$FabricWorkspaceName' not found." -ForegroundColor Yellow
+        Write-Host "  Available workspaces:" -ForegroundColor Yellow
+        foreach ($w in $workspaces) {
+            Write-Host "    - $($w.displayName)" -ForegroundColor DarkGray
+        }
+        Write-Host "  Skipping Fabric cleanup." -ForegroundColor Yellow
+    } else {
+        $wsId = $ws.id
+        Write-Host "  ✓ Workspace found: $FabricWorkspaceName" -ForegroundColor Green
+        Write-Host "    ID: $wsId" -ForegroundColor DarkGray
+        Write-Host "    Fetching items..." -ForegroundColor DarkGray
+
+        try {
+            $itemResp = Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/items" -Headers $headers -ErrorAction Stop
+            $items = $itemResp.value
+            
+            if ($null -eq $items) {
+                $items = @()
+            } elseif ($items -isnot [array]) {
+                $items = @($items)
+            }
+            
+            Write-Host "  Items to delete: $($items.Count)" -ForegroundColor White
+            
+            if ($items.Count -gt 0) {
+                Write-Host "  Item types found:" -ForegroundColor DarkGray
+                $items | Group-Object -Property type | ForEach-Object { 
+                    Write-Host "    - $($_.Name): $($_.Count)" -ForegroundColor DarkGray 
+                }
+                Write-Host "" -ForegroundColor DarkGray
+            }
+        } catch {
+            Write-Host "  ✗ Failed to fetch workspace items: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "    Status Code: $([int]$_.Exception.Response.StatusCode)" -ForegroundColor Red
+            $items = @()
+        }
+
+        if ($items.Count -gt 0) {
+            # Delete in dependency order to minimize conflicts
+            $deleteOrder = @(
+                'DataAgent', 'OperationsAgent',
+                'KQLDashboard', 'Ontology', 'GraphModel', 'Reflex', 'AnomalyDetector',
+                'Eventstream',
+                'KQLDatabase', 'Eventhouse',
+                'SemanticModel',
+                'Notebook',
+                'DataPipeline',
+                'Lakehouse',
+                'Environment',
+                'SQLEndpoint'
+            )
+
+            $deleted = 0
+            $failed = 0
+
+            # First pass: ordered types
+            foreach ($type in $deleteOrder) {
+                $typeItems = @($items | Where-Object { $_.type -eq $type })
+                foreach ($item in $typeItems) {
+                    Write-Host "  DEL $($item.type.PadRight(25)) $($item.displayName)..." -NoNewline
+                    try {
+                        Invoke-RestMethod -Method Delete `
+                            -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/items/$($item.id)" `
+                            -Headers $headers -ErrorAction Stop | Out-Null
+                        Write-Host " OK" -ForegroundColor Green
+                        $deleted++
+                    } catch {
+                        Write-Host " SKIP" -ForegroundColor DarkGray
+                        $failed++
+                    }
+                    Start-Sleep -Milliseconds 300
+                }
+            }
+
+            # Second pass: catch any types not in the ordered list
+            try {
+                $items2 = (Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/items" -Headers $headers).value
+                if ($null -eq $items2) { $items2 = @() }
+                elseif ($items2 -isnot [array]) { $items2 = @($items2) }
+                
+                foreach ($item in $items2) {
+                    Write-Host "  DEL $($item.type.PadRight(25)) $($item.displayName) (retry)..." -NoNewline
+                    try {
+                        Invoke-RestMethod -Method Delete `
+                            -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/items/$($item.id)" `
+                            -Headers $headers -ErrorAction Stop | Out-Null
+                        Write-Host " OK" -ForegroundColor Green
+                        $deleted++
+                    } catch {
+                        Write-Host " FAIL" -ForegroundColor Red
+                    }
+                    Start-Sleep -Milliseconds 300
+                }
+            } catch {
+                Write-Host "  ⚠ Could not fetch items for retry pass: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+
+            # Source deployment creates Fabric workspace folders outside the item list.
+            try {
+                $folders = (Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/folders" -Headers $headers).value
+                foreach ($folder in @($folders | Where-Object { $_.displayName -in @('deployment_notebooks', 'validation_notebooks') })) {
+                    Invoke-RestMethod -Method Delete `
+                        -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/folders/$($folder.id)" `
+                        -Headers $headers -ErrorAction Stop | Out-Null
+                    Write-Host "  DEL Folder                    $($folder.displayName)... OK" -ForegroundColor Green
+                }
+            } catch {
+                Write-Host "  ⚠ Could not delete HDS source folders: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+
+            Write-Host ""
+            Write-Host "  Deleted: $deleted items" -ForegroundColor Green
+        } else {
+            Write-Host "  Workspace is already empty or items API returned no results." -ForegroundColor DarkGray
+        }
+
+        # Delete Fabric connections created by the deployment scripts
+        Write-Host ""
+        Write-Host "  Cleaning up Fabric connections..." -ForegroundColor White
+        try {
+            $connResp = Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/connections" -Headers $headers -ErrorAction Stop
+            $connections = $connResp.value
+            if ($null -eq $connections) { $connections = @() }
+            elseif ($connections -isnot [array]) { $connections = @($connections) }
+            
+            Write-Host "    Found $($connections.Count) connection(s)" -ForegroundColor DarkGray
+        } catch {
+            Write-Host "    ⚠ Could not fetch connections: $($_.Exception.Message)" -ForegroundColor Yellow
+            $connections = @()
+        }
+        
+        # Derive appNamePrefix to clean up potential custom connection prefixes
+        $appNamePrefix = "masimo"
+        if ($FabricWorkspaceName) {
+            $sanitized = ($FabricWorkspaceName -replace '[^a-zA-Z0-9]', '').ToLower()
+            if ($sanitized -match '^[0-9]') { $sanitized = "m" + $sanitized }
+            if ($sanitized.Length -gt 8) { $sanitized = $sanitized.SubString(0, 8) }
+            while ($sanitized.Length -lt 3) { $sanitized += "m" }
+            if ($sanitized -match '^[a-z][a-z0-9]{2,7}$') {
+                $appNamePrefix = $sanitized
+            }
+        }
+        $matchPatterns = @('masimo', 'fhir', 'dicom', 'stfhir', 'EventHub', 'telemetry', 'fab-', $appNamePrefix)
+        $connToDelete = @($connections | Where-Object {
+            $name = $_.displayName
+            $matchPatterns | Where-Object { $name -match $_ }
+        })
+
+        if ($connToDelete.Count -gt 0) {
+            foreach ($conn in $connToDelete) {
+                Write-Host "  DEL Connection: $($conn.displayName)..." -NoNewline
+                try {
+                    Invoke-RestMethod -Method Delete `
+                        -Uri "https://api.fabric.microsoft.com/v1/connections/$($conn.id)" `
+                        -Headers $headers -ErrorAction Stop | Out-Null
+                    Write-Host " OK" -ForegroundColor Green
+                } catch {
+                    Write-Host " SKIP" -ForegroundColor DarkGray
+                }
+            }
+        } else {
+            Write-Host "    No matching connections found." -ForegroundColor DarkGray
+        }
+
+        # Final verification
+        Write-Host ""
+        Write-Host "  Final verification..." -ForegroundColor DarkGray
+        try {
+            $finalResp = Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/items" -Headers $headers -ErrorAction Stop
+            $finalItems = $finalResp.value
+            if ($null -eq $finalItems) { $finalItems = @() }
+            elseif ($finalItems -isnot [array]) { $finalItems = @($finalItems) }
+            
+            Write-Host "  Items remaining: $($finalItems.Count)" -ForegroundColor $(if ($finalItems.Count -eq 0) { 'Green' } else { 'Yellow' })
+            if ($finalItems.Count -gt 0) {
+                foreach ($item in $finalItems) {
+                    Write-Host "    - $($item.type): $($item.displayName)" -ForegroundColor DarkGray
+                }
+            }
+        } catch {
+            Write-Host "  ⚠ Could not verify remaining items: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+} else {
+    Write-Host ""
+    Write-Host "─── Step 2: SKIPPED (Fabric) ───" -ForegroundColor DarkGray
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# STEP 2b: DEPROVISION WORKSPACE IDENTITY
+# ═══════════════════════════════════════════════════════════════════════
+
+if (-not $SkipFabric) {
+    Write-Host ""
+    Write-Host "─── Step 2b: Deprovision Workspace Identity ───" -ForegroundColor Cyan
+
+    if (-not $wsId) {
+        $token = (Get-AzAccessToken -ResourceUrl "https://api.fabric.microsoft.com").Token
+        if ($token -is [System.Security.SecureString]) { $token = $token | ConvertFrom-SecureString -AsPlainText }
+        $headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" }
+        $wsResp = Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces" -Headers $headers
+        $ws = $wsResp.value | Where-Object { $_.displayName -eq $FabricWorkspaceName }
+        $wsId = $ws.id
+    }
+
+    if ($wsId) {
+        try {
+            Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId/deprovisionIdentity" `
+                -Headers $headers -Method POST | Out-Null
+            Write-Host "  ✓ Workspace identity deprovisioned." -ForegroundColor Green
+        } catch {
+            $sc = [int]$_.Exception.Response.StatusCode
+            if ($sc -eq 404 -or $_.Exception.Message -match 'not found|does not exist|not provisioned') {
+                Write-Host "  No workspace identity to deprovision." -ForegroundColor DarkGray
+            } else {
+                Write-Host "  ⚠ Could not deprovision workspace identity: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+
+        # Delete ALL Entra ID app registrations and service principals matching the workspace name (handles stale SPs from previous deployments)
+        Write-Host "  Checking for Entra app registrations and service principals matching '$FabricWorkspaceName'..." -ForegroundColor Cyan
+        try {
+            $allApps = @(az ad app list --display-name $FabricWorkspaceName --query "[].{id:id, appId:appId}" -o json 2>$null | ConvertFrom-Json)
+            if ($allApps -and $allApps.Count -gt 0) {
+                Write-Host "  Found $($allApps.Count) app registration(s) to delete" -ForegroundColor Gray
+                foreach ($app in $allApps) {
+                    try {
+                        az ad app delete --id $app.id 2>$null | Out-Null
+                        Write-Host "  ✓ Deleted app registration: $($app.id) (appId: $($app.appId))" -ForegroundColor Green
+                    } catch {
+                        Write-Host "  ⚠ Could not delete app registration $($app.id): $($_.Exception.Message)" -ForegroundColor Yellow
+                    }
+                }
+            } else {
+                Write-Host "  No matching app registrations found." -ForegroundColor DarkGray
+            }
+        } catch {
+            Write-Host "  ⚠ Could not list/delete app registrations: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+
+        try {
+            $allSPs = @(az ad sp list --display-name $FabricWorkspaceName --query "[].{id:id, appId:appId}" -o json 2>$null | ConvertFrom-Json)
+            if ($allSPs -and $allSPs.Count -gt 0) {
+                Write-Host "  Found $($allSPs.Count) service principal(s) to delete" -ForegroundColor Gray
+                foreach ($sp in $allSPs) {
+                    try {
+                        az ad sp delete --id $sp.id 2>$null | Out-Null
+                        Write-Host "  ✓ Deleted service principal: $($sp.id) (appId: $($sp.appId))" -ForegroundColor Green
+                    } catch {
+                        Write-Host "  ⚠ Could not delete service principal $($sp.id): $($_.Exception.Message)" -ForegroundColor Yellow
+                    }
+                }
+            } else {
+                Write-Host "  No matching service principals found." -ForegroundColor DarkGray
+            }
+        } catch {
+            Write-Host "  ⚠ Could not list/delete service principals: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  Workspace not found — skipping identity deprovision." -ForegroundColor DarkGray
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# STEP 3: DELETE FABRIC WORKSPACE (optional)
+# ═══════════════════════════════════════════════════════════════════════
+
+if ($DeleteWorkspace -and -not $SkipFabric) {
+    Write-Host ""
+    Write-Host "─── Step 3: Delete Fabric Workspace ───" -ForegroundColor Cyan
+
+    if (-not $wsId) {
+        # Resolve workspace ID if we skipped Step 2
+        $token = (Get-AzAccessToken -ResourceUrl "https://api.fabric.microsoft.com").Token
+        if ($token -is [System.Security.SecureString]) { $token = $token | ConvertFrom-SecureString -AsPlainText }
+        $headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" }
+        $wsResp = Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces" -Headers $headers
+        $ws = $wsResp.value | Where-Object { $_.displayName -eq $FabricWorkspaceName }
+        $wsId = $ws.id
+    }
+
+    if ($wsId) {
+        Write-Host "  Deleting workspace '$FabricWorkspaceName' ($wsId)..." -ForegroundColor Yellow
+        try {
+            Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/workspaces/$wsId" `
+                -Headers $headers -Method Delete | Out-Null
+            Write-Host "  ✓ Workspace deleted." -ForegroundColor Green
+        } catch {
+            $sc = [int]$_.Exception.Response.StatusCode
+            if ($sc -eq 404) {
+                Write-Host "  Workspace already deleted (404)." -ForegroundColor DarkGray
+            } else {
+                Write-Host "  ✗ Failed to delete workspace: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+    } else {
+        Write-Host "  Workspace '$FabricWorkspaceName' not found — nothing to delete." -ForegroundColor DarkGray
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# SUMMARY
+# ═══════════════════════════════════════════════════════════════════════
+
+$overallTimer.Stop()
+$totalMin = [math]::Round($overallTimer.Elapsed.TotalMinutes, 1)
+
+Write-Host ""
+Write-Host "+============================================================+" -ForegroundColor Green
+Write-Host "|          TEARDOWN COMPLETE                                 |" -ForegroundColor Green
+Write-Host "+============================================================+" -ForegroundColor Green
+Write-Host "  Duration: $totalMin min" -ForegroundColor White
+if (-not $SkipAzure) {
+    $rgState = az group exists -n $ResourceGroupName 2>$null
+    Write-Host "  Azure RG '$ResourceGroupName': $(if ($rgState -eq 'true') { 'still deleting (async)' } else { 'DELETED' })" -ForegroundColor White
+}
+if (-not $SkipFabric) {
+    if ($DeleteWorkspace) {
+        Write-Host "  Fabric workspace '$FabricWorkspaceName': DELETED" -ForegroundColor White
+    } else {
+        Write-Host "  Fabric workspace '$FabricWorkspaceName': items cleared" -ForegroundColor White
+    }
+}
+Write-Host ""
+Write-Host "  To redeploy: .\Deploy-All.ps1 -FabricWorkspaceName '$FabricWorkspaceName'" -ForegroundColor DarkGray
+Write-Host ""

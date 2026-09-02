@@ -1,0 +1,17 @@
+{
+  "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/adapter_schema.json",
+  "name": "SDOH",
+  "description": "",
+  "version": "1.0",
+  "sourceDomain": "HDS-SDOH",
+  "dbSemantics": "dbSemantics.json",
+  "dbTargetSchema": "dbTargetSchema.json",
+  "defaultReferenceValue": -9999999,
+  "failUponMissingReferenceValues": false,
+  "source": {
+    "lakeDBName": "{{dtt_source}}",
+    "dataFormat": "delta",
+    "connectionStringUri": ""
+  },
+  "sourceTables":null
+}

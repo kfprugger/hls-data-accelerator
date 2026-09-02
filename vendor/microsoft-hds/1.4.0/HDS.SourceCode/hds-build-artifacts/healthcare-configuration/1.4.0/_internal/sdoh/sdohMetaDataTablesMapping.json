@@ -1,0 +1,101 @@
+{
+    "SdohDataSetMetadata": [
+        {
+            "sourcefield": "Dataset_Name",
+            "targetfield": "DatasetName",
+            "targettable": "SocialDeterminantDataSetMetadata",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Publisher_Name",
+            "targetfield": "PublisherName",
+            "targettable": "SocialDeterminantDataSetMetadata",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Published_Date",
+            "targetfield": "PublishedDate",
+            "targettable": "SocialDeterminantDataSetMetadata",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Valid_Until",
+            "targetfield": "ValidUntil",
+            "targettable": "SocialDeterminantDataSetMetadata",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "FolderPath",
+            "targetfield": "FolderPath",
+            "targettable": "SocialDeterminantDataSetMetadata",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Target_PK",
+            "targetfield": "SocialDeterminantDataSetMetadataId",
+            "targettable": "SocialDeterminantDataSetMetadata",
+            "fieldType": "string",
+            "targetField": null
+        }
+    ],
+    "SdohLayout_UOM": [
+        {
+            "sourcefield": "Units",
+            "targetfield": "UnitOfMeasureName",
+            "targettable": "UnitOfMeasure",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Target_PK",
+            "targetfield": "UnitOfMeasureId",
+            "targettable": "UnitOfMeasure",
+            "fieldType": "string",
+            "targetField": null
+        }
+    ],
+    "SdohLayout_Category": [
+        {
+            "sourcefield": "Social_Determinant_Category_Name",
+            "targetfield": "SocialDeterminantCategoryName",
+            "targettable": "SocialDeterminantCategory",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Target_PK",
+            "targetfield": "SocialDeterminantCategoryId",
+            "targettable": "SocialDeterminantCategory",
+            "fieldType": "string",
+            "targetField": null
+        }
+    ],
+    "SdohLayout_SubCategory": [
+        {
+            "sourcefield": "Sub_Category",
+            "targetfield": "SocialDeterminantSubCategoryName",
+            "targettable": "SocialDeterminantSubCategory",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Social_Determinant_Category_Id",
+            "targetfield": "SocialDeterminantCategoryId",
+            "targettable": "SocialDeterminantSubCategory",
+            "fieldType": "string",
+            "targetField": null
+        },
+        {
+            "sourcefield": "Target_PK",
+            "targetfield": "SocialDeterminantSubCategoryId",
+            "targettable": "SocialDeterminantSubCategory",
+            "fieldType": "string",
+            "targetField": null
+        }
+    ]
+}

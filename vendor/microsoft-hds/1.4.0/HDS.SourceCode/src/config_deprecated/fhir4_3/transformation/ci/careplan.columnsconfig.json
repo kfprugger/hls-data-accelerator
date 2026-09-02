@@ -1,0 +1,49 @@
+{
+    "name": "Care Plan column configuration",
+    "autoFlattenStruct": false,
+    "retainSourceColumns": false,
+    "stringifyComplexTypes": false,
+    "extendWithDefaultRules": false,
+    "columns": [
+        {
+            "name": "Id",
+            "style": "expr",
+            "expression": "id_orig"
+        },
+        {
+            "name": "Status",
+            "style": "expr",
+            "expression": "status"
+        },
+        {
+            "name": "Goal",
+            "style": "expr",
+            "expression": "goal[0].id_orig"
+        },
+        {
+            "name": "PeriodStart",
+            "style": "expr",
+            "expression": "period.start"
+        },
+        {
+            "name": "PeriodEnd",
+            "style": "expr",
+            "expression": "period.end"
+        },
+        {
+            "name": "SubjectPatient",
+            "style": "expr",
+            "expression": "subject.id_orig"
+        },
+        {
+            "name": "Category",
+            "style": "expr",
+            "expression":"category[0].text"
+        },
+        {
+            "name": "LastUpdated",
+            "style": "col",
+            "expression": "meta.lastUpdated"
+        }
+    ]
+}

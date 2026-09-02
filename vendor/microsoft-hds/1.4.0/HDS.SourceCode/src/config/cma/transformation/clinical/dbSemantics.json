@@ -1,0 +1,16 @@
+{
+  "referenceTables": [
+{
+      "table": "concept",
+      "keyField": "concept_id",
+      "nameField": "concept_name"
+    }
+  ],
+  "extensionTables": [
+    {
+      "parentTable": "person",
+      "childTable": "death"
+    }
+  ],
+  "modifiedOnTargetField": "SourceModifiedOn"
+}

@@ -1,0 +1,33 @@
+[
+    {
+        "operation_name": "update_patient_deceased_on_encounter",
+        "sample_data_path": "/mnt/c/HLS/sample_data/51KSyntheticPatients",
+        "output_dir": "/mnt/c/HLS/sample_data"
+    },
+    {
+        "operation_name": "keyword_lookup",
+        "imports": [
+            {
+                "data_type": "Procedure"
+            }
+        ],
+        "keyword": "cesarean",
+        "sample_data_path": "/mnt/c/HLS/sample_data/51KSyntheticPatients",
+        "output_dir": "/mnt/c/HLS/sample_data"
+    },
+    {
+        "operation_name": "remove_records",
+        "sample_data_path": "/mnt/c/HLS/sample_data/51KSyntheticPatients",
+        "record_ids_path": "/mnt/c/HLS/sample_data/record_ids.txt",
+        "output_dir": "/mnt/c/HLS/sample_data",
+        "data_type": "Procedure"
+    },
+    {
+        "operation_name": "find_reference_records_on_record_id",
+        "sample_data_path": "/mnt/c/HLS/sample_data/51KSyntheticPatients",
+        "record_ids_path": "/mnt/c/HLS/sample_data/record_ids.txt",
+        "output_dir": "/mnt/c/HLS/sample_data",
+        "data_type": "Procedure",
+        "reference_path": "encounter.reference"
+    }
+]

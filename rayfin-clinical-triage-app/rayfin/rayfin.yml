@@ -1,0 +1,32 @@
+id: rayfin-clinical-triage-app
+name: rayfin-clinical-triage-app
+version: 1.0.11
+services:
+  auth:
+    enabled: true
+    customClaims:
+      app_version: 1.0.0
+    scopes:
+      - read:data
+      - write:data
+    password:
+      enabled: false
+    allowedRedirectUris:
+      - http://localhost:5173
+      - https://tough-bolt-f41e8d694c-westus2.webapp.fabricapps.net
+      - https://rich-heath-ac8cddda24-westus2.webapp.fabricapps.net
+      - https://rusty-knoll-fb007fbed9-westus2.webapp.fabricapps.net
+    fabric:
+      enabled: true
+  data:
+    enabled: true
+    dialect: mssql
+  staticHosting:
+    enabled: true
+    folder: dist
+    buildCommand: npm run build
+    indexDocument: index.html
+  storage:
+    enabled: false
+  functions:
+    enabled: false

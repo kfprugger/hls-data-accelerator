@@ -1,0 +1,137 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "name": "raw_process_movement",
+        "description": "This notebook activity orchestrates file movement from the Ingest folder to the Process Folder and ensures the presence of all file names in the Process folder.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "typeProperties": {
+          "notebookId": "%%raw_process_movement_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"modality\":\"Imaging\",\"modality_format\":\"DICOM\",\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+              "type": "string"
+						}
+					}
+        }
+      },
+      {
+        "name": "imaging_dicom_extract_bronze_ingestion",
+        "description": "The extraction notebook activity helps extract metadata (DICOM tags) from the ingested DICOM dcm files.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "raw_process_movement",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%imaging_dicom_extract_bronze_ingestion_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+							"type": "string"
+						}
+					}
+        }
+      },
+      {
+        "name": "imaging_bronze_silver_metastore_transformation",
+        "description": "The transformation notebook activity helps transform the extracted metadata (DICOM tags) into the silver ImagingMetastore table.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "imaging_dicom_extract_bronze_ingestion",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%imaging_dicom_silver_metastore_transformation_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\",\"process_type\":\"dicom\"}",
+							"type": "string"
+						}
+					}
+        }
+      },
+      {
+        "name": "imaging_dicom_fhir_conversion",
+        "description": "The conversion notebook activity will then convert the metadata to the FHIR presentation of ImagingStudy in ndjson format.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "imaging_bronze_silver_metastore_transformation",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%imaging_dicom_fhir_conversion_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+							"type": "string"
+						}
+					}
+        }
+      },
+      {
+        "name": "fhir_ndjson_bronze_ingestion",
+        "description": "This notebook activity facilitates the ingestion of FHIR ndjson data into Delta tables within the bronze lakehouse.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "imaging_dicom_fhir_conversion",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%fhir_ndjson_bronze_ingestion_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+							"type": "string"
+						}
+					}
+        }
+      },
+      {
+        "name": "bronze_silver_flatten",
+        "description": "This notebook activity transforms and flattens the data from the bronze lakehouse and ingests the data into the silver lakehouse.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "fhir_ndjson_bronze_ingestion",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%bronze_silver_flatten_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+							"type": "string"
+						}
+					}
+        }
+      }
+    ]
+  }
+}

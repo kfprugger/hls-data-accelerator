@@ -1,0 +1,49 @@
+{
+    "name": "Sample Data Upload",
+    "description": "A sample test for uploading sample data",
+    "initial_context": {
+        "targetEnvironment": "msit",
+        "workspaceDisplayName": "HDS_local_sample_data"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": "true"
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Test lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Test",
+                "description": "A lakehouse for test artifacts",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "test_lakehouse"
+            ]
+        },
+        {
+            "type": "CopyFromStorageAccount",
+            "description": "Copy sample data into Test Lakehouse",
+            "parameters": {
+                "workspace": "$workspace",
+                "blob_storage_account_url": "https://dmhdevsharedsa.blob.core.windows.net/",
+                "container_name": "sample-data",
+                "source_subpath": "/msft_dmh_sample_data/5_dataset/5_dataset",
+                "destination_lakehouse_name": "Test",
+                "destination_subpath": "Files/Ingest/Clinical/FHIR-NDJSON/FHIR-HDS"
+            }
+        }
+    ]
+}

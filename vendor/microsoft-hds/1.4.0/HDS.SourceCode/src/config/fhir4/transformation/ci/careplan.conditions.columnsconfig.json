@@ -1,0 +1,32 @@
+{
+  "name": "CarePlan conditions column configuration",
+  "retainSourceColumns": false,
+  "stringifyComplexTypes": false,
+  "extendWithDefaultRules": false,
+  "explode": {
+    "name": "condition_expl",
+    "expression": "addresses"
+  },
+  "columns": [
+    {
+      "name": "Id",
+      "style": "expr",
+      "expression": "concat(idOrig,'-',index)"
+    },
+    {
+      "name": "CarePlanId",
+      "style": "expr",
+      "expression": "idOrig"
+    },
+    {
+      "name": "ConditionId",
+      "style": "expr",
+      "expression": "condition_expl.idOrig"
+    },
+    {
+      "name": "LastUpdated",
+      "style": "col",
+      "expression": "meta.lastUpdated"
+    }
+  ]
+}

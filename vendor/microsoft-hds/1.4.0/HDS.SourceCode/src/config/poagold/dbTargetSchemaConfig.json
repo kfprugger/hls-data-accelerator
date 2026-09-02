@@ -1,0 +1,25 @@
+{
+  "fields": [
+    {
+      "name": "SourceModifiedOn",
+      "description": "Used for comparing with source system records to know when a records was changed in the source",
+      "tables": ["*"],
+      "type": "timestamp",
+      "timestampFormat": "yyyy-MM-ddTHH:mm:ssZ",
+      "enabled": true
+    },
+    {
+      "name": "SourceTable",
+      "description": "Used for comparing with source system records to know when a records was changed in the source",
+      "tables": ["*"],
+      "type": "string",
+      "enabled": true
+    }
+  ],
+  "partitionFields": [
+   ],
+  "configuration": {
+    "modifiedOnTargetField": "SourceModifiedOn",
+    "sourceTableField": "SourceTable"
+  }
+}

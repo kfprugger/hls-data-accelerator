@@ -1,0 +1,45 @@
+{
+	"properties": {
+        "activities": [
+            {
+                "name": "dax_bronze_ingestion",
+                "description": "This notebook activity facilitates the ingestion of DAX data from the bronze landing zone into the bronze lakehouse tables.",
+                "type": "TridentNotebook",
+                "dependsOn": [],
+                "typeProperties": {
+                    "notebookId": "%%dax_bronze_ingestion_notebook_id%%",
+                    "workspaceId": "%%workspace_id%%",
+                    "parameters": {
+                        "inline_params": {
+                            "value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "dax_silver_ingestion",
+                "description": "This notebook activity facilitates the ingestion of bronze data to build the silver model.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.\n",
+                "type": "TridentNotebook",
+                "dependsOn": [
+                    {
+                        "activity": "dax_bronze_ingestion",
+                        "dependencyConditions": [
+                            "Completed"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "notebookId": "%%dax_silver_ingestion_notebook_id%%",
+                    "workspaceId": "%%workspace_id%%",
+                    "parameters": {
+                        "inline_params": {
+                            "value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        ]
+    }
+}

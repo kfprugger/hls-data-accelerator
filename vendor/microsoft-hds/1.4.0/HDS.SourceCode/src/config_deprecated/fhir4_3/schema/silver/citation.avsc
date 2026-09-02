@@ -1,0 +1,2704 @@
+{
+  "type": "record",
+  "name": "Citation",
+  "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+  "namespace": "org.hl7.fhir",
+  "fields": [
+    {
+      "name": "resourceType",
+      "type": "string"
+    },
+    {
+      "name": "id",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "extension",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "meta",
+      "type": {
+        "type": "record",
+        "name": "Meta",
+        "doc": "The metadata about a resource. This is content in the resource that is maintained by the infrastructure. Changes to the content might not always be associated with version changes to the resource.",
+        "namespace": "org.hl7.fhir",
+        "fields": [
+          {
+            "name": "extension",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "id",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "versionId",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "lastUpdated",
+            "type": [
+              "null",
+              {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+              }
+            ],
+            "default": null
+          },
+          {
+            "name": "source",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "profile",
+            "type": {
+              "type": "array",
+              "items": {
+                "name": "profile",
+                "type": "string"
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "security",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "Coding",
+                "doc": "A reference to a code defined by a terminology system.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "system",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "version",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "code",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "display",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "userSelected",
+                    "type": [
+                      "null",
+                      "boolean"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "tag",
+            "type": {
+              "type": "array",
+              "items": "org.hl7.fhir.Coding",
+              "default": []
+            },
+            "default": []
+          }
+        ],
+        "default": {}
+      },
+      "default": {}
+    },
+    {
+      "name": "implicitRules",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "language",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "text",
+      "type": {
+        "type": "record",
+        "name": "Narrative",
+        "doc": "A human-readable summary of the resource conveying the essential clinical and business information for the resource.",
+        "namespace": "org.hl7.fhir",
+        "fields": [
+          {
+            "name": "extension",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "id",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "status",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "div",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          }
+        ],
+        "default": {}
+      },
+      "default": {}
+    },
+    {
+      "name": "contained",
+      "type": {
+        "type": "array",
+        "items": {
+          "name": "resourcelist",
+          "type": "string"
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "url",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "identifier",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Identifier",
+          "doc": "An identifier - identifies some entity uniquely and unambiguously. Typically this is used for business identifiers.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "use",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "value",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "system",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "type",
+              "type": {
+                "type": "record",
+                "name": "CodeableConcept",
+                "doc": "A concept that may be defined by a formal reference to a terminology or ontology or may be provided by text.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "coding",
+                    "type": {
+                      "type": "array",
+                      "items": "org.hl7.fhir.Coding",
+                      "default": []
+                    },
+                    "default": []
+                  },
+                  {
+                    "name": "text",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            },
+            {
+              "name": "period",
+              "type": {
+                "type": "record",
+                "name": "Period",
+                "doc": "A time period defined by a start and end date and optionally time.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "start",
+                    "type": [
+                      "null",
+                      {
+                        "type": "long",
+                        "logicalType": "timestamp-micros"
+                      }
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "end",
+                    "type": [
+                      "null",
+                      {
+                        "type": "long",
+                        "logicalType": "timestamp-micros"
+                      }
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            },
+            {
+              "name": "assigner",
+              "type": {
+                "type": "record",
+                "name": "Reference",
+                "doc": "A Reference",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "reference",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "type",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "identifier",
+                    "type": {
+                      "type": "record",
+                      "name": "IdentifierRef",
+                      "doc": "A Identifier",
+                      "namespace": "org.hl7.fhir",
+                      "fields": [
+                        {
+                          "name": "extension",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "use",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "type",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "value",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "system",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "period",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "assigner",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        }
+                      ],
+                      "default": {}
+                    },
+                    "default": {}
+                  },
+                  {
+                    "name": "display",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "version",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "name",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "title",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "status",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "experimental",
+      "type": [
+        "null",
+        "boolean"
+      ],
+      "default": null
+    },
+    {
+      "name": "date",
+      "type": [
+        "null",
+        {
+          "type": "long",
+          "logicalType": "timestamp-micros"
+        }
+      ],
+      "default": null
+    },
+    {
+      "name": "publisher",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "contact",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "ContactDetail",
+          "doc": "Specifies contact information for a person or organization.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "telecom",
+              "type": {
+                "type": "array",
+                "items": {
+                  "type": "record",
+                  "name": "ContactPoint",
+                  "doc": "Details for all kinds of technology mediated contact points for a person or organization, including telephone, email, etc.",
+                  "namespace": "org.hl7.fhir",
+                  "fields": [
+                    {
+                      "name": "extension",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "system",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "value",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "use",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "rank",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "type": "org.hl7.fhir.Period",
+                      "name": "period",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": []
+              },
+              "default": []
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "description",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "useContext",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "UsageContext",
+          "doc": "Specifies clinical/business/etc. metadata that can be used to retrieve, index and/or categorize an artifact. This metadata can either be specific to the applicable population (e.g., age category, DRG) or the specific context of care (e.g., venue, care setting, provider of care).",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.Coding",
+              "name": "code",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "valueCodeableConcept",
+              "default": {}
+            },
+            {
+              "name": "valueQuantity",
+              "type": {
+                "type": "record",
+                "name": "Quantity",
+                "doc": "A measured amount (or an amount that can potentially be measured). Note that measured amounts include amounts that are not precisely quantified, including amounts involving arbitrary units and floating currencies.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "value",
+                    "type": [
+                      "null",
+                      {
+                        "type": "bytes",
+                        "logicalType": "decimal",
+                        "precision": 18,
+                        "scale": 5
+                      }
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "comparator",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "unit",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "system",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "code",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            },
+            {
+              "name": "valueRange",
+              "type": {
+                "type": "record",
+                "name": "Range",
+                "doc": "A set of ordered Quantities defined by a low and high limit.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.Quantity",
+                    "name": "low",
+                    "default": {}
+                  },
+                  {
+                    "type": "org.hl7.fhir.Quantity",
+                    "name": "high",
+                    "default": {}
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.Reference",
+              "name": "valueReference",
+              "default": {}
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "jurisdiction",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.CodeableConcept",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "purpose",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "copyright",
+      "type": [
+        "null",
+        "string"
+      ],
+      "default": null
+    },
+    {
+      "name": "approvalDate",
+      "type": [
+        "null",
+        {
+          "type": "int",
+          "logicalType": "date"
+        }
+      ],
+      "default": null
+    },
+    {
+      "name": "lastReviewDate",
+      "type": [
+        "null",
+        {
+          "type": "int",
+          "logicalType": "date"
+        }
+      ],
+      "default": null
+    },
+    {
+      "type": "org.hl7.fhir.Period",
+      "name": "effectivePeriod",
+      "default": {}
+    },
+    {
+      "name": "author",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.ContactDetail",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "editor",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.ContactDetail",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "reviewer",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.ContactDetail",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "endorser",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.ContactDetail",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "summary",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Citation_Summary",
+          "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "style",
+              "default": {}
+            },
+            {
+              "name": "text",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "classification",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Citation_Classification",
+          "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "type",
+              "default": {}
+            },
+            {
+              "name": "classifier",
+              "type": {
+                "type": "array",
+                "items": "org.hl7.fhir.CodeableConcept",
+                "default": []
+              },
+              "default": []
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "note",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Annotation",
+          "doc": "A  text note which also  contains information about who made the statement and when.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.Reference",
+              "name": "authorReference",
+              "default": {}
+            },
+            {
+              "name": "authorString",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "time",
+              "type": [
+                "null",
+                {
+                  "type": "long",
+                  "logicalType": "timestamp-micros"
+                }
+              ],
+              "default": null
+            },
+            {
+              "name": "text",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "currentState",
+      "type": {
+        "type": "array",
+        "items": "org.hl7.fhir.CodeableConcept",
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "statusDate",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Citation_StatusDate",
+          "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "activity",
+              "default": {}
+            },
+            {
+              "name": "actual",
+              "type": [
+                "null",
+                "boolean"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.Period",
+              "name": "period",
+              "default": {}
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "relatesTo",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "Citation_RelatesTo",
+          "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+          "namespace": "org.hl7.fhir",
+          "fields": [
+            {
+              "name": "extension",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": [
+                "null",
+                "string"
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.CodeableConcept",
+              "name": "relationshipType",
+              "default": {}
+            },
+            {
+              "name": "targetClassifier",
+              "type": {
+                "type": "array",
+                "items": "org.hl7.fhir.CodeableConcept",
+                "default": []
+              },
+              "default": []
+            },
+            {
+              "name": "targetUri",
+              "type": [
+                "null",
+                {
+                  "type": "long",
+                  "logicalType": "timestamp-micros"
+                }
+              ],
+              "default": null
+            },
+            {
+              "type": "org.hl7.fhir.Identifier",
+              "name": "targetIdentifier",
+              "default": {}
+            },
+            {
+              "type": "org.hl7.fhir.Reference",
+              "name": "targetReference",
+              "default": {}
+            },
+            {
+              "name": "targetAttachment",
+              "type": {
+                "type": "record",
+                "name": "Attachment",
+                "doc": "For referring to data content defined in other formats.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "contentType",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "language",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "data",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "url",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "size",
+                    "type": [
+                      "null",
+                      "int"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "hash",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "title",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "creation",
+                    "type": [
+                      "null",
+                      {
+                        "type": "long",
+                        "logicalType": "timestamp-micros"
+                      }
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": {}
+            }
+          ],
+          "default": {}
+        },
+        "default": []
+      },
+      "default": []
+    },
+    {
+      "name": "citedArtifact",
+      "type": {
+        "type": "record",
+        "name": "Citation_CitedArtifact",
+        "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+        "namespace": "org.hl7.fhir",
+        "fields": [
+          {
+            "name": "extension",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "id",
+            "type": [
+              "null",
+              "string"
+            ],
+            "default": null
+          },
+          {
+            "name": "identifier",
+            "type": {
+              "type": "array",
+              "items": "org.hl7.fhir.Identifier",
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "relatedIdentifier",
+            "type": {
+              "type": "array",
+              "items": "org.hl7.fhir.Identifier",
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "dateAccessed",
+            "type": [
+              "null",
+              {
+                "type": "long",
+                "logicalType": "timestamp-micros"
+              }
+            ],
+            "default": null
+          },
+          {
+            "name": "version",
+            "type": {
+              "type": "record",
+              "name": "Citation_Version",
+              "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+              "namespace": "org.hl7.fhir",
+              "fields": [
+                {
+                  "name": "extension",
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "default": null
+                },
+                {
+                  "name": "id",
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "default": null
+                },
+                {
+                  "name": "value",
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "default": null
+                },
+                {
+                  "type": "org.hl7.fhir.Reference",
+                  "name": "baseCitation",
+                  "default": {}
+                }
+              ],
+              "default": {}
+            },
+            "default": {}
+          },
+          {
+            "name": "currentState",
+            "type": {
+              "type": "array",
+              "items": "org.hl7.fhir.CodeableConcept",
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "statusDate",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "Citation_StatusDate1",
+                "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.CodeableConcept",
+                    "name": "activity",
+                    "default": {}
+                  },
+                  {
+                    "name": "actual",
+                    "type": [
+                      "null",
+                      "boolean"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.Period",
+                    "name": "period",
+                    "default": {}
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "title",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "Citation_Title",
+                "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "type",
+                    "type": {
+                      "type": "array",
+                      "items": "org.hl7.fhir.CodeableConcept",
+                      "default": []
+                    },
+                    "default": []
+                  },
+                  {
+                    "type": "org.hl7.fhir.CodeableConcept",
+                    "name": "language",
+                    "default": {}
+                  },
+                  {
+                    "name": "text",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "abstract",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "Citation_Abstract",
+                "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.CodeableConcept",
+                    "name": "type",
+                    "default": {}
+                  },
+                  {
+                    "type": "org.hl7.fhir.CodeableConcept",
+                    "name": "language",
+                    "default": {}
+                  },
+                  {
+                    "name": "text",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "copyright",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "part",
+            "type": {
+              "type": "record",
+              "name": "Citation_Part",
+              "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+              "namespace": "org.hl7.fhir",
+              "fields": [
+                {
+                  "name": "extension",
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "default": null
+                },
+                {
+                  "name": "id",
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "default": null
+                },
+                {
+                  "type": "org.hl7.fhir.CodeableConcept",
+                  "name": "type",
+                  "default": {}
+                },
+                {
+                  "name": "value",
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "default": null
+                },
+                {
+                  "type": "org.hl7.fhir.Reference",
+                  "name": "baseCitation",
+                  "default": {}
+                }
+              ],
+              "default": {}
+            },
+            "default": {}
+          },
+          {
+            "name": "relatesTo",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "Citation_RelatesTo1",
+                "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.CodeableConcept",
+                    "name": "relationshipType",
+                    "default": {}
+                  },
+                  {
+                    "name": "targetClassifier",
+                    "type": {
+                      "type": "array",
+                      "items": "org.hl7.fhir.CodeableConcept",
+                      "default": []
+                    },
+                    "default": []
+                  },
+                  {
+                    "name": "targetUri",
+                    "type": [
+                      "null",
+                      {
+                        "type": "long",
+                        "logicalType": "timestamp-micros"
+                      }
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.Identifier",
+                    "name": "targetIdentifier",
+                    "default": {}
+                  },
+                  {
+                    "type": "org.hl7.fhir.Reference",
+                    "name": "targetReference",
+                    "default": {}
+                  },
+                  {
+                    "type": "org.hl7.fhir.Attachment",
+                    "name": "targetAttachment",
+                    "default": {}
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "publicationForm",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "Citation_PublicationForm",
+                "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "publishedIn",
+                    "type": {
+                      "type": "record",
+                      "name": "Citation_PublishedIn",
+                      "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                      "namespace": "org.hl7.fhir",
+                      "fields": [
+                        {
+                          "name": "extension",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "id",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "type": "org.hl7.fhir.CodeableConcept",
+                          "name": "type",
+                          "default": {}
+                        },
+                        {
+                          "name": "identifier",
+                          "type": {
+                            "type": "array",
+                            "items": "org.hl7.fhir.Identifier",
+                            "default": []
+                          },
+                          "default": []
+                        },
+                        {
+                          "name": "title",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "type": "org.hl7.fhir.Reference",
+                          "name": "publisher",
+                          "default": {}
+                        },
+                        {
+                          "name": "publisherLocation",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        }
+                      ],
+                      "default": {}
+                    },
+                    "default": {}
+                  },
+                  {
+                    "name": "periodicRelease",
+                    "type": {
+                      "type": "record",
+                      "name": "Citation_PeriodicRelease",
+                      "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                      "namespace": "org.hl7.fhir",
+                      "fields": [
+                        {
+                          "name": "extension",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "id",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "type": "org.hl7.fhir.CodeableConcept",
+                          "name": "citedMedium",
+                          "default": {}
+                        },
+                        {
+                          "name": "volume",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "issue",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "dateOfPublication",
+                          "type": {
+                            "type": "record",
+                            "name": "Citation_DateOfPublication",
+                            "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                            "namespace": "org.hl7.fhir",
+                            "fields": [
+                              {
+                                "name": "extension",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "id",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "date",
+                                "type": [
+                                  "null",
+                                  {
+                                    "type": "int",
+                                    "logicalType": "date"
+                                  }
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "year",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "month",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "day",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "season",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "text",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              }
+                            ],
+                            "default": {}
+                          },
+                          "default": {}
+                        }
+                      ],
+                      "default": {}
+                    },
+                    "default": {}
+                  },
+                  {
+                    "name": "articleDate",
+                    "type": [
+                      "null",
+                      {
+                        "type": "long",
+                        "logicalType": "timestamp-micros"
+                      }
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "lastRevisionDate",
+                    "type": [
+                      "null",
+                      {
+                        "type": "long",
+                        "logicalType": "timestamp-micros"
+                      }
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "language",
+                    "type": {
+                      "type": "array",
+                      "items": "org.hl7.fhir.CodeableConcept",
+                      "default": []
+                    },
+                    "default": []
+                  },
+                  {
+                    "name": "accessionNumber",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "pageString",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "firstPage",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "lastPage",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "pageCount",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "copyright",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "webLocation",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "Citation_WebLocation",
+                "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.CodeableConcept",
+                    "name": "type",
+                    "default": {}
+                  },
+                  {
+                    "name": "url",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "classification",
+            "type": {
+              "type": "array",
+              "items": {
+                "type": "record",
+                "name": "Citation_Classification1",
+                "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                "namespace": "org.hl7.fhir",
+                "fields": [
+                  {
+                    "name": "extension",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "name": "id",
+                    "type": [
+                      "null",
+                      "string"
+                    ],
+                    "default": null
+                  },
+                  {
+                    "type": "org.hl7.fhir.CodeableConcept",
+                    "name": "type",
+                    "default": {}
+                  },
+                  {
+                    "name": "classifier",
+                    "type": {
+                      "type": "array",
+                      "items": "org.hl7.fhir.CodeableConcept",
+                      "default": []
+                    },
+                    "default": []
+                  },
+                  {
+                    "name": "whoClassified",
+                    "type": {
+                      "type": "record",
+                      "name": "Citation_WhoClassified",
+                      "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                      "namespace": "org.hl7.fhir",
+                      "fields": [
+                        {
+                          "name": "extension",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "id",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "type": "org.hl7.fhir.Reference",
+                          "name": "person",
+                          "default": {}
+                        },
+                        {
+                          "type": "org.hl7.fhir.Reference",
+                          "name": "organization",
+                          "default": {}
+                        },
+                        {
+                          "type": "org.hl7.fhir.Reference",
+                          "name": "publisher",
+                          "default": {}
+                        },
+                        {
+                          "name": "classifierCopyright",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "freeToShare",
+                          "type": [
+                            "null",
+                            "boolean"
+                          ],
+                          "default": null
+                        }
+                      ],
+                      "default": {}
+                    },
+                    "default": {}
+                  }
+                ],
+                "default": {}
+              },
+              "default": []
+            },
+            "default": []
+          },
+          {
+            "name": "contributorship",
+            "type": {
+              "type": "record",
+              "name": "Citation_Contributorship",
+              "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+              "namespace": "org.hl7.fhir",
+              "fields": [
+                {
+                  "name": "extension",
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "default": null
+                },
+                {
+                  "name": "id",
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "default": null
+                },
+                {
+                  "name": "complete",
+                  "type": [
+                    "null",
+                    "boolean"
+                  ],
+                  "default": null
+                },
+                {
+                  "name": "entry",
+                  "type": {
+                    "type": "array",
+                    "items": {
+                      "type": "record",
+                      "name": "Citation_Entry",
+                      "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                      "namespace": "org.hl7.fhir",
+                      "fields": [
+                        {
+                          "name": "extension",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "id",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "name",
+                          "type": {
+                            "type": "record",
+                            "name": "HumanName",
+                            "doc": "A human's name with the ability to identify parts and usage.",
+                            "namespace": "org.hl7.fhir",
+                            "fields": [
+                              {
+                                "name": "extension",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "id",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "use",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "text",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "family",
+                                "type": [
+                                  "null",
+                                  "string"
+                                ],
+                                "default": null
+                              },
+                              {
+                                "name": "given",
+                                "type": {
+                                  "type": "array",
+                                  "items": {
+                                    "name": "given",
+                                    "type": "string"
+                                  },
+                                  "default": []
+                                },
+                                "default": []
+                              },
+                              {
+                                "name": "prefix",
+                                "type": {
+                                  "type": "array",
+                                  "items": {
+                                    "name": "prefix",
+                                    "type": "string"
+                                  },
+                                  "default": []
+                                },
+                                "default": []
+                              },
+                              {
+                                "name": "suffix",
+                                "type": {
+                                  "type": "array",
+                                  "items": {
+                                    "name": "suffix",
+                                    "type": "string"
+                                  },
+                                  "default": []
+                                },
+                                "default": []
+                              },
+                              {
+                                "type": "org.hl7.fhir.Period",
+                                "name": "period",
+                                "default": {}
+                              }
+                            ],
+                            "default": {}
+                          },
+                          "default": {}
+                        },
+                        {
+                          "name": "initials",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "collectiveName",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "identifier",
+                          "type": {
+                            "type": "array",
+                            "items": "org.hl7.fhir.Identifier",
+                            "default": []
+                          },
+                          "default": []
+                        },
+                        {
+                          "name": "affiliationInfo",
+                          "type": {
+                            "type": "array",
+                            "items": {
+                              "type": "record",
+                              "name": "Citation_AffiliationInfo",
+                              "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                              "namespace": "org.hl7.fhir",
+                              "fields": [
+                                {
+                                  "name": "extension",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "id",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "affiliation",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "role",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "identifier",
+                                  "type": {
+                                    "type": "array",
+                                    "items": "org.hl7.fhir.Identifier",
+                                    "default": []
+                                  },
+                                  "default": []
+                                }
+                              ],
+                              "default": {}
+                            },
+                            "default": []
+                          },
+                          "default": []
+                        },
+                        {
+                          "name": "address",
+                          "type": {
+                            "type": "array",
+                            "items": {
+                              "type": "record",
+                              "name": "Address",
+                              "doc": "An address expressed using postal conventions (as opposed to GPS or other location definition formats).  This data type may be used to convey addresses for use in delivering mail as well as for visiting locations which might not be valid for mail delivery.  There are a variety of postal address formats defined around the world.",
+                              "namespace": "org.hl7.fhir",
+                              "fields": [
+                                {
+                                  "name": "extension",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "id",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "use",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "type",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "text",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "line",
+                                  "type": {
+                                    "type": "array",
+                                    "items": {
+                                      "name": "line",
+                                      "type": "string"
+                                    },
+                                    "default": []
+                                  },
+                                  "default": []
+                                },
+                                {
+                                  "name": "city",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "district",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "state",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "postalCode",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "country",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "type": "org.hl7.fhir.Period",
+                                  "name": "period",
+                                  "default": {}
+                                }
+                              ],
+                              "default": {}
+                            },
+                            "default": []
+                          },
+                          "default": []
+                        },
+                        {
+                          "name": "telecom",
+                          "type": {
+                            "type": "array",
+                            "items": "org.hl7.fhir.ContactPoint",
+                            "default": []
+                          },
+                          "default": []
+                        },
+                        {
+                          "name": "contributionType",
+                          "type": {
+                            "type": "array",
+                            "items": "org.hl7.fhir.CodeableConcept",
+                            "default": []
+                          },
+                          "default": []
+                        },
+                        {
+                          "type": "org.hl7.fhir.CodeableConcept",
+                          "name": "role",
+                          "default": {}
+                        },
+                        {
+                          "name": "contributionInstance",
+                          "type": {
+                            "type": "array",
+                            "items": {
+                              "type": "record",
+                              "name": "Citation_ContributionInstance",
+                              "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                              "namespace": "org.hl7.fhir",
+                              "fields": [
+                                {
+                                  "name": "extension",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "id",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "type": "org.hl7.fhir.CodeableConcept",
+                                  "name": "type",
+                                  "default": {}
+                                },
+                                {
+                                  "name": "time",
+                                  "type": [
+                                    "null",
+                                    {
+                                      "type": "long",
+                                      "logicalType": "timestamp-micros"
+                                    }
+                                  ],
+                                  "default": null
+                                }
+                              ],
+                              "default": {}
+                            },
+                            "default": []
+                          },
+                          "default": []
+                        },
+                        {
+                          "name": "correspondingContact",
+                          "type": [
+                            "null",
+                            "boolean"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "listOrder",
+                          "type": [
+                            "null",
+                            "int"
+                          ],
+                          "default": null
+                        }
+                      ],
+                      "default": {}
+                    },
+                    "default": []
+                  },
+                  "default": []
+                },
+                {
+                  "name": "summary",
+                  "type": {
+                    "type": "array",
+                    "items": {
+                      "type": "record",
+                      "name": "Citation_Summary1",
+                      "doc": "The Citation Resource enables reference to any knowledge artifact for purposes of identification and attribution. The Citation Resource supports existing reference structures and developing publication practices such as versioning, expressing complex contributorship roles, and referencing computable resources.",
+                      "namespace": "org.hl7.fhir",
+                      "fields": [
+                        {
+                          "name": "extension",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "name": "id",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        },
+                        {
+                          "type": "org.hl7.fhir.CodeableConcept",
+                          "name": "type",
+                          "default": {}
+                        },
+                        {
+                          "type": "org.hl7.fhir.CodeableConcept",
+                          "name": "style",
+                          "default": {}
+                        },
+                        {
+                          "type": "org.hl7.fhir.CodeableConcept",
+                          "name": "source",
+                          "default": {}
+                        },
+                        {
+                          "name": "value",
+                          "type": [
+                            "null",
+                            "string"
+                          ],
+                          "default": null
+                        }
+                      ],
+                      "default": {}
+                    },
+                    "default": []
+                  },
+                  "default": []
+                }
+              ],
+              "default": {}
+            },
+            "default": {}
+          },
+          {
+            "name": "note",
+            "type": {
+              "type": "array",
+              "items": "org.hl7.fhir.Annotation",
+              "default": []
+            },
+            "default": []
+          }
+        ],
+        "default": {}
+      },
+      "default": {}
+    }
+  ],
+  "default": null
+}

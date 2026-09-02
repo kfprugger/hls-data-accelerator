@@ -1,0 +1,3121 @@
+{
+    "type": "record",
+    "name": "Extension",
+    "doc": "Optional Extension Element - found in all resources.",
+    "namespace": "org.hl7.fhir.extgenerated",
+    "fields": [
+      {
+        "name": "id",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "extension",
+        "type": {
+          "type": "array",
+          "items": {
+            "type": "record",
+            "name": "Extension1",
+            "doc": "Optional Extension Element - found in all resources.",
+            "namespace": "org.hl7.fhir.extgenerated",
+            "fields": [
+              {
+                "name": "id",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "extension",
+                "type": {
+                  "type": "array",
+                  "items": "string",
+                  "default": []
+                },
+                "default": []
+              },
+              {
+                "name": "url",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueBase64Binary",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueBoolean",
+                "type": [
+                  "null",
+                  "boolean"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueCanonical",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueCode",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueDate",
+                "type": [
+                  "null",
+                  {
+                    "type": "int",
+                    "logicalType": "date"
+                  }
+                ],
+                "default": null
+              },
+              {
+                "name": "valueDateTime",
+                "type": [
+                  "null",
+                  {
+                    "type": "long",
+                    "logicalType": "timestamp-micros"
+                  }
+                ],
+                "default": null
+              },
+              {
+                "name": "valueDecimal",
+                "type": [
+                  "null",
+                  {
+                    "type": "bytes",
+                    "logicalType": "decimal",
+                    "precision": 18,
+                    "scale": 5
+                  }
+                ],
+                "default": null
+              },
+              {
+                "name": "valueId",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueInstant",
+                "type": [
+                  "null",
+                  {
+                    "type": "long",
+                    "logicalType": "timestamp-millis"
+                  }
+                ],
+                "default": null
+              },
+              {
+                "name": "valueInteger",
+                "type": [
+                  "null",
+                  "int"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueMarkdown",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueOid",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valuePositiveInt",
+                "type": [
+                  "null",
+                  "int"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueString",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueTime",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueUnsignedInt",
+                "type": [
+                  "null",
+                  "int"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueUri",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueUrl",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueUuid",
+                "type": [
+                  "null",
+                  "string"
+                ],
+                "default": null
+              },
+              {
+                "name": "valueAddress",
+                "type": {
+                  "type": "record",
+                  "name": "Address",
+                  "doc": "An address expressed using postal conventions (as opposed to GPS or other location definition formats).  This data type may be used to convey addresses for use in delivering mail as well as for visiting locations which might not be valid for mail delivery.  There are a variety of postal address formats defined around the world.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "use",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "type",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "text",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "line",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "city",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "district",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "state",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "postalCode",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "country",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "period",
+                      "type": {
+                        "type": "record",
+                        "name": "Period",
+                        "doc": "A time period defined by a start and end date and optionally time.",
+                        "namespace": "org.hl7.fhir.extgenerated",
+                        "fields": [
+                          {
+                            "name": "id",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "extension",
+                            "type": {
+                              "type": "array",
+                              "items": "string",
+                              "default": []
+                            },
+                            "default": []
+                          },
+                          {
+                            "name": "start",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "end",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          }
+                        ],
+                        "default": {}
+                      },
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueAge",
+                "type": {
+                  "type": "record",
+                  "name": "Age",
+                  "doc": "A duration of time during which an organism (or a process) has existed.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "value",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "comparator",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "unit",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "system",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "code",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueAnnotation",
+                "type": {
+                  "type": "record",
+                  "name": "Annotation",
+                  "doc": "A  text note which also  contains information about who made the statement and when.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "authorReference",
+                      "type": {
+                        "type": "record",
+                        "name": "Reference",
+                        "doc": "A reference from one resource to another.",
+                        "namespace": "org.hl7.fhir.extgenerated",
+                        "fields": [
+                          {
+                            "name": "id",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "extension",
+                            "type": {
+                              "type": "array",
+                              "items": "string",
+                              "default": []
+                            },
+                            "default": []
+                          },
+                          {
+                            "name": "reference",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "type",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "identifier",
+                            "type": {
+                              "type": "record",
+                              "name": "Identifier",
+                              "doc": "An identifier - identifies some entity uniquely and unambiguously. Typically this is used for business identifiers.",
+                              "namespace": "org.hl7.fhir.extgenerated",
+                              "fields": [
+                                {
+                                  "name": "id",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "extension",
+                                  "type": {
+                                    "type": "array",
+                                    "items": "string",
+                                    "default": []
+                                  },
+                                  "default": []
+                                },
+                                {
+                                  "name": "use",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "type",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "system",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "value",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "period",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                },
+                                {
+                                  "name": "assigner",
+                                  "type": [
+                                    "null",
+                                    "string"
+                                  ],
+                                  "default": null
+                                }
+                              ],
+                              "default": {}
+                            },
+                            "default": {}
+                          },
+                          {
+                            "name": "display",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          }
+                        ],
+                        "default": {}
+                      },
+                      "default": {}
+                    },
+                    {
+                      "name": "authorString",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "time",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "text",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueAttachment",
+                "type": {
+                  "type": "record",
+                  "name": "Attachment",
+                  "doc": "For referring to data content defined in other formats.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "contentType",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "language",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "data",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "url",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "size",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "hash",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "title",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "creation",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueCodeableConcept",
+                "type": {
+                  "type": "record",
+                  "name": "CodeableConcept",
+                  "doc": "A concept that may be defined by a formal reference to a terminology or ontology or may be provided by text.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "coding",
+                      "type": {
+                        "type": "array",
+                        "items": {
+                          "type": "record",
+                          "name": "Coding",
+                          "doc": "A reference to a code defined by a terminology system.",
+                          "namespace": "org.hl7.fhir.extgenerated",
+                          "fields": [
+                            {
+                              "name": "id",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "extension",
+                              "type": {
+                                "type": "array",
+                                "items": "string",
+                                "default": []
+                              },
+                              "default": []
+                            },
+                            {
+                              "name": "system",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "version",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "code",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "display",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "userSelected",
+                              "type": [
+                                "null",
+                                "boolean"
+                              ],
+                              "default": null
+                            }
+                          ],
+                          "default": {}
+                        },
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "text",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueCodeableReference",
+                "type": {
+                  "type": "record",
+                  "name": "CodeableReference",
+                  "doc": "A reference to a resource (by instance), or instead, a reference to a concept defined in a terminology or ontology (by class).",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "concept",
+                      "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+                      "default": {}
+                    },
+                    {
+                      "name": "reference",
+                      "type": "org.hl7.fhir.extgenerated.Reference",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueCoding",
+                "type": "org.hl7.fhir.extgenerated.Coding",
+                "default": {}
+              },
+              {
+                "name": "valueContactPoint",
+                "type": {
+                  "type": "record",
+                  "name": "ContactPoint",
+                  "doc": "Details for all kinds of technology mediated contact points for a person or organization, including telephone, email, etc.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "system",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "value",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "use",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "rank",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "period",
+                      "type": "org.hl7.fhir.extgenerated.Period",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueCount",
+                "type": {
+                  "type": "record",
+                  "name": "Count",
+                  "doc": "A measured amount (or an amount that can potentially be measured). Note that measured amounts include amounts that are not precisely quantified, including amounts involving arbitrary units and floating currencies.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "value",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "comparator",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "unit",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "system",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "code",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueDistance",
+                "type": {
+                  "type": "record",
+                  "name": "Distance",
+                  "doc": "A length - a value with a unit that is a physical distance.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "value",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "comparator",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "unit",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "system",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "code",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueDuration",
+                "type": {
+                  "type": "record",
+                  "name": "Duration",
+                  "doc": "A length of time.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "value",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "comparator",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "unit",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "system",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "code",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueHumanName",
+                "type": {
+                  "type": "record",
+                  "name": "HumanName",
+                  "doc": "A human's name with the ability to identify parts and usage.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "use",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "text",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "family",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "given",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "prefix",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "suffix",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "period",
+                      "type": "org.hl7.fhir.extgenerated.Period",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueIdentifier",
+                "type": "org.hl7.fhir.extgenerated.Identifier",
+                "default": {}
+              },
+              {
+                "name": "valueMoney",
+                "type": {
+                  "type": "record",
+                  "name": "Money",
+                  "doc": "An amount of economic utility in some recognized currency.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "value",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "currency",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valuePeriod",
+                "type": "org.hl7.fhir.extgenerated.Period",
+                "default": {}
+              },
+              {
+                "name": "valueQuantity",
+                "type": {
+                  "type": "record",
+                  "name": "Quantity",
+                  "doc": "A measured amount (or an amount that can potentially be measured). Note that measured amounts include amounts that are not precisely quantified, including amounts involving arbitrary units and floating currencies.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "value",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "comparator",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "unit",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "system",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "code",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueRange",
+                "type": {
+                  "type": "record",
+                  "name": "Range",
+                  "doc": "A set of ordered Quantities defined by a low and high limit.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "low",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    },
+                    {
+                      "name": "high",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueRatio",
+                "type": {
+                  "type": "record",
+                  "name": "Ratio",
+                  "doc": "A relationship of two Quantity values - expressed as a numerator and a denominator.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "numerator",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    },
+                    {
+                      "name": "denominator",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueRatioRange",
+                "type": {
+                  "type": "record",
+                  "name": "RatioRange",
+                  "doc": "A range of ratios expressed as a low and high numerator and a denominator.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "lowNumerator",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    },
+                    {
+                      "name": "highNumerator",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    },
+                    {
+                      "name": "denominator",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueReference",
+                "type": "org.hl7.fhir.extgenerated.Reference",
+                "default": {}
+              },
+              {
+                "name": "valueSampledData",
+                "type": {
+                  "type": "record",
+                  "name": "SampledData",
+                  "doc": "A series of measurements taken by a device, with upper and lower limits. There may be more than one dimension in the data.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "origin",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    },
+                    {
+                      "name": "period",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "factor",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "lowerLimit",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "upperLimit",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "dimensions",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "data",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueSignature",
+                "type": {
+                  "type": "record",
+                  "name": "Signature",
+                  "doc": "A signature along with supporting context. The signature may be a digital signature that is cryptographic in nature, or some other signature acceptable to the domain. This other signature may be as simple as a graphical image representing a hand-written signature, or a signature ceremony Different signature approaches have different utilities.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "type",
+                      "type": {
+                        "type": "array",
+                        "items": "org.hl7.fhir.extgenerated.Coding",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "when",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "who",
+                      "type": "org.hl7.fhir.extgenerated.Reference",
+                      "default": {}
+                    },
+                    {
+                      "name": "onBehalfOf",
+                      "type": "org.hl7.fhir.extgenerated.Reference",
+                      "default": {}
+                    },
+                    {
+                      "name": "targetFormat",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "sigFormat",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "data",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueTiming",
+                "type": {
+                  "type": "record",
+                  "name": "Timing",
+                  "doc": "Specifies an event that may occur multiple times. Timing schedules are used to record when things are planned, expected or requested to occur. The most common usage is in dosage instructions for medications. They are also used when planning care of various kinds, and may be used for reporting the schedule to which past regular activities were carried out.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "event",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "repeat",
+                      "type": {
+                        "type": "record",
+                        "name": "Timing_Repeat",
+                        "doc": "Specifies an event that may occur multiple times. Timing schedules are used to record when things are planned, expected or requested to occur. The most common usage is in dosage instructions for medications. They are also used when planning care of various kinds, and may be used for reporting the schedule to which past regular activities were carried out.",
+                        "namespace": "org.hl7.fhir.extgenerated",
+                        "fields": [
+                          {
+                            "name": "id",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "extension",
+                            "type": {
+                              "type": "array",
+                              "items": "string",
+                              "default": []
+                            },
+                            "default": []
+                          },
+                          {
+                            "name": "boundsDuration",
+                            "type": "org.hl7.fhir.extgenerated.Duration",
+                            "default": {}
+                          },
+                          {
+                            "name": "boundsRange",
+                            "type": "org.hl7.fhir.extgenerated.Range",
+                            "default": {}
+                          },
+                          {
+                            "name": "boundsPeriod",
+                            "type": "org.hl7.fhir.extgenerated.Period",
+                            "default": {}
+                          },
+                          {
+                            "name": "count",
+                            "type": [
+                              "null",
+                              "int"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "countMax",
+                            "type": [
+                              "null",
+                              "int"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "duration",
+                            "type": [
+                              "null",
+                              "int"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "durationMax",
+                            "type": [
+                              "null",
+                              "int"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "durationUnit",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "frequency",
+                            "type": [
+                              "null",
+                              "int"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "frequencyMax",
+                            "type": [
+                              "null",
+                              "int"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "period",
+                            "type": [
+                              "null",
+                              "int"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "periodMax",
+                            "type": [
+                              "null",
+                              "int"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "periodUnit",
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "default": null
+                          },
+                          {
+                            "name": "dayOfWeek",
+                            "type": {
+                              "type": "array",
+                              "items": "string",
+                              "default": []
+                            },
+                            "default": []
+                          },
+                          {
+                            "name": "timeOfDay",
+                            "type": {
+                              "type": "array",
+                              "items": "string",
+                              "default": []
+                            },
+                            "default": []
+                          },
+                          {
+                            "name": "when",
+                            "type": {
+                              "type": "array",
+                              "items": "string",
+                              "default": []
+                            },
+                            "default": []
+                          },
+                          {
+                            "name": "offset",
+                            "type": [
+                              "null",
+                              "int"
+                            ],
+                            "default": null
+                          }
+                        ],
+                        "default": {}
+                      },
+                      "default": {}
+                    },
+                    {
+                      "name": "code",
+                      "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueContactDetail",
+                "type": {
+                  "type": "record",
+                  "name": "ContactDetail",
+                  "doc": "Specifies contact information for a person or organization.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "name",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "telecom",
+                      "type": {
+                        "type": "array",
+                        "items": "org.hl7.fhir.extgenerated.ContactPoint",
+                        "default": []
+                      },
+                      "default": []
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueContributor",
+                "type": {
+                  "type": "record",
+                  "name": "Contributor",
+                  "doc": "A contributor to the content of a knowledge asset, including authors, editors, reviewers, and endorsers.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "type",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "name",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "contact",
+                      "type": {
+                        "type": "array",
+                        "items": "org.hl7.fhir.extgenerated.ContactDetail",
+                        "default": []
+                      },
+                      "default": []
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueDataRequirement",
+                "type": {
+                  "type": "record",
+                  "name": "DataRequirement",
+                  "doc": "Describes a required data item for evaluation in terms of the type of data, and optional code or date-based filters of the data.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "type",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "profile",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "subjectCodeableConcept",
+                      "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+                      "default": {}
+                    },
+                    {
+                      "name": "subjectReference",
+                      "type": "org.hl7.fhir.extgenerated.Reference",
+                      "default": {}
+                    },
+                    {
+                      "name": "mustSupport",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "codeFilter",
+                      "type": {
+                        "type": "array",
+                        "items": {
+                          "type": "record",
+                          "name": "DataRequirement_CodeFilter",
+                          "doc": "Describes a required data item for evaluation in terms of the type of data, and optional code or date-based filters of the data.",
+                          "namespace": "org.hl7.fhir.extgenerated",
+                          "fields": [
+                            {
+                              "name": "id",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "extension",
+                              "type": {
+                                "type": "array",
+                                "items": "string",
+                                "default": []
+                              },
+                              "default": []
+                            },
+                            {
+                              "name": "path",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "searchParam",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "valueSet",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "code",
+                              "type": {
+                                "type": "array",
+                                "items": "org.hl7.fhir.extgenerated.Coding",
+                                "default": []
+                              },
+                              "default": []
+                            }
+                          ],
+                          "default": {}
+                        },
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "dateFilter",
+                      "type": {
+                        "type": "array",
+                        "items": {
+                          "type": "record",
+                          "name": "DataRequirement_DateFilter",
+                          "doc": "Describes a required data item for evaluation in terms of the type of data, and optional code or date-based filters of the data.",
+                          "namespace": "org.hl7.fhir.extgenerated",
+                          "fields": [
+                            {
+                              "name": "id",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "extension",
+                              "type": {
+                                "type": "array",
+                                "items": "string",
+                                "default": []
+                              },
+                              "default": []
+                            },
+                            {
+                              "name": "path",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "searchParam",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "valueDateTime",
+                              "type": [
+                                "null",
+                                {
+                                  "type": "long",
+                                  "logicalType": "timestamp-micros"
+                                }
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "valuePeriod",
+                              "type": "org.hl7.fhir.extgenerated.Period",
+                              "default": {}
+                            },
+                            {
+                              "name": "valueDuration",
+                              "type": "org.hl7.fhir.extgenerated.Duration",
+                              "default": {}
+                            }
+                          ],
+                          "default": {}
+                        },
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "limit",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "sort",
+                      "type": {
+                        "type": "array",
+                        "items": {
+                          "type": "record",
+                          "name": "DataRequirement_Sort",
+                          "doc": "Describes a required data item for evaluation in terms of the type of data, and optional code or date-based filters of the data.",
+                          "namespace": "org.hl7.fhir.extgenerated",
+                          "fields": [
+                            {
+                              "name": "id",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "extension",
+                              "type": {
+                                "type": "array",
+                                "items": "string",
+                                "default": []
+                              },
+                              "default": []
+                            },
+                            {
+                              "name": "path",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "direction",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            }
+                          ],
+                          "default": {}
+                        },
+                        "default": []
+                      },
+                      "default": []
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueExpression",
+                "type": {
+                  "type": "record",
+                  "name": "Expression",
+                  "doc": "A expression that is evaluated in a specified context and returns a value. The context of use of the expression must specify the context in which the expression is evaluated, and how the result of the expression is used.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "description",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "name",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "language",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "expression",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "reference",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueParameterDefinition",
+                "type": {
+                  "type": "record",
+                  "name": "ParameterDefinition",
+                  "doc": "The parameters to the module. This collection specifies both the input and output parameters. Input parameters are provided by the caller as part of the $evaluate operation. Output parameters are included in the GuidanceResponse.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "name",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "use",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "min",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "max",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "documentation",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "type",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "profile",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueRelatedArtifact",
+                "type": {
+                  "type": "record",
+                  "name": "RelatedArtifact",
+                  "doc": "Related artifacts such as additional documentation, justification, or bibliographic references.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "type",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "label",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "display",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "citation",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "url",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "document",
+                      "type": "org.hl7.fhir.extgenerated.Attachment",
+                      "default": {}
+                    },
+                    {
+                      "name": "resource",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueTriggerDefinition",
+                "type": {
+                  "type": "record",
+                  "name": "TriggerDefinition",
+                  "doc": "A description of a triggering event. Triggering events can be named events, data events, or periodic, as determined by the type element.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "type",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "name",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "timingTiming",
+                      "type": "org.hl7.fhir.extgenerated.Timing",
+                      "default": {}
+                    },
+                    {
+                      "name": "timingReference",
+                      "type": "org.hl7.fhir.extgenerated.Reference",
+                      "default": {}
+                    },
+                    {
+                      "name": "timingDate",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "timingDateTime",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "data",
+                      "type": {
+                        "type": "array",
+                        "items": "org.hl7.fhir.extgenerated.DataRequirement",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "condition",
+                      "type": "org.hl7.fhir.extgenerated.Expression",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueUsageContext",
+                "type": {
+                  "type": "record",
+                  "name": "UsageContext",
+                  "doc": "Specifies clinical/business/etc. metadata that can be used to retrieve, index and/or categorize an artifact. This metadata can either be specific to the applicable population (e.g., age category, DRG) or the specific context of care (e.g., venue, care setting, provider of care).",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "code",
+                      "type": "org.hl7.fhir.extgenerated.Coding",
+                      "default": {}
+                    },
+                    {
+                      "name": "valueCodeableConcept",
+                      "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+                      "default": {}
+                    },
+                    {
+                      "name": "valueQuantity",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    },
+                    {
+                      "name": "valueRange",
+                      "type": "org.hl7.fhir.extgenerated.Range",
+                      "default": {}
+                    },
+                    {
+                      "name": "valueReference",
+                      "type": "org.hl7.fhir.extgenerated.Reference",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              },
+              {
+                "name": "valueDosage",
+                "type": {
+                  "type": "record",
+                  "name": "Dosage",
+                  "doc": "Indicates how the medication is/was taken or should be taken by the patient.",
+                  "namespace": "org.hl7.fhir.extgenerated",
+                  "fields": [
+                    {
+                      "name": "id",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "extension",
+                      "type": {
+                        "type": "array",
+                        "items": "string",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "sequence",
+                      "type": [
+                        "null",
+                        "int"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "text",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "additionalInstruction",
+                      "type": {
+                        "type": "array",
+                        "items": "org.hl7.fhir.extgenerated.CodeableConcept",
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "patientInstruction",
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "timing",
+                      "type": "org.hl7.fhir.extgenerated.Timing",
+                      "default": {}
+                    },
+                    {
+                      "name": "asNeededBoolean",
+                      "type": [
+                        "null",
+                        "boolean"
+                      ],
+                      "default": null
+                    },
+                    {
+                      "name": "asNeededCodeableConcept",
+                      "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+                      "default": {}
+                    },
+                    {
+                      "name": "site",
+                      "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+                      "default": {}
+                    },
+                    {
+                      "name": "route",
+                      "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+                      "default": {}
+                    },
+                    {
+                      "name": "method",
+                      "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+                      "default": {}
+                    },
+                    {
+                      "name": "doseAndRate",
+                      "type": {
+                        "type": "array",
+                        "items": {
+                          "type": "record",
+                          "name": "Dosage_DoseAndRate",
+                          "doc": "Indicates how the medication is/was taken or should be taken by the patient.",
+                          "namespace": "org.hl7.fhir.extgenerated",
+                          "fields": [
+                            {
+                              "name": "id",
+                              "type": [
+                                "null",
+                                "string"
+                              ],
+                              "default": null
+                            },
+                            {
+                              "name": "extension",
+                              "type": {
+                                "type": "array",
+                                "items": "string",
+                                "default": []
+                              },
+                              "default": []
+                            },
+                            {
+                              "name": "type",
+                              "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+                              "default": {}
+                            },
+                            {
+                              "name": "doseRange",
+                              "type": "org.hl7.fhir.extgenerated.Range",
+                              "default": {}
+                            },
+                            {
+                              "name": "doseQuantity",
+                              "type": "org.hl7.fhir.extgenerated.Quantity",
+                              "default": {}
+                            },
+                            {
+                              "name": "rateRatio",
+                              "type": "org.hl7.fhir.extgenerated.Ratio",
+                              "default": {}
+                            },
+                            {
+                              "name": "rateRange",
+                              "type": "org.hl7.fhir.extgenerated.Range",
+                              "default": {}
+                            },
+                            {
+                              "name": "rateQuantity",
+                              "type": "org.hl7.fhir.extgenerated.Quantity",
+                              "default": {}
+                            }
+                          ],
+                          "default": {}
+                        },
+                        "default": []
+                      },
+                      "default": []
+                    },
+                    {
+                      "name": "maxDosePerPeriod",
+                      "type": "org.hl7.fhir.extgenerated.Ratio",
+                      "default": {}
+                    },
+                    {
+                      "name": "maxDosePerAdministration",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    },
+                    {
+                      "name": "maxDosePerLifetime",
+                      "type": "org.hl7.fhir.extgenerated.Quantity",
+                      "default": {}
+                    }
+                  ],
+                  "default": {}
+                },
+                "default": {}
+              }
+            ],
+            "default": {}
+          },
+          "default": []
+        },
+        "default": []
+      },
+      {
+        "name": "url",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueBase64Binary",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueBoolean",
+        "type": [
+          "null",
+          "boolean"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueCanonical",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueCode",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueDate",
+        "type": [
+          "null",
+          {
+            "type": "int",
+            "logicalType": "date"
+          }
+        ],
+        "default": null
+      },
+      {
+        "name": "valueDateTime",
+        "type": [
+          "null",
+          {
+            "type": "long",
+            "logicalType": "timestamp-micros"
+          }
+        ],
+        "default": null
+      },
+      {
+        "name": "valueDecimal",
+        "type": [
+          "null",
+          {
+            "type": "bytes",
+            "logicalType": "decimal",
+            "precision": 18,
+            "scale": 5
+          }
+        ],
+        "default": null
+      },
+      {
+        "name": "valueId",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueInstant",
+        "type": [
+          "null",
+          {
+            "type": "long",
+            "logicalType": "timestamp-millis"
+          }
+        ],
+        "default": null
+      },
+      {
+        "name": "valueInteger",
+        "type": [
+          "null",
+          "int"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueMarkdown",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueOid",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valuePositiveInt",
+        "type": [
+          "null",
+          "int"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueString",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueTime",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueUnsignedInt",
+        "type": [
+          "null",
+          "int"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueUri",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueUrl",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueUuid",
+        "type": [
+          "null",
+          "string"
+        ],
+        "default": null
+      },
+      {
+        "name": "valueAddress",
+        "type": "org.hl7.fhir.extgenerated.Address",
+        "default": {}
+      },
+      {
+        "name": "valueAge",
+        "type": "org.hl7.fhir.extgenerated.Age",
+        "default": {}
+      },
+      {
+        "name": "valueAnnotation",
+        "type": "org.hl7.fhir.extgenerated.Annotation",
+        "default": {}
+      },
+      {
+        "name": "valueAttachment",
+        "type": "org.hl7.fhir.extgenerated.Attachment",
+        "default": {}
+      },
+      {
+        "name": "valueCodeableConcept",
+        "type": "org.hl7.fhir.extgenerated.CodeableConcept",
+        "default": {}
+      },
+      {
+        "name": "valueCodeableReference",
+        "type": "org.hl7.fhir.extgenerated.CodeableReference",
+        "default": {}
+      },
+      {
+        "name": "valueCoding",
+        "type": "org.hl7.fhir.extgenerated.Coding",
+        "default": {}
+      },
+      {
+        "name": "valueContactPoint",
+        "type": "org.hl7.fhir.extgenerated.ContactPoint",
+        "default": {}
+      },
+      {
+        "name": "valueCount",
+        "type": "org.hl7.fhir.extgenerated.Count",
+        "default": {}
+      },
+      {
+        "name": "valueDistance",
+        "type": "org.hl7.fhir.extgenerated.Distance",
+        "default": {}
+      },
+      {
+        "name": "valueDuration",
+        "type": "org.hl7.fhir.extgenerated.Duration",
+        "default": {}
+      },
+      {
+        "name": "valueHumanName",
+        "type": "org.hl7.fhir.extgenerated.HumanName",
+        "default": {}
+      },
+      {
+        "name": "valueIdentifier",
+        "type": "org.hl7.fhir.extgenerated.Identifier",
+        "default": {}
+      },
+      {
+        "name": "valueMoney",
+        "type": "org.hl7.fhir.extgenerated.Money",
+        "default": {}
+      },
+      {
+        "name": "valuePeriod",
+        "type": "org.hl7.fhir.extgenerated.Period",
+        "default": {}
+      },
+      {
+        "name": "valueQuantity",
+        "type": "org.hl7.fhir.extgenerated.Quantity",
+        "default": {}
+      },
+      {
+        "name": "valueRange",
+        "type": "org.hl7.fhir.extgenerated.Range",
+        "default": {}
+      },
+      {
+        "name": "valueRatio",
+        "type": "org.hl7.fhir.extgenerated.Ratio",
+        "default": {}
+      },
+      {
+        "name": "valueRatioRange",
+        "type": "org.hl7.fhir.extgenerated.RatioRange",
+        "default": {}
+      },
+      {
+        "name": "valueReference",
+        "type": "org.hl7.fhir.extgenerated.Reference",
+        "default": {}
+      },
+      {
+        "name": "valueSampledData",
+        "type": "org.hl7.fhir.extgenerated.SampledData",
+        "default": {}
+      },
+      {
+        "name": "valueSignature",
+        "type": "org.hl7.fhir.extgenerated.Signature",
+        "default": {}
+      },
+      {
+        "name": "valueTiming",
+        "type": "org.hl7.fhir.extgenerated.Timing",
+        "default": {}
+      },
+      {
+        "name": "valueContactDetail",
+        "type": "org.hl7.fhir.extgenerated.ContactDetail",
+        "default": {}
+      },
+      {
+        "name": "valueContributor",
+        "type": "org.hl7.fhir.extgenerated.Contributor",
+        "default": {}
+      },
+      {
+        "name": "valueDataRequirement",
+        "type": "org.hl7.fhir.extgenerated.DataRequirement",
+        "default": {}
+      },
+      {
+        "name": "valueExpression",
+        "type": "org.hl7.fhir.extgenerated.Expression",
+        "default": {}
+      },
+      {
+        "name": "valueParameterDefinition",
+        "type": "org.hl7.fhir.extgenerated.ParameterDefinition",
+        "default": {}
+      },
+      {
+        "name": "valueRelatedArtifact",
+        "type": "org.hl7.fhir.extgenerated.RelatedArtifact",
+        "default": {}
+      },
+      {
+        "name": "valueTriggerDefinition",
+        "type": "org.hl7.fhir.extgenerated.TriggerDefinition",
+        "default": {}
+      },
+      {
+        "name": "valueUsageContext",
+        "type": "org.hl7.fhir.extgenerated.UsageContext",
+        "default": {}
+      },
+      {
+        "name": "valueDosage",
+        "type": "org.hl7.fhir.extgenerated.Dosage",
+        "default": {}
+      }
+    ],
+    "default": {}
+  }

@@ -1,0 +1,4148 @@
+{
+  "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceData_schema.json",
+  "adrmTableName": "PartyType",
+  "fieldMapping": [
+    {
+      "adrmFieldName": "PartyTypeId",
+      "referenceFieldName": "id"
+    },
+    {
+      "adrmFieldName": "PartyTypeName",
+      "referenceFieldName": "name"
+    },
+    {
+      "adrmFieldName": "PartyTypeDescription",
+      "referenceFieldName": "description"
+    }
+  ],
+  "data": [
+    {
+      "id": 1,
+      "name": "AccountingFramework"
+    },
+    {
+      "id": 3,
+      "name": "AccreditationOrganization"
+    },
+    {
+      "id": 4,
+      "name": "Acquirer"
+    },
+    {
+      "id": 5,
+      "name": "ActivityCost"
+    },
+    {
+      "id": 6,
+      "name": "AdditionalAccountHolder"
+    },
+    {
+      "id": 7,
+      "name": "AdditionalInsuredParty"
+    },
+    {
+      "id": 8,
+      "name": "AdvertisingCampaignCooperativeProgram"
+    },
+    {
+      "id": 9,
+      "name": "AdvertisingCampaignRelatedParty"
+    },
+    {
+      "id": 10,
+      "name": "AdvertisingCollateralRelatedParty"
+    },
+    {
+      "id": 11,
+      "name": "AdvertisingEventRelatedParty"
+    },
+    {
+      "id": 12,
+      "name": "Agency"
+    },
+    {
+      "id": 13,
+      "name": "AgencyRelatedParty"
+    },
+    {
+      "id": 14,
+      "name": "Aircraft"
+    },
+    {
+      "id": 15,
+      "name": "AircraftManufacturer"
+    },
+    {
+      "id": 16,
+      "name": "AircraftScheduledFlightLegFuelCharge"
+    },
+    {
+      "id": 17,
+      "name": "AirportFacility"
+    },
+    {
+      "id": 18,
+      "name": "AirportLoungeEventRelatedParty"
+    },
+    {
+      "id": 19,
+      "name": "AirportStore"
+    },
+    {
+      "id": 20,
+      "name": "Alert"
+    },
+    {
+      "id": 21,
+      "name": "AlleleFrequencyCalculationParty"
+    },
+    {
+      "id": 22,
+      "name": "Alliance"
+    },
+    {
+      "id": 23,
+      "name": "AminoAcidSynonym"
+    },
+    {
+      "id": 24,
+      "name": "AnimalEventRelatedParty"
+    },
+    {
+      "id": 25,
+      "name": "AnimalRelatedParty"
+    },
+    {
+      "id": 26,
+      "name": "AnnuityAnnuitant"
+    },
+    {
+      "id": 27,
+      "name": "AnnuityBeneficiary"
+    },
+    {
+      "id": 28,
+      "name": "AnnuityEventRelatedParty"
+    },
+    {
+      "id": 29,
+      "name": "AnnuityOwner"
+    },
+    {
+      "id": 30,
+      "name": "AnnuityParty"
+    },
+    {
+      "id": 31,
+      "name": "AnnuityPolicy"
+    },
+    {
+      "id": 32,
+      "name": "AnnuityProduct"
+    },
+    {
+      "id": 33,
+      "name": "AppealRelatedParty"
+    },
+    {
+      "id": 34,
+      "name": "ArbitrationRelatedParty"
+    },
+    {
+      "id": 35,
+      "name": "Asset"
+    },
+    {
+      "id": 36,
+      "name": "AssetAppropriationRelatedParty"
+    },
+    {
+      "id": 37,
+      "name": "AssetAssessment"
+    },
+    {
+      "id": 38,
+      "name": "AssetAssignment"
+    },
+    {
+      "id": 39,
+      "name": "AssetCalibration"
+    },
+    {
+      "id": 40,
+      "name": "AssetCertification"
+    },
+    {
+      "id": 41,
+      "name": "AssetEntitlementPartyAllocation"
+    },
+    {
+      "id": 42,
+      "name": "AssetEntitlementPartyUsage"
+    },
+    {
+      "id": 43,
+      "name": "AssetEventRelatedParty"
+    },
+    {
+      "id": 44,
+      "name": "AssetExtraordinaryRepairRelatedParty"
+    },
+    {
+      "id": 45,
+      "name": "AssetImprovementRelatedParty"
+    },
+    {
+      "id": 46,
+      "name": "AssetInspection"
+    },
+    {
+      "id": 47,
+      "name": "AssetLocation"
+    },
+    {
+      "id": 48,
+      "name": "AssetLocationRelatedParty"
+    },
+    {
+      "id": 49,
+      "name": "AssetMaintenanceRelatedParty"
+    },
+    {
+      "id": 50,
+      "name": "AssetModelCertification"
+    },
+    {
+      "id": 51,
+      "name": "AssetReadingTypeSchedule"
+    },
+    {
+      "id": 52,
+      "name": "AssetRelatedParty"
+    },
+    {
+      "id": 53,
+      "name": "AssignmentAssetLiquidation"
+    },
+    {
+      "id": 54,
+      "name": "AssignmentProceedingRelatedParty"
+    },
+    {
+      "id": 55,
+      "name": "Association"
+    },
+    {
+      "id": 56,
+      "name": "AtmRelatedParty"
+    },
+    {
+      "id": 57,
+      "name": "AuctionBid"
+    },
+    {
+      "id": 58,
+      "name": "Auditor"
+    },
+    {
+      "id": 59,
+      "name": "AuditRelatedParty"
+    },
+    {
+      "id": 60,
+      "name": "AuditTestRelatedParty"
+    },
+    {
+      "id": 61,
+      "name": "AutomobileQuote"
+    },
+    {
+      "id": 62,
+      "name": "BadDebtWriteOff"
+    },
+    {
+      "id": 63,
+      "name": "BankruptcyAssetLiquidation"
+    },
+    {
+      "id": 64,
+      "name": "BankruptcyAssetLiquidationRelatedParty"
+    },
+    {
+      "id": 65,
+      "name": "BankruptcyCreditor"
+    },
+    {
+      "id": 66,
+      "name": "BankruptcyProceedingRelatedParty"
+    },
+    {
+      "id": 67,
+      "name": "Barge"
+    },
+    {
+      "id": 68,
+      "name": "BatchCost"
+    },
+    {
+      "id": 69,
+      "name": "BatchPhaseRelatedParty"
+    },
+    {
+      "id": 70,
+      "name": "BatchRelatedParty"
+    },
+    {
+      "id": 71,
+      "name": "Battery"
+    },
+    {
+      "id": 72,
+      "name": "Beneficiary"
+    },
+    {
+      "id": 73,
+      "name": "BeneficiaryRelatedParty"
+    },
+    {
+      "id": 74,
+      "name": "BerthAssetRelatedParty"
+    },
+    {
+      "id": 75,
+      "name": "BerthServiceRelatedParty"
+    },
+    {
+      "id": 76,
+      "name": "BillOfLading"
+    },
+    {
+      "id": 77,
+      "name": "BillOfLadingAmendment"
+    },
+    {
+      "id": 78,
+      "name": "BillOfLadingEventRelatedParty"
+    },
+    {
+      "id": 79,
+      "name": "BillOfLadingFeeRelatedParty"
+    },
+    {
+      "id": 80,
+      "name": "BillOfLadingRelatedParty"
+    },
+    {
+      "id": 81,
+      "name": "BillOfLadingTransferRelatedParty"
+    },
+    {
+      "id": 82,
+      "name": "BoardMember"
+    },
+    {
+      "id": 83,
+      "name": "BoardOfDirectors"
+    },
+    {
+      "id": 84,
+      "name": "Boiler"
+    },
+    {
+      "id": 85,
+      "name": "Brand"
+    },
+    {
+      "id": 86,
+      "name": "Broker"
+    },
+    {
+      "id": 87,
+      "name": "Budget"
+    },
+    {
+      "id": 88,
+      "name": "BudgetRelatedParty"
+    },
+    {
+      "id": 89,
+      "name": "CarbonTrading"
+    },
+    {
+      "id": 90,
+      "name": "CardAssociation"
+    },
+    {
+      "id": 91,
+      "name": "CardIssuer"
+    },
+    {
+      "id": 92,
+      "name": "CarRentalAgencyRelatedParty"
+    },
+    {
+      "id": 93,
+      "name": "Carrier"
+    },
+    {
+      "id": 94,
+      "name": "CarrierRelatedParty"
+    },
+    {
+      "id": 95,
+      "name": "CaseManager"
+    },
+    {
+      "id": 96,
+      "name": "CashBudgetDisbursement"
+    },
+    {
+      "id": 97,
+      "name": "CashBudgetFinancing"
+    },
+    {
+      "id": 98,
+      "name": "CertificateOfInspectionRelatedParty"
+    },
+    {
+      "id": 99,
+      "name": "Certification"
+    },
+    {
+      "id": 100,
+      "name": "Channel"
+    },
+    {
+      "id": 101,
+      "name": "ChannelOrderPartyCommission"
+    },
+    {
+      "id": 102,
+      "name": "ChannelRegistration"
+    },
+    {
+      "id": 103,
+      "name": "ChannelRelatedParty"
+    },
+    {
+      "id": 104,
+      "name": "ChargeController"
+    },
+    {
+      "id": 105,
+      "name": "CharitableGiftAnnuity"
+    },
+    {
+      "id": 106,
+      "name": "CharitableGiftAnnuityAnnuitant"
+    },
+    {
+      "id": 107,
+      "name": "ClaimAppealRelatedParty"
+    },
+    {
+      "id": 108,
+      "name": "ClaimAppraisal"
+    },
+    {
+      "id": 109,
+      "name": "ClaimCostRelatedParty"
+    },
+    {
+      "id": 110,
+      "name": "ClaimEstimate"
+    },
+    {
+      "id": 111,
+      "name": "ClaimEventRelatedParty"
+    },
+    {
+      "id": 112,
+      "name": "ClaimFraudRelatedParty"
+    },
+    {
+      "id": 113,
+      "name": "ClaimInjuredParty"
+    },
+    {
+      "id": 114,
+      "name": "ClaimPayingParty"
+    },
+    {
+      "id": 115,
+      "name": "ClaimPaymentRelatedParty"
+    },
+    {
+      "id": 116,
+      "name": "ClaimRelatedParty"
+    },
+    {
+      "id": 117,
+      "name": "ClaimSubrogationPayment"
+    },
+    {
+      "id": 118,
+      "name": "ClassificationSystem"
+    },
+    {
+      "id": 119,
+      "name": "ClinicalTrialContractRelatedParty"
+    },
+    {
+      "id": 120,
+      "name": "ClinicalTrialInvestigationalMedicinalProduct"
+    },
+    {
+      "id": 121,
+      "name": "ClinicalTrialPeerPartyStatement"
+    },
+    {
+      "id": 122,
+      "name": "ClinicalTrialPeerReviewRelatedParty"
+    },
+    {
+      "id": 123,
+      "name": "ClinicalTrialRelatedParty"
+    },
+    {
+      "id": 124,
+      "name": "ClusterParty"
+    },
+    {
+      "id": 125,
+      "name": "CodeSystem"
+    },
+    {
+      "id": 126,
+      "name": "CollectionEventRelatedParty"
+    },
+    {
+      "id": 127,
+      "name": "Combiner"
+    },
+    {
+      "id": 128,
+      "name": "CommercialMortgageLoanAssumption"
+    },
+    {
+      "id": 129,
+      "name": "CommercialMortgageLoanBuyDown"
+    },
+    {
+      "id": 130,
+      "name": "CommercialMortgageSecondaryMarketTransaction"
+    },
+    {
+      "id": 131,
+      "name": "CommercialPolypropyleneGrade"
+    },
+    {
+      "id": 132,
+      "name": "CommunicationRelatedParty"
+    },
+    {
+      "id": 133,
+      "name": "CompatibleUnitPrice"
+    },
+    {
+      "id": 134,
+      "name": "ComplianceStandard"
+    },
+    {
+      "id": 135,
+      "name": "ComponentCalibration"
+    },
+    {
+      "id": 136,
+      "name": "ComponentCertification"
+    },
+    {
+      "id": 137,
+      "name": "ComponentEventRelatedParty"
+    },
+    {
+      "id": 138,
+      "name": "ComponentExtraordinaryRepairRelatedParty"
+    },
+    {
+      "id": 139,
+      "name": "ComponentGroupRelatedParty"
+    },
+    {
+      "id": 140,
+      "name": "ComponentImprovementRelatedParty"
+    },
+    {
+      "id": 141,
+      "name": "ComponentInspection"
+    },
+    {
+      "id": 142,
+      "name": "ComponentInspectionRelatedParty"
+    },
+    {
+      "id": 143,
+      "name": "ComponentLocationRelatedParty"
+    },
+    {
+      "id": 144,
+      "name": "ComponentMaintenanceRelatedParty"
+    },
+    {
+      "id": 145,
+      "name": "ComponentRelatedParty"
+    },
+    {
+      "id": 146,
+      "name": "ConstructionLoanDisbursement"
+    },
+    {
+      "id": 147,
+      "name": "ConsumerLineOfCreditRelatedParty"
+    },
+    {
+      "id": 148,
+      "name": "ConsumerLoanRelatedParty"
+    },
+    {
+      "id": 149,
+      "name": "ConsumerPaymentCardRelatedParty"
+    },
+    {
+      "id": 150,
+      "name": "ContainerOwner"
+    },
+    {
+      "id": 151,
+      "name": "ContractAssignment"
+    },
+    {
+      "id": 152,
+      "name": "ContractEventRelatedParty"
+    },
+    {
+      "id": 153,
+      "name": "ContractFeePaymentRelatedParty"
+    },
+    {
+      "id": 154,
+      "name": "ContractFeeRelatedParty"
+    },
+    {
+      "id": 155,
+      "name": "Contractor"
+    },
+    {
+      "id": 156,
+      "name": "ContractPartyDelivery"
+    },
+    {
+      "id": 157,
+      "name": "ContractPartyExecution"
+    },
+    {
+      "id": 158,
+      "name": "ContractRelatedParty"
+    },
+    {
+      "id": 159,
+      "name": "ContractSectionClauseAssetPaymentSchedule"
+    },
+    {
+      "id": 160,
+      "name": "ContractSectionClauseEventRelatedParty"
+    },
+    {
+      "id": 161,
+      "name": "ContractSectionClauseOfferRelatedParty"
+    },
+    {
+      "id": 162,
+      "name": "ContractSectionClauseOfferResponseRelatedParty"
+    },
+    {
+      "id": 163,
+      "name": "CoreEventRelatedParty"
+    },
+    {
+      "id": 164,
+      "name": "CountryKeyParty"
+    },
+    {
+      "id": 165,
+      "name": "CountrySubdivisionKeyParty"
+    },
+    {
+      "id": 166,
+      "name": "CreditGrantor"
+    },
+    {
+      "id": 167,
+      "name": "CreditGrantorRelatedParty"
+    },
+    {
+      "id": 168,
+      "name": "CreditInsuranceCompany"
+    },
+    {
+      "id": 169,
+      "name": "CreditorPayment"
+    },
+    {
+      "id": 170,
+      "name": "CreditRatingAgency"
+    },
+    {
+      "id": 171,
+      "name": "CreditScoringModel"
+    },
+    {
+      "id": 172,
+      "name": "CruiseLine"
+    },
+    {
+      "id": 173,
+      "name": "CurrencyHighLow"
+    },
+    {
+      "id": 174,
+      "name": "Custodian"
+    },
+    {
+      "id": 175,
+      "name": "Customer"
+    },
+    {
+      "id": 176,
+      "name": "CustomerAccountAction"
+    },
+    {
+      "id": 177,
+      "name": "CustomerAccountAssumption"
+    },
+    {
+      "id": 178,
+      "name": "CustomerAccountBillingStatementRelatedParty"
+    },
+    {
+      "id": 179,
+      "name": "CustomerAccountChurnFromParty"
+    },
+    {
+      "id": 180,
+      "name": "CustomerAccountChurnToParty"
+    },
+    {
+      "id": 181,
+      "name": "CustomerAccountCreditRequest"
+    },
+    {
+      "id": 182,
+      "name": "CustomerAccountDisbursement"
+    },
+    {
+      "id": 183,
+      "name": "CustomerAccountExpenseIncome"
+    },
+    {
+      "id": 184,
+      "name": "CustomerAccountFeeRelatedParty"
+    },
+    {
+      "id": 185,
+      "name": "CustomerAccountInsurance"
+    },
+    {
+      "id": 186,
+      "name": "CustomerAccountPaymentCard"
+    },
+    {
+      "id": 187,
+      "name": "CustomerAccountRelatedParty"
+    },
+    {
+      "id": 188,
+      "name": "CustomerAccountReview"
+    },
+    {
+      "id": 189,
+      "name": "CustomerAccountSource"
+    },
+    {
+      "id": 190,
+      "name": "CustomerAction"
+    },
+    {
+      "id": 191,
+      "name": "CustomerAssetCondition"
+    },
+    {
+      "id": 192,
+      "name": "CustomerAssetFinancialAssessment"
+    },
+    {
+      "id": 193,
+      "name": "CustomerAssetRelatedParty"
+    },
+    {
+      "id": 194,
+      "name": "CustomerAuthorizedParty"
+    },
+    {
+      "id": 195,
+      "name": "CustomerCertification"
+    },
+    {
+      "id": 196,
+      "name": "CustomerCollectionAgencyReferral"
+    },
+    {
+      "id": 197,
+      "name": "CustomerLead"
+    },
+    {
+      "id": 198,
+      "name": "CustomerMilitaryService"
+    },
+    {
+      "id": 199,
+      "name": "CustomerRelatedParty"
+    },
+    {
+      "id": 200,
+      "name": "CustomerSalesActivityRelatedParty"
+    },
+    {
+      "id": 201,
+      "name": "CustomerSpouse"
+    },
+    {
+      "id": 202,
+      "name": "CustomerSpouseEmployment"
+    },
+    {
+      "id": 203,
+      "name": "DailyDrillingReportMudAdditive"
+    },
+    {
+      "id": 204,
+      "name": "DailyDrillingReportRelatedParty"
+    },
+    {
+      "id": 205,
+      "name": "Dependent"
+    },
+    {
+      "id": 206,
+      "name": "DetonationEventRelatedParty"
+    },
+    {
+      "id": 207,
+      "name": "DetonationRelatedParty"
+    },
+    {
+      "id": 208,
+      "name": "DeviceEventRelatedParty"
+    },
+    {
+      "id": 209,
+      "name": "DeviceLocationRelatedParty"
+    },
+    {
+      "id": 210,
+      "name": "DeviceRelatedParty"
+    },
+    {
+      "id": 211,
+      "name": "DocumentCopyEventRelatedParty"
+    },
+    {
+      "id": 212,
+      "name": "DocumentCopyRelatedParty"
+    },
+    {
+      "id": 213,
+      "name": "DocumentEventRelatedParty"
+    },
+    {
+      "id": 214,
+      "name": "DocumentRelatedParty"
+    },
+    {
+      "id": 215,
+      "name": "DoNotContactRegistry"
+    },
+    {
+      "id": 216,
+      "name": "DrillHoleAssetRelatedParty"
+    },
+    {
+      "id": 217,
+      "name": "DrillHoleEventRelatedParty"
+    },
+    {
+      "id": 218,
+      "name": "DrillHoleLog"
+    },
+    {
+      "id": 219,
+      "name": "Driver"
+    },
+    {
+      "id": 220,
+      "name": "Drone"
+    },
+    {
+      "id": 221,
+      "name": "DrugFormulary"
+    },
+    {
+      "id": 222,
+      "name": "EducationalInstitution"
+    },
+    {
+      "id": 223,
+      "name": "EmissionsFromTransmissionAndDistributionLossesSupplierSpecificMethod"
+    },
+    {
+      "id": 224,
+      "name": "Employee"
+    },
+    {
+      "id": 225,
+      "name": "EmployeeBenefitPlanBeneficiary"
+    },
+    {
+      "id": 226,
+      "name": "EmployeeCertification"
+    },
+    {
+      "id": 227,
+      "name": "EmployeeHrEventRelatedParty"
+    },
+    {
+      "id": 228,
+      "name": "EmployeeMilitaryService"
+    },
+    {
+      "id": 229,
+      "name": "EmployeePayrollPaymentMethod"
+    },
+    {
+      "id": 230,
+      "name": "EmployeePositionAvailability"
+    },
+    {
+      "id": 231,
+      "name": "EmployeeReference"
+    },
+    {
+      "id": 232,
+      "name": "EmployeeRelatedParty"
+    },
+    {
+      "id": 233,
+      "name": "EmployeeSpouse"
+    },
+    {
+      "id": 234,
+      "name": "EmployeeSpouseEmployment"
+    },
+    {
+      "id": 235,
+      "name": "EmployeeTraining"
+    },
+    {
+      "id": 236,
+      "name": "Employer"
+    },
+    {
+      "id": 237,
+      "name": "EmploymentLeadSource"
+    },
+    {
+      "id": 238,
+      "name": "EncounterAncillaryServiceParty"
+    },
+    {
+      "id": 239,
+      "name": "EncounterAssetRelatedParty"
+    },
+    {
+      "id": 240,
+      "name": "EncounterConsumableItemRelatedParty"
+    },
+    {
+      "id": 241,
+      "name": "EncounterDentalProcedureRelatedParty"
+    },
+    {
+      "id": 242,
+      "name": "EncounterDrugRelatedParty"
+    },
+    {
+      "id": 243,
+      "name": "EncounterFinanciallyResponsibleParty"
+    },
+    {
+      "id": 244,
+      "name": "EncounterGoal"
+    },
+    {
+      "id": 245,
+      "name": "EncounterGoalRelatedParty"
+    },
+    {
+      "id": 246,
+      "name": "EncounterMedicalProcedureRelatedParty"
+    },
+    {
+      "id": 247,
+      "name": "EncounterNote"
+    },
+    {
+      "id": 248,
+      "name": "EncounterNutritionProductRelatedParty"
+    },
+    {
+      "id": 249,
+      "name": "EncounterProductRelatedParty"
+    },
+    {
+      "id": 250,
+      "name": "EncounterRelatedParty"
+    },
+    {
+      "id": 251,
+      "name": "EncounterServiceRelatedParty"
+    },
+    {
+      "id": 252,
+      "name": "EncounterTestRelatedParty"
+    },
+    {
+      "id": 253,
+      "name": "EncounterVisionProductRelatedParty"
+    },
+    {
+      "id": 254,
+      "name": "EnergyMarketplace"
+    },
+    {
+      "id": 255,
+      "name": "EnergyTradingProductRelatedParty"
+    },
+    {
+      "id": 256,
+      "name": "Entertainment"
+    },
+    {
+      "id": 257,
+      "name": "EnvironmentalFactorSourceLibrary"
+    },
+    {
+      "id": 258,
+      "name": "EnvironmentalFootprintAssuranceRelatedParty"
+    },
+    {
+      "id": 259,
+      "name": "EventRelatedParty"
+    },
+    {
+      "id": 260,
+      "name": "EventSponsor"
+    },
+    {
+      "id": 261,
+      "name": "Examiner"
+    },
+    {
+      "id": 262,
+      "name": "Exchange"
+    },
+    {
+      "id": 263,
+      "name": "Facility"
+    },
+    {
+      "id": 264,
+      "name": "FacilityInspection"
+    },
+    {
+      "id": 265,
+      "name": "FacilityRelatedParty"
+    },
+    {
+      "id": 266,
+      "name": "FacilityScheduleRelatedParty"
+    },
+    {
+      "id": 267,
+      "name": "Farm"
+    },
+    {
+      "id": 268,
+      "name": "FarmActivityAssetRelatedParty"
+    },
+    {
+      "id": 269,
+      "name": "FarmActivityRelatedParty"
+    },
+    {
+      "id": 270,
+      "name": "FarmActivityTransferRelatedParty"
+    },
+    {
+      "id": 271,
+      "name": "FarmEventRelatedParty"
+    },
+    {
+      "id": 272,
+      "name": "FarmLegalStructureRelatedParty"
+    },
+    {
+      "id": 273,
+      "name": "FarmLoan"
+    },
+    {
+      "id": 274,
+      "name": "FarmPropertyBoundary"
+    },
+    {
+      "id": 275,
+      "name": "FarmPropertyRelatedParty"
+    },
+    {
+      "id": 276,
+      "name": "FarmRelatedParty"
+    },
+    {
+      "id": 277,
+      "name": "Fee"
+    },
+    {
+      "id": 278,
+      "name": "FinancialProductRecommendation"
+    },
+    {
+      "id": 279,
+      "name": "FinancialProductRelatedParty"
+    },
+    {
+      "id": 280,
+      "name": "FinancingParty"
+    },
+    {
+      "id": 281,
+      "name": "FlightReservation"
+    },
+    {
+      "id": 282,
+      "name": "FocusGroupParty"
+    },
+    {
+      "id": 283,
+      "name": "ForeignExchange"
+    },
+    {
+      "id": 284,
+      "name": "Franchisee"
+    },
+    {
+      "id": 285,
+      "name": "FraudulentActivityRelatedParty"
+    },
+    {
+      "id": 286,
+      "name": "FuelAssemblyEventRelatedParty"
+    },
+    {
+      "id": 287,
+      "name": "FuelRodEventRelatedParty"
+    },
+    {
+      "id": 288,
+      "name": "FundAdviser"
+    },
+    {
+      "id": 289,
+      "name": "FundFamily"
+    },
+    {
+      "id": 290,
+      "name": "FundFamilyRelatedParty"
+    },
+    {
+      "id": 291,
+      "name": "FundManager"
+    },
+    {
+      "id": 292,
+      "name": "FundRecommendation"
+    },
+    {
+      "id": 293,
+      "name": "FundRelatedParty"
+    },
+    {
+      "id": 294,
+      "name": "FundSubadvisor"
+    },
+    {
+      "id": 295,
+      "name": "FundTransferAgent"
+    },
+    {
+      "id": 296,
+      "name": "FundTrustee"
+    },
+    {
+      "id": 297,
+      "name": "FundUnderwriter"
+    },
+    {
+      "id": 298,
+      "name": "GeneAkaName"
+    },
+    {
+      "id": 299,
+      "name": "GeneAlias"
+    },
+    {
+      "id": 300,
+      "name": "GeneId"
+    },
+    {
+      "id": 301,
+      "name": "GeneratorPowerOutputForecast"
+    },
+    {
+      "id": 302,
+      "name": "GenericMedicinalProduct"
+    },
+    {
+      "id": 303,
+      "name": "GeneSequenceFormatConverterType"
+    },
+    {
+      "id": 304,
+      "name": "GeneSequenceFormatRelatedParty"
+    },
+    {
+      "id": 305,
+      "name": "GeneSequencingFileRelatedParty"
+    },
+    {
+      "id": 306,
+      "name": "GeographicAreaKeyParty"
+    },
+    {
+      "id": 307,
+      "name": "GeographicAreaMeteorology"
+    },
+    {
+      "id": 308,
+      "name": "GeographicAreaRelatedParty"
+    },
+    {
+      "id": 309,
+      "name": "GeophysicalSurveyCostRelatedParty"
+    },
+    {
+      "id": 310,
+      "name": "GeophysicalSurveyEventRelatedParty"
+    },
+    {
+      "id": 311,
+      "name": "GeophysicalSurveyRelatedParty"
+    },
+    {
+      "id": 312,
+      "name": "GeophysicalSurveySoftwareFileRelatedParty"
+    },
+    {
+      "id": 313,
+      "name": "GeophysicalSurveyTestCostRelatedParty"
+    },
+    {
+      "id": 314,
+      "name": "GeophysicalSurveyTestRelatedParty"
+    },
+    {
+      "id": 315,
+      "name": "GiftCardTransactionRelatedParty"
+    },
+    {
+      "id": 316,
+      "name": "GoTermDatabase"
+    },
+    {
+      "id": 317,
+      "name": "GoTermReferenceParty"
+    },
+    {
+      "id": 318,
+      "name": "GovernmentAgriculturalProgram"
+    },
+    {
+      "id": 319,
+      "name": "GovernmentCaseCommunication"
+    },
+    {
+      "id": 320,
+      "name": "GovernmentGrant"
+    },
+    {
+      "id": 321,
+      "name": "GovernmentProgramRelatedParty"
+    },
+    {
+      "id": 322,
+      "name": "GroupSponsor"
+    },
+    {
+      "id": 323,
+      "name": "HealthcareFacilityRelatedParty"
+    },
+    {
+      "id": 324,
+      "name": "HealthcareGroup"
+    },
+    {
+      "id": 325,
+      "name": "HealthcareNetwork"
+    },
+    {
+      "id": 326,
+      "name": "HealthPlanPolicyContinuation"
+    },
+    {
+      "id": 327,
+      "name": "HealthPlanPolicyRelatedParty"
+    },
+    {
+      "id": 328,
+      "name": "HealthPlanPolicySubsidy"
+    },
+    {
+      "id": 329,
+      "name": "HealthPlanQuoteParty"
+    },
+    {
+      "id": 330,
+      "name": "HealthQualityMeasureSet"
+    },
+    {
+      "id": 331,
+      "name": "HedgingCounterparty"
+    },
+    {
+      "id": 332,
+      "name": "HomeInspection"
+    },
+    {
+      "id": 333,
+      "name": "HospitalityRating"
+    },
+    {
+      "id": 334,
+      "name": "HotelCriteriaRating"
+    },
+    {
+      "id": 335,
+      "name": "HotelRelatedParty"
+    },
+    {
+      "id": 336,
+      "name": "Household"
+    },
+    {
+      "id": 337,
+      "name": "HouseholdMember"
+    },
+    {
+      "id": 338,
+      "name": "HydrologicFormationAppropriation"
+    },
+    {
+      "id": 339,
+      "name": "HydrologicFormationAssetRelatedParty"
+    },
+    {
+      "id": 340,
+      "name": "HydrologicFormationEntitlementRight"
+    },
+    {
+      "id": 341,
+      "name": "HydrologicFormationRelatedParty"
+    },
+    {
+      "id": 342,
+      "name": "Identification"
+    },
+    {
+      "id": 343,
+      "name": "ImageRelatedParty"
+    },
+    {
+      "id": 344,
+      "name": "IncidentCause"
+    },
+    {
+      "id": 345,
+      "name": "IncidentEventRelatedParty"
+    },
+    {
+      "id": 346,
+      "name": "IncidentInjuredParty"
+    },
+    {
+      "id": 347,
+      "name": "IncidentInjuryTreatmentRelatedParty"
+    },
+    {
+      "id": 348,
+      "name": "IncidentPartyInjury"
+    },
+    {
+      "id": 349,
+      "name": "IncidentPartyInjuryRelatedParty"
+    },
+    {
+      "id": 350,
+      "name": "IncidentPartyInjuryTreatmentRelatedParty"
+    },
+    {
+      "id": 351,
+      "name": "IncidentRelatedParty"
+    },
+    {
+      "id": 352,
+      "name": "IncidentWitnessStatement"
+    },
+    {
+      "id": 353,
+      "name": "Index"
+    },
+    {
+      "id": 354,
+      "name": "IndividualParty"
+    },
+    {
+      "id": 355,
+      "name": "InspectionRelatedParty"
+    },
+    {
+      "id": 356,
+      "name": "InsuranceCompany"
+    },
+    {
+      "id": 357,
+      "name": "InsuranceCompanyLineOfBusiness"
+    },
+    {
+      "id": 358,
+      "name": "InsuranceCompanyRelatedParty"
+    },
+    {
+      "id": 359,
+      "name": "InsuranceCoverageRelatedParty"
+    },
+    {
+      "id": 360,
+      "name": "InsurancePolicy"
+    },
+    {
+      "id": 361,
+      "name": "InsurancePolicyRelatedParty"
+    },
+    {
+      "id": 362,
+      "name": "InsuredParty"
+    },
+    {
+      "id": 363,
+      "name": "Insurer"
+    },
+    {
+      "id": 364,
+      "name": "InsurerRelatedParty"
+    },
+    {
+      "id": 365,
+      "name": "IntercarrierAgreementRelatedParty"
+    },
+    {
+      "id": 366,
+      "name": "InterconnectionSettlementTransactionRelatedParty"
+    },
+    {
+      "id": 367,
+      "name": "InternalCostOfFunds"
+    },
+    {
+      "id": 368,
+      "name": "InternationalWireTransfer"
+    },
+    {
+      "id": 369,
+      "name": "InterventionEventRelatedParty"
+    },
+    {
+      "id": 370,
+      "name": "InterventionRelatedParty"
+    },
+    {
+      "id": 371,
+      "name": "InventoryItemLocationAdjustment"
+    },
+    {
+      "id": 372,
+      "name": "InventoryTransactionRelatedParty"
+    },
+    {
+      "id": 373,
+      "name": "Inverter"
+    },
+    {
+      "id": 374,
+      "name": "InvestigationalMedicinalProduct"
+    },
+    {
+      "id": 375,
+      "name": "InvestmentGroup"
+    },
+    {
+      "id": 376,
+      "name": "Invoice"
+    },
+    {
+      "id": 377,
+      "name": "IpAddress"
+    },
+    {
+      "id": 378,
+      "name": "IssueActivityCostRelatedParty"
+    },
+    {
+      "id": 379,
+      "name": "IssueActivityRelatedParty"
+    },
+    {
+      "id": 380,
+      "name": "Issuer"
+    },
+    {
+      "id": 381,
+      "name": "IssueRelatedParty"
+    },
+    {
+      "id": 382,
+      "name": "IssueTicket"
+    },
+    {
+      "id": 383,
+      "name": "ItemCertification"
+    },
+    {
+      "id": 384,
+      "name": "ItemIdentifier"
+    },
+    {
+      "id": 385,
+      "name": "ItemRelatedParty"
+    },
+    {
+      "id": 386,
+      "name": "JointBondObligor"
+    },
+    {
+      "id": 387,
+      "name": "JournalTransaction"
+    },
+    {
+      "id": 388,
+      "name": "Jurisdiction"
+    },
+    {
+      "id": 389,
+      "name": "LeadManager"
+    },
+    {
+      "id": 390,
+      "name": "LeadSource"
+    },
+    {
+      "id": 391,
+      "name": "LearningEventIncurredCostItem"
+    },
+    {
+      "id": 392,
+      "name": "LearningEventRelatedParty"
+    },
+    {
+      "id": 393,
+      "name": "LegalActionRelatedParty"
+    },
+    {
+      "id": 394,
+      "name": "LegalEntity"
+    },
+    {
+      "id": 395,
+      "name": "LegalEntityAuthorizedParty"
+    },
+    {
+      "id": 396,
+      "name": "LegalEntityBusinessMetricRelatedParty"
+    },
+    {
+      "id": 397,
+      "name": "LegalEntityCertification"
+    },
+    {
+      "id": 398,
+      "name": "LegalEntityCollectionAgencyReferral"
+    },
+    {
+      "id": 399,
+      "name": "LegalEntityParty"
+    },
+    {
+      "id": 400,
+      "name": "LegalEntityRelatedParty"
+    },
+    {
+      "id": 401,
+      "name": "Lender"
+    },
+    {
+      "id": 402,
+      "name": "Level2Level3DataType"
+    },
+    {
+      "id": 403,
+      "name": "LicensingOrganization"
+    },
+    {
+      "id": 404,
+      "name": "LienRelatedParty"
+    },
+    {
+      "id": 405,
+      "name": "LineOfCredit"
+    },
+    {
+      "id": 406,
+      "name": "LoadAssetRelatedParty"
+    },
+    {
+      "id": 407,
+      "name": "LoadRelatedParty"
+    },
+    {
+      "id": 408,
+      "name": "LocationRelatedParty"
+    },
+    {
+      "id": 409,
+      "name": "LocationVendorApprovedItem"
+    },
+    {
+      "id": 410,
+      "name": "Locomotive"
+    },
+    {
+      "id": 411,
+      "name": "LogAssetRelatedParty"
+    },
+    {
+      "id": 412,
+      "name": "LogEventRelatedParty"
+    },
+    {
+      "id": 413,
+      "name": "LogRelatedParty"
+    },
+    {
+      "id": 414,
+      "name": "LoyaltyAccount"
+    },
+    {
+      "id": 415,
+      "name": "LoyaltyAccountAppreciationGift"
+    },
+    {
+      "id": 416,
+      "name": "LoyaltyAccountMember"
+    },
+    {
+      "id": 417,
+      "name": "LoyaltyAccountRelatedParty"
+    },
+    {
+      "id": 418,
+      "name": "LoyaltyProgram"
+    },
+    {
+      "id": 419,
+      "name": "MaintenanceOperationRelatedParty"
+    },
+    {
+      "id": 420,
+      "name": "MaintenanceTaskComponentOperationRelatedParty"
+    },
+    {
+      "id": 421,
+      "name": "MaintenanceTaskItemCost"
+    },
+    {
+      "id": 422,
+      "name": "MaintenanceTaskRelatedParty"
+    },
+    {
+      "id": 423,
+      "name": "Manufacturer"
+    },
+    {
+      "id": 424,
+      "name": "ManufacturerFacilityRelatedParty"
+    },
+    {
+      "id": 425,
+      "name": "MarketingAuthorizationHolder"
+    },
+    {
+      "id": 426,
+      "name": "MarketingCampaignRelatedParty"
+    },
+    {
+      "id": 427,
+      "name": "MarketingCampaignTargetProfileListParty"
+    },
+    {
+      "id": 428,
+      "name": "MarketingCampaignTaskRelatedParty"
+    },
+    {
+      "id": 429,
+      "name": "MarketingEventPartyContact"
+    },
+    {
+      "id": 430,
+      "name": "MarketingEventRelatedParty"
+    },
+    {
+      "id": 431,
+      "name": "MarketingEventTargetParty"
+    },
+    {
+      "id": 432,
+      "name": "MarketingProgram"
+    },
+    {
+      "id": 433,
+      "name": "MarketParticipant"
+    },
+    {
+      "id": 434,
+      "name": "MarketParticipantIdentification"
+    },
+    {
+      "id": 435,
+      "name": "MarketParticipantRelatedParty"
+    },
+    {
+      "id": 436,
+      "name": "Marketplace"
+    },
+    {
+      "id": 437,
+      "name": "MasterContractSponsor"
+    },
+    {
+      "id": 438,
+      "name": "MedicalCareOrderRelatedParty"
+    },
+    {
+      "id": 439,
+      "name": "MedicalConditionIntervention"
+    },
+    {
+      "id": 440,
+      "name": "MedicalTestRelatedParty"
+    },
+    {
+      "id": 441,
+      "name": "MedicinalProductClassification"
+    },
+    {
+      "id": 442,
+      "name": "MedicinalProductRelatedParty"
+    },
+    {
+      "id": 443,
+      "name": "Member"
+    },
+    {
+      "id": 444,
+      "name": "MemberChurnFromParty"
+    },
+    {
+      "id": 445,
+      "name": "MemberChurnToParty"
+    },
+    {
+      "id": 446,
+      "name": "MemberFamilyMember"
+    },
+    {
+      "id": 447,
+      "name": "MemberHealthStatementRelatedParty"
+    },
+    {
+      "id": 448,
+      "name": "MemberLead"
+    },
+    {
+      "id": 449,
+      "name": "MemberNote"
+    },
+    {
+      "id": 450,
+      "name": "MemberRelatedParty"
+    },
+    {
+      "id": 451,
+      "name": "MemberRiskScore"
+    },
+    {
+      "id": 452,
+      "name": "MemberSpouseEmployment"
+    },
+    {
+      "id": 453,
+      "name": "Merchant"
+    },
+    {
+      "id": 454,
+      "name": "MerchantEventRelatedParty"
+    },
+    {
+      "id": 455,
+      "name": "MerchantServiceProvider"
+    },
+    {
+      "id": 456,
+      "name": "MeterModel"
+    },
+    {
+      "id": 457,
+      "name": "MeterRelatedParty"
+    },
+    {
+      "id": 458,
+      "name": "MineActivityAssetRelatedParty"
+    },
+    {
+      "id": 459,
+      "name": "MineActivityRelatedParty"
+    },
+    {
+      "id": 460,
+      "name": "MineDocumentRelatedParty"
+    },
+    {
+      "id": 461,
+      "name": "MineEventRelatedParty"
+    },
+    {
+      "id": 462,
+      "name": "MineFeatureRelatedParty"
+    },
+    {
+      "id": 463,
+      "name": "MineFeatureSoftwareFileRelatedParty"
+    },
+    {
+      "id": 464,
+      "name": "MineGasTestRelatedParty"
+    },
+    {
+      "id": 465,
+      "name": "MineProcessingActivityAssetRelatedParty"
+    },
+    {
+      "id": 466,
+      "name": "MineProcessingActivityRelatedParty"
+    },
+    {
+      "id": 467,
+      "name": "MineRelatedParty"
+    },
+    {
+      "id": 468,
+      "name": "MobileCarrierServiceProvider"
+    },
+    {
+      "id": 469,
+      "name": "ModelYearTrimValue"
+    },
+    {
+      "id": 470,
+      "name": "MortgageApplicant"
+    },
+    {
+      "id": 471,
+      "name": "MortgageApplication"
+    },
+    {
+      "id": 472,
+      "name": "MortgageAssignment"
+    },
+    {
+      "id": 473,
+      "name": "MortgageAssumption"
+    },
+    {
+      "id": 474,
+      "name": "MortgageInsurance"
+    },
+    {
+      "id": 475,
+      "name": "MortgageLoanBuyDown"
+    },
+    {
+      "id": 476,
+      "name": "MortgageLoanSummaryRelatedParty"
+    },
+    {
+      "id": 477,
+      "name": "MortgageSecondaryMarketTransaction"
+    },
+    {
+      "id": 478,
+      "name": "NetPromoterScore"
+    },
+    {
+      "id": 479,
+      "name": "Network"
+    },
+    {
+      "id": 480,
+      "name": "NetworkEventRelatedParty"
+    },
+    {
+      "id": 481,
+      "name": "NetworkRelatedParty"
+    },
+    {
+      "id": 482,
+      "name": "NetworkTransactionRelatedParty"
+    },
+    {
+      "id": 483,
+      "name": "NetworkTransactionSettlement"
+    },
+    {
+      "id": 484,
+      "name": "NetworkTransactionSettlementRelatedParty"
+    },
+    {
+      "id": 485,
+      "name": "NuclearEventRelatedParty"
+    },
+    {
+      "id": 486,
+      "name": "NuclearReactorPartyOccupationalRadiationDose"
+    },
+    {
+      "id": 487,
+      "name": "NuclearReactorRelatedParty"
+    },
+    {
+      "id": 488,
+      "name": "ObservationAssetEventRelatedParty"
+    },
+    {
+      "id": 489,
+      "name": "ObservationAssetRelatedParty"
+    },
+    {
+      "id": 490,
+      "name": "ObservationMediaEventRelatedParty"
+    },
+    {
+      "id": 491,
+      "name": "ObservationProcessingRelatedParty"
+    },
+    {
+      "id": 492,
+      "name": "ObservationRelatedParty"
+    },
+    {
+      "id": 493,
+      "name": "OccupationalClassificationSystem"
+    },
+    {
+      "id": 494,
+      "name": "OccurrenceRelatedParty"
+    },
+    {
+      "id": 495,
+      "name": "OilGasPropertyDivisionOrder"
+    },
+    {
+      "id": 496,
+      "name": "OilGasPropertyFunding"
+    },
+    {
+      "id": 497,
+      "name": "OilGasPropertyInterest"
+    },
+    {
+      "id": 498,
+      "name": "OilGasPropertyRelatedParty"
+    },
+    {
+      "id": 499,
+      "name": "OilGasPropertyRoyalty"
+    },
+    {
+      "id": 500,
+      "name": "OptionRelatedParty"
+    },
+    {
+      "id": 501,
+      "name": "OrderCharge"
+    },
+    {
+      "id": 502,
+      "name": "OrderConfirmToParty"
+    },
+    {
+      "id": 503,
+      "name": "OrderLineCharge"
+    },
+    {
+      "id": 504,
+      "name": "OrderRelatedParty"
+    },
+    {
+      "id": 505,
+      "name": "OreProcessingActivityAssetRelatedParty"
+    },
+    {
+      "id": 506,
+      "name": "OreProcessingActivityRelatedParty"
+    },
+    {
+      "id": 507,
+      "name": "OreProcessingActivityTransferRelatedParty"
+    },
+    {
+      "id": 508,
+      "name": "OrganicClaimAgency"
+    },
+    {
+      "id": 509,
+      "name": "OrganizationalDisclosureRelatedParty"
+    },
+    {
+      "id": 510,
+      "name": "OrganizationalPolicyRelatedParty"
+    },
+    {
+      "id": 511,
+      "name": "OrganizationParty"
+    },
+    {
+      "id": 512,
+      "name": "OrganizationPartyRelatedParty"
+    },
+    {
+      "id": 513,
+      "name": "OrganizationSafetyStandard"
+    },
+    {
+      "id": 514,
+      "name": "OutageRelatedParty"
+    },
+    {
+      "id": 515,
+      "name": "PackageActivity"
+    },
+    {
+      "id": 516,
+      "name": "PalletType"
+    },
+    {
+      "id": 517,
+      "name": "Partner"
+    },
+    {
+      "id": 518,
+      "name": "PartyAffinitySales"
+    },
+    {
+      "id": 519,
+      "name": "PartyAppreciationGift"
+    },
+    {
+      "id": 520,
+      "name": "PartyAssetOwnership"
+    },
+    {
+      "id": 521,
+      "name": "PartyAssociation"
+    },
+    {
+      "id": 522,
+      "name": "PartyAuthenticationMethod"
+    },
+    {
+      "id": 523,
+      "name": "PartyBankAccount"
+    },
+    {
+      "id": 524,
+      "name": "PartyBiodiversityMetric"
+    },
+    {
+      "id": 525,
+      "name": "PartyBusinessEthicsMetric"
+    },
+    {
+      "id": 526,
+      "name": "PartyBusinessMetric"
+    },
+    {
+      "id": 527,
+      "name": "PartyBusinessMetricRelatedParty"
+    },
+    {
+      "id": 528,
+      "name": "PartyCertification"
+    },
+    {
+      "id": 529,
+      "name": "PartyChurnPropensity"
+    },
+    {
+      "id": 530,
+      "name": "PartyCommission"
+    },
+    {
+      "id": 531,
+      "name": "PartyConsent"
+    },
+    {
+      "id": 532,
+      "name": "PartyContactPreference"
+    },
+    {
+      "id": 533,
+      "name": "PartyContactPurpose"
+    },
+    {
+      "id": 534,
+      "name": "PartyContract"
+    },
+    {
+      "id": 535,
+      "name": "PartyCountryIdentification"
+    },
+    {
+      "id": 536,
+      "name": "PartyCreditStatus"
+    },
+    {
+      "id": 537,
+      "name": "PartyCurrencyUsage"
+    },
+    {
+      "id": 538,
+      "name": "PartyCustomerAssetOwnership"
+    },
+    {
+      "id": 539,
+      "name": "PartyCustomerGroupServiceDisruption"
+    },
+    {
+      "id": 540,
+      "name": "PartyCustomerGroupWaterMetric"
+    },
+    {
+      "id": 541,
+      "name": "PartyCybersecurityMetric"
+    },
+    {
+      "id": 542,
+      "name": "PartyDataPrivacyMetric"
+    },
+    {
+      "id": 543,
+      "name": "PartyDocument"
+    },
+    {
+      "id": 544,
+      "name": "PartyEarnedCommission"
+    },
+    {
+      "id": 545,
+      "name": "PartyEmail"
+    },
+    {
+      "id": 546,
+      "name": "PartyEvent"
+    },
+    {
+      "id": 547,
+      "name": "PartyEventRelatedParty"
+    },
+    {
+      "id": 548,
+      "name": "PartyFocusGroupMembership"
+    },
+    {
+      "id": 549,
+      "name": "PartyGeographicAreaBiodiversityMetric"
+    },
+    {
+      "id": 550,
+      "name": "PartyGeographicAreaBusinessEthicsMetric"
+    },
+    {
+      "id": 551,
+      "name": "PartyGeographicAreaBusinessMetric"
+    },
+    {
+      "id": 552,
+      "name": "PartyGeographicAreaCustomerGroupServiceDisruption"
+    },
+    {
+      "id": 553,
+      "name": "PartyGeographicAreaCybersecurityMetric"
+    },
+    {
+      "id": 554,
+      "name": "PartyGeographicAreaDataPrivacyMetric"
+    },
+    {
+      "id": 555,
+      "name": "PartyGeographicAreaGreenhouseGas"
+    },
+    {
+      "id": 556,
+      "name": "PartyGeographicAreaHealthSafetyTrainingMetric"
+    },
+    {
+      "id": 557,
+      "name": "PartyGeographicAreaIndirectEmissions"
+    },
+    {
+      "id": 558,
+      "name": "PartyGeographicAreaResponsibleSourcing"
+    },
+    {
+      "id": 559,
+      "name": "PartyGeographicAreaWaste"
+    },
+    {
+      "id": 560,
+      "name": "PartyGeographicAreaWasteQuality"
+    },
+    {
+      "id": 561,
+      "name": "PartyGeographicAreaWaterQuality"
+    },
+    {
+      "id": 562,
+      "name": "PartyGeographicAreaWaterUtilization"
+    },
+    {
+      "id": 563,
+      "name": "PartyGreenhouseGas"
+    },
+    {
+      "id": 564,
+      "name": "PartyHealthSafetyTrainingMetric"
+    },
+    {
+      "id": 565,
+      "name": "PartyIdentification"
+    },
+    {
+      "id": 566,
+      "name": "PartyIndirectEmissions"
+    },
+    {
+      "id": 567,
+      "name": "PartyItemEnvironmentalFootprint"
+    },
+    {
+      "id": 568,
+      "name": "PartyItemResponsibleSourcing"
+    },
+    {
+      "id": 569,
+      "name": "PartyItemSustainableContentAsPerStandardVersionJurisdiction"
+    },
+    {
+      "id": 570,
+      "name": "PartyItemSustainableContentBaseline"
+    },
+    {
+      "id": 571,
+      "name": "PartyJurisdictionAreaWaterUtilization"
+    },
+    {
+      "id": 572,
+      "name": "PartyJurisdictionBiodiversityMetric"
+    },
+    {
+      "id": 573,
+      "name": "PartyJurisdictionBusinessEthicsMetric"
+    },
+    {
+      "id": 574,
+      "name": "PartyJurisdictionBusinessMetric"
+    },
+    {
+      "id": 575,
+      "name": "PartyJurisdictionCustomerGroupServiceDisruption"
+    },
+    {
+      "id": 576,
+      "name": "PartyJurisdictionCybersecurityMetric"
+    },
+    {
+      "id": 577,
+      "name": "PartyJurisdictionDataPrivacyMetric"
+    },
+    {
+      "id": 578,
+      "name": "PartyJurisdictionGreenhouseGas"
+    },
+    {
+      "id": 579,
+      "name": "PartyJurisdictionHealthSafetyTrainingMetric"
+    },
+    {
+      "id": 580,
+      "name": "PartyJurisdictionIndirectEmissions"
+    },
+    {
+      "id": 581,
+      "name": "PartyJurisdictionResponsibleSourcing"
+    },
+    {
+      "id": 582,
+      "name": "PartyJurisdictionWaste"
+    },
+    {
+      "id": 583,
+      "name": "PartyJurisdictionWasteQuality"
+    },
+    {
+      "id": 584,
+      "name": "PartyJurisdictionWaterQuality"
+    },
+    {
+      "id": 585,
+      "name": "PartyJurisdictionWaterUtilizationCost"
+    },
+    {
+      "id": 586,
+      "name": "PartyLanguageUsage"
+    },
+    {
+      "id": 587,
+      "name": "PartyLearningEvent"
+    },
+    {
+      "id": 588,
+      "name": "PartyLegalAction"
+    },
+    {
+      "id": 589,
+      "name": "PartyLocation"
+    },
+    {
+      "id": 590,
+      "name": "PartyLocationGeographicCriteria"
+    },
+    {
+      "id": 591,
+      "name": "PartyMarketingEvent"
+    },
+    {
+      "id": 592,
+      "name": "PartyMarketingProgram"
+    },
+    {
+      "id": 593,
+      "name": "PartyMarketSegment"
+    },
+    {
+      "id": 594,
+      "name": "PartyMilitaryService"
+    },
+    {
+      "id": 595,
+      "name": "PartyOrganization"
+    },
+    {
+      "id": 596,
+      "name": "PartyOrganizationalDisclosure"
+    },
+    {
+      "id": 597,
+      "name": "PartyOrganizationalPolicy"
+    },
+    {
+      "id": 598,
+      "name": "PartyOrganizationRelatedParty"
+    },
+    {
+      "id": 599,
+      "name": "PartyProcessTypeGreenhouseGas"
+    },
+    {
+      "id": 600,
+      "name": "PartyProcessTypeWaste"
+    },
+    {
+      "id": 601,
+      "name": "PartyProcessTypeWasteQuality"
+    },
+    {
+      "id": 602,
+      "name": "PartyProcessTypeWaterQuality"
+    },
+    {
+      "id": 603,
+      "name": "PartyProcessTypeWaterUtilization"
+    },
+    {
+      "id": 604,
+      "name": "PartyProgram"
+    },
+    {
+      "id": 605,
+      "name": "PartyPromotion"
+    },
+    {
+      "id": 606,
+      "name": "PartyPropensity"
+    },
+    {
+      "id": 607,
+      "name": "PartyProtocolProcedureIntervention"
+    },
+    {
+      "id": 608,
+      "name": "PartyRelationship"
+    },
+    {
+      "id": 609,
+      "name": "PartyRelationshipEvent"
+    },
+    {
+      "id": 610,
+      "name": "PartyResponsibleSourcing"
+    },
+    {
+      "id": 611,
+      "name": "PartyRole"
+    },
+    {
+      "id": 612,
+      "name": "PartyRoleEvent"
+    },
+    {
+      "id": 613,
+      "name": "PartySatisfactionRating"
+    },
+    {
+      "id": 614,
+      "name": "PartyScopeCategoryGreenhouseGas"
+    },
+    {
+      "id": 615,
+      "name": "PartyScopeCategoryPurposeGreenhouseGasEquivalentEmissions"
+    },
+    {
+      "id": 616,
+      "name": "PartyScopePurposeGreenhouseGasEquivalentEmissions"
+    },
+    {
+      "id": 617,
+      "name": "PartySecurityQuestion"
+    },
+    {
+      "id": 618,
+      "name": "PartySkill"
+    },
+    {
+      "id": 619,
+      "name": "PartySocialMediaPlatformUser"
+    },
+    {
+      "id": 620,
+      "name": "PartyStatus"
+    },
+    {
+      "id": 621,
+      "name": "PartySurvey"
+    },
+    {
+      "id": 622,
+      "name": "PartySurveyQuestionResponse"
+    },
+    {
+      "id": 623,
+      "name": "PartyTelephoneNumber"
+    },
+    {
+      "id": 624,
+      "name": "PartyVendorGeneratorIndirectEmissions"
+    },
+    {
+      "id": 625,
+      "name": "PartyVendorIndirectEmissions"
+    },
+    {
+      "id": 626,
+      "name": "PartyWaste"
+    },
+    {
+      "id": 627,
+      "name": "PartyWasteQuality"
+    },
+    {
+      "id": 628,
+      "name": "PartyWaterQuality"
+    },
+    {
+      "id": 629,
+      "name": "PartyWaterUtilization"
+    },
+    {
+      "id": 630,
+      "name": "Passenger"
+    },
+    {
+      "id": 631,
+      "name": "PassengerBaggageCheckInEventRelatedParty"
+    },
+    {
+      "id": 632,
+      "name": "PassengerBoardingEventRelatedParty"
+    },
+    {
+      "id": 633,
+      "name": "PassengerBorderControlEventRelatedParty"
+    },
+    {
+      "id": 634,
+      "name": "PassengerCheckInEventRelatedParty"
+    },
+    {
+      "id": 635,
+      "name": "PassengerSecurityEventRelatedParty"
+    },
+    {
+      "id": 636,
+      "name": "Patient"
+    },
+    {
+      "id": 637,
+      "name": "PatientAtRisk"
+    },
+    {
+      "id": 638,
+      "name": "PatientFamilyMember"
+    },
+    {
+      "id": 639,
+      "name": "PatientLead"
+    },
+    {
+      "id": 640,
+      "name": "PatientNote"
+    },
+    {
+      "id": 641,
+      "name": "PatientRelatedParty"
+    },
+    {
+      "id": 642,
+      "name": "PatientScreening"
+    },
+    {
+      "id": 643,
+      "name": "PatientSpouseEmployment"
+    },
+    {
+      "id": 644,
+      "name": "Payee"
+    },
+    {
+      "id": 645,
+      "name": "Payment"
+    },
+    {
+      "id": 646,
+      "name": "PaymentCardRelatedParty"
+    },
+    {
+      "id": 647,
+      "name": "PaymentCardTransactionStatusType"
+    },
+    {
+      "id": 648,
+      "name": "PaymentRecovery"
+    },
+    {
+      "id": 649,
+      "name": "PharmaceuticalProductPharmacovigilanceEventRelatedParty"
+    },
+    {
+      "id": 650,
+      "name": "Pharmacy"
+    },
+    {
+      "id": 651,
+      "name": "Photograph"
+    },
+    {
+      "id": 652,
+      "name": "PickList"
+    },
+    {
+      "id": 653,
+      "name": "PipeEventRelatedParty"
+    },
+    {
+      "id": 654,
+      "name": "PipeInspectionRelatedParty"
+    },
+    {
+      "id": 655,
+      "name": "PipeLeakRelatedParty"
+    },
+    {
+      "id": 656,
+      "name": "PipelineCapacityCharge"
+    },
+    {
+      "id": 657,
+      "name": "PipelineTestRelatedParty"
+    },
+    {
+      "id": 658,
+      "name": "PipePressureClass"
+    },
+    {
+      "id": 659,
+      "name": "PipeStandardType"
+    },
+    {
+      "id": 660,
+      "name": "PlantEventRelatedParty"
+    },
+    {
+      "id": 661,
+      "name": "PlantRelatedParty"
+    },
+    {
+      "id": 662,
+      "name": "PoChangeOrderRelatedParty"
+    },
+    {
+      "id": 663,
+      "name": "PolicyAssignment"
+    },
+    {
+      "id": 664,
+      "name": "Policyholder"
+    },
+    {
+      "id": 665,
+      "name": "PolicySurveyQuestionResponse"
+    },
+    {
+      "id": 666,
+      "name": "PortActivityRelatedParty"
+    },
+    {
+      "id": 667,
+      "name": "PortRelatedParty"
+    },
+    {
+      "id": 668,
+      "name": "PortVesselConcessionRelatedParty"
+    },
+    {
+      "id": 669,
+      "name": "PortVesselFeeRelatedParty"
+    },
+    {
+      "id": 670,
+      "name": "PortVesselRepairFeeRelatedParty"
+    },
+    {
+      "id": 671,
+      "name": "PosDeviceRelatedParty"
+    },
+    {
+      "id": 672,
+      "name": "PosEventRelatedParty"
+    },
+    {
+      "id": 673,
+      "name": "PositionRelatedParty"
+    },
+    {
+      "id": 674,
+      "name": "PreauthorizationAppealRelatedParty"
+    },
+    {
+      "id": 675,
+      "name": "PrescriptionRelatedParty"
+    },
+    {
+      "id": 676,
+      "name": "PriceCurve"
+    },
+    {
+      "id": 677,
+      "name": "PriceCurvePriceSource"
+    },
+    {
+      "id": 678,
+      "name": "PriceCurveSource"
+    },
+    {
+      "id": 679,
+      "name": "PriceListType"
+    },
+    {
+      "id": 680,
+      "name": "PrivatePlacement"
+    },
+    {
+      "id": 681,
+      "name": "ProcedureRelatedParty"
+    },
+    {
+      "id": 682,
+      "name": "Process"
+    },
+    {
+      "id": 683,
+      "name": "ProcessAssetRelatedParty"
+    },
+    {
+      "id": 684,
+      "name": "ProcessComponentReadingAlarmRelatedParty"
+    },
+    {
+      "id": 685,
+      "name": "ProcessingPlantBid"
+    },
+    {
+      "id": 686,
+      "name": "ProcessingPlantEventAssetRelatedParty"
+    },
+    {
+      "id": 687,
+      "name": "ProcessingPlantEventRelatedParty"
+    },
+    {
+      "id": 688,
+      "name": "ProcessingPlantProcessAdditive"
+    },
+    {
+      "id": 689,
+      "name": "ProcessingPlantProcessCatalyst"
+    },
+    {
+      "id": 690,
+      "name": "ProcessingPlantProcessComponentRelatedParty"
+    },
+    {
+      "id": 691,
+      "name": "ProcessingPlantProcessFeedstock"
+    },
+    {
+      "id": 692,
+      "name": "ProcessingPlantProcessRelatedParty"
+    },
+    {
+      "id": 693,
+      "name": "ProcessingPlantRelatedParty"
+    },
+    {
+      "id": 694,
+      "name": "ProcessingPlantStructureRelatedParty"
+    },
+    {
+      "id": 695,
+      "name": "ProcessingPlantTestAssetRelatedParty"
+    },
+    {
+      "id": 696,
+      "name": "ProcessingPlantTestCostRelatedParty"
+    },
+    {
+      "id": 697,
+      "name": "ProcessingPlantTestDocumentRelatedParty"
+    },
+    {
+      "id": 698,
+      "name": "ProcessingPlantTestMethod"
+    },
+    {
+      "id": 699,
+      "name": "ProcessingPlantTestRelatedParty"
+    },
+    {
+      "id": 700,
+      "name": "Processor"
+    },
+    {
+      "id": 701,
+      "name": "ProcessRelatedParty"
+    },
+    {
+      "id": 702,
+      "name": "ProcessSafetyStandardRelatedParty"
+    },
+    {
+      "id": 703,
+      "name": "ProcessTestAssetRelatedParty"
+    },
+    {
+      "id": 704,
+      "name": "ProcessTestCostRelatedParty"
+    },
+    {
+      "id": 705,
+      "name": "ProcessTestDocumentRelatedParty"
+    },
+    {
+      "id": 706,
+      "name": "ProcessTestRelatedParty"
+    },
+    {
+      "id": 707,
+      "name": "ProcessTestStandard"
+    },
+    {
+      "id": 708,
+      "name": "ProduceProductGradeCodeAgency"
+    },
+    {
+      "id": 709,
+      "name": "ProductAlert"
+    },
+    {
+      "id": 710,
+      "name": "ProductEventRelatedParty"
+    },
+    {
+      "id": 711,
+      "name": "ProductFee"
+    },
+    {
+      "id": 712,
+      "name": "ProductFeeRelatedParty"
+    },
+    {
+      "id": 713,
+      "name": "ProductGroup"
+    },
+    {
+      "id": 714,
+      "name": "ProductIdentifier"
+    },
+    {
+      "id": 715,
+      "name": "ProductIngredient"
+    },
+    {
+      "id": 716,
+      "name": "ProductLocationContact"
+    },
+    {
+      "id": 717,
+      "name": "ProductRatingLevel"
+    },
+    {
+      "id": 718,
+      "name": "ProductRecall"
+    },
+    {
+      "id": 719,
+      "name": "ProductRegistration"
+    },
+    {
+      "id": 720,
+      "name": "ProductRegulation"
+    },
+    {
+      "id": 721,
+      "name": "ProductRelatedParty"
+    },
+    {
+      "id": 722,
+      "name": "ProductRestriction"
+    },
+    {
+      "id": 723,
+      "name": "ProductVoluntaryReportingRelatedParty"
+    },
+    {
+      "id": 724,
+      "name": "ProgramRelatedParty"
+    },
+    {
+      "id": 725,
+      "name": "Project"
+    },
+    {
+      "id": 726,
+      "name": "ProjectAuthorizationRelatedParty"
+    },
+    {
+      "id": 727,
+      "name": "ProjectPhaseAuthorizationRelatedParty"
+    },
+    {
+      "id": 728,
+      "name": "ProjectPhaseRelatedParty"
+    },
+    {
+      "id": 729,
+      "name": "ProjectRelatedParty"
+    },
+    {
+      "id": 730,
+      "name": "Promotion"
+    },
+    {
+      "id": 731,
+      "name": "PromotionAccountDisbursement"
+    },
+    {
+      "id": 732,
+      "name": "PromotionRelatedParty"
+    },
+    {
+      "id": 733,
+      "name": "PropertyAppraisal"
+    },
+    {
+      "id": 734,
+      "name": "PropertyAssessedValue"
+    },
+    {
+      "id": 735,
+      "name": "PropertyDivisionOrder"
+    },
+    {
+      "id": 736,
+      "name": "PropertyFunding"
+    },
+    {
+      "id": 737,
+      "name": "PropertyInterest"
+    },
+    {
+      "id": 738,
+      "name": "PropertyLocationParty"
+    },
+    {
+      "id": 739,
+      "name": "PropertyRelatedParty"
+    },
+    {
+      "id": 740,
+      "name": "PropertyRepairRelatedParty"
+    },
+    {
+      "id": 741,
+      "name": "PropertyRoyalty"
+    },
+    {
+      "id": 742,
+      "name": "ProteinDatabase"
+    },
+    {
+      "id": 743,
+      "name": "ProtocolRelatedParty"
+    },
+    {
+      "id": 744,
+      "name": "Provider"
+    },
+    {
+      "id": 745,
+      "name": "PublicHealthAgency"
+    },
+    {
+      "id": 746,
+      "name": "PublicOfferPurchase"
+    },
+    {
+      "id": 747,
+      "name": "PurchaseOrderRelatedParty"
+    },
+    {
+      "id": 748,
+      "name": "QualifiedTaxPlanType"
+    },
+    {
+      "id": 749,
+      "name": "RadioStation"
+    },
+    {
+      "id": 750,
+      "name": "Railcar"
+    },
+    {
+      "id": 751,
+      "name": "RatePlanRelatedParty"
+    },
+    {
+      "id": 752,
+      "name": "ReadingTypeSchedule"
+    },
+    {
+      "id": 753,
+      "name": "ReceivershipCreditor"
+    },
+    {
+      "id": 754,
+      "name": "ReceivershipProceedingAssetLiquidation"
+    },
+    {
+      "id": 755,
+      "name": "ReceivershipProceedingAssetLiquidationRelatedParty"
+    },
+    {
+      "id": 756,
+      "name": "ReceivershipProceedingRelatedParty"
+    },
+    {
+      "id": 757,
+      "name": "ReceivingAgent"
+    },
+    {
+      "id": 758,
+      "name": "RecipeRelatedParty"
+    },
+    {
+      "id": 759,
+      "name": "ReferenceSource"
+    },
+    {
+      "id": 760,
+      "name": "ReferralSource"
+    },
+    {
+      "id": 761,
+      "name": "RefineryEventAssetRelatedParty"
+    },
+    {
+      "id": 762,
+      "name": "RefineryEventRelatedParty"
+    },
+    {
+      "id": 763,
+      "name": "RefineryProcessAdditive"
+    },
+    {
+      "id": 764,
+      "name": "RefineryProcessCatalyst"
+    },
+    {
+      "id": 765,
+      "name": "RefineryProcessComponentRelatedParty"
+    },
+    {
+      "id": 766,
+      "name": "RefineryProcessFeedstock"
+    },
+    {
+      "id": 767,
+      "name": "RefineryProcessRelatedParty"
+    },
+    {
+      "id": 768,
+      "name": "RefineryRelatedParty"
+    },
+    {
+      "id": 769,
+      "name": "RefineryTestAssetRelatedParty"
+    },
+    {
+      "id": 770,
+      "name": "RefineryTestCostRelatedParty"
+    },
+    {
+      "id": 771,
+      "name": "RefineryTestDocumentRelatedParty"
+    },
+    {
+      "id": 772,
+      "name": "RefineryTestMethod"
+    },
+    {
+      "id": 773,
+      "name": "RefineryTestRelatedParty"
+    },
+    {
+      "id": 774,
+      "name": "Registrar"
+    },
+    {
+      "id": 775,
+      "name": "RegistryRelatedParty"
+    },
+    {
+      "id": 776,
+      "name": "RegistryWaitList"
+    },
+    {
+      "id": 777,
+      "name": "Regulation"
+    },
+    {
+      "id": 778,
+      "name": "Regulator"
+    },
+    {
+      "id": 779,
+      "name": "RegulatoryAgency"
+    },
+    {
+      "id": 780,
+      "name": "RegulatoryAuthority"
+    },
+    {
+      "id": 781,
+      "name": "Reinspection"
+    },
+    {
+      "id": 782,
+      "name": "RelatedParty"
+    },
+    {
+      "id": 783,
+      "name": "RelatedPartyAuthenticationMethod"
+    },
+    {
+      "id": 784,
+      "name": "ReportingRequirement"
+    },
+    {
+      "id": 785,
+      "name": "RepurchaseAgreementRelatedParty"
+    },
+    {
+      "id": 786,
+      "name": "RequestForInformation"
+    },
+    {
+      "id": 787,
+      "name": "RequestForProposal"
+    },
+    {
+      "id": 788,
+      "name": "RequestForQuotation"
+    },
+    {
+      "id": 789,
+      "name": "Requisition"
+    },
+    {
+      "id": 790,
+      "name": "RequisitionRelatedParty"
+    },
+    {
+      "id": 791,
+      "name": "ReservationRelatedParty"
+    },
+    {
+      "id": 792,
+      "name": "Resource"
+    },
+    {
+      "id": 793,
+      "name": "ResourcePropertyDivisionOrder"
+    },
+    {
+      "id": 794,
+      "name": "ResourcePropertyFunding"
+    },
+    {
+      "id": 795,
+      "name": "ResourcePropertyInterest"
+    },
+    {
+      "id": 796,
+      "name": "ResourcePropertyRelatedParty"
+    },
+    {
+      "id": 797,
+      "name": "ResourcePropertyRoyalty"
+    },
+    {
+      "id": 798,
+      "name": "ResponsibilityCenter"
+    },
+    {
+      "id": 799,
+      "name": "Restaurant"
+    },
+    {
+      "id": 800,
+      "name": "RestaurantRelatedParty"
+    },
+    {
+      "id": 801,
+      "name": "Retailer"
+    },
+    {
+      "id": 802,
+      "name": "Review"
+    },
+    {
+      "id": 803,
+      "name": "ReviewComment"
+    },
+    {
+      "id": 804,
+      "name": "RevolvingCreditAccountRelatedParty"
+    },
+    {
+      "id": 805,
+      "name": "RfiRelatedParty"
+    },
+    {
+      "id": 806,
+      "name": "RfpRelatedParty"
+    },
+    {
+      "id": 807,
+      "name": "RfqRelatedParty"
+    },
+    {
+      "id": 808,
+      "name": "SafetyObservation"
+    },
+    {
+      "id": 809,
+      "name": "SailingScheduleSegmentRelatedParty"
+    },
+    {
+      "id": 810,
+      "name": "SampleCost"
+    },
+    {
+      "id": 811,
+      "name": "SampleRelatedParty"
+    },
+    {
+      "id": 812,
+      "name": "SampleTestRelatedParty"
+    },
+    {
+      "id": 813,
+      "name": "SampleTestTypeStandardVersionExemption"
+    },
+    {
+      "id": 814,
+      "name": "Satellite"
+    },
+    {
+      "id": 815,
+      "name": "SatelliteRelatedParty"
+    },
+    {
+      "id": 816,
+      "name": "ScheduledFlightLegAircraftFlightOperationCharge"
+    },
+    {
+      "id": 817,
+      "name": "ScheduledFlightLegBumpedPassenger"
+    },
+    {
+      "id": 818,
+      "name": "ScheduledFlightLegEventRelatedParty"
+    },
+    {
+      "id": 819,
+      "name": "ScheduledFlightLegRelatedParty"
+    },
+    {
+      "id": 820,
+      "name": "ScheduledFlightLegWaitlist"
+    },
+    {
+      "id": 821,
+      "name": "ScheduledLearningEventIncurredCostItem"
+    },
+    {
+      "id": 822,
+      "name": "ScheduledLearningEventParty"
+    },
+    {
+      "id": 823,
+      "name": "ScheduledLearningEventProfileTargetParty"
+    },
+    {
+      "id": 824,
+      "name": "ScheduledLearningEventRelatedParty"
+    },
+    {
+      "id": 825,
+      "name": "ScheduledLearningEventTargetProfileListParty"
+    },
+    {
+      "id": 826,
+      "name": "ScheduledLearningRelatedParty"
+    },
+    {
+      "id": 827,
+      "name": "ScheduleFlightLegRelatedParty"
+    },
+    {
+      "id": 828,
+      "name": "Scope3Category10ProcessingOfSoldProductsSiteSpecificMethod"
+    },
+    {
+      "id": 829,
+      "name": "Scope3Category12EndOfLifeTreatmentOfSoldProductsSummary"
+    },
+    {
+      "id": 830,
+      "name": "Scope3Category3FuelAndEnergyRelatedEmissionsSupplierSpecificMethod"
+    },
+    {
+      "id": 831,
+      "name": "Scope3Category4UpstreamTransportationAndDistributionDistanceBasedMethod"
+    },
+    {
+      "id": 832,
+      "name": "Scope3Category4UpstreamTransportationAndDistributionFuelBasedMethod"
+    },
+    {
+      "id": 833,
+      "name": "Scope3Category4UpstreamTransportationAndDistributionSpendBasedMethod"
+    },
+    {
+      "id": 834,
+      "name": "Scope3Category5WasteGeneratedInOperationsSummary"
+    },
+    {
+      "id": 835,
+      "name": "Scope3Category8UpstreamLeasedAssetsLessorSpecificMethod"
+    },
+    {
+      "id": 836,
+      "name": "Scope3Category9DownstreamTransportationAndDistributionEmissions"
+    },
+    {
+      "id": 837,
+      "name": "SeasonalFieldBoundary"
+    },
+    {
+      "id": 838,
+      "name": "SeasonalFieldRelatedParty"
+    },
+    {
+      "id": 839,
+      "name": "SecuritiesTradingOrganization"
+    },
+    {
+      "id": 840,
+      "name": "SecurityIdentificationSource"
+    },
+    {
+      "id": 841,
+      "name": "SeedRelatedParty"
+    },
+    {
+      "id": 842,
+      "name": "SeismicDataAcquisitionEventRelatedParty"
+    },
+    {
+      "id": 843,
+      "name": "SeismicDataFileRelatedParty"
+    },
+    {
+      "id": 844,
+      "name": "SeismicDataProcessRelatedParty"
+    },
+    {
+      "id": 845,
+      "name": "SeismicDataProcessSoftwareProductRelatedParty"
+    },
+    {
+      "id": 846,
+      "name": "SeismicMathematicalProcessingFee"
+    },
+    {
+      "id": 847,
+      "name": "SeismicMathematicalProcessRelatedParty"
+    },
+    {
+      "id": 848,
+      "name": "SensorReadingTypeSchedule"
+    },
+    {
+      "id": 849,
+      "name": "SensorRelatedParty"
+    },
+    {
+      "id": 850,
+      "name": "ServiceLocationPointOfDelivery"
+    },
+    {
+      "id": 851,
+      "name": "ServiceLocationRelatedParty"
+    },
+    {
+      "id": 852,
+      "name": "ServiceLocationSeatingSeat"
+    },
+    {
+      "id": 853,
+      "name": "ServiceProvider"
+    },
+    {
+      "id": 854,
+      "name": "ServiceProviderDentalProcedureRelatedParty"
+    },
+    {
+      "id": 855,
+      "name": "ServiceProviderDrugRelatedParty"
+    },
+    {
+      "id": 856,
+      "name": "ServiceProviderInsurancePolicy"
+    },
+    {
+      "id": 857,
+      "name": "ServiceProviderMedicalProcedureRelatedParty"
+    },
+    {
+      "id": 858,
+      "name": "ServiceProviderRelatedParty"
+    },
+    {
+      "id": 859,
+      "name": "ServiceProviderRetailProductRelatedParty"
+    },
+    {
+      "id": 860,
+      "name": "ServiceProviderServiceRelatedParty"
+    },
+    {
+      "id": 861,
+      "name": "ServiceProviderVisionProductRelatedParty"
+    },
+    {
+      "id": 862,
+      "name": "Servicer"
+    },
+    {
+      "id": 863,
+      "name": "ServiceRequestActivityCostRelatedParty"
+    },
+    {
+      "id": 864,
+      "name": "ServiceRequestActivityRelatedParty"
+    },
+    {
+      "id": 865,
+      "name": "ServiceRequestChargeRelatedParty"
+    },
+    {
+      "id": 866,
+      "name": "ServiceRequestPartySatisfactionRating"
+    },
+    {
+      "id": 867,
+      "name": "ServiceRequestRelatedParty"
+    },
+    {
+      "id": 868,
+      "name": "SetOfFinancialStatements"
+    },
+    {
+      "id": 869,
+      "name": "SettlementInstructionRelatedParty"
+    },
+    {
+      "id": 870,
+      "name": "Shipment"
+    },
+    {
+      "id": 871,
+      "name": "ShipmentAssignment"
+    },
+    {
+      "id": 872,
+      "name": "ShipmentBarCode"
+    },
+    {
+      "id": 873,
+      "name": "ShipmentCharge"
+    },
+    {
+      "id": 874,
+      "name": "ShipmentChargeRelatedParty"
+    },
+    {
+      "id": 875,
+      "name": "ShipmentDamageRelatedParty"
+    },
+    {
+      "id": 876,
+      "name": "ShipmentEventRelatedParty"
+    },
+    {
+      "id": 877,
+      "name": "ShipmentItemBarCode"
+    },
+    {
+      "id": 878,
+      "name": "ShipmentItemConsolidation"
+    },
+    {
+      "id": 879,
+      "name": "ShipmentItemRelatedParty"
+    },
+    {
+      "id": 880,
+      "name": "ShipmentLocationRelatedParty"
+    },
+    {
+      "id": 881,
+      "name": "ShipmentReconsignment"
+    },
+    {
+      "id": 882,
+      "name": "ShipmentRejection"
+    },
+    {
+      "id": 883,
+      "name": "ShipmentRelatedParty"
+    },
+    {
+      "id": 884,
+      "name": "ShipmentRouteRelatedParty"
+    },
+    {
+      "id": 885,
+      "name": "ShippingLocationAvailableEquipment"
+    },
+    {
+      "id": 886,
+      "name": "ShippingLocationRelatedParty"
+    },
+    {
+      "id": 887,
+      "name": "SmeltingActivityAssetRelatedParty"
+    },
+    {
+      "id": 888,
+      "name": "SmeltingActivityRelatedParty"
+    },
+    {
+      "id": 889,
+      "name": "SmeltingActivityTransferRelatedParty"
+    },
+    {
+      "id": 890,
+      "name": "SmeltingFacilityEventRelatedParty"
+    },
+    {
+      "id": 891,
+      "name": "SoilSampleParty"
+    },
+    {
+      "id": 892,
+      "name": "SoilSurveyRelatedParty"
+    },
+    {
+      "id": 893,
+      "name": "SolarArray"
+    },
+    {
+      "id": 894,
+      "name": "SolarArrayEventRelatedParty"
+    },
+    {
+      "id": 895,
+      "name": "SolarCell"
+    },
+    {
+      "id": 896,
+      "name": "SolarPanel"
+    },
+    {
+      "id": 897,
+      "name": "SolarPanelRelatedParty"
+    },
+    {
+      "id": 898,
+      "name": "SolarPowerOutputForecast"
+    },
+    {
+      "id": 899,
+      "name": "SpecialPurposeVehicle"
+    },
+    {
+      "id": 900,
+      "name": "SpecimenRelatedParty"
+    },
+    {
+      "id": 901,
+      "name": "Sponsor"
+    },
+    {
+      "id": 902,
+      "name": "Standard"
+    },
+    {
+      "id": 903,
+      "name": "SteamReformer"
+    },
+    {
+      "id": 904,
+      "name": "StepUpTransformer"
+    },
+    {
+      "id": 905,
+      "name": "Store"
+    },
+    {
+      "id": 906,
+      "name": "StoreRelatedParty"
+    },
+    {
+      "id": 907,
+      "name": "StructureRelatedParty"
+    },
+    {
+      "id": 908,
+      "name": "StructureRepairRelatedParty"
+    },
+    {
+      "id": 909,
+      "name": "Subject"
+    },
+    {
+      "id": 910,
+      "name": "SubjectEventRelatedParty"
+    },
+    {
+      "id": 911,
+      "name": "SubjectFilialGeneration"
+    },
+    {
+      "id": 912,
+      "name": "SubjectGenomeRelatedParty"
+    },
+    {
+      "id": 913,
+      "name": "SubjectRelatedParty"
+    },
+    {
+      "id": 914,
+      "name": "SubjectSurveyRelatedParty"
+    },
+    {
+      "id": 915,
+      "name": "SubscriberRelatedParty"
+    },
+    {
+      "id": 916,
+      "name": "Surcharge"
+    },
+    {
+      "id": 917,
+      "name": "SurveyRelatedParty"
+    },
+    {
+      "id": 918,
+      "name": "SwapRelatedParty"
+    },
+    {
+      "id": 919,
+      "name": "SyndicatedDataProvider"
+    },
+    {
+      "id": 920,
+      "name": "SyndicatedDataProviderProductAlternatedIdentifier"
+    },
+    {
+      "id": 921,
+      "name": "SyndicatedDataProviderProductIdentifier"
+    },
+    {
+      "id": 922,
+      "name": "TariffConditionRelatedParty"
+    },
+    {
+      "id": 923,
+      "name": "TariffEventRelatedParty"
+    },
+    {
+      "id": 924,
+      "name": "TariffFee"
+    },
+    {
+      "id": 925,
+      "name": "TariffProgramRelatedParty"
+    },
+    {
+      "id": 926,
+      "name": "TariffPromotionRelatedParty"
+    },
+    {
+      "id": 927,
+      "name": "TariffRelatedParty"
+    },
+    {
+      "id": 928,
+      "name": "TariffTax"
+    },
+    {
+      "id": 929,
+      "name": "TaskAuthorizationRelatedParty"
+    },
+    {
+      "id": 930,
+      "name": "TaskChargeRelatedParty"
+    },
+    {
+      "id": 931,
+      "name": "TaskCostRelatedParty"
+    },
+    {
+      "id": 932,
+      "name": "TaskDeliverableRelatedParty"
+    },
+    {
+      "id": 933,
+      "name": "TaskEstimateRelatedParty"
+    },
+    {
+      "id": 934,
+      "name": "TaskItemRelatedParty"
+    },
+    {
+      "id": 935,
+      "name": "TaskRelatedParty"
+    },
+    {
+      "id": 936,
+      "name": "Tax"
+    },
+    {
+      "id": 937,
+      "name": "TaxingAuthority"
+    },
+    {
+      "id": 938,
+      "name": "TaxType"
+    },
+    {
+      "id": 939,
+      "name": "TestCost"
+    },
+    {
+      "id": 940,
+      "name": "TestingEquipmentCalibration"
+    },
+    {
+      "id": 941,
+      "name": "TestingEquipmentReadingTypeSchedule"
+    },
+    {
+      "id": 942,
+      "name": "TestRelatedParty"
+    },
+    {
+      "id": 943,
+      "name": "TicketRelatedParty"
+    },
+    {
+      "id": 944,
+      "name": "Towboat"
+    },
+    {
+      "id": 945,
+      "name": "TowScheduleLegRelatedParty"
+    },
+    {
+      "id": 946,
+      "name": "TradeAffirmingFacility"
+    },
+    {
+      "id": 947,
+      "name": "TradeMatchingFacility"
+    },
+    {
+      "id": 948,
+      "name": "TradingAccount"
+    },
+    {
+      "id": 949,
+      "name": "TradingAccountRelatedParty"
+    },
+    {
+      "id": 950,
+      "name": "TradingBookRelatedParty"
+    },
+    {
+      "id": 951,
+      "name": "Trailer"
+    },
+    {
+      "id": 952,
+      "name": "TrainScheduleLegRelatedParty"
+    },
+    {
+      "id": 953,
+      "name": "TransactionAuthorization"
+    },
+    {
+      "id": 954,
+      "name": "TransactionAuthorizationParty"
+    },
+    {
+      "id": 955,
+      "name": "TransactionCode"
+    },
+    {
+      "id": 956,
+      "name": "TransactionCollateral"
+    },
+    {
+      "id": 957,
+      "name": "TransactionEventRelatedParty"
+    },
+    {
+      "id": 958,
+      "name": "TransactionFeeRelatedParty"
+    },
+    {
+      "id": 959,
+      "name": "TransactionRelatedParty"
+    },
+    {
+      "id": 960,
+      "name": "TransactionRequestType"
+    },
+    {
+      "id": 961,
+      "name": "TransactionSubmissionMode"
+    },
+    {
+      "id": 962,
+      "name": "TransferAgent"
+    },
+    {
+      "id": 963,
+      "name": "TransitionOfCareRelatedParty"
+    },
+    {
+      "id": 964,
+      "name": "TransitOperationRelatedParty"
+    },
+    {
+      "id": 965,
+      "name": "TransportationVehicle"
+    },
+    {
+      "id": 966,
+      "name": "TreatmentPlanExtendedTeamMember"
+    },
+    {
+      "id": 967,
+      "name": "TreatmentPlanGoal"
+    },
+    {
+      "id": 968,
+      "name": "TreatmentPlanGoalRelatedParty"
+    },
+    {
+      "id": 969,
+      "name": "Trustee"
+    },
+    {
+      "id": 970,
+      "name": "UccFilingRelatedParty"
+    },
+    {
+      "id": 971,
+      "name": "UccPledgedCollateralAsset"
+    },
+    {
+      "id": 972,
+      "name": "UdiStandardType"
+    },
+    {
+      "id": 973,
+      "name": "Underwriter"
+    },
+    {
+      "id": 974,
+      "name": "Union"
+    },
+    {
+      "id": 975,
+      "name": "UniqueDeviceIdentifier"
+    },
+    {
+      "id": 976,
+      "name": "UsDomesticWireTransfer"
+    },
+    {
+      "id": 977,
+      "name": "Vehicle"
+    },
+    {
+      "id": 978,
+      "name": "VehicleOwnership"
+    },
+    {
+      "id": 979,
+      "name": "VehicleRepairRelatedParty"
+    },
+    {
+      "id": 980,
+      "name": "VehicleScheduleLegRelatedParty"
+    },
+    {
+      "id": 981,
+      "name": "VehicleUse"
+    },
+    {
+      "id": 982,
+      "name": "Vendor"
+    },
+    {
+      "id": 983,
+      "name": "VendorAuthorizedParty"
+    },
+    {
+      "id": 984,
+      "name": "VendorCertification"
+    },
+    {
+      "id": 985,
+      "name": "VendorItemLotRelatedParty"
+    },
+    {
+      "id": 986,
+      "name": "VendorRelatedParty"
+    },
+    {
+      "id": 987,
+      "name": "Vessel"
+    },
+    {
+      "id": 988,
+      "name": "VesselBerthActivityRelatedParty"
+    },
+    {
+      "id": 989,
+      "name": "VesselRelatedParty"
+    },
+    {
+      "id": 990,
+      "name": "Visit"
+    },
+    {
+      "id": 991,
+      "name": "VoltageRegulator"
+    },
+    {
+      "id": 992,
+      "name": "VolumeCurve"
+    },
+    {
+      "id": 993,
+      "name": "VolumeCurvePriceSource"
+    },
+    {
+      "id": 994,
+      "name": "VolumeCurveSource"
+    },
+    {
+      "id": 995,
+      "name": "Warehouse"
+    },
+    {
+      "id": 996,
+      "name": "WarehouseItemDisposition"
+    },
+    {
+      "id": 997,
+      "name": "WarehouseRelatedParty"
+    },
+    {
+      "id": 998,
+      "name": "WaterBodyAssetRelatedParty"
+    },
+    {
+      "id": 999,
+      "name": "WaterBodyRelatedParty"
+    },
+    {
+      "id": 1000,
+      "name": "WaterRisk"
+    },
+    {
+      "id": 1001,
+      "name": "WaterTreatmentProcedureAdditive"
+    },
+    {
+      "id": 1002,
+      "name": "WaterTreatmentProcedureCatalyst"
+    },
+    {
+      "id": 1003,
+      "name": "WaterTreatmentProcedureInputToWellProcedure"
+    },
+    {
+      "id": 1004,
+      "name": "WaterTreatmentProcedureRelatedParty"
+    },
+    {
+      "id": 1005,
+      "name": "WeatherStation"
+    },
+    {
+      "id": 1006,
+      "name": "Website"
+    },
+    {
+      "id": 1007,
+      "name": "WeldMaintenanceRelatedParty"
+    },
+    {
+      "id": 1008,
+      "name": "WellboreVerticalSeismicProfile"
+    },
+    {
+      "id": 1009,
+      "name": "WellEventRelatedParty"
+    },
+    {
+      "id": 1010,
+      "name": "WellIncidentRelatedParty"
+    },
+    {
+      "id": 1011,
+      "name": "WellLogRelatedParty"
+    },
+    {
+      "id": 1012,
+      "name": "WellProcedureAdditive"
+    },
+    {
+      "id": 1013,
+      "name": "WellProcedureComponentRelatedParty"
+    },
+    {
+      "id": 1014,
+      "name": "WellProcedureDrillingFluid"
+    },
+    {
+      "id": 1015,
+      "name": "WellProcedureEventRelatedParty"
+    },
+    {
+      "id": 1016,
+      "name": "WellProcedureOutputToWaterTreatmentProcedure"
+    },
+    {
+      "id": 1017,
+      "name": "WellProcedureRelatedParty"
+    },
+    {
+      "id": 1018,
+      "name": "WellProcedureWaterBodyInputWater"
+    },
+    {
+      "id": 1019,
+      "name": "WellProcedureWaterBodyOutputWater"
+    },
+    {
+      "id": 1020,
+      "name": "WellRelatedParty"
+    },
+    {
+      "id": 1021,
+      "name": "WellTestAssetRelatedParty"
+    },
+    {
+      "id": 1022,
+      "name": "WellTestCostRelatedParty"
+    },
+    {
+      "id": 1023,
+      "name": "WellTestDocumentRelatedParty"
+    },
+    {
+      "id": 1024,
+      "name": "WellTreatmentProcedureEventRelatedParty"
+    },
+    {
+      "id": 1025,
+      "name": "WindFarmRelatedParty"
+    },
+    {
+      "id": 1026,
+      "name": "WindProgramRelatedParty"
+    },
+    {
+      "id": 1027,
+      "name": "WindTurbineEventRelatedParty"
+    },
+    {
+      "id": 1028,
+      "name": "WindTurbineRelatedParty"
+    },
+    {
+      "id": 1029,
+      "name": "WorkOrderAuthorizationRelatedParty"
+    },
+    {
+      "id": 1030,
+      "name": "WorkOrderRelatedParty"
+    },
+    {
+      "id": 1031,
+      "name": "WorkoutProceedingRelatedParty"
+    },
+    {
+      "id": 1032,
+      "name": "WorkoutSchedule"
+    },
+    {
+      "id": 1033,
+      "name": "WorkstationEventRelatedParty"
+    }
+  ]
+}

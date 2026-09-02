@@ -1,0 +1,196 @@
+{
+  "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceData_schema.json",
+  "adrmTableName": "TaskRelationshipType",
+  "fieldMapping": [
+    {
+      "adrmFieldName": "TaskRelationshipTypeId",
+      "referenceFieldName": "id"
+    },
+    {
+      "adrmFieldName": "TaskRelationshipTypeName",
+      "referenceFieldName": "name"
+    },
+    {
+      "adrmFieldName": "TaskRelationshipTypeDescription",
+      "referenceFieldName": "description"
+    }
+  ],
+  "data": [
+    {
+      "id": 20000000,
+      "name": "JourneyInstance to Journey"
+    },
+    {
+      "id": 20000001,
+      "name": "ActionEvent to JourneyInstance"
+    },
+    {
+      "id": 20000002,
+      "name": "ActionEvent to Journey"
+    },
+    {
+      "id": 20000003,
+      "name": "ActionEvent to JourneyAction"
+    },
+    {
+      "id": 20000004,
+      "name": "JourneyEvent to JourneyInstance"
+    },
+    {
+      "id": 20000005,
+      "name": "JourneyEvent to Journey "
+    },
+    {
+      "id": 20000006,
+      "name": "JourneyEvent to JourneyAction"
+    },
+    {
+      "id": 20000007,
+      "name": "EmailClicked to  JourneyInstance"
+    },
+    {
+      "id": 20000008,
+      "name": "EmailClicked to Journey"
+    },
+    {
+      "id": 20000009,
+      "name": "EmailClicked to JourneyAction"
+    },
+    {
+      "id": 20000010,
+      "name": "EmailDelivered to Journey"
+    },
+    {
+      "id": 20000011,
+      "name": "EmailDelivered to JourneyInstance"
+    },
+    {
+      "id": 20000012,
+      "name": "EmailDelivered to JourneyAction"
+    },
+    {
+      "id": 20000013,
+      "name": "EmailOpened to Journey"
+    },
+    {
+      "id": 20000014,
+      "name": "EmailOpened to JourneyInstance"
+    },
+    {
+      "id": 20000015,
+      "name": "EmailOpened to JourneyAction"
+    },
+    {
+      "id": 20000016,
+      "name": "EmailSent to Journey "
+    },
+    {
+      "id": 20000017,
+      "name": "EmailSent to JourneyInstance"
+    },
+    {
+      "id": 20000018,
+      "name": "EmailSent to JourneyAction"
+    },
+    {
+      "id": 20000019,
+      "name": "SmsDelivered to Journey"
+    },
+    {
+      "id": 20000020,
+      "name": "SmsDelivered to JourneyInstance"
+    },
+    {
+      "id": 20000021,
+      "name": "SmsDelivered to JourneyAction"
+    },
+    {
+      "id": 20000022,
+      "name": "SmsLinkClicked to Journey"
+    },
+    {
+      "id": 20000023,
+      "name": "SmsLinkClicked to JourneyInstance"
+    },
+    {
+      "id": 20000024,
+      "name": "SmsLinkClicked to JourneyAction"
+    },
+    {
+      "id": 20000025,
+      "name": "SmsSent to Journey "
+    },
+    {
+      "id": 20000026,
+      "name": "SmsSent to JourneyInstance"
+    },
+    {
+      "id": 20000027,
+      "name": "SmsSent to JourneyAction"
+    },
+    {
+      "id": 20000028,
+      "name": "SmsNotSent to Journey"
+    },
+    {
+      "id": 20000029,
+      "name": "SmsNotSent to JourneyInstance"
+    },
+    {
+      "id": 20000030,
+      "name": "SmsNotSent to JourneyAction"
+    },
+    {
+      "id": 20000031,
+      "name": "PushNotificationOpened to Journey"
+    },
+    {
+      "id": 20000032,
+      "name": "PushNotificationOpened to JourneyInstance"
+    },
+    {
+      "id": 20000033,
+      "name": "PushNotificationOpened to JourneyAction"
+    },
+    {
+      "id": 20000034,
+      "name": "PushNotificationLinkClicked to Journey "
+    },
+    {
+      "id": 20000035,
+      "name": "PushNotificationLinkClicked to JourneyInstance"
+    },
+    {
+      "id": 20000036,
+      "name": "PushNotificationLinkClicked to JourneyAction"
+    },
+    {
+      "id": 20000037,
+      "name": "PushNotificationSent to Journey"
+    },
+    {
+      "id": 20000038,
+      "name": "PushNotificationSent to JourneyInstance"
+    },
+    {
+      "id": 20000039,
+      "name": "PushNotificationSent to JourneyAction"
+    },
+    {
+      "id": 20000040,
+      "name": "PushNotificationNotSent to Journey"
+    },
+    {
+      "id": 20000041,
+      "name": "PushNotificationNotSent to JourneyInstance"
+    },
+    {
+      "id": 20000042,
+      "name": "PushNotificationNotSent to JourneyAction"
+    },
+    {
+      "id": 20000043,
+      "name": "Journey to base version of Journey"
+    }
+  ]
+}

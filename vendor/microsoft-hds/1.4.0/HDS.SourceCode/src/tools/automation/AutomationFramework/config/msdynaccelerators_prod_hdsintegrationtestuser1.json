@@ -1,0 +1,11 @@
+{
+    "name": "Prod environment(MS dynamic accelerators tenant)",
+    "description": "Prod environemnt from accelerators tenant tenant. NOTE: This is not the main tenant where microsoft users exist",
+    "tenantId": "096d1a84-d560-4fa0-b41f-e88d1e4e3cae",
+    "redirectUri": "https://app.powerbi.com/signin",
+    "targetEnvironment": "msit",
+    "userDetails": {
+        "userName": "hdsintegrationtestuser1@msdynaccelerators.onmicrosoft.com",
+        "certificateFileName": "cert_msdynaccelerators_hdsintegrationtestuser1"
+    }
+}

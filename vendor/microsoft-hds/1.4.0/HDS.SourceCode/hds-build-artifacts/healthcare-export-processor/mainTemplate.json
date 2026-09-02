@@ -1,0 +1,1045 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.44.1.10279",
+      "templateHash": "7801804389391755790"
+    }
+  },
+  "parameters": {
+    "languageServiceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional. Language service id."
+      }
+    },
+    "tagsByResources": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Optional. Tags for all resources."
+      }
+    },
+    "fhirServerUri": {
+      "type": "string",
+      "defaultValue": "NA",
+      "metadata": {
+        "description": "Optional. Fhir Server Uri for export."
+      }
+    },
+    "exportStartTime": {
+      "type": "string",
+      "defaultValue": "2023-03-15",
+      "metadata": {
+        "description": "Optional. Export start date time in yyyy-MM-dd."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Optional. Location for all resources."
+      }
+    },
+    "deployUpdatesOnly": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Optional. Set to true to only update the function app package without recreating other resources"
+      }
+    },
+    "skipZipDeploy": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Optional. Set to true to skip ZipDeploy during Bicep deployment (code will be deployed separately via az functionapp deployment)."
+      }
+    },
+    "restrictStorageNetworkAccess": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Optional. Set to true to restrict storage account network access (defaultAction=Deny). Only enable this for subscriptions whose Azure Policy requires it; the Consumption-plan function host content share is not supported behind a storage firewall, so leave false unless required."
+      }
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "defaultValue": "[deployment().properties.templateLink.uri]",
+      "metadata": {
+        "description": "Optional. The base URI where artifacts required by this template are located including a trailing '/'"
+      }
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated. Use the defaultValue if the staging location is not secured."
+      }
+    }
+  },
+  "variables": {
+    "$fxv#0": {
+      "blobStorageContainers": {
+        "exportlandingzoneContainer": {
+          "name": "export-landing-zone"
+        }
+      }
+    },
+    "$fxv#1": {
+      "functionApps": {
+        "relativePath": "functionapps/",
+        "exportFunctionAppZipName": "exportprocessor.zip",
+        "runExportFunctionName": "Run_Export"
+      }
+    },
+    "uniqueIdentifier": "[uniqueString(subscription().subscriptionId, resourceGroup().id)]",
+    "storageAccountName": "[format('msftst{0}', variables('uniqueIdentifier'))]",
+    "logAnalyticsNamespaceName": "[format('msft-log-hds-{0}', variables('uniqueIdentifier'))]",
+    "appInsightsName": "[format('msft-appi-hds-{0}', variables('uniqueIdentifier'))]",
+    "appServicePlanName": "[format('msft-asp-hds-{0}', variables('uniqueIdentifier'))]",
+    "exportProcessorFunctionAppName": "[format('msft-func-hds-export-{0}', variables('uniqueIdentifier'))]",
+    "keyVaultName": "[format('msft-kv-{0}', variables('uniqueIdentifier'))]",
+    "token": "[if(and(not(empty(parameters('_artifactsLocationSasToken'))), not(startsWith(parameters('_artifactsLocationSasToken'), '?'))), format('?{0}', parameters('_artifactsLocationSasToken')), parameters('_artifactsLocationSasToken'))]",
+    "sasToken": "[if(and(empty(variables('token')), contains(parameters('_artifactsLocation'), '?')), format('?{0}', split(parameters('_artifactsLocation'), '?')[1]), variables('token'))]",
+    "blobContainersConfig": "[variables('$fxv#0')]",
+    "armArtifactsConfig": "[variables('$fxv#1')]"
+  },
+  "resources": [
+    {
+      "condition": "[not(parameters('deployUpdatesOnly'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "msft-mdl-hds-deploySharedComponents",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "uniqueIdentifier": {
+            "value": "[variables('uniqueIdentifier')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tagsByResources')]"
+          },
+          "hdsStorageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          },
+          "logAnalyticsNamespaceName": {
+            "value": "[variables('logAnalyticsNamespaceName')]"
+          },
+          "appInsightsName": {
+            "value": "[variables('appInsightsName')]"
+          },
+          "keyVaultName": {
+            "value": "[variables('keyVaultName')]"
+          },
+          "blobContainersConfig": {
+            "value": "[variables('blobContainersConfig')]"
+          },
+          "restrictStorageNetworkAccess": {
+            "value": "[parameters('restrictStorageNetworkAccess')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "2053751441375128017"
+            }
+          },
+          "parameters": {
+            "uniqueIdentifier": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Unique string for deployment resources name."
+              }
+            },
+            "hdsStorageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Healthcare data solutions deployment storage account name."
+              }
+            },
+            "logAnalyticsNamespaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the log analytics workspace."
+              }
+            },
+            "appInsightsName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the application insights instance for Healthcare data solutions."
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the azure key vault."
+              }
+            },
+            "blobContainersConfig": {
+              "type": "object",
+              "metadata": {
+                "description": "Required. Configurations for blob storage containers."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Optional. Tags of the resource."
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]",
+              "metadata": {
+                "description": "Optional. Location for all resources."
+              }
+            },
+            "restrictStorageNetworkAccess": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Optional. Set to true to restrict storage account network access (defaultAction=Deny)."
+              }
+            }
+          },
+          "variables": {
+            "hdsStorageAccountType": "Standard_GRS",
+            "logAnalyticsWorkspaceSku": "PerGB2018",
+            "logRetentionDays": 180,
+            "hdsBlobContainers": [
+              "[parameters('blobContainersConfig').blobStorageContainers.exportlandingzoneContainer.name]"
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[parameters('hdsStorageAccountName')]",
+              "kind": "StorageV2",
+              "location": "[parameters('location')]",
+              "tags": "[if(contains(parameters('tags'), 'Microsoft.Storage/storageAccounts'), parameters('tags')['Microsoft.Storage/storageAccounts'], json('{}'))]",
+              "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true,
+                "defaultToOAuthAuthentication": true,
+                "networkAcls": {
+                  "defaultAction": "[if(parameters('restrictStorageNetworkAccess'), 'Deny', 'Allow')]",
+                  "bypass": "AzureServices"
+                }
+              },
+              "sku": {
+                "name": "[variables('hdsStorageAccountType')]"
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}', parameters('hdsStorageAccountName'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('hdsStorageAccountName'))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "blobContainers",
+                "count": "[length(variables('hdsBlobContainers'))]"
+              },
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('hdsStorageAccountName'), 'default', variables('hdsBlobContainers')[copyIndex()])]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('hdsStorageAccountName'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[parameters('logAnalyticsNamespaceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[if(contains(parameters('tags'), 'Microsoft.OperationalInsights/workspaces'), parameters('tags')['Microsoft.OperationalInsights/workspaces'], json('{}'))]",
+              "properties": {
+                "sku": {
+                  "name": "[variables('logAnalyticsWorkspaceSku')]"
+                },
+                "retentionInDays": "[variables('logRetentionDays')]",
+                "features": {
+                  "enableLogAccessUsingOnlyResourcePermissions": true
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[parameters('appInsightsName')]",
+              "location": "[parameters('location')]",
+              "kind": "string",
+              "tags": "[if(contains(parameters('tags'), 'Microsoft.Insights/components'), parameters('tags')['Microsoft.Insights/components'], json('{}'))]",
+              "properties": {
+                "Application_Type": "web",
+                "Request_Source": "rest",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsNamespaceName'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Resources/deployments', 'msft-mdl-hds-delayAppInsightsDeployment')]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsNamespaceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2023-07-01",
+              "name": "[parameters('keyVaultName')]",
+              "location": "[parameters('location')]",
+              "tags": "[if(contains(parameters('tags'), 'Microsoft.KeyVault/vaults'), parameters('tags')['Microsoft.KeyVault/vaults'], json('{}'))]",
+              "properties": {
+                "enableSoftDelete": true,
+                "enablePurgeProtection": true,
+                "tenantId": "[subscription().tenantId]",
+                "sku": {
+                  "name": "standard",
+                  "family": "A"
+                },
+                "enableRbacAuthorization": true
+              }
+            },
+            {
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "msft-mdl-hds-delayAppInsightsDeployment",
+              "properties": {
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                  "uniqueIdentifier": {
+                    "value": "[parameters('uniqueIdentifier')]"
+                  },
+                  "location": {
+                    "value": "[parameters('location')]"
+                  },
+                  "tags": {
+                    "value": "[parameters('tags')]"
+                  },
+                  "waitSeconds": {
+                    "value": 120
+                  }
+                },
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.44.1.10279",
+                      "templateHash": "14012467772801773225"
+                    }
+                  },
+                  "parameters": {
+                    "uniqueIdentifier": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Required. Unique string for deployment resources name."
+                      }
+                    },
+                    "waitSeconds": {
+                      "type": "int",
+                      "metadata": {
+                        "description": "Optional. Wait time in seconds."
+                      }
+                    },
+                    "location": {
+                      "type": "string",
+                      "defaultValue": "[resourceGroup().location]",
+                      "metadata": {
+                        "description": "Optional. Location for all resources."
+                      }
+                    },
+                    "scriptForceUpdateTag": {
+                      "type": "string",
+                      "defaultValue": "[utcNow('yyyy-MM-dd-HH-mm-ss')]",
+                      "metadata": {
+                        "description": "Generated. Do not provide a value! This date value is used to make sure the script run every time the template is deployed."
+                      }
+                    },
+                    "tags": {
+                      "type": "object",
+                      "defaultValue": {},
+                      "metadata": {
+                        "description": "Optional. Tags of the resource."
+                      }
+                    }
+                  },
+                  "variables": {
+                    "azPowerShellVersion": "8.3",
+                    "scriptRetentionInterval": "PT1H",
+                    "scriptCleanupPreference": "Always"
+                  },
+                  "resources": [
+                    {
+                      "type": "Microsoft.Resources/deploymentScripts",
+                      "apiVersion": "2023-08-01",
+                      "name": "[format('msft-ds-delayDeployment-{0}', parameters('uniqueIdentifier'))]",
+                      "location": "[parameters('location')]",
+                      "tags": "[if(contains(parameters('tags'), 'Microsoft.Resources/deploymentScripts'), parameters('tags')['Microsoft.Resources/deploymentScripts'], json('{}'))]",
+                      "kind": "AzurePowerShell",
+                      "properties": {
+                        "azPowerShellVersion": "[variables('azPowerShellVersion')]",
+                        "arguments": "[format('-waitSeconds {0}', parameters('waitSeconds'))]",
+                        "scriptContent": "      param([string] $waitSeconds)\n      Start-Sleep -Seconds $waitSeconds\n    ",
+                        "cleanupPreference": "[variables('scriptCleanupPreference')]",
+                        "forceUpdateTag": "[parameters('scriptForceUpdateTag')]",
+                        "retentionInterval": "[variables('scriptRetentionInterval')]"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "msft-mdl-hds-deployAppServices",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "uniqueIdentifier": {
+            "value": "[variables('uniqueIdentifier')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[parameters('tagsByResources')]"
+          },
+          "appInsightsName": {
+            "value": "[variables('appInsightsName')]"
+          },
+          "appServicePlanName": {
+            "value": "[variables('appServicePlanName')]"
+          },
+          "exportDataStorageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          },
+          "exportProcessorFunctionAppName": {
+            "value": "[variables('exportProcessorFunctionAppName')]"
+          },
+          "fhirServerUri": {
+            "value": "[parameters('fhirServerUri')]"
+          },
+          "exportStartTime": {
+            "value": "[parameters('exportStartTime')]"
+          },
+          "_artifactsLocation": {
+            "value": "[parameters('_artifactsLocation')]"
+          },
+          "_artifactsLocationSasToken": {
+            "value": "[variables('sasToken')]"
+          },
+          "armArtifactsConfig": {
+            "value": "[variables('armArtifactsConfig')]"
+          },
+          "blobContainersConfig": {
+            "value": "[variables('blobContainersConfig')]"
+          },
+          "keyVaultName": {
+            "value": "[variables('keyVaultName')]"
+          },
+          "deployUpdatesOnly": {
+            "value": "[parameters('deployUpdatesOnly')]"
+          },
+          "skipZipDeploy": {
+            "value": "[parameters('skipZipDeploy')]"
+          },
+          "restrictStorageNetworkAccess": {
+            "value": "[parameters('restrictStorageNetworkAccess')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "9626950224109432761"
+            }
+          },
+          "parameters": {
+            "uniqueIdentifier": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Unique string for deployment resources name."
+              }
+            },
+            "appServicePlanName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the app service plan."
+              }
+            },
+            "exportProcessorFunctionAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the export processor function app."
+              }
+            },
+            "appInsightsName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the application insights instance for Healthcare data solutions."
+              }
+            },
+            "fhirServerUri": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Fhir Server Uri app setting value."
+              }
+            },
+            "exportStartTime": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Export start date time app setting value."
+              }
+            },
+            "exportDataStorageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Export output storage account name app setting value."
+              }
+            },
+            "armArtifactsConfig": {
+              "type": "object",
+              "metadata": {
+                "description": "Required. Configurations for arm supporting artifacts."
+              }
+            },
+            "blobContainersConfig": {
+              "type": "object",
+              "metadata": {
+                "description": "Required. Configurations for blob storage containers."
+              }
+            },
+            "_artifactsLocation": {
+              "type": "string",
+              "defaultValue": "[deployment().properties.templateLink.uri]",
+              "metadata": {
+                "description": "Required. The base URI where artifacts required by this template are located including a trailing '/'"
+              }
+            },
+            "_artifactsLocationSasToken": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Required. The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated. Use the defaultValue if the staging location is not secured."
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the azure key vault."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Optional. Tags of the resource."
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]",
+              "metadata": {
+                "description": "Optional. Location for all resources."
+              }
+            },
+            "deployUpdatesOnly": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set to true to only update the function app package without recreating other resources"
+              }
+            },
+            "skipZipDeploy": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set to true to skip ZipDeploy during Bicep deployment (code will be deployed separately via az functionapp deployment)."
+              }
+            },
+            "restrictStorageNetworkAccess": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Set to true to restrict storage account network access (defaultAction=Deny)."
+              }
+            }
+          },
+          "variables": {
+            "skuTier": "dynamic",
+            "skuName": "Y1",
+            "resourcesToExport": "Account,ActivityDefinition,AdverseEvent,AllergyIntolerance,Appointment,AppointmentResponse,AuditEvent,Basic,Binary,BiologicallyDerivedProduct,BodyStructure,Bundle,CapabilityStatement,CarePlan,CareTeam,CatalogEntry,ChargeItem,ChargeItemDefinition,Claim,ClaimResponse,ClinicalImpression,CodeSystem,Communication,CommunicationRequest,CompartmentDefinition,Composition,ConceptMap,Condition,Consent,Contract,Coverage,CoverageEligibilityRequest,CoverageEligibilityResponse,DetectedIssue,Device,DeviceDefinition,DeviceMetric,DeviceRequest,DeviceUseStatement,DiagnosticReport,DocumentManifest,DocumentReference,EffectEvidenceSynthesis,Encounter,Endpoint,EnrollmentRequest,EnrollmentResponse,EpisodeOfCare,EventDefinition,Evidence,EvidenceVariable,ExampleScenario,ExplanationOfBenefit,FamilyMemberHistory,Flag,Goal,GraphDefinition,Group,GuidanceResponse,HealthcareService,ImagingStudy,Immunization,ImmunizationEvaluation,ImmunizationRecommendation,ImplementationGuide,InsurancePlan,Invoice,Library,Linkage,List,Location,Measure,MeasureReport,Media,Medication,MedicationAdministration,MedicationDispense,MedicationKnowledge,MedicationRequest,MedicationStatement,MedicinalProduct,MedicinalProductAuthorization,MedicinalProductContraindication,MedicinalProductIndication,MedicinalProductIngredient,MedicinalProductInteraction,MedicinalProductManufactured,MedicinalProductPackaged,MedicinalProductPharmaceutical,MedicinalProductUndesirableEffect,MessageDefinition,MessageHeader,MolecularSequence,NamingSystem,NutritionOrder,Observation,ObservationDefinition,OperationDefinition,OperationOutcome,Organization,OrganizationAffiliation,Parameters,Patient,PaymentNotice,PaymentReconciliation,Person,PlanDefinition,Practitioner,PractitionerRole,Procedure,Provenance,Questionnaire,QuestionnaireResponse,RelatedPerson,RequestGroup,ResearchDefinition,ResearchElementDefinition,ResearchStudy,ResearchSubject,RiskAssessment,RiskEvidenceSynthesis,Schedule,SearchParameter,ServiceRequest,Slot,Specimen,SpecimenDefinition,StructureDefinition,StructureMap,Subscription,Substance,SubstancePolymer,SubstanceProtein,SubstanceReferenceInformation,SubstanceSpecification,SubstanceSourceMaterial,SupplyDelivery,SupplyRequest,Task,TerminologyCapabilities,TestReport,TestScript,ValueSet,VerificationResult,VisionPrescription",
+            "exportRetryCount": "3",
+            "functionAppsRelativePath": "[parameters('armArtifactsConfig').functionApps.relativePath]",
+            "exportFunctionZipName": "[parameters('armArtifactsConfig').functionApps.exportFunctionAppZipName]",
+            "functionAppStorageAccountName": "[format('msftstexprt{0}', parameters('uniqueIdentifier'))]",
+            "functionAppStorageAccountType": "Standard_RAGRS",
+            "blobDataContributorAzureRbacRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+            "keyVaultSecretsUserRoleDefinitionId": "4633458b-17de-408a-b874-0445c86b69e6",
+            "storageAccountConnectionStringSecretKey": "FunctionAppStorageAccountKey",
+            "keyVaultReferenceFunctionAppStorageAccountKey": "[format('@Microsoft.KeyVault(VaultName={0};SecretName={1})', parameters('keyVaultName'), variables('storageAccountConnectionStringSecretKey'))]",
+            "exportFunctionAppBlobDataContributorRoleUniqueId": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('exportDataStorageAccountName')), parameters('exportProcessorFunctionAppName'), variables('blobDataContributorAzureRbacRoleId'))]",
+            "exportFunctionSecretUserRoleUniqueId": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('exportProcessorFunctionAppName'), variables('keyVaultSecretsUserRoleDefinitionId'))]"
+          },
+          "resources": [
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[variables('functionAppStorageAccountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[if(contains(parameters('tags'), 'Microsoft.Storage/storageAccounts'), parameters('tags')['Microsoft.Storage/storageAccounts'], json('{}'))]",
+              "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true,
+                "defaultToOAuthAuthentication": true,
+                "networkAcls": {
+                  "defaultAction": "[if(parameters('restrictStorageNetworkAccess'), 'Deny', 'Allow')]",
+                  "bypass": "AzureServices"
+                }
+              },
+              "sku": {
+                "name": "[variables('functionAppStorageAccountType')]"
+              },
+              "kind": "StorageV2"
+            },
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('appServicePlanName')]",
+              "location": "[parameters('location')]",
+              "tags": "[if(contains(parameters('tags'), 'Microsoft.Web/serverfarms'), parameters('tags')['Microsoft.Web/serverfarms'], json('{}'))]",
+              "sku": {
+                "name": "[variables('skuName')]",
+                "tier": "[variables('skuTier')]"
+              }
+            },
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-12-01",
+              "name": "[parameters('exportProcessorFunctionAppName')]",
+              "location": "[parameters('location')]",
+              "tags": "[if(contains(parameters('tags'), 'Microsoft.Web/sites'), parameters('tags')['Microsoft.Web/sites'], json('{}'))]",
+              "kind": "functionapp",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+                "httpsOnly": true,
+                "clientAffinityEnabled": true,
+                "siteConfig": {
+                  "minTlsVersion": "1.2",
+                  "netFrameworkVersion": "v8.0",
+                  "use32BitWorkerProcess": false,
+                  "appSettings": [
+                    {
+                      "name": "FUNCTIONS_EXTENSION_VERSION",
+                      "value": "~4"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), variables('storageAccountConnectionStringSecretKey'))]",
+              "properties": {
+                "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', variables('functionAppStorageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('functionAppStorageAccountName')), '2023-05-01').keys[0].value)]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('functionAppStorageAccountName'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('exportProcessorFunctionAppName'), 'appsettings')]",
+              "properties": {
+                "APPINSIGHTS_INSTRUMENTATIONKEY": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey]",
+                "dataStart": "[parameters('exportStartTime')]",
+                "fhirServerUri": "[parameters('fhirServerUri')]",
+                "exportContainerName": "[parameters('blobContainersConfig').blobStorageContainers.exportlandingzoneContainer.name]",
+                "jobOutputContainerName": "[parameters('blobContainersConfig').blobStorageContainers.exportlandingzoneContainer.name]",
+                "jobOutputStorageAccountName": "[parameters('exportDataStorageAccountName')]",
+                "resources": "[variables('resourcesToExport')]",
+                "retryCount": "[variables('exportRetryCount')]",
+                "AzureWebJobsStorage": "[variables('keyVaultReferenceFunctionAppStorageAccountKey')]",
+                "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING": "[variables('keyVaultReferenceFunctionAppStorageAccountKey')]",
+                "WEBSITE_CONTENTSHARE": "[parameters('exportProcessorFunctionAppName')]",
+                "FUNCTIONS_EXTENSION_VERSION": "~4",
+                "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+                "WEBSITE_RUN_FROM_PACKAGE": "1",
+                "AzureWebJobsSecretStorageType": "Files",
+                "WEBSITE_USE_PLACEHOLDER_DOTNETISOLATED": "1"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Resources/deployments', 'msft-mdl-hds-delayAppServiceSettingsDeployment')]",
+                "[resourceId('Microsoft.Web/sites', parameters('exportProcessorFunctionAppName'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('exportProcessorFunctionAppName'), 'scm')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "allow": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('exportProcessorFunctionAppName'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('exportProcessorFunctionAppName'), 'ftp')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "allow": false
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('exportProcessorFunctionAppName'))]"
+              ]
+            },
+            {
+              "condition": "[and(not(parameters('deployUpdatesOnly')), not(parameters('skipZipDeploy')))]",
+              "type": "Microsoft.Web/sites/extensions",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('exportProcessorFunctionAppName'), 'ZipDeploy')]",
+              "properties": {
+                "packageUri": "[uri(parameters('_artifactsLocation'), format('{0}{1}{2}', variables('functionAppsRelativePath'), variables('exportFunctionZipName'), parameters('_artifactsLocationSasToken')))]",
+                "skipAppData": true
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites/config', parameters('exportProcessorFunctionAppName'), 'appsettings')]",
+                "[resourceId('Microsoft.Web/sites', parameters('exportProcessorFunctionAppName'))]"
+              ]
+            },
+            {
+              "condition": "[and(parameters('deployUpdatesOnly'), not(parameters('skipZipDeploy')))]",
+              "type": "Microsoft.Web/sites/extensions",
+              "apiVersion": "2023-12-01",
+              "name": "[format('{0}/{1}', parameters('exportProcessorFunctionAppName'), 'ZipDeploy')]",
+              "properties": {
+                "packageUri": "[uri(parameters('_artifactsLocation'), format('{0}{1}{2}', variables('functionAppsRelativePath'), variables('exportFunctionZipName'), parameters('_artifactsLocationSasToken')))]",
+                "skipAppData": true
+              }
+            },
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('exportDataStorageAccountName'))]",
+              "name": "[variables('exportFunctionAppBlobDataContributorRoleUniqueId')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('exportProcessorFunctionAppName')), '2023-12-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', variables('blobDataContributorAzureRbacRoleId'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('exportProcessorFunctionAppName'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[variables('exportFunctionSecretUserRoleUniqueId')]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('exportProcessorFunctionAppName')), '2023-12-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[resourceId('Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsUserRoleDefinitionId'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('exportProcessorFunctionAppName'))]"
+              ]
+            },
+            {
+              "condition": "[not(parameters('deployUpdatesOnly'))]",
+              "type": "Microsoft.Resources/deployments",
+              "apiVersion": "2025-04-01",
+              "name": "msft-mdl-hds-delayAppServiceSettingsDeployment",
+              "properties": {
+                "expressionEvaluationOptions": {
+                  "scope": "inner"
+                },
+                "mode": "Incremental",
+                "parameters": {
+                  "uniqueIdentifier": {
+                    "value": "[parameters('uniqueIdentifier')]"
+                  },
+                  "location": {
+                    "value": "[parameters('location')]"
+                  },
+                  "tags": {
+                    "value": "[parameters('tags')]"
+                  },
+                  "waitSeconds": {
+                    "value": 120
+                  }
+                },
+                "template": {
+                  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+                  "contentVersion": "1.0.0.0",
+                  "metadata": {
+                    "_generator": {
+                      "name": "bicep",
+                      "version": "0.44.1.10279",
+                      "templateHash": "14012467772801773225"
+                    }
+                  },
+                  "parameters": {
+                    "uniqueIdentifier": {
+                      "type": "string",
+                      "metadata": {
+                        "description": "Required. Unique string for deployment resources name."
+                      }
+                    },
+                    "waitSeconds": {
+                      "type": "int",
+                      "metadata": {
+                        "description": "Optional. Wait time in seconds."
+                      }
+                    },
+                    "location": {
+                      "type": "string",
+                      "defaultValue": "[resourceGroup().location]",
+                      "metadata": {
+                        "description": "Optional. Location for all resources."
+                      }
+                    },
+                    "scriptForceUpdateTag": {
+                      "type": "string",
+                      "defaultValue": "[utcNow('yyyy-MM-dd-HH-mm-ss')]",
+                      "metadata": {
+                        "description": "Generated. Do not provide a value! This date value is used to make sure the script run every time the template is deployed."
+                      }
+                    },
+                    "tags": {
+                      "type": "object",
+                      "defaultValue": {},
+                      "metadata": {
+                        "description": "Optional. Tags of the resource."
+                      }
+                    }
+                  },
+                  "variables": {
+                    "azPowerShellVersion": "8.3",
+                    "scriptRetentionInterval": "PT1H",
+                    "scriptCleanupPreference": "Always"
+                  },
+                  "resources": [
+                    {
+                      "type": "Microsoft.Resources/deploymentScripts",
+                      "apiVersion": "2023-08-01",
+                      "name": "[format('msft-ds-delayDeployment-{0}', parameters('uniqueIdentifier'))]",
+                      "location": "[parameters('location')]",
+                      "tags": "[if(contains(parameters('tags'), 'Microsoft.Resources/deploymentScripts'), parameters('tags')['Microsoft.Resources/deploymentScripts'], json('{}'))]",
+                      "kind": "AzurePowerShell",
+                      "properties": {
+                        "azPowerShellVersion": "[variables('azPowerShellVersion')]",
+                        "arguments": "[format('-waitSeconds {0}', parameters('waitSeconds'))]",
+                        "scriptContent": "      param([string] $waitSeconds)\n      Start-Sleep -Seconds $waitSeconds\n    ",
+                        "cleanupPreference": "[variables('scriptCleanupPreference')]",
+                        "forceUpdateTag": "[parameters('scriptForceUpdateTag')]",
+                        "retentionInterval": "[variables('scriptRetentionInterval')]"
+                      }
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), 'Microsoft.Authorization/roleAssignments', variables('exportFunctionSecretUserRoleUniqueId'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('functionAppStorageAccountName'))]"
+              ]
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'msft-mdl-hds-deploySharedComponents')]"
+      ]
+    },
+    {
+      "condition": "[not(parameters('deployUpdatesOnly'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "msft-mdl-hds-addNonFunctionSecrets",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "keyVaultName": {
+            "value": "[variables('keyVaultName')]"
+          },
+          "languageServiceId": {
+            "value": "[parameters('languageServiceId')]"
+          },
+          "exportProcessorFunctionAppName": {
+            "value": "[variables('exportProcessorFunctionAppName')]"
+          },
+          "logAnalyticsNamespaceName": {
+            "value": "[variables('logAnalyticsNamespaceName')]"
+          },
+          "appInsightsName": {
+            "value": "[variables('appInsightsName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "10374571923900761261"
+            }
+          },
+          "parameters": {
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the azure key vault."
+              }
+            },
+            "logAnalyticsNamespaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the log analytics workspace."
+              }
+            },
+            "appInsightsName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the application insights."
+              }
+            },
+            "exportProcessorFunctionAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Required. Name of the export processor function app."
+              }
+            },
+            "languageServiceId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional. Id of the azure cognitive service for natural language processing."
+              }
+            }
+          },
+          "variables": {
+            "languageServiceSelected": "[not(empty(parameters('languageServiceId')))]",
+            "parts": "[if(variables('languageServiceSelected'), split(parameters('languageServiceId'), '/'), array(''))]",
+            "languageServiceResourceGroupName": "[if(variables('languageServiceSelected'), variables('parts')[4], '')]",
+            "languageServiceName": "[if(variables('languageServiceSelected'), variables('parts')[8], '')]"
+          },
+          "resources": [
+            {
+              "condition": "[variables('languageServiceSelected')]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'LanguageServiceKey')]",
+              "properties": {
+                "value": "[if(variables('languageServiceSelected'), listKeys(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('languageServiceResourceGroupName')), 'Microsoft.CognitiveServices/accounts', variables('languageServiceName')), '2023-05-01').key1, '')]"
+              }
+            },
+            {
+              "condition": "[variables('languageServiceSelected')]",
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'LanguageServiceEndpoint')]",
+              "properties": {
+                "value": "[if(variables('languageServiceSelected'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, variables('languageServiceResourceGroupName')), 'Microsoft.CognitiveServices/accounts', variables('languageServiceName')), '2023-05-01').endpoint, '')]"
+              }
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'FunctionAppEndpoint')]",
+              "properties": {
+                "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', parameters('exportProcessorFunctionAppName')), '2023-12-01').defaultHostName)]"
+              }
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'LogAnalyticsWorkspaceKey')]",
+              "properties": {
+                "value": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsNamespaceName')), '2023-09-01').primarySharedKey]"
+              }
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'AppInsightsInstrumentationKey')]",
+              "properties": {
+                "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').InstrumentationKey]"
+              }
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2023-07-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'AppInsightsIngestionEndpointKey')]",
+              "properties": {
+                "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'msft-mdl-hds-deployAppServices')]",
+        "[resourceId('Microsoft.Resources/deployments', 'msft-mdl-hds-deploySharedComponents')]"
+      ]
+    }
+  ]
+}

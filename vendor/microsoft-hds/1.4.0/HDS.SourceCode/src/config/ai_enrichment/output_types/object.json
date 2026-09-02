@@ -1,0 +1,40 @@
+{
+  "fields": [
+    {
+      "metadata": {},
+      "name": "type",
+      "nullable": true,
+      "type": "string",
+      "description": "the type of the object. e.g. relation . For FHIR resources, designate this as fhir"
+    },
+    {
+      "metadata": {},
+      "name": "value",
+      "nullable": true,
+      "type": "string",
+      "description": "the value of the object enrichment"
+    },
+    {
+      "metadata": {},
+      "name": "reasoning",
+      "nullable": true,
+      "type": "string",
+      "description": "the reasoning behind the object enrichment value"
+    },
+    {
+      "metadata": {},
+      "name": "evidence",
+      "nullable": true,
+      "type": "string",
+      "description": "Serialized list of 'evidence' values that support the object enrichment"
+    },
+    {
+      "metadata": {},
+      "name": "description",
+      "nullable": true,
+      "type": "string",
+      "description": "A text description of the object"
+    }
+  ],
+  "type": "struct"
+}

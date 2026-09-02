@@ -1,0 +1,2341 @@
+<#
+.SYNOPSIS
+    Creates a Fabric Lakehouse shortcut from the dicom-output ADLS Gen2 container
+    into the HDS Bronze Lakehouse.
+
+.DESCRIPTION
+    This script:
+    1. Resolves the Fabric workspace identity (service principal) from the workspace name
+    2. Ensures the workspace identity has Storage Blob Data Contributor on the storage account
+    3. Applies ADLS Gen2 ACLs (access + default) on the dicom-output container recursively
+    4. Creates the /Files/Ingest/Imaging/DICOM folder path in the Bronze Lakehouse
+    5. Creates a Fabric cloud connection to the ADLS Gen2 storage account
+    6. Creates a shortcut named DICOM-HDS pointing to the dicom-output ADLS Gen2 container
+       (the shortcut itself IS the DICOM-HDS folder — matches the FHIR-HDS pattern for FHIR data)
+
+.PARAMETER FabricWorkspaceName
+    The Fabric workspace name. Default: "med-device-rti-hds"
+
+.PARAMETER ResourceGroupName
+    Azure resource group containing the FHIR infrastructure. Default: "rg-medtech-rti-fhir"
+
+.PARAMETER BronzeLakehouseName
+    Name of the Bronze Lakehouse in the Fabric workspace. Default: "healthcare1_msft_bronze"
+
+.PARAMETER DicomContainerName
+    Name of the blob container with DICOM files. Default: "dicom-output"
+
+.PARAMETER ShortcutName
+    Name of the shortcut inside the lakehouse. Default: "DICOM-HDS"
+    The shortcut itself becomes the DICOM-HDS folder (like FHIR-HDS for FHIR data).
+
+.PARAMETER ShortcutFolderPath
+    The lakehouse folder path (under /Files/) where the shortcut is created.
+    Default: "Files/Ingest/Imaging/DICOM"
+
+.EXAMPLE
+    .\storage-access-trusted-workspace.ps1 -FabricWorkspaceName "med-device-rti-hds"
+#>
+
+# Requires Az.Accounts, Az.Resources, Az.Storage (loaded in Step 0)
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)][string]$FabricWorkspaceName,
+    [Parameter(Mandatory)][string]$ResourceGroupName,
+    [string]$BronzeLakehouseName = "healthcare1_msft_bronze",
+    [string]$DicomContainerName = "dicom-output",
+    [string]$ShortcutName = "DICOM-HDS",
+    [string]$ShortcutFolderPath = "Files/Ingest/Imaging/DICOM",
+
+    [string]$ImagingPipelineName = "healthcare1_msft_imaging_with_clinical_foundation_ingestion",
+    [string]$ClinicalPipelineName = "healthcare1_msft_clinical_data_foundation_ingestion",
+    [string]$OmopPipelineName = "healthcare1_msft_omop_analytics",
+    [string]$CmaPipelineName = "healthcare1_msft_cma",
+    [string[]]$OptionalSidecarPipelineNames = @(),
+    [string[]]$OptionalSidecarPipelineNamePatterns = @('sdoh','social.?determinant','claim','claims','cclf'),
+
+    [switch]$RequireClinicalFhirData,
+    [switch]$RequireImagingDicomData,
+    [switch]$SkipImagingPipeline
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$VerbosePreference = 'Continue'
+$InformationPreference = 'Continue'
+
+$FabricManagementEndpoint = 'https://api.fabric.microsoft.com'
+$OneLakeEndpoint = 'https://onelake.dfs.fabric.microsoft.com'
+
+# ═══════════════════════════════════════════════════════════════════════
+# LOGGING
+# ═══════════════════════════════════════════════════════════════════════
+
+function Write-Log {
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [ValidateSet('INFO','WARN','ERROR','DEBUG')][string]$Level = 'INFO'
+    )
+    $ts = Get-Date -Format 'u'
+    switch ($Level) {
+        'INFO'  { Write-Information "[$ts][INFO]  $Message" }
+        'WARN'  { Write-Warning     "[$ts][WARN]  $Message" }
+        'ERROR' { Write-Error       "[$ts][ERROR] $Message" }
+        'DEBUG' { Write-Verbose     "[$ts][DEBUG] $Message" }
+    }
+}
+
+function Remove-ImagingStudyFromClinicalExport {
+    param(
+        [Parameter(Mandatory)][string]$StorageAccountName,
+        [string]$ContainerName = 'fhir-export'
+    )
+
+    $blobNames = az storage blob list --container-name $ContainerName `
+        --account-name $StorageAccountName --auth-mode login --query '[].name' -o tsv 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not enumerate $ContainerName before clinical ingestion: $($blobNames -join ' ')"
+    }
+
+    $imagingStudyBlobs = @($blobNames | Where-Object { $_ -match '(?i)(^|[/_.-])ImagingStudy([/_.-]|$)' })
+    foreach ($blobName in $imagingStudyBlobs) {
+        az storage blob delete --container-name $ContainerName --name $blobName `
+            --account-name $StorageAccountName --auth-mode login --only-show-errors | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not remove duplicate clinical ImagingStudy export blob '$blobName'"
+        }
+    }
+
+    Write-Log "  Clinical export excludes $($imagingStudyBlobs.Count) ImagingStudy blob(s); the imaging pipeline owns ImagingStudy ingestion." 'INFO'
+    return $imagingStudyBlobs.Count
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# TOKEN HELPERS  (adapted from hds-dicom-infra.ps1)
+# ═══════════════════════════════════════════════════════════════════════
+
+function Convert-SecureStringToPlainText {
+    param([Parameter(Mandatory)][Security.SecureString]$SecureString)
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureString)
+    try   { [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+    finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+}
+
+function Resolve-TokenValue {
+    param([Parameter(Mandatory)]$TokenResponse)
+    $tokenProp = $TokenResponse.PSObject.Properties['Token']
+    if (-not $tokenProp -or $null -eq $tokenProp.Value) {
+        throw 'Token response did not include a usable token value.'
+    }
+    if ($tokenProp.Value -is [Security.SecureString]) {
+        return Convert-SecureStringToPlainText -SecureString $tokenProp.Value
+    }
+    return [string]$tokenProp.Value
+}
+
+$script:AccessTokenCache = @{}
+function Get-CachedTokenValue {
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [string]$ResourceUrl = '',
+        [string]$ResourceTypeName = ''
+    )
+    $cached = $script:AccessTokenCache[$Key]
+    if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
+    if ($ResourceTypeName) {
+        $resp = Get-AzAccessToken -ResourceTypeName $ResourceTypeName -ErrorAction Stop
+    } else {
+        $resp = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+    }
+    $token = Resolve-TokenValue -TokenResponse $resp
+    $script:AccessTokenCache[$Key] = @{ Token = $token; ExpiresOn = $resp.ExpiresOn }
+    return $token
+}
+
+function Get-OneLakeAccessToken {
+    Write-Log 'Acquiring OneLake (storage) access token...' 'INFO'
+    $token = Get-CachedTokenValue -Key 'storage' -ResourceTypeName Storage
+    Write-Log 'OneLake access token acquired.' 'INFO'
+    return $token
+}
+
+function Get-FabricApiAccessToken {
+    Write-Log 'Acquiring Fabric API access token...' 'INFO'
+    $token = Get-CachedTokenValue -Key 'fabric' -ResourceUrl $FabricManagementEndpoint
+    Write-Log 'Fabric API access token acquired.' 'INFO'
+    return $token
+}
+
+function Get-FabricApiHeaders {
+    param([Parameter(Mandatory)][string]$AccessToken)
+    return @{ Authorization = "Bearer $AccessToken"; 'Content-Type' = 'application/json' }
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# FABRIC API HELPERS  (adapted from hds-dicom-infra.ps1)
+# ═══════════════════════════════════════════════════════════════════════
+
+function Invoke-FabricApiRequest {
+    param(
+        [Parameter(Mandatory)][ValidateSet('Get','Post','Put','Delete','Patch','Head')][string]$Method,
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][hashtable]$Headers,
+        [object]$Body,
+        [string]$Description = ''
+    )
+    Write-Log "FABRIC API: $Method $Uri ($Description)" 'INFO'
+
+    $attempts = 8
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        $invokeParams = @{ Method = $Method; Uri = $Uri; Headers = $Headers; ErrorAction = 'Stop' }
+        if ($null -ne $Body) {
+            $json = if ($Body -is [string]) { $Body } else { $Body | ConvertTo-Json -Depth 10 }
+            $invokeParams['Body'] = $json
+            $invokeParams['ContentType'] = 'application/json'
+            Write-Log "  Body: $json" 'DEBUG'
+        }
+        $cmd = Get-Command Invoke-WebRequest
+        if ($cmd.Parameters.ContainsKey('SkipHttpErrorCheck')) { $invokeParams['SkipHttpErrorCheck'] = $true }
+
+        try {
+            $raw = Invoke-WebRequest @invokeParams
+            $sc = [int]$raw.StatusCode
+            $content = [string]$raw.Content
+        } catch {
+            $sc = 0
+            $content = $_.Exception.Message
+        }
+
+        if ($sc -ge 200 -and $sc -lt 300) { break }
+
+        if ($attempt -lt $attempts -and $sc -eq 401 -and $content -match 'TokenExpired|token has expired') {
+            Write-Log "Fabric token expired; refreshing and retrying request ($attempt/$attempts)..." 'WARN'
+            $script:AccessTokenCache.Remove('fabric')
+            $Headers['Authorization'] = "Bearer $(Get-FabricApiAccessToken)"
+            continue
+        }
+
+        $msg = "FABRIC API $Method $Uri returned $sc. Body: $content"
+        if ($attempt -lt $attempts -and ($sc -eq 0 -or $sc -eq 429 -or $sc -ge 500 -or ($sc -eq 403 -and $content -match 'RequestDeniedByInboundPolicy'))) {
+            $delay = [Math]::Min(120, 10 * [Math]::Pow(2, $attempt - 1))
+            Write-Log "$msg Retrying in ${delay}s ($attempt/$attempts)..." 'WARN'
+            Start-Sleep -Seconds $delay
+            continue
+        }
+        Write-Log $msg 'ERROR'
+        throw [System.Net.Http.HttpRequestException]::new($msg)
+    }
+    Write-Log "  Response: $sc" 'INFO'
+
+    $parsed = $null
+    if (-not [string]::IsNullOrWhiteSpace($content)) {
+        try { $parsed = $content | ConvertFrom-Json -Depth 50 } catch { $parsed = $content }
+    }
+    return [pscustomobject]@{ Response = $parsed; StatusCode = $sc; Headers = $raw.Headers; RawContent = $content }
+}
+
+function Invoke-OptionalDataPipelineNonBlocking {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$PipelineName,
+        [object]$Pipeline,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders,
+        [Parameter(Mandatory)][string]$StepName,
+        [string]$SkipReason = 'not deployed'
+    )
+
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
+    $invoked = $false
+    $alreadyRunning = $false
+    $status = 'SKIPPED'
+
+    if (-not $Pipeline) {
+        Write-Log "─── ${StepName}: SKIPPING optional pipeline '$PipelineName' ($SkipReason) ───" 'INFO'
+        $timer.Stop()
+        Record-Step -Name $StepName -Status $status -Seconds $timer.Elapsed.TotalSeconds
+        return [pscustomobject]@{ Name = $PipelineName; Id = $null; Status = $status; Invoked = $false; AlreadyRunning = $false }
+    }
+
+    $pipelineId = [string]$Pipeline.id
+    Write-Log "─── ${StepName}: Running optional pipeline '$PipelineName' (non-blocking) ───" 'INFO'
+    Write-Log "  Found '$PipelineName' (ID: $pipelineId)" 'INFO'
+    $runUri = "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$pipelineId/jobs/Pipeline/instances"
+
+    try {
+        $null = Invoke-FabricApiRequest -Method Post -Uri $runUri -Headers $FabricHeaders -Description "Run optional pipeline '$PipelineName'"
+        Write-Log "  Optional pipeline '$PipelineName' invoked successfully (non-blocking)." 'INFO'
+        $invoked = $true
+        $status = 'INVOKED'
+    } catch {
+        $errMsg = $_.Exception.Message
+        if ($errMsg -match '409|already running|TooManyRequestsForJobs') {
+            Write-Log "  Optional pipeline '$PipelineName' is already running or recently invoked (non-blocking)." 'WARN'
+            $alreadyRunning = $true
+            $status = 'ALREADY RUNNING'
+        } else {
+            Write-Log "  ⚠ Could not invoke optional pipeline '$PipelineName': $errMsg" 'WARN'
+            $status = 'WARN'
+        }
+    }
+
+    $timer.Stop()
+    Record-Step -Name $StepName -Status $status -Seconds $timer.Elapsed.TotalSeconds
+    return [pscustomobject]@{ Name = $PipelineName; Id = $pipelineId; Status = $status; Invoked = $invoked; AlreadyRunning = $alreadyRunning }
+}
+
+function Invoke-OptionalDataPipelineSerialized {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$PipelineName,
+        [Parameter(Mandatory)][object]$Pipeline,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders,
+        [Parameter(Mandatory)][string]$StepName,
+        [int]$MaxAttempts = 3,
+        [int]$TimeoutMinutes = 60
+    )
+
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
+    $pipelineId = [string]$Pipeline.id
+    $runUri = "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$pipelineId/jobs/Pipeline/instances"
+    Write-Log "─── ${StepName}: Running write-conflicting pipeline '$PipelineName' serially ───" 'INFO'
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        $attemptStarted = (Get-Date).ToUniversalTime()
+        $acceptExistingRun = $false
+        try {
+            $null = Invoke-FabricApiRequest -Method Post -Uri $runUri -Headers $FabricHeaders -Description "Run serialized pipeline '$PipelineName'"
+            Write-Log "  '$PipelineName' invoked (attempt $attempt/$MaxAttempts); waiting for completion before core HDS writers start." 'INFO'
+        } catch {
+            $errMsg = $_.Exception.Message
+            if ($errMsg -match '409|already running|TooManyRequestsForJobs') {
+                Write-Log "  '$PipelineName' is already running; waiting for that run to complete." 'WARN'
+                $acceptExistingRun = $true
+            } else {
+                $timer.Stop()
+                Record-Step -Name $StepName -Status 'FAILED' -Seconds $timer.Elapsed.TotalSeconds
+                throw
+            }
+        }
+
+        $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
+        $failureText = ''
+        while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 15
+            $jobsResult = Invoke-FabricApiRequest -Method Get -Uri "$runUri`?limit=5" -Headers $FabricHeaders -Description "Poll serialized pipeline '$PipelineName'"
+            $jobs = @($jobsResult.Response.value)
+            $latest = $jobs | Where-Object {
+                if ($acceptExistingRun) { return $true }
+                try { return ([datetime]$_.startTimeUtc).ToUniversalTime() -ge $attemptStarted.AddMinutes(-1) } catch { return $false }
+            } | Sort-Object { try { [datetime]$_.startTimeUtc } catch { [datetime]::MinValue } } -Descending | Select-Object -First 1
+            if (-not $latest) { continue }
+
+            $status = [string]$latest.status
+            Write-Log "  '$PipelineName' status: $status" 'INFO'
+            if ($status -eq 'Completed') {
+                $timer.Stop()
+                Record-Step -Name $StepName -Status 'COMPLETED' -Seconds $timer.Elapsed.TotalSeconds
+                return [pscustomobject]@{ Name = $PipelineName; Id = $pipelineId; Status = 'COMPLETED'; Invoked = $true; AlreadyRunning = $acceptExistingRun }
+            }
+            if ($status -in @('Failed', 'Cancelled', 'Canceled')) {
+                $failureText = try { $latest.failureReason | ConvertTo-Json -Depth 20 -Compress } catch { [string]$latest.failureReason }
+                break
+            }
+        }
+
+        $isConcurrentWrite = $failureText -match 'ConcurrentAppendException|DELTA_CONCURRENT_APPEND|concurrent update'
+        if ($isConcurrentWrite -and $attempt -lt $MaxAttempts) {
+            $delay = 30 * $attempt
+            Write-Log "  '$PipelineName' hit a Delta concurrent-write conflict; retrying serially in ${delay}s (attempt $($attempt + 1)/$MaxAttempts)." 'WARN'
+            Start-Sleep -Seconds $delay
+            continue
+        }
+
+        $timer.Stop()
+        Record-Step -Name $StepName -Status 'FAILED' -Seconds $timer.Elapsed.TotalSeconds
+        if ([string]::IsNullOrWhiteSpace($failureText)) {
+            throw "Serialized pipeline '$PipelineName' did not complete within $TimeoutMinutes minutes."
+        }
+        throw "Serialized pipeline '$PipelineName' failed after $attempt attempt(s): $failureText"
+    }
+
+    throw "Serialized pipeline '$PipelineName' exhausted all retry attempts."
+}
+
+function Test-TransientFabricNotebookSessionFailure {
+    param([AllowNull()][string]$FailureText)
+    if ([string]::IsNullOrWhiteSpace($FailureText)) { return $false }
+    return $FailureText -match '(?i)Failed to create session for executing notebook|Livy.*session|Spark.*session.*(?:failed|unavailable)|session.*temporarily unavailable'
+}
+
+function Wait-FabricOperation {
+    param(
+        [Parameter(Mandatory)][object]$OperationResult,
+        [Parameter(Mandatory)][hashtable]$Headers,
+        [Parameter(Mandatory)][string]$Description,
+        [int]$TimeoutSeconds = 600
+    )
+
+    if ($OperationResult.StatusCode -ne 202) { return }
+    $location = [string]$OperationResult.Headers['Location']
+    if ([string]::IsNullOrWhiteSpace($location)) { return }
+
+    Write-Log "  Waiting for Fabric operation: $Description" 'INFO'
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 5
+        $poll = Invoke-FabricApiRequest -Method Get -Uri $location -Headers $Headers -Description "Poll $Description"
+        $status = [string]$poll.Response.status
+        if ($status -in @('Succeeded', 'Completed')) {
+            Write-Log "  ✓ Fabric operation succeeded: $Description" 'INFO'
+            return
+        }
+        if ($status -in @('Failed', 'Cancelled')) {
+            throw "Fabric operation failed: $Description ($($poll.RawContent))"
+        }
+    }
+    throw "Fabric operation timed out: $Description"
+}
+
+function New-FabricItemDefinitionFromDirectory {
+    param(
+        [Parameter(Mandatory)][string]$ItemDirectory,
+        [Parameter(Mandatory)][ValidateSet('TMDL','PBIR-Legacy')][string]$Format,
+        [hashtable]$Replacements = @{}
+    )
+
+    if (-not (Test-Path $ItemDirectory)) {
+        throw "Fabric item artifact directory not found: $ItemDirectory"
+    }
+
+    $parts = @()
+    $root = (Resolve-Path $ItemDirectory).Path
+    foreach ($file in Get-ChildItem -Path $root -Recurse -File | Sort-Object FullName) {
+        $rel = $file.FullName.Substring($root.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) -replace '\\', '/'
+        $content = [System.IO.File]::ReadAllText($file.FullName)
+        foreach ($key in $Replacements.Keys) { $content = $content.Replace([string]$key, [string]$Replacements[$key]) }
+        $parts += @{
+            path = $rel
+            payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($content))
+            payloadType = 'InlineBase64'
+        }
+    }
+
+    if ($parts.Count -eq 0) { throw "Fabric item artifact directory is empty: $ItemDirectory" }
+    return @{ format = $Format; parts = $parts }
+}
+
+function Set-ReportDefinitionSemanticModelConnection {
+    param(
+        [Parameter(Mandatory)][hashtable]$Definition,
+        [Parameter(Mandatory)][string]$WorkspaceName,
+        [Parameter(Mandatory)][string]$SemanticModelName,
+        [Parameter(Mandatory)][string]$SemanticModelId
+    )
+
+    $connectionString = "Data Source=powerbi://api.powerbi.com/v1.0/myorg/$WorkspaceName;initial catalog=$SemanticModelName;integrated security=ClaimsToken;semanticmodelid=$SemanticModelId"
+    foreach ($part in $Definition.parts) {
+        if ($part.path -ne 'definition.pbir') { continue }
+        $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($part.payload)) | ConvertFrom-Json -Depth 50
+        if (-not $json.datasetReference) { $json | Add-Member -NotePropertyName datasetReference -NotePropertyValue ([pscustomobject]@{}) }
+        if (-not $json.datasetReference.byConnection) { $json.datasetReference | Add-Member -NotePropertyName byConnection -NotePropertyValue ([pscustomobject]@{}) }
+        $json.datasetReference.byConnection.connectionString = $connectionString
+        $part.payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($json | ConvertTo-Json -Depth 50)))
+        $part.payloadType = 'InlineBase64'
+        return $Definition
+    }
+    throw 'Report definition is missing definition.pbir'
+}
+
+function Invoke-CmaSemanticModelFinalization {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$WorkspaceName,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders
+    )
+
+    $semanticModelName = 'healthcare1_msft_cma_semantic_model'
+    $reportName = 'healthcare1_msft_cma_report'
+    $artifactRoot = Join-Path $PSScriptRoot 'cma-report'
+
+    Write-Log '─── Step 9d: Finalizing CMA semantic model and report binding ───' 'INFO'
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
+
+    $modelsResult = Invoke-FabricApiRequest -Method Get `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items?type=SemanticModel" `
+        -Headers $FabricHeaders -Description 'List semantic models for CMA finalization'
+    $semanticModel = $modelsResult.Response.value | Where-Object { $_.displayName -eq $semanticModelName } | Select-Object -First 1
+    if (-not $semanticModel) {
+        Write-Log "  CMA semantic model '$semanticModelName' not found; skipping finalization." 'WARN'
+        $timer.Stop()
+        Record-Step -Name 'CMA Semantic Model' -Status 'NOT FOUND' -Seconds $timer.Elapsed.TotalSeconds
+        return
+    }
+
+    $lakehousesResult = Invoke-FabricApiRequest -Method Get `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items?type=Lakehouse" `
+        -Headers $FabricHeaders -Description 'List lakehouses for CMA datasource rewrite'
+    $cmaLakehouse = $lakehousesResult.Response.value | Where-Object { $_.displayName -eq 'healthcare1_msft_gold_cma' } | Select-Object -First 1
+    if (-not $cmaLakehouse) { throw "CMA Gold lakehouse 'healthcare1_msft_gold_cma' not found." }
+    $cmaDetail = Invoke-FabricApiRequest -Method Get `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/lakehouses/$($cmaLakehouse.id)" `
+        -Headers $FabricHeaders -Description 'Get CMA Gold SQL endpoint'
+    $cmaSqlEndpoint = [string]$cmaDetail.Response.properties.sqlEndpointProperties.connectionString
+    if ([string]::IsNullOrWhiteSpace($cmaSqlEndpoint)) { throw 'CMA Gold SQL endpoint is unavailable.' }
+    $exportedCmaEndpoint = 'nkhahdl5to4ezo6p5bg76flepa-knddbdlugufetk2sy3oxghm6ly.datawarehouse.fabric.microsoft.com'
+
+    $semanticDefinition = New-FabricItemDefinitionFromDirectory `
+        -ItemDirectory (Join-Path $artifactRoot "$semanticModelName.SemanticModel") `
+        -Format 'TMDL' `
+        -Replacements @{ $exportedCmaEndpoint = $cmaSqlEndpoint }
+    $modelUpdate = Invoke-FabricApiRequest -Method Post `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$($semanticModel.id)/updateDefinition" `
+        -Headers $FabricHeaders -Body @{ definition = $semanticDefinition } `
+        -Description "Overwrite CMA semantic model '$semanticModelName'"
+    Wait-FabricOperation -OperationResult $modelUpdate -Headers $FabricHeaders -Description "Overwrite CMA semantic model '$semanticModelName'"
+
+    $reportDefinition = New-FabricItemDefinitionFromDirectory `
+        -ItemDirectory (Join-Path $artifactRoot "$reportName.Report") `
+        -Format 'PBIR-Legacy'
+    $reportDefinition = Set-ReportDefinitionSemanticModelConnection `
+        -Definition $reportDefinition `
+        -WorkspaceName $WorkspaceName `
+        -SemanticModelName $semanticModelName `
+        -SemanticModelId $semanticModel.id
+
+    $reportsResult = Invoke-FabricApiRequest -Method Get `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items?type=Report" `
+        -Headers $FabricHeaders -Description 'List reports for CMA finalization'
+    $report = $reportsResult.Response.value | Where-Object { $_.displayName -eq $reportName } | Select-Object -First 1
+    if ($report) {
+        $reportUpdate = Invoke-FabricApiRequest -Method Post `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$($report.id)/updateDefinition" `
+            -Headers $FabricHeaders -Body @{ definition = $reportDefinition } `
+            -Description "Bind CMA report '$reportName' to '$semanticModelName'"
+        Wait-FabricOperation -OperationResult $reportUpdate -Headers $FabricHeaders -Description "Bind CMA report '$reportName'"
+    } else {
+        $reportCreate = Invoke-FabricApiRequest -Method Post `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items" `
+            -Headers $FabricHeaders -Body @{ displayName = $reportName; type = 'Report'; definition = $reportDefinition } `
+            -Description "Create CMA report '$reportName'"
+        Wait-FabricOperation -OperationResult $reportCreate -Headers $FabricHeaders -Description "Create CMA report '$reportName'"
+    }
+
+    $timer.Stop()
+    Record-Step -Name 'CMA Semantic Model' -Status 'OVERWRITTEN/BOUND' -Seconds $timer.Elapsed.TotalSeconds
+    Write-Log "  ✓ CMA semantic model overwritten and report bound to '$semanticModelName'." 'INFO'
+}
+
+function Resolve-OptionalSidecarPipelines {
+    param(
+        [Parameter(Mandatory)][object[]]$Pipelines,
+        [string[]]$Names = @(),
+        [string[]]$Patterns = @(),
+        [string[]]$ExcludedNames = @()
+    )
+
+    $resolved = @()
+    $seen = @{}
+    foreach ($name in @($Names)) {
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+        $pipeline = $Pipelines | Where-Object { $_.displayName -eq $name } | Select-Object -First 1
+        if ($pipeline -and -not $seen.ContainsKey([string]$pipeline.id)) {
+            $resolved += $pipeline
+            $seen[[string]$pipeline.id] = $true
+        }
+    }
+
+    foreach ($pipeline in @($Pipelines)) {
+        $displayName = [string]$pipeline.displayName
+        if ([string]::IsNullOrWhiteSpace($displayName) -or $displayName -in $ExcludedNames) { continue }
+        foreach ($pattern in @($Patterns)) {
+            if ([string]::IsNullOrWhiteSpace($pattern)) { continue }
+            if ($displayName -match $pattern -and -not $seen.ContainsKey([string]$pipeline.id)) {
+                $resolved += $pipeline
+                $seen[[string]$pipeline.id] = $true
+                break
+            }
+        }
+    }
+
+    return @($resolved)
+}
+
+function Invoke-LakehouseScalarQuery {
+    param(
+        [Parameter(Mandatory)][string]$Server,
+        [Parameter(Mandatory)][string]$Database,
+        [Parameter(Mandatory)][string]$Token,
+        [Parameter(Mandatory)][string]$Query
+    )
+
+    $env:_HDS_SQL_SERVER = $Server
+    $env:_HDS_SQL_DATABASE = $Database
+    $env:_HDS_SQL_TOKEN = $Token
+    $env:_HDS_SQL_QUERY = $Query
+    $pyScript = @"
+import os
+import struct
+import pyodbc
+
+token = os.environ['_HDS_SQL_TOKEN']
+token_bytes = token.encode('utf-16-le')
+token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+conn = pyodbc.connect(
+    'DRIVER={ODBC Driver 18 for SQL Server};'
+    f"SERVER={os.environ['_HDS_SQL_SERVER']};"
+    f"DATABASE={os.environ['_HDS_SQL_DATABASE']};"
+    'Encrypt=Yes;TrustServerCertificate=no;Connection Timeout=30',
+    attrs_before={1256: token_struct},
+    timeout=30,
+)
+try:
+    cur = conn.cursor()
+    cur.execute(os.environ['_HDS_SQL_QUERY'])
+    row = cur.fetchone()
+    print('' if row is None or row[0] is None else row[0])
+finally:
+    conn.close()
+"@
+    $executorVariable = Get-Variable -Scope Script -Name LakehouseQueryExecutor -ErrorAction SilentlyContinue
+    $executeQuery = if ($executorVariable) {
+        $executorVariable.Value
+    } else {
+        { param($Script) $Script | python - 2>&1 }
+    }
+    try {
+        $maxAttempts = 5
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            $result = & $executeQuery $pyScript
+            if ($LASTEXITCODE -eq 0) {
+                return (($result | Where-Object { $_ -and $_.ToString().Trim() } | Select-Object -Last 1).ToString().Trim())
+            }
+
+            $failure = $result -join "`n"
+            $transient = $failure -match '08S01|08001|HYT00|HYT01|10054|TCP Provider|Communication link failure|Connection Timeout|temporarily unavailable'
+            if (-not $transient -or $attempt -eq $maxAttempts) { throw $failure }
+            $delay = 10 * $attempt
+            Write-Log "  Lakehouse SQL endpoint connection was transiently unavailable; retrying in ${delay}s ($attempt/$maxAttempts)..." 'WARN'
+            Start-Sleep -Seconds $delay
+        }
+    } finally {
+        Remove-Item Env:\_HDS_SQL_SERVER -ErrorAction SilentlyContinue
+        Remove-Item Env:\_HDS_SQL_DATABASE -ErrorAction SilentlyContinue
+        Remove-Item Env:\_HDS_SQL_TOKEN -ErrorAction SilentlyContinue
+        Remove-Item Env:\_HDS_SQL_QUERY -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-BronzeTableRowCount {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$LakehouseName,
+        [Parameter(Mandatory)][string]$TableName,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders
+    )
+
+    if ($TableName -notin @('ClinicalFhir','ImagingDicom')) {
+        throw "Unsupported Bronze readiness table '$TableName'."
+    }
+
+    $sqlToken = Get-CachedTokenValue -Key 'sql' -ResourceUrl 'https://database.windows.net/'
+    $lakehouseDetail = Invoke-FabricApiRequest -Method Get `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/lakehouses/$LakehouseId" `
+        -Headers $FabricHeaders -Description "Get Bronze Lakehouse SQL endpoint"
+    $server = $lakehouseDetail.Response.properties.sqlEndpointProperties.connectionString
+    if ([string]::IsNullOrWhiteSpace($server)) {
+        throw "Bronze Lakehouse SQL endpoint is not available yet."
+    }
+
+    $query = "SELECT COUNT_BIG(*) FROM dbo.[$TableName]"
+    $rawCount = Invoke-LakehouseScalarQuery -Server $server -Database $LakehouseName -Token $sqlToken -Query $query
+    $count = 0L
+    if (-not [long]::TryParse($rawCount, [ref]$count)) {
+        throw "Could not parse row count for dbo.$TableName from '$rawCount'."
+    }
+    return $count
+}
+
+function Get-LakehouseTableRowCount {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$LakehouseName,
+        [Parameter(Mandatory)][string]$TableName,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders,
+        [string]$Label = 'Lakehouse'
+    )
+
+    if ($TableName -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+        throw "Unsafe table name '$TableName'."
+    }
+
+    $sqlToken = Get-CachedTokenValue -Key 'sql' -ResourceUrl 'https://database.windows.net/'
+    $lakehouseDetail = Invoke-FabricApiRequest -Method Get `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/lakehouses/$LakehouseId" `
+        -Headers $FabricHeaders -Description "Get $Label SQL endpoint"
+    $server = $lakehouseDetail.Response.properties.sqlEndpointProperties.connectionString
+    if ([string]::IsNullOrWhiteSpace($server)) {
+        throw "$Label SQL endpoint is not available yet."
+    }
+
+    $query = "SELECT COUNT_BIG(*) FROM dbo.[$TableName]"
+    $rawCount = Invoke-LakehouseScalarQuery -Server $server -Database $LakehouseName -Token $sqlToken -Query $query
+    $count = 0L
+    if (-not [long]::TryParse($rawCount, [ref]$count)) {
+        throw "Could not parse row count for $Label dbo.$TableName from '$rawCount'."
+    }
+    return $count
+}
+
+function Assert-LakehouseTableHasData {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$LakehouseName,
+        [Parameter(Mandatory)][string]$TableName,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders,
+        [Parameter(Mandatory)][string]$Reason,
+        [string]$Label = 'Lakehouse'
+    )
+
+    Write-Log "  Validating $Label table dbo.$TableName after $Reason..." 'INFO'
+    $count = Get-LakehouseTableRowCount -WorkspaceId $WorkspaceId -LakehouseId $LakehouseId -LakehouseName $LakehouseName -TableName $TableName -FabricHeaders $FabricHeaders -Label $Label
+    if ($count -le 0) {
+        throw "$Label table dbo.$TableName has 0 rows after $Reason. Downstream report visuals will be empty."
+    }
+    Write-Log "  ✓ $Label table dbo.$TableName contains $count rows." 'INFO'
+}
+
+function Wait-LakehouseTableHasData {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$LakehouseName,
+        [Parameter(Mandatory)][string]$TableName,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders,
+        [Parameter(Mandatory)][string]$Reason,
+        [string]$Label = 'Lakehouse',
+        [int]$TimeoutMinutes = 10,
+        [int]$PollSeconds = 30
+    )
+
+    Write-Log "  Waiting for $Label table dbo.$TableName to synchronize after $Reason..." 'INFO'
+    $started = Get-Date
+    $lastError = $null
+    do {
+        try {
+            $count = Get-LakehouseTableRowCount -WorkspaceId $WorkspaceId -LakehouseId $LakehouseId -LakehouseName $LakehouseName -TableName $TableName -FabricHeaders $FabricHeaders -Label $Label
+            if ($count -gt 0) {
+                Write-Log "  ✓ $Label table dbo.$TableName contains $count rows." 'INFO'
+                return
+            }
+            $lastError = "$Label table dbo.$TableName has 0 rows."
+        } catch {
+            $lastError = $_.Exception.Message
+        }
+
+        $elapsedMinutes = [math]::Round((New-TimeSpan -Start $started).TotalMinutes, 1)
+        if ($elapsedMinutes -ge $TimeoutMinutes) { break }
+        Write-Log "  $Label table dbo.$TableName is not ready yet ($elapsedMinutes min); retrying in ${PollSeconds}s." 'INFO'
+        Start-Sleep -Seconds $PollSeconds
+    } while ($true)
+
+    throw "$Label table dbo.$TableName did not contain rows within $TimeoutMinutes minutes after $Reason. Last result: $lastError"
+}
+
+function Assert-SilverFhirReferencesIntact {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$LakehouseName,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders
+    )
+
+    Write-Log "  Validating Silver FHIR references required by OMOP/CMA (reference/msftSourceReference/idOrig)..." 'INFO'
+    $sqlToken = Get-CachedTokenValue -Key 'sql' -ResourceUrl 'https://database.windows.net/'
+    $lakehouseDetail = Invoke-FabricApiRequest -Method Get `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/lakehouses/$LakehouseId" `
+        -Headers $FabricHeaders -Description "Get Silver Lakehouse SQL endpoint"
+    $server = $lakehouseDetail.Response.properties.sqlEndpointProperties.connectionString
+    if ([string]::IsNullOrWhiteSpace($server)) {
+        throw "Silver Lakehouse SQL endpoint is not available yet."
+    }
+
+    $checks = @(
+        @{ Label = 'Condition.subject'; Table = 'Condition'; Column = 'subject_string'; JsonPath = '$.reference' },
+        @{ Label = 'Condition.encounter'; Table = 'Condition'; Column = 'encounter_string'; JsonPath = '$.reference' },
+        @{ Label = 'Observation.subject'; Table = 'Observation'; Column = 'subject_string'; JsonPath = '$.reference' },
+        @{ Label = 'Observation.encounter'; Table = 'Observation'; Column = 'encounter_string'; JsonPath = '$.reference' },
+        @{ Label = 'Procedure.subject'; Table = 'Procedure'; Column = 'subject_string'; JsonPath = '$.reference' },
+        @{ Label = 'Procedure.encounter'; Table = 'Procedure'; Column = 'encounter_string'; JsonPath = '$.reference' },
+        @{ Label = 'Encounter.subject'; Table = 'Encounter'; Column = 'subject_string'; JsonPath = '$.reference' },
+        @{ Label = 'CarePlan.subject'; Table = 'CarePlan'; Column = 'subject_string'; JsonPath = '$.reference' },
+        @{ Label = 'MedicationRequest.subject'; Table = 'MedicationRequest'; Column = 'subject_string'; JsonPath = '$.reference' },
+        @{ Label = 'Immunization.patient'; Table = 'Immunization'; Column = 'patient_string'; JsonPath = '$.reference' },
+        @{ Label = 'Coverage.beneficiary'; Table = 'Coverage'; Column = 'beneficiary_string'; JsonPath = '$.reference' },
+        @{ Label = 'ImagingStudy.subject'; Table = 'ImagingStudy'; Column = 'subject_string'; JsonPath = '$.reference' },
+        @{ Label = 'Basic.subject'; Table = 'Basic'; Column = 'subject_string'; JsonPath = '$.reference' },
+        @{ Label = 'Claim.patient'; Table = 'Claim'; Column = 'patient_string'; JsonPath = '$.reference' },
+        @{ Label = 'ExplanationOfBenefit.patient'; Table = 'ExplanationOfBenefit'; Column = 'patient_string'; JsonPath = '$.reference' }
+    )
+
+    foreach ($check in $checks) {
+        $query = "SELECT COUNT_BIG(*) FROM dbo.[$($check.Table)] WHERE [$($check.Column)] IS NOT NULL AND COALESCE(NULLIF(JSON_VALUE([$($check.Column)], '$.reference'), ''), NULLIF(JSON_VALUE([$($check.Column)], '$.msftSourceReference'), ''), NULLIF(JSON_VALUE([$($check.Column)], '$.idOrig'), ''), NULLIF(JSON_VALUE([$($check.Column)], '$.identifier.value'), '')) IS NULL"
+        $rawCount = Invoke-LakehouseScalarQuery -Server $server -Database $LakehouseName -Token $sqlToken -Query $query
+        $broken = 0L
+        if (-not [long]::TryParse($rawCount, [ref]$broken)) {
+            throw "Could not parse broken reference count for $($check.Label) from '$rawCount'."
+        }
+        if ($broken -gt 0) {
+            throw "Silver FHIR reference check failed for $($check.Label): $broken rows have missing $.reference/$.msftSourceReference/$.idOrig/$.identifier.value. Fix FHIR typed references before OMOP/CMA."
+        }
+    }
+    $basicQuery = "SELECT COUNT_BIG(*) FROM dbo.Basic WHERE JSON_VALUE(code_string, '$.coding[0].code') = 'device-assoc' AND (COALESCE(NULLIF(JSON_VALUE(subject_string, '$.idOrig'), ''), REPLACE(NULLIF(JSON_VALUE(subject_string, '$.msftSourceReference'), ''), 'Patient/', '')) IS NULL OR NULLIF(JSON_VALUE(extension, '$[0].valueReference.reference'), '') IS NULL)"
+    $brokenBasic = Invoke-LakehouseScalarQuery -Server $server -Database $LakehouseName -Token $sqlToken -Query $basicQuery
+    if ([long]$brokenBasic -gt 0) { throw "Silver Basic device association contract failed for $brokenBasic row(s)." }
+
+    $patientNameQuery = "SELECT COUNT_BIG(*) FROM dbo.Patient WHERE COALESCE(NULLIF(JSON_VALUE(name_string, '$[0].text'), ''), NULLIF(JSON_VALUE(name_string, '$[0].family'), ''), NULLIF(JSON_VALUE(name_string, '$[0].given[0]'), '')) IS NULL"
+    $missingPatientNames = Invoke-LakehouseScalarQuery -Server $server -Database $LakehouseName -Token $sqlToken -Query $patientNameQuery
+    if ([long]$missingPatientNames -gt 0) { throw "Silver Patient ontology display name is empty for $missingPatientNames row(s)." }
+    Write-Log "  ✓ Silver FHIR references/source identifiers are present for OMOP/CMA source tables." 'INFO'
+}
+
+function Assert-BronzeTableHasData {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$LakehouseName,
+        [Parameter(Mandatory)][string]$TableName,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders,
+        [Parameter(Mandatory)][string]$Reason
+    )
+
+    Write-Log "  Validating Bronze table dbo.$TableName for synthesized data path..." 'INFO'
+    $count = Get-BronzeTableRowCount -WorkspaceId $WorkspaceId -LakehouseId $LakehouseId -LakehouseName $LakehouseName -TableName $TableName -FabricHeaders $FabricHeaders
+    if ($count -le 0) {
+        throw "Synthesized data was selected, but Bronze table dbo.$TableName has 0 rows after $Reason. Stop before downstream HDS steps use empty data."
+    }
+    Write-Log "  ✓ Bronze table dbo.$TableName contains $count rows." 'INFO'
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# ONELAKE DIRECTORY HELPERS  (from hds-dicom-infra.ps1)
+# ═══════════════════════════════════════════════════════════════════════
+
+function Test-OneLakeDirectoryExists {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string[]]$PathSegments,
+        [Parameter(Mandatory)][string]$AccessToken
+    )
+    $rel = ($PathSegments | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
+    $uri = "$OneLakeEndpoint/$WorkspaceId/$LakehouseId/Files/$rel"
+    $headers = @{ Authorization = "Bearer $AccessToken"; 'x-ms-version' = '2021-06-08'; 'x-ms-date' = (Get-Date -Format 'R') }
+    try {
+        Invoke-RestMethod -Method Head -Uri $uri -Headers $headers -TimeoutSec 30 -ErrorAction Stop | Out-Null
+        Write-Log "  Directory exists: /$rel" 'DEBUG'
+        return $true
+    } catch {
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode.value__ -eq 404) {
+            Write-Log "  Directory not found: /$rel" 'DEBUG'
+            return $false
+        }
+        throw
+    }
+}
+
+function New-OneLakeDirectory {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string[]]$PathSegments,
+        [Parameter(Mandatory)][string]$AccessToken
+    )
+    $rel = ($PathSegments | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
+    $uri = "$OneLakeEndpoint/$WorkspaceId/$LakehouseId/Files/$rel`?resource=directory"
+    $headers = @{
+        Authorization = "Bearer $AccessToken"
+        'x-ms-version' = '2021-06-08'
+        'x-ms-date'    = (Get-Date -Format 'R')
+        'Content-Length' = '0'
+    }
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            Invoke-RestMethod -Method Put -Uri $uri -Headers $headers -TimeoutSec 60 -ErrorAction Stop
+            Write-Log "  Created directory: /$rel" 'INFO'
+            return
+        } catch {
+            if ($_.Exception.Response -and $_.Exception.Response.StatusCode.value__ -eq 409) {
+                Write-Log "  Directory already exists: /$rel" 'DEBUG'
+                return
+            }
+            if ($attempt -ge 3) { throw }
+            Write-Log "  Retry $attempt for /$rel ..." 'WARN'
+            Start-Sleep -Seconds ([math]::Pow(2, $attempt))
+        }
+    }
+}
+
+function New-LakehouseDirectoryPath {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string[]]$PathSegments,
+        [Parameter(Mandatory)][string]$AccessToken
+    )
+    for ($i = 0; $i -lt $PathSegments.Count; $i++) {
+        $current = $PathSegments[0..$i]
+        if (-not (Test-OneLakeDirectoryExists -WorkspaceId $WorkspaceId -LakehouseId $LakehouseId -PathSegments $current -AccessToken $AccessToken)) {
+            New-OneLakeDirectory -WorkspaceId $WorkspaceId -LakehouseId $LakehouseId -PathSegments $current -AccessToken $AccessToken
+        }
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# RBAC + ACL HELPERS  (from hds-dicom-infra.ps1)
+# ═══════════════════════════════════════════════════════════════════════
+
+function Ensure-RoleAssignment {
+    param(
+        [Parameter(Mandatory)][string]$Scope,
+        [Parameter(Mandatory)][string]$PrincipalId,
+        [Parameter(Mandatory)][string]$RoleDefinitionName,
+        [Parameter(Mandatory)][string]$PrincipalType,
+        [string]$Description = ''
+    )
+    $existing = Get-AzRoleAssignment -Scope $Scope -ObjectId $PrincipalId -RoleDefinitionName $RoleDefinitionName -ErrorAction SilentlyContinue
+    if ($existing) {
+        Write-Log "  RBAC '$RoleDefinitionName' already assigned to $Description on scope." 'INFO'
+        return $false  # no new assignment
+    } else {
+        Write-Log "  Assigning '$RoleDefinitionName' to $Description ..." 'INFO'
+        try {
+            New-AzRoleAssignment -Scope $Scope -ObjectId $PrincipalId -RoleDefinitionName $RoleDefinitionName -ObjectType $PrincipalType -ErrorAction Stop | Out-Null
+            Write-Log "  RBAC assigned successfully." 'INFO'
+            return $true  # new assignment
+        } catch {
+            if ($_.Exception.Message -match 'Conflict|RoleAssignmentExists|already exists') {
+                Write-Log "  RBAC already exists (race condition)." 'DEBUG'
+                return $false
+            } else { throw }
+        }
+    }
+}
+
+function Set-AdlsContainerAcl {
+    param(
+        [Parameter(Mandatory)][string]$StorageAccountName,
+        [Parameter(Mandatory)][string]$ResourceGroupName,
+        [Parameter(Mandatory)][string]$ContainerName,
+        [Parameter(Mandatory)][string]$PrincipalId,
+        [ValidateSet('user','group','sp','other')][string]$PrincipalType = 'sp',
+        [string]$Permissions = 'rwx'
+    )
+    $context = (Get-AzStorageAccount -ResourceGroupName $ResourceGroupName -Name $StorageAccountName).Context
+    $aclType = if ($PrincipalType -eq 'group') { 'group' } else { 'user' }
+
+    Write-Log "  Setting ACL on container '$ContainerName' for principal '$PrincipalId' (${aclType}:${Permissions})..." 'INFO'
+
+    $fs = Get-AzDataLakeGen2Item -Context $context -FileSystem $ContainerName -ErrorAction Stop
+    $currentAcl = $fs.ACL
+
+    $accessPattern  = "^${aclType}:${PrincipalId}:"
+    $defaultPattern = "^default:${aclType}:${PrincipalId}:"
+    $hasAccess  = $currentAcl | Where-Object { $_.ToString() -match $accessPattern }
+    $hasDefault = $currentAcl | Where-Object { $_.ToString() -match $defaultPattern }
+
+    if ($hasAccess -and $hasDefault) {
+        Write-Log "  ACL entries already exist for principal '$PrincipalId' on '$ContainerName'." 'INFO'
+        return
+    }
+
+    $acl = Set-AzDataLakeGen2ItemAclObject -AccessControlType $aclType -EntityId $PrincipalId -Permission $Permissions
+    $acl = Set-AzDataLakeGen2ItemAclObject -AccessControlType $aclType -EntityId $PrincipalId -Permission $Permissions -DefaultScope -InputObject $acl
+
+    Write-Log "  Applying ACL recursively on container '$ContainerName'..." 'INFO'
+    Update-AzDataLakeGen2AclRecursive -Context $context -FileSystem $ContainerName -Acl $acl -ErrorAction Stop | Out-Null
+    Write-Log "  ACL applied recursively." 'INFO'
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# FABRIC CONNECTION HELPERS  (from hds-dicom-infra.ps1)
+# ═══════════════════════════════════════════════════════════════════════
+
+function Get-FabricConnectionByDisplayName {
+    param(
+        [Parameter(Mandatory)][string]$AccessToken,
+        [Parameter(Mandatory)][string]$DisplayName
+    )
+    $headers = Get-FabricApiHeaders -AccessToken $AccessToken
+    $uri = "$FabricManagementEndpoint/v1/connections"
+    try {
+        $result = Invoke-FabricApiRequest -Method Get -Uri $uri -Headers $headers -Description 'List connections'
+    } catch {
+        Write-Log "  Could not list connections: $($_.Exception.Message)" 'WARN'
+        return $null
+    }
+    $items = @()
+    if ($result.Response.PSObject.Properties['value']) { $items = @($result.Response.value) }
+    return $items | Where-Object { $_.displayName -eq $DisplayName } | Select-Object -First 1
+}
+
+function New-FabricAdlsConnection {
+    param(
+        [Parameter(Mandatory)][string]$AccessToken,
+        [Parameter(Mandatory)][string]$DisplayName,
+        [Parameter(Mandatory)][string]$StorageAccountName,
+        [Parameter(Mandatory)][string]$ContainerName
+    )
+
+    # Check for existing connection
+    $existing = Get-FabricConnectionByDisplayName -AccessToken $AccessToken -DisplayName $DisplayName
+    if ($existing -and $existing.PSObject.Properties['id']) {
+        Write-Log "  Reusing existing connection '$DisplayName' (ID: $($existing.id))." 'INFO'
+        return [string]$existing.id
+    }
+
+    $dfsHost = "$StorageAccountName.dfs.core.windows.net"
+    $dfsUrl  = "https://$dfsHost"
+
+    # Discover supported ADLS connection type
+    $headers = Get-FabricApiHeaders -AccessToken $AccessToken
+    $typesResult = Invoke-FabricApiRequest -Method Get -Uri "$FabricManagementEndpoint/v1/connections/supportedConnectionTypes" -Headers $headers -Description 'List supported connection types'
+    $entries = @()
+    if ($typesResult.Response.PSObject.Properties['value']) { $entries = @($typesResult.Response.value) }
+
+    $adlsMeta = $entries | Where-Object {
+        $_.type -match 'AdlsGen2|AzureDataLakeStorage' -and $_.supportedCredentialTypes -contains 'WorkspaceIdentity'
+    } | Select-Object -First 1
+
+    $connType = if ($adlsMeta) { $adlsMeta.type } else { 'AdlsGen2' }
+    $methodName = $connType
+    $encOption = 'NotEncrypted'
+    $parameterObjects = @()
+
+    if ($adlsMeta -and $adlsMeta.PSObject.Properties['supportedConnectionEncryptionTypes']) {
+        $sup = @($adlsMeta.supportedConnectionEncryptionTypes)
+        if ($sup -contains 'Encrypted') { $encOption = 'Encrypted' } elseif ($sup.Count -gt 0) { $encOption = $sup[0] }
+    }
+
+    if ($adlsMeta -and $adlsMeta.PSObject.Properties['creationMethods']) {
+        $method = $adlsMeta.creationMethods | Select-Object -First 1
+        if ($method.PSObject.Properties['name']) { $methodName = $method.name }
+        if ($method.PSObject.Properties['parameters']) {
+            foreach ($p in $method.parameters) {
+                $pn = [string]$p.name
+                $cn = ($pn -replace '[^a-zA-Z0-9]','').ToLowerInvariant()
+                $val = $null
+                if     ($cn -match 'server|host')                     { $val = $dfsHost }
+                elseif ($cn -match 'account|endpoint|url|location')   { $val = $dfsUrl }
+                elseif ($cn -match 'filesystem|container|root')       { $val = $ContainerName }
+                elseif ($cn -eq 'path' -or $cn -match 'fullpath')     { $val = $ContainerName }
+                elseif ($cn -match 'subpath|relativepath|folder|dir') { $val = '' }
+                if ($p.required -and [string]::IsNullOrWhiteSpace($val)) {
+                    if ($cn -match 'container|root|filesystem|path') { $val = $ContainerName }
+                    else { throw "Cannot map required param '$pn' for ADLS connection." }
+                }
+                if (-not [string]::IsNullOrWhiteSpace($val)) {
+                    $parameterObjects += @{
+                        name     = $pn
+                        dataType = if ($p.PSObject.Properties['dataType']) { $p.dataType } else { 'Text' }
+                        value    = $val
+                    }
+                }
+            }
+        }
+    }
+
+    if ($parameterObjects.Count -eq 0) {
+        $parameterObjects = @(
+            @{ name = 'server'; dataType = 'Text'; value = $dfsHost }
+            @{ name = 'path';   dataType = 'Text'; value = $ContainerName }
+        )
+    }
+
+    $body = @{
+        connectivityType  = 'ShareableCloud'
+        displayName       = $DisplayName
+        privacyLevel      = 'Organizational'
+        connectionDetails = @{
+            type           = $connType
+            creationMethod = $methodName
+            parameters     = $parameterObjects
+        }
+        credentialDetails = @{
+            singleSignOnType     = 'None'
+            connectionEncryption = $encOption
+            skipTestConnection   = $false
+            credentials          = @{ credentialType = 'WorkspaceIdentity' }
+        }
+    }
+
+    Write-Log "  Creating ADLS connection '$DisplayName' (type=$connType, method=$methodName)..." 'INFO'
+
+    $uri = "$FabricManagementEndpoint/v1/connections"
+    try {
+        $result = Invoke-FabricApiRequest -Method Post -Uri $uri -Headers $headers -Body $body -Description "Create ADLS connection '$DisplayName'"
+    } catch {
+        if ($_.Exception.Message -match '409|DuplicateConnectionName') {
+            Write-Log "  Connection '$DisplayName' already exists (409). Looking up..." 'WARN'
+            $retry = Get-FabricConnectionByDisplayName -AccessToken $AccessToken -DisplayName $DisplayName
+            if ($retry -and $retry.PSObject.Properties['id']) { return [string]$retry.id }
+        }
+        throw
+    }
+
+    if ($result.Response -and $result.Response.PSObject.Properties['id']) {
+        $cid = [string]$result.Response.id
+        Write-Log "  Connection created: $cid" 'INFO'
+        return $cid
+    }
+    throw "Connection response did not include an ID for '$DisplayName'."
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# SHORTCUT HELPERS  (from hds-dicom-infra.ps1)
+# ═══════════════════════════════════════════════════════════════════════
+
+function Get-FabricShortcutByName {
+    param(
+        [Parameter(Mandatory)][string]$AccessToken,
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$ShortcutName,
+        [Parameter(Mandatory)][string]$ShortcutPath
+    )
+    $headers = Get-FabricApiHeaders -AccessToken $AccessToken
+    $uri = "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$LakehouseId/shortcuts"
+    try {
+        $result = Invoke-FabricApiRequest -Method Get -Uri $uri -Headers $headers -Description "List shortcuts"
+    } catch {
+        Write-Log "  Could not list shortcuts: $($_.Exception.Message)" 'WARN'
+        return $null
+    }
+    $items = @()
+    if ($result.Response.PSObject.Properties['value']) { $items = @($result.Response.value) }
+    return $items | Where-Object { $_.name -eq $ShortcutName -and $_.path -eq $ShortcutPath } | Select-Object -First 1
+}
+
+# ═══════════════════════════════════════════════════════════════════════
+# MAIN EXECUTION
+# ═══════════════════════════════════════════════════════════════════════
+
+Write-Host ""
+Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "  DICOM ADLS Gen2 → Fabric Lakehouse Shortcut Deployment" -ForegroundColor Cyan
+Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "  Workspace:    $FabricWorkspaceName" -ForegroundColor White
+Write-Host "  Resource Group: $ResourceGroupName" -ForegroundColor White
+Write-Host "  Lakehouse:    $BronzeLakehouseName" -ForegroundColor White
+Write-Host "  Container:    $DicomContainerName" -ForegroundColor White
+Write-Host "  Shortcut Path: $ShortcutFolderPath/$ShortcutName" -ForegroundColor White
+Write-Host ""
+
+# ── Step tracking ──
+$overallTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$stepResults = @()
+
+function Record-Step {
+    param([string]$Name, [string]$Status, [double]$Seconds)
+    $script:stepResults += [pscustomobject]@{
+        Step     = $Name
+        Status   = $Status
+        Duration = if ($Seconds -ge 60) { "{0:N1} min" -f ($Seconds / 60) } else { "{0:N0} sec" -f $Seconds }
+    }
+}
+
+# ── Step 0: Import modules ──
+foreach ($mod in @('Az.Accounts','Az.Storage')) {
+    if (-not (Get-Module -Name $mod)) { Import-Module $mod -ErrorAction Stop }
+}
+
+$script:DeploymentSubscriptionId = $null
+try {
+    $azContext = Get-AzContext -ErrorAction SilentlyContinue
+    if ($azContext -and $azContext.Subscription -and $azContext.Subscription.Id) {
+        $script:DeploymentSubscriptionId = $azContext.Subscription.Id
+    }
+} catch { }
+if (-not $script:DeploymentSubscriptionId) {
+    $script:DeploymentSubscriptionId = (az account show --query id -o tsv 2>$null)
+}
+
+function Use-DeploymentAzSubscription {
+    if ($script:DeploymentSubscriptionId) {
+        az account set --subscription $script:DeploymentSubscriptionId 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Azure CLI context drifted and could not be reset to subscription $script:DeploymentSubscriptionId"
+        }
+    }
+}
+
+
+# ── Step 1: Resolve storage account from deployment outputs ──
+$step1Timer = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log '─── Step 1: Resolving infrastructure from deployment outputs ───' 'INFO'
+
+Use-DeploymentAzSubscription
+$fhirOutputs = az deployment group show --resource-group $ResourceGroupName --name fhir-infra --query properties.outputs 2>$null
+$storageAccountName = $null
+if ($LASTEXITCODE -eq 0 -and $fhirOutputs) {
+    $fhirJson = $fhirOutputs | ConvertFrom-Json
+    $storageAccountName = $fhirJson.storageAccountName.value
+}
+
+# Fallback: if deployment failed (e.g. RoleAssignmentExists) but resources exist, find storage account directly
+if (-not $storageAccountName) {
+    Write-Log "  Deployment outputs not available — searching for storage account in resource group..." 'WARN'
+    Use-DeploymentAzSubscription
+    $storageAccountName = (az storage account list -g $ResourceGroupName `
+        --query "[?starts_with(name,'stfhir')].name" -o tsv 2>$null) | Select-Object -Last 1
+    if ($storageAccountName) {
+        # Sanitize: lowercase, alphanumeric only, max 24 chars
+        $storageAccountName = ($storageAccountName.Trim().ToLower() -replace '[^a-z0-9]', '')
+        if ($storageAccountName.Length -gt 24) { $storageAccountName = $storageAccountName.Substring(0, 24) }
+    }
+    if (-not $storageAccountName -or $storageAccountName.Length -lt 3) {
+        throw "Cannot find FHIR storage account in resource group '$ResourceGroupName'. Ensure deploy-fhir.ps1 has been run."
+    }
+}
+
+Write-Log "  Storage Account: $storageAccountName" 'INFO'
+
+# Verify the storage account has HNS enabled (ADLS Gen2)
+$storageAccount = Get-AzStorageAccount -ResourceGroupName $ResourceGroupName -Name $storageAccountName -ErrorAction Stop
+if (-not $storageAccount.EnableHierarchicalNamespace) {
+    throw "Storage account '$storageAccountName' does not have HNS (ADLS Gen2) enabled."
+}
+Write-Log "  HNS (ADLS Gen2) confirmed." 'INFO'
+
+# Verify dicom-output only when imaging ingestion is selected.
+$ctx = $storageAccount.Context
+if ($SkipImagingPipeline) {
+    Write-Log "  DICOM container verification skipped; clinical and OMOP ingestion remain enabled." 'INFO'
+} else {
+    $container = Get-AzStorageContainer -Name $DicomContainerName -Context $ctx -ErrorAction SilentlyContinue
+    if (-not $container) {
+        throw "Container '$DicomContainerName' not found in storage account '$storageAccountName'."
+    }
+    $blobCount = (Get-AzStorageBlob -Container $DicomContainerName -Context $ctx -MaxCount 5 | Measure-Object).Count
+    Write-Log "  Container '$DicomContainerName' exists with blobs (sampled $blobCount)." 'INFO'
+    if ($blobCount -eq 0) {
+        throw "Container '$DicomContainerName' exists in storage account '$storageAccountName' but contains no sampled blobs. DICOM ingestion cannot proceed."
+    }
+}
+$step1Timer.Stop()
+Record-Step -Name 'Resolve Infrastructure' -Status 'OK' -Seconds $step1Timer.Elapsed.TotalSeconds
+
+# ── Step 2: Resolve Fabric workspace identity ──
+$step2Timer = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log '─── Step 2: Resolving Fabric workspace identity ───' 'INFO'
+
+# Get workspace identity from Fabric API (preferred) with az ad fallback
+$workspacePrincipalId = $null
+$workspaceAppId = $null
+
+# First, try Fabric API to get workspace identity
+try {
+    $earlyFabToken = Get-FabricApiAccessToken
+    $earlyFabHeaders = Get-FabricApiHeaders -AccessToken $earlyFabToken
+
+    # Try provisionIdentity (returns identity if already exists or creates one)
+    try {
+        $identityResult = Invoke-FabricApiRequest -Method Post `
+            -Uri "$FabricManagementEndpoint/v1/workspaces" `
+            -Headers $earlyFabHeaders -Description 'List workspaces for identity'
+
+        # Actually, let's get workspace list first to find our workspace ID, then query identity
+        $wsListResult = Invoke-FabricApiRequest -Method Get `
+            -Uri "$FabricManagementEndpoint/v1/workspaces" `
+            -Headers $earlyFabHeaders -Description 'List workspaces'
+        $targetWs = $wsListResult.Response.value | Where-Object { $_.displayName -eq $FabricWorkspaceName } | Select-Object -First 1
+        if ($targetWs) {
+            $earlyWsId = $targetWs.id
+            # Try to provision identity (will return existing or create new)
+            try {
+                $idResult = Invoke-FabricApiRequest -Method Post `
+                    -Uri "$FabricManagementEndpoint/v1/workspaces/$earlyWsId/provisionIdentity" `
+                    -Headers $earlyFabHeaders -Description 'Provision workspace identity'
+                if ($idResult.Response) {
+                    $workspacePrincipalId = $idResult.Response.servicePrincipalId
+                    $workspaceAppId = $idResult.Response.applicationId
+                }
+            } catch {
+                # Identity already exists — try getting workspace details
+                try {
+                    $wsDetailResult = Invoke-FabricApiRequest -Method Get `
+                        -Uri "$FabricManagementEndpoint/v1/workspaces/$earlyWsId" `
+                        -Headers $earlyFabHeaders -Description 'Get workspace details'
+                    if ($wsDetailResult.Response.identity) {
+                        $workspacePrincipalId = $wsDetailResult.Response.identity.servicePrincipalId
+                        $workspaceAppId = $wsDetailResult.Response.identity.applicationId
+                    }
+                } catch {}
+            }
+        }
+    } catch {}
+} catch {
+    Write-Log "  Could not query Fabric API for workspace identity: $($_.Exception.Message)" 'DEBUG'
+}
+
+# Fallback to az ad if Fabric API didn't return the SP ID
+if (-not $workspacePrincipalId) {
+    Write-Log "  Falling back to az ad sp lookup..." 'INFO'
+    $workspaceSP = Get-AzADServicePrincipal -DisplayName $FabricWorkspaceName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($workspaceSP) {
+        $workspacePrincipalId = $workspaceSP.Id
+        $workspaceAppId = $workspaceSP.AppId
+    }
+}
+
+if (-not $workspacePrincipalId) {
+    throw "Cannot find service principal for workspace '$FabricWorkspaceName'. Ensure workspace managed identity exists."
+}
+Write-Log "  Workspace '$FabricWorkspaceName' → Service Principal ID: $workspacePrincipalId" 'INFO'
+if ($workspaceAppId) { Write-Log "    App ID: $workspaceAppId" 'INFO' }
+$step2Timer.Stop()
+Record-Step -Name 'Resolve Workspace Identity' -Status 'OK' -Seconds $step2Timer.Elapsed.TotalSeconds
+
+# ── Step 3: RBAC — Storage Blob Data Contributor on storage account ──
+$step3Timer = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log '─── Step 3: Ensuring RBAC role assignment ───' 'INFO'
+
+$rbacChanged = $false
+
+$result1 = Ensure-RoleAssignment -Scope $storageAccount.Id `
+    -PrincipalId $workspacePrincipalId `
+    -RoleDefinitionName 'Storage Blob Data Contributor' `
+    -PrincipalType 'ServicePrincipal' `
+    -Description "workspace identity '$FabricWorkspaceName'"
+if ($result1) { $rbacChanged = $true }
+
+# Also ensure the current user has Storage Blob Data Owner (required for ACL operations)
+$currentUser = (Get-AzContext).Account
+Write-Log "  Current user: $($currentUser.Id)" 'INFO'
+$currentUserObj = Get-AzADUser -UserPrincipalName $currentUser.Id -ErrorAction SilentlyContinue
+if ($currentUserObj) {
+    $result2 = Ensure-RoleAssignment -Scope $storageAccount.Id `
+        -PrincipalId $currentUserObj.Id `
+        -RoleDefinitionName 'Storage Blob Data Owner' `
+        -PrincipalType 'User' `
+        -Description "current user '$($currentUser.Id)'"
+    if ($result2) { $rbacChanged = $true }
+}
+
+if ($rbacChanged) {
+    Write-Log '  New RBAC assignments detected. Waiting 60 seconds for propagation...' 'INFO'
+    Start-Sleep -Seconds 60
+} else {
+    Write-Log '  All RBAC assignments already in place. Skipping wait.' 'INFO'
+}
+$step3Timer.Stop()
+Record-Step -Name 'RBAC Role Assignment' -Status $(if ($rbacChanged) { 'ASSIGNED' } else { 'SKIPPED' }) -Seconds $step3Timer.Elapsed.TotalSeconds
+
+# ── Step 4: ADLS Gen2 ACLs on dicom-output container ──
+$step4Timer = [System.Diagnostics.Stopwatch]::StartNew()
+if ($SkipImagingPipeline) {
+    Write-Log '─── Step 4: Skipping DICOM ACLs (imaging ingestion disabled) ───' 'INFO'
+    $step4Timer.Stop()
+    Record-Step -Name 'ADLS Gen2 ACLs' -Status 'SKIPPED' -Seconds $step4Timer.Elapsed.TotalSeconds
+} else {
+    Write-Log '─── Step 4: Setting ADLS Gen2 ACLs on dicom-output container ───' 'INFO'
+    $aclMaxRetries = 5
+    $aclSuccess = $false
+    for ($aclAttempt = 1; $aclAttempt -le $aclMaxRetries; $aclAttempt++) {
+        try {
+            Set-AdlsContainerAcl -StorageAccountName $storageAccountName `
+                -ResourceGroupName $ResourceGroupName `
+                -ContainerName $DicomContainerName `
+                -PrincipalId $workspacePrincipalId `
+                -PrincipalType 'sp' `
+                -Permissions 'rwx'
+            $aclSuccess = $true
+            break
+        } catch {
+            if ($aclAttempt -lt $aclMaxRetries -and $_.Exception.Message -match '403|AuthorizationPermissionMismatch') {
+                Write-Log "  ACL attempt $aclAttempt failed (RBAC not yet propagated). Waiting 60s before retry..." 'WARN'
+                Start-Sleep -Seconds 60
+            } else {
+                throw
+            }
+        }
+    }
+    if (-not $aclSuccess) { throw "Failed to set ACLs after $aclMaxRetries attempts." }
+    Write-Log '  ACLs set successfully.' 'INFO'
+    $step4Timer.Stop()
+    Record-Step -Name 'ADLS Gen2 ACLs' -Status 'OK' -Seconds $step4Timer.Elapsed.TotalSeconds
+}
+
+# ── Step 5: Resolve Fabric workspace + lakehouse IDs ──
+$step5Timer = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log '─── Step 5: Resolving Fabric workspace and lakehouse IDs ───' 'INFO'
+
+$fabricToken = Get-FabricApiAccessToken
+$fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
+
+# Resolve workspace ID from name
+$wsResult = Invoke-FabricApiRequest -Method Get -Uri "$FabricManagementEndpoint/v1/workspaces" -Headers $fabHeaders -Description 'List workspaces'
+$workspace = $wsResult.Response.value | Where-Object { $_.displayName -eq $FabricWorkspaceName } | Select-Object -First 1
+if (-not $workspace) {
+    throw "Fabric workspace '$FabricWorkspaceName' not found."
+}
+$workspaceId = $workspace.id
+Write-Log "  Workspace ID: $workspaceId" 'INFO'
+
+# Resolve lakehouse ID from name
+$lhResult = Invoke-FabricApiRequest -Method Get -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items?type=Lakehouse" -Headers $fabHeaders -Description 'List lakehouses'
+$lakehouse = $lhResult.Response.value | Where-Object { $_.displayName -eq $BronzeLakehouseName } | Select-Object -First 1
+if (-not $lakehouse) {
+    throw "Lakehouse '$BronzeLakehouseName' not found in workspace '$FabricWorkspaceName'."
+}
+$lakehouseId = $lakehouse.id
+Write-Log "  Lakehouse ID: $lakehouseId" 'INFO'
+$step5Timer.Stop()
+Record-Step -Name 'Resolve Workspace/Lakehouse' -Status 'OK' -Seconds $step5Timer.Elapsed.TotalSeconds
+
+if ($SkipImagingPipeline) {
+    Write-Log '─── Steps 6-8: Skipping DICOM folder, connection, and shortcut ───' 'INFO'
+    Record-Step -Name 'Create Lakehouse Folders' -Status 'SKIPPED' -Seconds 0
+    Record-Step -Name 'Create ADLS Connection' -Status 'SKIPPED' -Seconds 0
+    Record-Step -Name 'Create Lakehouse Shortcut' -Status 'SKIPPED' -Seconds 0
+    $connectionId = $null
+    $existingShortcut = $null
+} else {
+# ── Step 6: Create folder path in lakehouse ──
+$step6Timer = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log '─── Step 6: Creating folder path in lakehouse ───' 'INFO'
+
+$oneLakeToken = Get-OneLakeAccessToken
+
+# Parse the folder path into segments (strip leading "Files/")
+$folderParts = $ShortcutFolderPath.TrimStart('/').Split('/', [System.StringSplitOptions]::RemoveEmptyEntries)
+if ($folderParts[0] -eq 'Files') { $folderParts = $folderParts[1..($folderParts.Count - 1)] }
+
+Write-Log "  Ensuring path segments: $($folderParts -join ' → ')" 'INFO'
+New-LakehouseDirectoryPath -WorkspaceId $workspaceId -LakehouseId $lakehouseId -PathSegments $folderParts -AccessToken $oneLakeToken
+Write-Log "  Folder path created/verified." 'INFO'
+$step6Timer.Stop()
+Record-Step -Name 'Create Lakehouse Folders' -Status 'OK' -Seconds $step6Timer.Elapsed.TotalSeconds
+
+# ── Step 7: Create Fabric ADLS Gen2 connection ──
+$step7Timer = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log '─── Step 7: Creating Fabric ADLS Gen2 cloud connection ───' 'INFO'
+
+$connectionDisplayName = "fab-$storageAccountName-dicom-adls-conn"
+$connectionId = New-FabricAdlsConnection -AccessToken $fabricToken `
+    -DisplayName $connectionDisplayName `
+    -StorageAccountName $storageAccountName `
+    -ContainerName $DicomContainerName
+
+Write-Log "  Connection ID: $connectionId" 'INFO'
+$step7Timer.Stop()
+Record-Step -Name 'Create ADLS Connection' -Status 'OK' -Seconds $step7Timer.Elapsed.TotalSeconds
+
+# ── Step 8: Create shortcut ──
+$step8Timer = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log '─── Step 8: Creating Fabric lakehouse shortcut ───' 'INFO'
+
+# Refresh OneLake token (may have expired during RBAC/ACL steps)
+$oneLakeToken = Get-OneLakeAccessToken
+
+$existingShortcut = Get-FabricShortcutByName -AccessToken $fabricToken `
+    -WorkspaceId $workspaceId -LakehouseId $lakehouseId `
+    -ShortcutName $ShortcutName -ShortcutPath $ShortcutFolderPath
+
+if ($existingShortcut) {
+    Write-Log "  Shortcut '$ShortcutName' already exists at '$ShortcutFolderPath'. Skipping creation." 'INFO'
+} else {
+    # Remove any existing directory at the shortcut path (a folder blocks shortcut creation)
+    try {
+        $olPath = "$workspaceId/$lakehouseId/$ShortcutFolderPath/$ShortcutName"
+        $olHeaders = @{ Authorization = "Bearer $oneLakeToken" }
+        $null = Invoke-WebRequest -Method HEAD -Uri "$OneLakeEndpoint/$olPath`?action=getStatus" -Headers $olHeaders -ErrorAction Stop
+        # Directory exists — delete it so the shortcut can be created
+        Write-Log "  Removing existing directory '$ShortcutName' at '$ShortcutFolderPath' to create shortcut..." 'WARN'
+        $null = Invoke-RestMethod -Method DELETE -Uri "$OneLakeEndpoint/$olPath`?recursive=true" -Headers $olHeaders
+        Write-Log "  Removed conflicting directory." 'INFO'
+    } catch {
+        # No directory to remove — expected
+    }
+
+    $dfsUrl = "https://$storageAccountName.dfs.core.windows.net"
+    $shortcutBody = @{
+        path   = $ShortcutFolderPath
+        name   = $ShortcutName
+        target = @{
+            adlsGen2 = @{
+                location     = $dfsUrl
+                subpath      = "/$DicomContainerName"
+                connectionId = $connectionId
+            }
+        }
+    }
+
+    $uri = "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items/$lakehouseId/shortcuts?shortcutConflictPolicy=Abort"
+    try {
+        Invoke-FabricApiRequest -Method Post -Uri $uri -Headers $fabHeaders -Body $shortcutBody -Description "Create shortcut '$ShortcutName'"
+        Write-Log "  Shortcut created: $ShortcutFolderPath/$ShortcutName → $dfsUrl/$DicomContainerName" 'INFO'
+    } catch {
+        $errMsg = $_.Exception.Message
+        if ($errMsg -match '409|EntityConflict|shortcut.*already exists') {
+            Write-Log "  Shortcut already exists (409 conflict). Continuing." 'WARN'
+        } elseif ($errMsg -match 'Unauthorized|denied|Access|400') {
+            Write-Log \"\" 'WARN'
+            Write-Log \"  ✗ Shortcut creation FAILED: $errMsg\" 'WARN'
+            Write-Log \"\" 'WARN'
+            Write-Host \"  ┌──────────────────────────────────────────────────────────────┐\" -ForegroundColor Yellow
+            Write-Host \"  │  HOW TO FIX: Create the shortcut manually in the Fabric     │\" -ForegroundColor Yellow
+            Write-Host \"  │  portal, then re-run this script.                            │\" -ForegroundColor Yellow
+            Write-Host \"  └──────────────────────────────────────────────────────────────┘\" -ForegroundColor Yellow
+            Write-Host \"\" -ForegroundColor White
+            Write-Host \"  Steps:\" -ForegroundColor White
+            Write-Host \"    1. Open the Fabric portal: https://app.fabric.microsoft.com\" -ForegroundColor Gray
+            Write-Host \"    2. Navigate to workspace '$FabricWorkspaceName'\" -ForegroundColor Gray
+            Write-Host \"    3. Open the Bronze Lakehouse\" -ForegroundColor Gray
+            Write-Host \"    4. Navigate to Files → $ShortcutFolderPath\" -ForegroundColor Gray
+            Write-Host \"    5. Right-click → 'New shortcut' → 'Azure Data Lake Storage Gen2'\" -ForegroundColor Gray
+            Write-Host \"    6. Connection URL: $dfsUrl\" -ForegroundColor Cyan
+            Write-Host \"    7. Container/subpath: $DicomContainerName\" -ForegroundColor Cyan
+            Write-Host \"    8. Shortcut name: $ShortcutName\" -ForegroundColor Cyan
+            Write-Host \"    9. Auth: Workspace Identity\" -ForegroundColor Gray
+            Write-Host \"\" -ForegroundColor White
+            Write-Host \"  Workspace Identity Details:\" -ForegroundColor White
+            Write-Host \"    SP Object ID: $workspacePrincipalId\" -ForegroundColor Cyan
+            if ($workspaceAppId) { Write-Host \"    App ID:       $workspaceAppId\" -ForegroundColor Cyan }
+            Write-Host \"\" -ForegroundColor White
+            Write-Host \"  After creating the shortcut, re-run:\" -ForegroundColor White
+            Write-Host \"    .\\storage-access-trusted-workspace.ps1 -FabricWorkspaceName '$FabricWorkspaceName'\" -ForegroundColor Cyan
+            Write-Host \"\" -ForegroundColor White
+
+            $step8Timer.Stop()
+            Record-Step -Name 'Create Lakehouse Shortcut' -Status 'FAILED (manual required)' -Seconds $step8Timer.Elapsed.TotalSeconds
+            throw \"Shortcut creation failed — manual step required. See instructions above.\"
+        } else { throw }
+    }
+}
+$step8Timer.Stop()
+$shortcutStatus = if ($existingShortcut) { 'EXISTS' } else { 'OK' }
+Record-Step -Name 'Create Lakehouse Shortcut' -Status $shortcutStatus -Seconds $step8Timer.Elapsed.TotalSeconds
+}
+
+# ── Step 8.5: Ensure scipy is in HDS Environment ──
+$step85Timer = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log '─── Step 8.5: Ensuring scipy is in HDS Environment ───' 'INFO'
+Write-Log '  The HDS flattening notebooks require scipy.' 'INFO'
+Write-Log '  Adding scipy==1.11.4 to the Spark environment...' 'INFO'
+
+$fabricToken = Get-FabricApiAccessToken
+$fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
+
+try {
+    # Find the HDS environment item
+    $envResult = Invoke-FabricApiRequest -Method Get -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items?type=Environment" -Headers $fabHeaders -Description 'List environments'
+    $hdsEnv = $envResult.Response.value | Where-Object { $_.displayName -match "healthcare.*environment" }
+    if ($hdsEnv -is [array]) { $hdsEnv = $hdsEnv[0] }
+
+    if ($hdsEnv) {
+        $envId = $hdsEnv.id
+        $envName = $hdsEnv.displayName
+        Write-Log "  ✓ Environment: $envName ($envId)" 'INFO'
+        $scipyReady = $false
+
+        # Check published libraries for scipy
+        $scipyAlreadyPublished = $false
+        try {
+            $pubLibsResult = Invoke-FabricApiRequest -Method Get -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/environments/$envId/libraries?beta=False" -Headers $fabHeaders -Description 'Check published libraries for scipy'
+            $pubLibs = $pubLibsResult.Response
+            $scipyLib = $pubLibs.libraries | Where-Object { $_.name -eq "scipy" }
+            if ($scipyLib) {
+                $scipyAlreadyPublished = $true
+                Write-Log "  ✓ scipy already published (v$($scipyLib.version))" 'INFO'
+                $scipyReady = $true
+            }
+        } catch {
+            Write-Log "  Could not query published libraries. Proceeding to verify staging." 'DEBUG'
+        }
+
+        if (-not $scipyAlreadyPublished) {
+            # Check environment state — cannot publish if already publishing
+            $envMetaResult = Invoke-FabricApiRequest -Method Get -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/environments/$envId" -Headers $fabHeaders -Description 'Get environment details'
+            $envState = $envMetaResult.Response.properties.publishDetails.state
+            if ($envState -and $envState -ne "Success" -and $envState -ne "Failed" -and $envState -ne "Cancelled") {
+                Write-Log "  ⚠ Environment is currently '$envState' — waiting for current publish to finish..." 'WARN'
+                $envWaitStart = Get-Date
+                while ((New-TimeSpan -Start $envWaitStart).TotalMinutes -lt 15) {
+                    Start-Sleep -Seconds 30
+                    $envMetaResult = Invoke-FabricApiRequest -Method Get -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/environments/$envId" -Headers $fabHeaders -Description 'Get environment details'
+                    $envState = $envMetaResult.Response.properties.publishDetails.state
+                    if ($envState -eq "Success" -or $envState -eq "Failed" -or $envState -eq "Cancelled" -or -not $envState) {
+                        break
+                    }
+                    $elapsed = [math]::Round((New-TimeSpan -Start $envWaitStart).TotalMinutes, 1)
+                    Write-Log "    Still $envState (${elapsed}m)..." 'INFO'
+                }
+            }
+
+            # Export current external libraries YAML (to preserve existing)
+            $existingYml = ""
+            try {
+                $existingYml = Invoke-RestMethod -Method GET `
+                    -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/environments/$envId/staging/libraries/exportExternalLibraries" `
+                    -Headers $fabHeaders
+            } catch {
+                # No existing external libs — expected for fresh HDS deploy
+            }
+
+            # Build updated environment.yml with scipy
+            $scipyEntry = "scipy==1.11.4"
+            if ($existingYml -and $existingYml -match "scipy") {
+                Write-Log "  ✓ scipy already in staging libraries (pending publish)" 'INFO'
+            } else {
+                if ($existingYml -and $existingYml -match "- pip:") {
+                    # Append scipy to existing pip list
+                    $newYml = $existingYml.TrimEnd() + "`n      - $scipyEntry`n"
+                } else {
+                    $newYml = @"
+dependencies:
+  - pip:
+      - $scipyEntry
+"@
+                }
+
+                Write-Log "  Importing scipy==1.11.4 into staging..." 'INFO'
+
+                # Upload via importExternalLibraries
+                $importHeaders = @{
+                    "Authorization" = "Bearer $fabricToken"
+                    "Content-Type"  = "application/octet-stream"
+                }
+                $ymlBytes = [System.Text.Encoding]::UTF8.GetBytes($newYml)
+                $null = Invoke-RestMethod -Method POST `
+                    -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/environments/$envId/staging/libraries/importExternalLibraries" `
+                    -Headers $importHeaders `
+                    -Body $ymlBytes
+                Write-Log "  ✓ scipy==1.11.4 added to staging" 'INFO'
+            }
+
+            # Publish the environment
+            Write-Log "  Publishing environment (this takes 3-10 min)..." 'INFO'
+            $pubResp = Invoke-WebRequest -Method POST `
+                -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/environments/$envId/staging/publish?beta=False" `
+                -Headers $fabHeaders `
+                -UseBasicParsing
+
+            # Poll for publish completion (max 15 min)
+            $pubStart = Get-Date
+            $maxPubMin = 15
+            $pubSuccess = $false
+            while ((New-TimeSpan -Start $pubStart).TotalMinutes -lt $maxPubMin) {
+                Start-Sleep -Seconds 30
+                $elapsed = [math]::Round((New-TimeSpan -Start $pubStart).TotalMinutes, 1)
+
+                try {
+                    $envMetaResult = Invoke-FabricApiRequest -Method Get -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/environments/$envId" -Headers $fabHeaders -Description 'Get environment details'
+                    $pubState = $envMetaResult.Response.properties.publishDetails.state
+                    if ($pubState -eq "Success") {
+                        Write-Log "  ✓ Environment published — scipy==1.11.4 is now available" 'INFO'
+                        $pubSuccess = $true
+                        $scipyReady = $true
+                        break
+                    } elseif ($pubState -eq "Failed" -or $pubState -eq "Cancelled") {
+                        Write-Log "  ✗ Environment publish $pubState" 'WARN'
+                        break
+                    } else {
+                        Write-Log "    Publish status: $pubState (${elapsed}m elapsed)" 'INFO'
+                    }
+                } catch {
+                    Write-Log "    Poll error: $($_.Exception.Message)" 'WARN'
+                }
+            }
+
+            if (-not $pubSuccess) {
+                throw "HDS Spark environment did not publish scipy==1.11.4 within ${maxPubMin}m"
+            }
+        }
+        if (-not $scipyReady) {
+            throw "scipy==1.11.4 was not verified in the HDS Spark environment"
+        }
+        $step85Timer.Stop()
+        Record-Step -Name 'Ensure scipy in Spark Env' -Status 'OK' -Seconds $step85Timer.Elapsed.TotalSeconds
+    } else {
+        Write-Log "  ⚠ HDS Spark environment not found in workspace." 'WARN'
+        Write-Log "    Ensure Healthcare Data Foundations is deployed first." 'WARN'
+        Write-Log "    Then manually add scipy==1.11.4 to the environment." 'WARN'
+        $step85Timer.Stop()
+        Record-Step -Name 'Ensure scipy in Spark Env' -Status 'NOT FOUND' -Seconds $step85Timer.Elapsed.TotalSeconds
+        throw "HDS Spark environment not found in workspace"
+    }
+} catch {
+    $envErr = $_.Exception.Message
+    try { $envErr = ($_.ErrorDetails.Message | ConvertFrom-Json).message } catch {}
+    Write-Log "  ✗ Could not update environment: $envErr" 'WARN'
+    Write-Log "    Manually add scipy==1.11.4 to the HDS Spark environment." 'WARN'
+    $step85Timer.Stop()
+    Record-Step -Name 'Ensure scipy in Spark Env' -Status 'FAILED' -Seconds $step85Timer.Elapsed.TotalSeconds
+    throw "Could not update HDS Spark environment: $envErr"
+}
+
+# ── Step 9: Run Clinical Ingestion Pipeline, then Imaging Ingestion Pipeline, then OMOP ──
+# The clinical pipeline must run first. Once it completes successfully, the imaging pipeline runs.
+# OMOP must run after both complete successfully.
+$step9Timer = [System.Diagnostics.Stopwatch]::StartNew()
+$step9bTimer = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log '─── Step 9: Running HDS Ingestion Pipelines sequentially ───' 'INFO'
+if (-not $SkipImagingPipeline) {
+    $removedClinicalImagingStudies = Remove-ImagingStudyFromClinicalExport -StorageAccountName $storageAccountName
+} else {
+    Write-Log '  Clinical FHIR export retains ImagingStudy because the imaging pipeline is disabled.' 'INFO'
+}
+
+# Refresh token
+$fabricToken = Get-FabricApiAccessToken
+$fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
+
+# List data pipelines in the workspace
+$pipelineResult = Invoke-FabricApiRequest -Method Get `
+    -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items?type=DataPipeline" `
+    -Headers $fabHeaders -Description 'List data pipelines'
+
+$pipelines = @()
+if ($pipelineResult.Response.PSObject.Properties['value']) {
+    $pipelines = @($pipelineResult.Response.value)
+}
+
+# Find pipelines
+$clinicalPipeline = $pipelines | Where-Object { $_.displayName -eq $ClinicalPipelineName } | Select-Object -First 1
+$imagingPipeline = $pipelines | Where-Object { $_.displayName -eq $ImagingPipelineName } | Select-Object -First 1
+$imagingId = if ($imagingPipeline) { [string]$imagingPipeline.id } else { $null }
+$cmaPipeline = $pipelines | Where-Object { $_.displayName -eq $CmaPipelineName } | Select-Object -First 1
+$cmaId = if ($cmaPipeline) { [string]$cmaPipeline.id } else { $null }
+if ($cmaPipeline) {
+    Write-Log "  Detected optional CMA pipeline '$CmaPipelineName' (ID: $cmaId). It will be invoked after Clinical/Silver readiness, before Imaging and OMOP." 'INFO'
+} else {
+    Write-Log "  Optional CMA pipeline '$CmaPipelineName' not found; no CMA follow-up action will run." 'INFO'
+}
+
+$excludedPipelineNames = @($ClinicalPipelineName, $ImagingPipelineName, $OmopPipelineName, $CmaPipelineName)
+$optionalSidecarPipelines = Resolve-OptionalSidecarPipelines -Pipelines $pipelines -Names $OptionalSidecarPipelineNames -Patterns $OptionalSidecarPipelineNamePatterns -ExcludedNames $excludedPipelineNames
+$optionalSidecarResults = @()
+$serializedSidecars = @($optionalSidecarPipelines | Where-Object { [string]$_.displayName -match '(?i)claim|cclf' })
+$nonBlockingSidecars = @($optionalSidecarPipelines | Where-Object { [string]$_.displayName -notmatch '(?i)claim|cclf' })
+if ($optionalSidecarPipelines.Count -gt 0) {
+    Write-Log "  Detected $($optionalSidecarPipelines.Count) optional HDS sidecar pipeline(s). Claims/CCLF writers run serially to avoid Delta conflicts; disjoint sidecars remain non-blocking." 'INFO'
+    foreach ($sidecarPipeline in $serializedSidecars) {
+        $sidecarName = [string]$sidecarPipeline.displayName
+        $optionalSidecarResults += Invoke-OptionalDataPipelineSerialized -WorkspaceId $workspaceId -PipelineName $sidecarName -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -StepName "Sidecar Pipeline: $sidecarName"
+    }
+    foreach ($sidecarPipeline in $nonBlockingSidecars) {
+        $sidecarName = [string]$sidecarPipeline.displayName
+        $optionalSidecarResults += Invoke-OptionalDataPipelineNonBlocking -WorkspaceId $workspaceId -PipelineName $sidecarName -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -StepName "Sidecar Pipeline: $sidecarName"
+    }
+} else {
+    Write-Log '  No optional HDS sidecar pipelines matched the configured names/patterns in the live workspace.' 'INFO'
+}
+
+$cmaInvoked = $false
+$cmaAlreadyRunning = $false
+$cmaCompleted = $false
+$cmaFailed = $false
+$cmaResult = $null
+
+
+$clinInvoked = $false
+$clinicalCompleted = $false
+$clinicalFailed = $false
+
+if ($RequireClinicalFhirData) {
+    try {
+        $clinicalRows = Get-BronzeTableRowCount -WorkspaceId $workspaceId -LakehouseId $lakehouseId -LakehouseName $BronzeLakehouseName -TableName 'ClinicalFhir' -FabricHeaders $fabHeaders
+        if ($clinicalRows -gt 0) {
+            Write-Log "  ✓ Bronze ClinicalFhir already contains $clinicalRows rows — skipping clinical pipeline rerun." 'INFO'
+            $clinicalCompleted = $true
+            $step9bTimer.Stop()
+        }
+    } catch {
+        Write-Log "  Clinical readiness pre-check did not pass: $($_.Exception.Message). Will invoke clinical pipeline." 'WARN'
+    }
+}
+
+if (-not $clinicalCompleted) {
+    if ($clinicalPipeline) {
+        $clinicalId = $clinicalPipeline.id
+        Write-Log "  Found '$ClinicalPipelineName' (ID: $clinicalId)" 'INFO'
+        $clinRunUri = "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items/$clinicalId/jobs/Pipeline/instances"
+        Write-Log "  Invoking clinical pipeline run..." 'INFO'
+        try {
+            Invoke-FabricApiRequest -Method Post -Uri $clinRunUri -Headers $fabHeaders -Description "Run pipeline '$ClinicalPipelineName'"
+            Write-Log "  ✓ Clinical pipeline invoked successfully." 'INFO'
+            $clinInvoked = $true
+        } catch {
+            $errMsg = $_.Exception.Message
+            if ($errMsg -match '409|already running|TooManyRequestsForJobs') {
+                Write-Log "  Clinical pipeline is already running or recently invoked — will poll for completion." 'WARN'
+                $clinInvoked = $true
+            } else {
+                Write-Log "  ⚠ Could not invoke clinical pipeline: $errMsg" 'WARN'
+            }
+        }
+    } else {
+        Write-Log "  Clinical pipeline '$ClinicalPipelineName' not found." 'WARN'
+    }
+}
+
+if ($clinInvoked) {
+    Write-Log "  Waiting for Clinical pipeline to complete (polling every 30s, max 60 min)..." 'INFO'
+    $maxPollMin = 60
+    $pollStart = Get-Date
+
+    while ((New-TimeSpan -Start $pollStart).TotalMinutes -lt $maxPollMin) {
+        if ($clinicalCompleted -or $clinicalFailed) {
+            break
+        }
+
+        Start-Sleep -Seconds 30
+        $pollElapsed = [math]::Round((New-TimeSpan -Start $pollStart).TotalMinutes, 1)
+
+        # Refresh token periodically
+        if ([math]::Floor($pollElapsed) % 10 -eq 0 -and $pollElapsed -gt 0) {
+            $fabricToken = Get-FabricApiAccessToken
+            $fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
+        }
+
+        # Poll Clinical Pipeline
+        try {
+            $clinJobsResult = Invoke-FabricApiRequest -Method Get `
+                -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items/$clinicalId/jobs/instances?limit=1" `
+                -Headers $fabHeaders -Description 'Poll clinical pipeline status'
+            $clinLatestJob = $null
+            if ($clinJobsResult.Response.PSObject.Properties['value']) {
+                $clinLatestJob = $clinJobsResult.Response.value | Select-Object -First 1
+            }
+
+            if ($clinLatestJob) {
+                $clinJobStatus = $clinLatestJob.status
+                Write-Log "  Clinical pipeline status: $clinJobStatus ($pollElapsed min elapsed)" 'INFO'
+
+                if ($clinJobStatus -eq 'Completed') {
+                    Write-Log "  ✓ Clinical pipeline completed successfully!" 'INFO'
+                    $clinicalCompleted = $true
+                    $step9bTimer.Stop()
+                } elseif ($clinJobStatus -in @('Failed', 'Cancelled')) {
+                    Write-Log "  ✗ Clinical pipeline $clinJobStatus!" 'WARN'
+                    $clinicalFailed = $true
+                    $step9bTimer.Stop()
+                }
+            }
+        } catch {
+            Write-Log "  Poll error for Clinical pipeline: $($_.Exception.Message). Retrying..." 'WARN'
+        }
+    }
+
+    if ($step9bTimer.IsRunning) { $step9bTimer.Stop() }
+    if (-not $clinicalCompleted -and -not $clinicalFailed) {
+        Write-Log "  ⚠ Clinical pipeline did not complete within $maxPollMin min." 'WARN'
+    }
+    if ($clinicalCompleted -and $RequireClinicalFhirData) {
+        try {
+            Wait-LakehouseTableHasData -WorkspaceId $workspaceId -LakehouseId $lakehouseId -LakehouseName $BronzeLakehouseName -TableName 'ClinicalFhir' -FabricHeaders $fabHeaders -Reason 'Clinical pipeline completion'
+        } catch {
+            Write-Log "  ✗ Bronze ClinicalFhir readiness check failed: $($_.Exception.Message)" 'ERROR'
+            $clinicalCompleted = $false
+            $clinicalFailed = $true
+        }
+    }
+    if ($clinicalCompleted) {
+        try {
+            $silverResult = Invoke-FabricApiRequest -Method Get `
+                -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items?type=Lakehouse" `
+                -Headers $fabHeaders -Description 'List lakehouses for Silver reference validation'
+            $silverLh = $silverResult.Response.value | Where-Object { $_.displayName -eq 'healthcare1_msft_silver' } | Select-Object -First 1
+            if (-not $silverLh) { throw "Silver Lakehouse 'healthcare1_msft_silver' not found." }
+            Assert-SilverFhirReferencesIntact -WorkspaceId $workspaceId -LakehouseId $silverLh.id -LakehouseName $silverLh.displayName -FabricHeaders $fabHeaders
+        } catch {
+            Write-Log "  ✗ Silver FHIR reference validation failed: $($_.Exception.Message)" 'ERROR'
+            $clinicalCompleted = $false
+            $clinicalFailed = $true
+        }
+    }
+} else {
+    $step9bTimer.Stop()
+}
+
+# ── Step 9c: Optional CMA follow-up (non-blocking) ──
+# Care Management Analytics reads Silver inputs. If deployed, launch it as soon
+# as Clinical/Silver readiness has passed; do not wait for Imaging or OMOP.
+if (-not $cmaPipeline) {
+    $cmaResult = Invoke-OptionalDataPipelineNonBlocking -WorkspaceId $workspaceId -PipelineName $CmaPipelineName -Pipeline $null -FabricHeaders $fabHeaders -StepName 'CMA Pipeline' -SkipReason 'not deployed'
+} elseif (-not $clinicalCompleted) {
+    $cmaTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Log '─── Step 9c: SKIPPING CMA pipeline (Clinical/Silver readiness did not complete) ───' 'WARN'
+    Write-Log '  CMA is a non-blocking Silver consumer and must start only after Clinical/Silver readiness passes.' 'WARN'
+    $cmaTimer.Stop()
+    Record-Step -Name 'CMA Pipeline' -Status 'SKIPPED' -Seconds $cmaTimer.Elapsed.TotalSeconds
+    $cmaResult = [pscustomobject]@{ Name = $CmaPipelineName; Id = $cmaId; Status = 'SKIPPED'; Invoked = $false; AlreadyRunning = $false }
+} else {
+    $cmaResult = Invoke-OptionalDataPipelineNonBlocking -WorkspaceId $workspaceId -PipelineName $CmaPipelineName -Pipeline $cmaPipeline -FabricHeaders $fabHeaders -StepName 'CMA Pipeline'
+    $cmaInvoked = [bool]$cmaResult.Invoked
+    $cmaAlreadyRunning = [bool]$cmaResult.AlreadyRunning
+}
+
+$imgInvoked = $false
+$imgCompleted = $false
+$imgFailed = $false
+$imgAttempt = 1
+
+if ($SkipImagingPipeline) {
+    Write-Log '─── Step 9b: Imaging Ingestion Pipeline intentionally skipped ───' 'INFO'
+    $imgCompleted = $true
+    $step9Timer.Stop()
+} elseif ($clinicalCompleted) {
+    Write-Log '─── Step 9b: Running Imaging Ingestion Pipeline ───' 'INFO'
+    if ($imagingPipeline) {
+        Write-Log "  Found '$ImagingPipelineName' (ID: $imagingId)" 'INFO'
+        $imgRunUri = "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items/$imagingId/jobs/Pipeline/instances"
+        Write-Log "  Invoking imaging pipeline run..." 'INFO'
+        try {
+            Invoke-FabricApiRequest -Method Post -Uri $imgRunUri -Headers $fabHeaders -Description "Run pipeline '$ImagingPipelineName'"
+            Write-Log "  ✓ Imaging pipeline invoked successfully." 'INFO'
+            $imgInvoked = $true
+        } catch {
+            $errMsg = $_.Exception.Message
+            if ($errMsg -match '409|already running|TooManyRequestsForJobs') {
+                Write-Log "  Imaging pipeline is already running or recently invoked — will poll for completion." 'WARN'
+                $imgInvoked = $true
+            } else {
+                Write-Log "  ⚠ Could not invoke imaging pipeline: $errMsg" 'WARN'
+            }
+        }
+    } else {
+        Write-Log "  Imaging pipeline '$ImagingPipelineName' not found." 'ERROR'
+    }
+
+    if ($imgInvoked) {
+        Write-Log "  Waiting for Imaging pipeline to complete (polling every 30s, max 60 min)..." 'INFO'
+        $maxPollMin = 60
+        $pollStart = Get-Date
+
+        while ((New-TimeSpan -Start $pollStart).TotalMinutes -lt $maxPollMin) {
+            if ($imgCompleted -or $imgFailed) {
+                break
+            }
+
+            Start-Sleep -Seconds 30
+            $pollElapsed = [math]::Round((New-TimeSpan -Start $pollStart).TotalMinutes, 1)
+
+            # Refresh token periodically
+            if ([math]::Floor($pollElapsed) % 10 -eq 0 -and $pollElapsed -gt 0) {
+                $fabricToken = Get-FabricApiAccessToken
+                $fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
+            }
+
+            # Poll Imaging Pipeline
+            try {
+                $jobsResult = Invoke-FabricApiRequest -Method Get `
+                    -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items/$imagingId/jobs/instances?limit=1" `
+                    -Headers $fabHeaders -Description 'Poll imaging pipeline status'
+                $latestJob = $null
+                if ($jobsResult.Response.PSObject.Properties['value']) {
+                    $latestJob = $jobsResult.Response.value | Select-Object -First 1
+                }
+
+                if ($latestJob) {
+                    $jobStatus = $latestJob.status
+                    Write-Log "  Imaging pipeline status: $jobStatus ($pollElapsed min elapsed)" 'INFO'
+
+                    if ($jobStatus -eq 'Completed') {
+                        Write-Log "  ✓ Imaging pipeline completed successfully!" 'INFO'
+                        $imgCompleted = $true
+                        $step9Timer.Stop()
+                    } elseif ($jobStatus -in @('Failed', 'Cancelled')) {
+                        $failureText = try { $latestJob.failureReason | ConvertTo-Json -Depth 20 -Compress } catch { [string]$latestJob.failureReason }
+                        if ($jobStatus -eq 'Failed' -and (Test-TransientFabricNotebookSessionFailure -FailureText $failureText) -and $imgAttempt -lt 3) {
+                            $delay = 45 * $imgAttempt
+                            Write-Log "  Imaging pipeline hit a transient notebook session failure; retrying in ${delay}s (attempt $($imgAttempt + 1)/3)." 'WARN'
+                            Start-Sleep -Seconds $delay
+                            $imgAttempt++
+                            $retryStarted = $false
+                            try {
+                                Invoke-FabricApiRequest -Method Post -Uri $imgRunUri -Headers $fabHeaders -Description "Retry pipeline '$ImagingPipelineName'"
+                                $retryStarted = $true
+                            } catch {
+                                $retryError = $_.Exception.Message
+                                if ($retryError -match '409|already running|TooManyRequestsForJobs') {
+                                    $retryStarted = $true
+                                } else {
+                                    Write-Log "  Imaging retry invocation failed: $retryError" 'WARN'
+                                }
+                            }
+                            if ($retryStarted) {
+                                $pollStart = Get-Date
+                                continue
+                            }
+                        }
+                        Write-Log "  ✗ Imaging pipeline $jobStatus. $failureText" 'WARN'
+                        $imgFailed = $true
+                        $step9Timer.Stop()
+                    }
+                }
+            } catch {
+                Write-Log "  Poll error for Imaging pipeline: $($_.Exception.Message). Retrying..." 'WARN'
+            }
+        }
+
+        if ($step9Timer.IsRunning) { $step9Timer.Stop() }
+        if (-not $imgCompleted -and -not $imgFailed) {
+            Write-Log "  ⚠ Imaging pipeline did not complete within $maxPollMin min." 'WARN'
+        }
+        if ($imgCompleted -and $RequireImagingDicomData) {
+            try {
+                Wait-LakehouseTableHasData -WorkspaceId $workspaceId -LakehouseId $lakehouseId -LakehouseName $BronzeLakehouseName -TableName 'ImagingDicom' -FabricHeaders $fabHeaders -Reason 'Imaging pipeline completion'
+            } catch {
+                Write-Log "  ✗ Bronze ImagingDicom readiness check failed: $($_.Exception.Message)" 'ERROR'
+                $imgCompleted = $false
+                $imgFailed = $true
+            }
+        }
+        if ($imgCompleted) {
+            try {
+                $silverResult = Invoke-FabricApiRequest -Method Get `
+                    -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items?type=Lakehouse" `
+                    -Headers $fabHeaders -Description 'List lakehouses for Silver imaging validation'
+                $silverLh = $silverResult.Response.value | Where-Object { $_.displayName -eq 'healthcare1_msft_silver' } | Select-Object -First 1
+                if (-not $silverLh) { throw "Silver Lakehouse 'healthcare1_msft_silver' not found." }
+                Wait-LakehouseTableHasData -WorkspaceId $workspaceId -LakehouseId $silverLh.id -LakehouseName $silverLh.displayName -TableName 'ImagingStudy' -FabricHeaders $fabHeaders -Reason 'Imaging pipeline completion' -Label 'Silver Lakehouse' -TimeoutMinutes 20
+                Wait-LakehouseTableHasData -WorkspaceId $workspaceId -LakehouseId $silverLh.id -LakehouseName $silverLh.displayName -TableName 'ImagingMetastore' -FabricHeaders $fabHeaders -Reason 'Imaging pipeline completion' -Label 'Silver Lakehouse' -TimeoutMinutes 20
+            } catch {
+                Write-Log "  ✗ Silver imaging readiness check failed: $($_.Exception.Message)" 'ERROR'
+                $imgCompleted = $false
+                $imgFailed = $true
+            }
+        }
+    } else {
+        $step9Timer.Stop()
+    }
+} else {
+    Write-Log '─── Step 9b: SKIPPING Imaging Ingestion Pipeline (Clinical pipeline was not completed successfully) ───' 'WARN'
+    $step9Timer.Stop()
+}
+
+Record-Step -Name 'Clinical Pipeline' -Status $(if ($clinicalCompleted) { 'COMPLETED' } elseif ($clinicalPipeline) { 'FAILED/TIMEOUT/WARN' } else { 'NOT FOUND' }) -Seconds $step9bTimer.Elapsed.TotalSeconds
+Record-Step -Name 'Imaging Pipeline' -Status $(if ($SkipImagingPipeline) { 'SKIPPED' } elseif ($imgCompleted) { 'COMPLETED' } elseif (-not $clinicalCompleted) { 'SKIPPED' } else { 'FAILED/TIMEOUT/WARN' }) -Seconds $step9Timer.Elapsed.TotalSeconds
+
+# ── Step 10: Run OMOP Analytics pipeline (MUST run AFTER imaging + clinical pipelines complete) ──
+# IMPORTANT: OMOP cannot run in parallel with any other HDS pipeline.
+$step10Timer = [System.Diagnostics.Stopwatch]::StartNew()
+$omopPipeline = $null  # Initialize to avoid unset variable errors in summary
+
+if (-not $clinicalCompleted -or (-not $SkipImagingPipeline -and -not $imgCompleted)) {
+    Write-Log '─── Step 10: SKIPPING OMOP pipeline (required ingestion prerequisite incomplete) ───' 'WARN'
+    Write-Log "  OMOP cannot run while a selected core pipeline is incomplete." 'WARN'
+    Write-Log "  Run OMOP manually after the selected prerequisites finish successfully." 'WARN'
+    $step10Timer.Stop()
+    Record-Step -Name 'OMOP Pipeline' -Status 'SKIPPED (prerequisites incomplete)' -Seconds $step10Timer.Elapsed.TotalSeconds
+} else {
+
+Write-Log '─── Step 10: Running OMOP Analytics pipeline ───' 'INFO'
+Write-Log "  (Imaging pipeline completed — safe to start OMOP)" 'INFO'
+
+# Refresh token
+$fabricToken = Get-FabricApiAccessToken
+$fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
+
+# Re-fetch pipelines in case the list is stale
+$pipelineResult2 = Invoke-FabricApiRequest -Method Get `
+    -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items?type=DataPipeline" `
+    -Headers $fabHeaders -Description 'List data pipelines (for OMOP)'
+
+$pipelines2 = @()
+if ($pipelineResult2.Response.PSObject.Properties['value']) {
+    $pipelines2 = @($pipelineResult2.Response.value)
+}
+
+$omopPipeline = $pipelines2 | Where-Object { $_.displayName -eq $OmopPipelineName } | Select-Object -First 1
+if (-not $omopPipeline) {
+    Write-Log "  OMOP pipeline '$OmopPipelineName' not found." 'WARN'
+    Write-Log "  Available pipelines:" 'INFO'
+    foreach ($p in $pipelines2) { Write-Log "    - $($p.displayName) ($($p.id))" 'INFO' }
+    Write-Log "  Skipping OMOP pipeline — it may not be deployed yet." 'WARN'
+    $step10Timer.Stop()
+    Record-Step -Name 'OMOP Pipeline' -Status 'NOT FOUND' -Seconds $step10Timer.Elapsed.TotalSeconds
+} else {
+    $omopId = $omopPipeline.id
+    Write-Log "  Found '$OmopPipelineName' (ID: $omopId)" 'INFO'
+
+    $omopRunUri = "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items/$omopId/jobs/Pipeline/instances"
+    Write-Log "  Invoking OMOP analytics pipeline run..." 'INFO'
+
+    $omopInvoked = $false
+    $omopCompleted = $false
+    $omopFailed = $false
+
+    try {
+        Invoke-FabricApiRequest -Method Post -Uri $omopRunUri -Headers $fabHeaders -Description "Run pipeline '$OmopPipelineName'"
+        Write-Log "  OMOP pipeline invoked successfully (202 Accepted)." 'INFO'
+        $omopInvoked = $true
+    } catch {
+        $errMsg = $_.Exception.Message
+        if ($errMsg -match '409|already running|TooManyRequestsForJobs') {
+            Write-Log "  OMOP pipeline is already running or recently invoked — will poll for completion." 'WARN'
+            $omopInvoked = $true
+        } else {
+            Write-Log "  ⚠ Could not invoke OMOP pipeline: $errMsg" 'WARN'
+            $step10Timer.Stop()
+            Record-Step -Name 'OMOP Pipeline' -Status 'FAILED' -Seconds $step10Timer.Elapsed.TotalSeconds
+            throw
+        }
+    }
+
+    if ($omopInvoked) {
+        Write-Log "  Waiting for OMOP pipeline to complete (polling every 30s, max 60 min)..." 'INFO'
+        $maxPollMin = 60
+        $pollStart = Get-Date
+
+        while ((New-TimeSpan -Start $pollStart).TotalMinutes -lt $maxPollMin) {
+            if ($omopCompleted -or $omopFailed) {
+                break
+            }
+
+            Start-Sleep -Seconds 30
+            $pollElapsed = [math]::Round((New-TimeSpan -Start $pollStart).TotalMinutes, 1)
+
+            # Refresh token periodically
+            if ([math]::Floor($pollElapsed) % 10 -eq 0 -and $pollElapsed -gt 0) {
+                $fabricToken = Get-FabricApiAccessToken
+                $fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
+            }
+
+            # Poll OMOP Pipeline
+            try {
+                $jobsResult = Invoke-FabricApiRequest -Method Get `
+                    -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items/$omopId/jobs/instances?limit=1" `
+                    -Headers $fabHeaders -Description 'Poll OMOP pipeline status'
+                $latestJob = $null
+                if ($jobsResult.Response.PSObject.Properties['value']) {
+                    $latestJob = $jobsResult.Response.value | Select-Object -First 1
+                }
+
+                if ($latestJob) {
+                    $jobStatus = $latestJob.status
+                    Write-Log "  OMOP pipeline status: $jobStatus ($pollElapsed min elapsed)" 'INFO'
+
+                    if ($jobStatus -eq 'Completed') {
+                        Write-Log "  ✓ OMOP pipeline completed successfully!" 'INFO'
+                        $omopCompleted = $true
+                        $step10Timer.Stop()
+                        Record-Step -Name 'OMOP Pipeline' -Status 'COMPLETED' -Seconds $step10Timer.Elapsed.TotalSeconds
+                    } elseif ($jobStatus -in @('Failed', 'Cancelled')) {
+                        Write-Log "  ✗ OMOP pipeline $jobStatus!" 'WARN'
+                        $omopFailed = $true
+                        $step10Timer.Stop()
+                        Record-Step -Name 'OMOP Pipeline' -Status 'FAILED' -Seconds $step10Timer.Elapsed.TotalSeconds
+                    }
+                }
+            } catch {
+                Write-Log "  Poll error for OMOP pipeline: $($_.Exception.Message). Retrying..." 'WARN'
+            }
+        }
+
+        if ($step10Timer.IsRunning) { $step10Timer.Stop() }
+        if (-not $omopCompleted -and -not $omopFailed) {
+            Write-Log "  ⚠ OMOP pipeline did not complete within $maxPollMin min." 'WARN'
+            Record-Step -Name 'OMOP Pipeline' -Status 'TIMEOUT' -Seconds $step10Timer.Elapsed.TotalSeconds
+        }
+    }
+}
+} # end: if ($imgCompleted) — OMOP only runs after imaging completes
+
+if ($cmaPipeline -and ($cmaInvoked -or $cmaAlreadyRunning)) {
+    $cmaFinalizeTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Log '─── Step 9d: Waiting for CMA pipeline before semantic model finalization ───' 'INFO'
+    $maxPollMin = 60
+    $pollStart = Get-Date
+    while ((New-TimeSpan -Start $pollStart).TotalMinutes -lt $maxPollMin) {
+        if ($cmaCompleted -or $cmaFailed) { break }
+        Start-Sleep -Seconds 30
+        $pollElapsed = [math]::Round((New-TimeSpan -Start $pollStart).TotalMinutes, 1)
+        if ([math]::Floor($pollElapsed) % 10 -eq 0 -and $pollElapsed -gt 0) {
+            $fabricToken = Get-FabricApiAccessToken
+            $fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
+        }
+        try {
+            $cmaJobsResult = Invoke-FabricApiRequest -Method Get `
+                -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items/$cmaId/jobs/instances?limit=1" `
+                -Headers $fabHeaders -Description 'Poll CMA pipeline status'
+            $cmaLatestJob = $null
+            if ($cmaJobsResult.Response.PSObject.Properties['value']) {
+                $cmaLatestJob = $cmaJobsResult.Response.value | Select-Object -First 1
+            }
+            if ($cmaLatestJob) {
+                $cmaJobStatus = $cmaLatestJob.status
+                Write-Log "  CMA pipeline status: $cmaJobStatus ($pollElapsed min elapsed)" 'INFO'
+                if ($cmaJobStatus -eq 'Completed') {
+                    $cmaCompleted = $true
+                } elseif ($cmaJobStatus -in @('Failed', 'Cancelled')) {
+                    Write-Log "  ✗ CMA pipeline $cmaJobStatus; skipping semantic model finalization." 'WARN'
+                    $cmaFailed = $true
+                }
+            }
+        } catch {
+            Write-Log "  Poll error for CMA pipeline: $($_.Exception.Message). Retrying..." 'WARN'
+        }
+    }
+
+    if ($cmaFailed) {
+        Write-Log '  CMA failed after overlapping the core pipelines; retrying serially to resolve transient Delta write conflicts.' 'WARN'
+        $retryResult = Invoke-OptionalDataPipelineSerialized `
+            -WorkspaceId $workspaceId -PipelineName $CmaPipelineName -Pipeline $cmaPipeline `
+            -FabricHeaders $fabHeaders -StepName 'CMA Pipeline Retry' -MaxAttempts 3 -TimeoutMinutes 60
+        $cmaCompleted = $retryResult.Status -eq 'COMPLETED'
+        $cmaFailed = -not $cmaCompleted
+    }
+
+    if ($cmaCompleted) {
+        $fabricToken = Get-FabricApiAccessToken
+        $fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
+        Invoke-CmaSemanticModelFinalization -WorkspaceId $workspaceId -WorkspaceName $FabricWorkspaceName -FabricHeaders $fabHeaders
+    } else {
+        $cmaFinalizeTimer.Stop()
+        Record-Step -Name 'CMA Semantic Model' -Status $(if ($cmaFailed) { 'SKIPPED (CMA failed)' } else { 'TIMEOUT' }) -Seconds $cmaFinalizeTimer.Elapsed.TotalSeconds
+        Write-Log '  ⚠ CMA semantic model finalization skipped because the CMA pipeline did not complete.' 'WARN'
+    }
+}
+
+
+# ── Summary ──
+$overallTimer.Stop()
+$totalSeconds = $overallTimer.Elapsed.TotalSeconds
+$totalDisplay = if ($totalSeconds -ge 60) { "{0:N1} min" -f ($totalSeconds / 60) } else { "{0:N0} sec" -f $totalSeconds }
+$blockingFailures = @()
+if (-not $clinicalCompleted) { $blockingFailures += 'Clinical pipeline did not complete successfully' }
+if (-not $SkipImagingPipeline -and -not $imgCompleted) { $blockingFailures += 'Imaging pipeline did not complete successfully' }
+if (-not $omopPipeline) {
+    $blockingFailures += 'OMOP pipeline was not found'
+} elseif (-not (Get-Variable -Name omopCompleted -ErrorAction SilentlyContinue) -or -not $omopCompleted) {
+    $blockingFailures += 'OMOP pipeline did not complete successfully'
+}
+if ($cmaPipeline -and -not $cmaCompleted) { $blockingFailures += 'CMA pipeline did not complete successfully' }
+
+
+Write-Host ""
+Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor $(if ($blockingFailures.Count -eq 0) { 'Green' } else { 'Red' })
+Write-Host $(if ($blockingFailures.Count -eq 0) { "  DEPLOYMENT COMPLETE" } else { "  DEPLOYMENT INCOMPLETE" }) -ForegroundColor $(if ($blockingFailures.Count -eq 0) { 'Green' } else { 'Red' })
+Write-Host "═══════════════════════════════════════════════════════════" -ForegroundColor $(if ($blockingFailures.Count -eq 0) { 'Green' } else { 'Red' })
+Write-Host ""
+Write-Host "  Step Summary:" -ForegroundColor White
+Write-Host "  $('─' * 55)" -ForegroundColor DarkGray
+
+foreach ($r in $stepResults) {
+    $icon = if ($r.Status -in @('OK','COMPLETED','INVOKED','SKIPPED','ALREADY RUNNING','ASSIGNED','OVERWRITTEN/BOUND')) { '✓' } else { '✗' }
+    $color = if ($icon -eq '✓') { 'Green' } else { 'Yellow' }
+    $line = "  $icon  $($r.Step.PadRight(30)) $($r.Status.PadRight(15)) $($r.Duration)"
+    Write-Host $line -ForegroundColor $color
+}
+
+Write-Host "  $('─' * 55)" -ForegroundColor DarkGray
+Write-Host "  Total: $totalDisplay" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Resources:" -ForegroundColor White
+Write-Host "    Shortcut:  $ShortcutFolderPath/$ShortcutName" -ForegroundColor DarkGray
+Write-Host "    Target:    https://$storageAccountName.dfs.core.windows.net/$DicomContainerName" -ForegroundColor DarkGray
+Write-Host "    Lakehouse: $BronzeLakehouseName ($lakehouseId)" -ForegroundColor DarkGray
+Write-Host "    Workspace: $FabricWorkspaceName ($workspaceId)" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  The HDS pipeline sequence:" -ForegroundColor Cyan
+Write-Host "    1. Optional sidecars — claims/CCLF serialized with retry; disjoint pipelines non-blocking ($(if ($optionalSidecarResults.Count -gt 0) { 'RECORDED' } else { 'NONE MATCHED' }))" -ForegroundColor $(if ($optionalSidecarResults.Count -gt 0) { 'Green' } else { 'DarkGray' })
+Write-Host "    2. Clinical Foundation pipeline — $(if ($clinicalCompleted) { 'COMPLETED ✓' } else { 'IN PROGRESS / NOT COMPLETED' })" -ForegroundColor $(if ($clinicalCompleted) { 'Green' } else { 'Yellow' })
+if ($cmaPipeline) {
+    $cmaStatus = if ($cmaCompleted) {
+        'COMPLETED ✓; semantic model overwritten and report rebound'
+    } elseif ($cmaFailed) {
+        'FAILED; semantic model finalization skipped'
+    } elseif ($cmaInvoked) {
+        'INVOKED after Clinical/Silver readiness; awaiting finalization'
+    } elseif ($cmaAlreadyRunning) {
+        'ALREADY RUNNING after Clinical/Silver readiness; awaiting finalization'
+    } elseif (-not $clinicalCompleted) {
+        'SKIPPED (waiting for Clinical/Silver readiness)'
+    } else {
+        'NOT INVOKED (non-blocking warning)'
+    }
+    Write-Host "    3. Care Management Analytics pipeline — $cmaStatus" -ForegroundColor $(if ($cmaInvoked -or $cmaAlreadyRunning) { 'Green' } else { 'Yellow' })
+}
+Write-Host "    4. Imaging with Clinical Foundation pipeline — $(if ($imgCompleted) { 'COMPLETED ✓' } else { 'IN PROGRESS / NOT COMPLETED' })" -ForegroundColor $(if ($imgCompleted) { 'Green' } else { 'Yellow' })
+if ($omopPipeline) {
+    $omopStatus = if ((Get-Variable -Name omopCompleted -ErrorAction SilentlyContinue) -and $omopCompleted) {
+        'COMPLETED ✓'
+    } elseif ((Get-Variable -Name omopFailed -ErrorAction SilentlyContinue) -and $omopFailed) {
+        'FAILED'
+    } elseif ($imgCompleted) {
+        'IN PROGRESS / NOT COMPLETED'
+    } else {
+        'SKIPPED (waiting for imaging)'
+    }
+    Write-Host "    5. OMOP Analytics pipeline — $omopStatus" -ForegroundColor $(if ((Get-Variable -Name omopCompleted -ErrorAction SilentlyContinue) -and $omopCompleted) { 'Green' } else { 'Yellow' })
+}
+Write-Host ""
+
+# Build direct pipeline URLs
+$fabricPortalBase = "https://app.fabric.microsoft.com/groups/$workspaceId"
+if ($imagingPipeline) {
+    Write-Host "  Pipeline URLs:" -ForegroundColor White
+    Write-Host "    Imaging Pipeline:  $fabricPortalBase/datapipelines/$imagingId" -ForegroundColor DarkCyan
+}
+if ($omopPipeline) {
+    $omopUrl = "$fabricPortalBase/datapipelines/$omopId"
+    Write-Host "    OMOP Pipeline:     $omopUrl" -ForegroundColor DarkCyan
+}
+if ($cmaPipeline) {
+    $cmaUrl = "$fabricPortalBase/datapipelines/$cmaId"
+    Write-Host "    CMA Pipeline:      $cmaUrl" -ForegroundColor DarkCyan
+}
+Write-Host ""
+
+if (-not $imgCompleted) {
+    Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Yellow
+    Write-Host "  │  NEXT STEP: Launch the OMOP Gold pipeline manually after    │" -ForegroundColor Yellow
+    Write-Host "  │  the Imaging pipeline completes.                            │" -ForegroundColor Yellow
+    Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  1. Wait for the Imaging pipeline to finish:" -ForegroundColor White
+    if ($imagingPipeline) {
+        Write-Host "     $fabricPortalBase/datapipelines/$imagingId" -ForegroundColor Cyan
+    }
+    Write-Host "  2. Then launch the OMOP Gold pipeline:" -ForegroundColor White
+    if ($omopPipeline) {
+        Write-Host "     $omopUrl" -ForegroundColor Cyan
+    }
+    Write-Host ""
+} elseif (-not $omopPipeline) {
+    Write-Host "  ⚠ OMOP pipeline not found — deploy it via HDS, then run manually." -ForegroundColor Yellow
+    Write-Host ""
+} else {
+    Write-Host "  ┌──────────────────────────────────────────────────────────────┐" -ForegroundColor Green
+    if ($omopCompleted) {
+        Write-Host "  │  OMOP Gold pipeline completed successfully!                  │" -ForegroundColor Green
+    } elseif ($omopFailed) {
+        Write-Host "  │  ⚠ OMOP Gold pipeline failed. Check the Fabric portal.      │" -ForegroundColor Red
+    } else {
+        Write-Host "  │  OMOP Gold pipeline has been launched. Monitor progress:    │" -ForegroundColor Green
+    }
+    Write-Host "  │  $($omopUrl.PadRight(58))│" -ForegroundColor Green
+    Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Green
+    Write-Host ""
+    if ($cmaPipeline) {
+        $cmaMessage = if ($cmaCompleted) { 'CMA pipeline completed; semantic model was overwritten from the exported PBIP and report binding was refreshed.' } elseif ($cmaFailed) { 'CMA pipeline failed; semantic model finalization was skipped.' } elseif ($cmaInvoked) { 'CMA pipeline was invoked after Clinical/Silver readiness; finalization did not complete.' } elseif ($cmaAlreadyRunning) { 'CMA pipeline was already running after Clinical/Silver readiness; finalization did not complete.' } else { 'CMA pipeline was not invoked; check warnings above.' }
+        Write-Host "  $cmaMessage" -ForegroundColor $(if ($cmaInvoked -or $cmaAlreadyRunning) { 'Green' } else { 'Yellow' })
+        if ($cmaUrl) { Write-Host "  $cmaUrl" -ForegroundColor DarkCyan }
+        Write-Host ""
+    }
+}
+Write-Host "  Monitor pipeline progress in the Fabric portal:" -ForegroundColor DarkGray
+Write-Host "  https://app.fabric.microsoft.com" -ForegroundColor DarkGray
+Write-Host ""
+
+
+if ($blockingFailures.Count -gt 0) {
+    Write-Host "  ✗ HDS deployment incomplete:" -ForegroundColor Red
+    foreach ($failure in $blockingFailures) { Write-Host "    - $failure" -ForegroundColor Red }
+    exit 1
+}

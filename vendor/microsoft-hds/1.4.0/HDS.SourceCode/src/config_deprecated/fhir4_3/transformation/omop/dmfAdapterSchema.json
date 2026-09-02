@@ -1,0 +1,559 @@
+{
+  "title": "RawAdapterModel",
+  "type": "object",
+  "properties": {
+    "name": {
+      "description": "Name of the adapter",
+      "type": "string"
+    },
+    "description": {
+      "description": "Description of the adapter",
+      "default": "",
+      "type": "string"
+    },
+    "version": {
+      "description": "Version of the adapter",
+      "type": "string"
+    },
+    "sourceDomain": {
+      "description": "One or more source mapping domains to use for reference data mappings, e.g., Healthcare,Shared",
+      "default": "",
+      "type": "string"
+    },
+    "source": {
+      "description": "Source data storage",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Storage"
+        }
+      ]
+    },
+    "target": {
+      "description": "Target data storage",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Storage"
+        }
+      ]
+    },
+    "dbSourceSchema": {
+      "description": "Path or content of the source schema (tables/fields names/types/descriptions)",
+      "type": "string"
+    },
+    "dbTargetSchema": {
+      "description": "Path or content of the source schema (tables/fields names/types/descriptions, relationships and primary keys...)",
+      "type": "string"
+    },
+    "dbSemantics": {
+      "description": "Path or content of the target semantics, e.g. what tables are temporal/extensions to other tables",
+      "type": "string"
+    },
+    "defaultReferenceValue": {
+      "description": "When reference value is not found during transformation,and failUponMissingReferenceValues is false, DMF will use this value as default value instead ",
+      "type": "integer"
+    },
+    "failUponMissingReferenceValues": {
+      "description": "When reference value is not found during transformation, and failUponMissingReferenceValues is falseDMF will fail. If true, DMF will use defaultReferenceValue instead",
+      "default": false,
+      "type": "boolean"
+    },
+    "queryTables": {
+      "description": "Tables used in source tables queries, e.g., when joining two or more tables",
+      "default": [],
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/QueryTable"
+      }
+    },
+    "sourceTables": {
+      "description": "Tables and fields mappings between source and target",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SourceTable"
+      }
+    },
+    "$schema": {
+      "description": "The schema version of the model. Used externally",
+      "default": "",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "version",
+    "sourceTables"
+  ],
+  "additionalProperties": false,
+  "definitions": {
+    "DataFormatEnum": {
+      "title": "DataFormatEnum",
+      "description": "An enumeration.",
+      "enum": [
+        "parquet",
+        "delta",
+        "csv"
+      ],
+      "type": "string"
+    },
+    "Storage": {
+      "title": "Storage",
+      "type": "object",
+      "properties": {
+        "dataFormat": {
+          "description": "The format of data in storage, e.g., parquet",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DataFormatEnum"
+            }
+          ]
+        },
+        "connectionStringUri": {
+          "title": "Connectionstringuri",
+          "description": "The path to the root folder of the data in storage, or a path to a file describing for each table a different path",
+          "type": "string"
+        },
+        "lakeDBName": {
+          "title": "Lakedbname",
+          "description": "The name of the database in the lake",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataFormat",
+        "connectionStringUri"
+      ],
+      "additionalProperties": false
+    },
+    "QueryTable": {
+      "title": "QueryTable",
+      "type": "object",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "description": "A table name that is used in a source query, e.g., in a join",
+          "type": "string"
+        },
+        "alias": {
+          "title": "Alias",
+          "description": "An alias to be used in the source query for that table",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "DeleteBehaviorEnum": {
+      "title": "DeleteBehaviorEnum",
+      "description": "An enumeration.",
+      "enum": [
+        "hard",
+        "soft",
+        "de-id"
+      ],
+      "type": "string"
+    },
+    "TargetAnchorTable": {
+      "title": "TargetAnchorTable",
+      "type": "object",
+      "properties": {
+        "tableName": {
+          "title": "Tablename",
+          "description": "A target table which the source writes to its single PK field",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tableName"
+      ],
+      "additionalProperties": false
+    },
+    "FieldReplacementKey": {
+      "title": "FieldReplacementKey",
+      "type": "object",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "description": "The internal field that is used as PK, e.g., contactid",
+          "type": "string"
+        },
+        "keyField": {
+          "title": "Keyfield",
+          "description": "The external field that is used as keyring between multiple data sources, e.g., integrationKey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "keyField"
+      ],
+      "additionalProperties": false
+    },
+    "FieldTypeEnum": {
+      "title": "FieldTypeEnum",
+      "description": "An enumeration.",
+      "enum": [
+        "string",
+        "long",
+        "integer",
+        "boolean",
+        "bigint",
+        "decimal",
+        "datetime",
+        "date",
+        "timestamp",
+        "double",
+        "float",
+        "binary"
+      ],
+      "type": "string"
+    },
+    "IntermediateTable": {
+      "title": "IntermediateTable",
+      "type": "object",
+      "properties": {
+        "intermediateTable": {
+          "title": "Intermediatetable",
+          "description": "Table that is used by DMF to create a graph between anchor table and a target table",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intermediateTable"
+      ],
+      "additionalProperties": false
+    },
+    "TargetTable": {
+      "title": "TargetTable",
+      "type": "object",
+      "properties": {
+        "targetTable": {
+          "title": "Targettable",
+          "description": "An anchor table",
+          "type": "string"
+        },
+        "intermediateTables": {
+          "title": "Intermediatetables",
+          "description": "Collection of tables in the graph between the anchor table and the last table in this collection",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IntermediateTable"
+          }
+        }
+      },
+      "required": [
+        "targetTable",
+        "intermediateTables"
+      ],
+      "additionalProperties": false
+    },
+    "TargetField": {
+      "title": "TargetField",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "title": "Enabled",
+          "description": "A flag to indicate if the target field should be processed",
+          "default": true,
+          "type": "boolean"
+        },
+        "tableName": {
+          "title": "Tablename",
+          "description": "The table name of the target field. The table can be the direct target table to write to, or a reference table from which DMF will derive multiple target fields to write to ",
+          "type": "string"
+        },
+        "fieldName": {
+          "title": "Fieldname",
+          "description": "The name the field in the target table",
+          "type": "string"
+        },
+        "condition": {
+          "title": "Condition",
+          "description": "The target field will be processed if the condition, a Spark SQL scalar expression evaluates to true",
+          "type": "string"
+        },
+        "fieldValue": {
+          "title": "Fieldvalue",
+          "description": "When specified, the field value Spark SQL expression will be used instead of the source field value",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "targetField": {
+          "title": "Targetfield",
+          "description": "When specified, the processed value with be written to the target field instead of the field name specified above.  In many cases the fieldName specified above is not the real target but DMF knows how to resolve it to real target. In cases there is ambiguity, a targetField should be specified",
+          "type": "string"
+        },
+        "tablePath": {
+          "title": "Tablepath",
+          "description": "In the rare cases in which DMF cannot decipher a non ambiguous graph path, the adapter should provide the correct path",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TargetTable"
+            }
+          ]
+        },
+        "description": {
+          "title": "Description",
+          "description": "A description of the target field",
+          "type": "string"
+        },
+        "isLookup": {
+          "title": "Islookup",
+          "description": "A flag to indicate that the target field is a lookup field",
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "tableName",
+        "fieldName"
+      ],
+      "additionalProperties": false
+    },
+    "UniqueKeyItem": {
+      "title": "UniqueKeyItem",
+      "type": "object",
+      "properties": {
+        "fieldName": {
+          "title": "Fieldname",
+          "description": "A target field name that is part of the uniquely collection of target fields",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fieldName"
+      ],
+      "additionalProperties": false
+    },
+    "TargetFields": {
+      "title": "TargetFields",
+      "type": "object",
+      "properties": {
+        "fields": {
+          "title": "Fields",
+          "description": "A collection of target fields. Can be in multiple tables",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TargetField"
+          }
+        },
+        "uniqueKey": {
+          "title": "Uniquekey",
+          "description": "A collection of some target fields that defines the uniqueness of record to be written, e.g., create a unique temporal record for each email type (work/home)",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UniqueKeyItem"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SourceField": {
+      "title": "SourceField",
+      "type": "object",
+      "properties": {
+        "fieldName": {
+          "title": "Fieldname",
+          "description": "Source field or calculation name. When source field is used it is a good practice to specify fully qualified name, i.e. table name.field name. when table name of field name contains dots or hyphens the name should be inclosed with ``",
+          "type": "string"
+        },
+        "fieldType": {
+          "description": "The source field type",
+          "allOf": [
+            {
+              "$ref": "#/definitions/FieldTypeEnum"
+            }
+          ]
+        },
+        "enabled": {
+          "title": "Enabled",
+          "description": "Whether to process the field or skip it",
+          "default": true,
+          "type": "boolean"
+        },
+        "targetFields": {
+          "title": "Targetfields",
+          "description": "The Fields the data is processed into. In many cases a field provides a hint, e.g., a field in a reference table, letting DMF find the fields that need to be filled. A source field may write to multiple target fields in different tables",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TargetFields"
+            }
+          ]
+        },
+        "isPrimaryKey": {
+          "title": "Isprimarykey",
+          "description": "Is the target field the PK in the target ",
+          "default": false,
+          "type": "boolean"
+        },
+        "fieldCalculatedValue": {
+          "title": "Fieldcalculatedvalue",
+          "description": "A spark SQL scalar expression",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "description": "A description of the source field and needed transformation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fieldName",
+        "fieldType",
+        "targetFields"
+      ],
+      "additionalProperties": false
+    },
+    "TargetTablePath": {
+      "title": "TargetTablePath",
+      "type": "object",
+      "properties": {
+        "targetTable": {
+          "title": "Targettable",
+          "description": "The target table name",
+          "type": "string"
+        },
+        "intermediateTables": {
+          "title": "Intermediatetables",
+          "description": "A collection of tables in the graph between the anchor table and the target table",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IntermediateTable"
+          }
+        }
+      },
+      "required": [
+        "targetTable",
+        "intermediateTables"
+      ],
+      "additionalProperties": false
+    },
+    "TargetTablesPath": {
+      "title": "TargetTablesPath",
+      "type": "object",
+      "properties": {
+        "anchorTable": {
+          "title": "Anchortable",
+          "description": "The anchor table name",
+          "type": "string"
+        },
+        "targetTables": {
+          "title": "Targettables",
+          "description": "A collection of paths from the anchor tables to target tables",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TargetTablePath"
+          }
+        }
+      },
+      "required": [
+        "anchorTable",
+        "targetTables"
+      ],
+      "additionalProperties": false
+    },
+    "SourceTable": {
+      "title": "SourceTable",
+      "description": "Source table to map into target",
+      "type": "object",
+      "properties": {
+        "description": {
+          "title": "Description",
+          "description": "A description of the source table",
+          "type": "string"
+        },
+        "tableName": {
+          "title": "Tablename",
+          "description": "The name of the source table. if query is defined, the name provides additional semantics but is not used",
+          "type": "string"
+        },
+        "query": {
+          "title": "Query",
+          "description": "SQL query to use as a source, .e.g., performing join with between two or more tables. All query fields can be mapped to target.",
+          "type": "string"
+        },
+        "modifiedonField": {
+          "title": "Modifiedonfield",
+          "description": "The field used to identify data updates when performing incremental updates",
+          "type": "string"
+        },
+        "stateField": {
+          "title": "Statefield",
+          "description": "The field used to identify state changes, e.g., customer becomes inactive/active",
+          "type": "string"
+        },
+        "deletedField": {
+          "title": "Deletedfield",
+          "description": "The field used to identify that record was deleted in the source system",
+          "type": "string"
+        },
+        "deleteBehavior": {
+          "description": "Delete behavior defines whether to hard delete these records\\tag them as deleted\\tag as deleted and de-id target fields",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DeleteBehaviorEnum"
+            }
+          ]
+        },
+        "targetAnchorTables": {
+          "title": "Targetanchortables",
+          "description": "Target Tables to be used as anchors. There can be multiple target anchor tables referenced in on source table e.g., contact->Customer, Location",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TargetAnchorTable"
+          }
+        },
+        "fieldReplacementKeys": {
+          "title": "Fieldreplacementkeys",
+          "description": "Field pairs that define strong relationship between two field, .e.g contactId and intergrationKey defined respectively, specify that the same mapping value (number) created for the integrationKey (string) will be used also for contactId",
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FieldReplacementKey"
+          }
+        },
+        "enabled": {
+          "title": "Enabled",
+          "description": "Whether to process all fields in this table or skip it",
+          "default": true,
+          "type": "boolean"
+        },
+        "sourceFields": {
+          "title": "Sourcefields",
+          "description": "Collection of source fields to be processed",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceField"
+          }
+        },
+        "targetTablesPath": {
+          "title": "Targettablespath",
+          "description": "In the rare cases in which DMF cannot decipher a non ambiguous graph path, the adapter should provide it",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TargetTablesPath"
+          }
+        }
+      },
+      "required": [
+        "tableName",
+        "modifiedonField",
+        "sourceFields"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

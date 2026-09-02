@@ -1,0 +1,4886 @@
+{
+  "name": "SemanticModel",
+  "compatibilityLevel": 1567,
+  "model": {
+    "culture": "en-IN",
+    "dataAccessOptions": {
+      "legacyRedirects": true,
+      "returnErrorValuesAsNull": true
+    },
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "sourceQueryCulture": "en-IN",
+    "tables": [
+      {
+        "name": "cost",
+        "lineageTag": "7c1f8a16-f6d3-460d-a947-c575d4eafcd3",
+        "columns": [
+          {
+            "name": "revenue_code_source_value",
+            "dataType": "string",
+            "sourceColumn": "revenue_code_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "3e86cab1-4374-4cbc-b85b-a3155ee013f9",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "drg_source_value",
+            "dataType": "string",
+            "sourceColumn": "drg_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "3bae08ed-0808-406c-920b-88c157a05361",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "cost_domain_id",
+            "dataType": "string",
+            "sourceColumn": "cost_domain_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "3a6befcb-48f1-4e68-ac8b-0b3b9ed7849d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "drg_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "drg_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "6c2ff919-e760-4f24-abf4-ae01586b114a",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "paid_dispensing_fee",
+            "dataType": "double",
+            "sourceColumn": "paid_dispensing_fee",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "732d5dd5-4d93-47f3-a6f8-c66688126495",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "cost_id",
+            "dataType": "int64",
+            "sourceColumn": "cost_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "7638f6b0-19ce-450a-8d92-95a33b1dbf75",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "paid_patient_copay",
+            "dataType": "double",
+            "sourceColumn": "paid_patient_copay",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "538033b4-1489-4be4-8c04-9ca1bc7b64d4",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "person_id",
+            "dataType": "int64",
+            "sourceColumn": "person_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "8383a48d-07da-4260-8e51-f1c7e8d6cb08",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "payer_plan_period_id",
+            "dataType": "int64",
+            "sourceColumn": "payer_plan_period_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "52d8a960-9543-4351-89b0-35e14a905942",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "paid_by_payer",
+            "dataType": "double",
+            "sourceColumn": "paid_by_payer",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "0d3947ba-f29c-4b50-90d3-08276a135056",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "amount_allowed",
+            "dataType": "double",
+            "sourceColumn": "amount_allowed",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "f42f0f2a-7ebd-4496-b010-c4f690940c72",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "paid_patient_deductible",
+            "dataType": "double",
+            "sourceColumn": "paid_patient_deductible",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "8d4ac6f4-8507-45c4-89ad-36da4caef31c",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "paid_ingredient_cost",
+            "dataType": "double",
+            "sourceColumn": "paid_ingredient_cost",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "3a13dca4-d8a2-4c47-815d-ed9dec801b29",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "paid_by_patient",
+            "dataType": "double",
+            "sourceColumn": "paid_by_patient",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "83041a10-147c-4b4a-9436-b631cec454eb",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "5850b1c2-74b9-4f00-85bb-41f70a1c6b3b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "total_charge",
+            "dataType": "double",
+            "sourceColumn": "total_charge",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "5049947e-0112-4e99-b2d5-e602cad95d88",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "total_paid",
+            "dataType": "double",
+            "sourceColumn": "total_paid",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "a2ef9e7c-2680-4b3e-81a0-2fb55710f59d",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "paid_patient_coinsurance",
+            "dataType": "double",
+            "sourceColumn": "paid_patient_coinsurance",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "ae7e850b-dce3-4d68-8e1f-ff07120fdd5b",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "2920f129-4894-477f-b39a-de5cee89be08",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "cost_type_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "cost_type_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "5e86ce8d-5f37-4a26-9141-92980b32f90f",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "total_cost",
+            "dataType": "double",
+            "sourceColumn": "total_cost",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "5cef399e-bcfa-4965-8030-ba5e45446415",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "revenue_code_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "revenue_code_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "981e5914-cff9-4cc0-955f-cd91f870f7bd",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "paid_by_primary",
+            "dataType": "double",
+            "sourceColumn": "paid_by_primary",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "3e175c07-657e-49d4-b71c-512a23b1bb0a",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "cost_event_id",
+            "dataType": "int64",
+            "sourceColumn": "cost_event_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "a5147166-d106-4cec-a277-71d863bc23ba",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "currency_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "currency_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "d068e2e6-81da-4a91-8dde-5bbe09c067dd",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "billable_period_start_date",
+            "dataType": "dateTime",
+            "sourceColumn": "billable_period_start_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "aa907720-8d2f-46cb-8872-f53a9cc8a50b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "billable_period_end_date",
+            "dataType": "dateTime",
+            "sourceColumn": "billable_period_end_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "8e7eb012-d30c-437f-a0df-ab6b7d3062e6",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "bill_end_date_year",
+            "dataType": "int64",
+            "sourceColumn": "bill_end_date_year",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "94c99ae6-6fa4-43bf-8ddc-ba666ae7bace",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "bill_end_date_quarter",
+            "dataType": "string",
+            "sourceColumn": "bill_end_date_quarter",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "00cea2ff-f303-4e5a-8f9a-af03fcb7932e",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "bill_start_date_quarter",
+            "dataType": "string",
+            "sourceColumn": "bill_start_date_quarter",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "158e2921-4362-49dc-bca6-f34ace813da0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "cost",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_cost = Source{[Schema=\"dbo\",Item=\"cost\"]}[Data]",
+                "in",
+                "    dbo_cost"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "cost_gender_female",
+            "expression": "COALESCE(CALCULATE(SUM(cost[total_charge]), 'person'[gender_source_value] = \"female\"),0)",
+            "lineageTag": "fb5ca3b2-ebbb-4ffa-a986-436c64952905",
+            "annotations": [
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "cost_gender_male",
+            "expression": "COALESCE(CALCULATE(SUM(cost[total_charge]), 'person'[gender_source_value] = \"male\"),0)",
+            "lineageTag": "bc04aa66-e948-4268-a991-323aa6b71dac",
+            "annotations": [
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "cost_gender_unknown",
+            "expression": "COALESCE(CALCULATE(SUM(cost[total_charge]), 'person'[gender_source_value] = \"unknown\"),0)",
+            "lineageTag": "29f34903-44fd-4a73-a692-7128c326ee09",
+            "annotations": [
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "TotalCostByCondition",
+            "expression": [
+              "CALCULATE(",
+              "    SUM('cost'[total_charge])",
+              ")"
+            ],
+            "lineageTag": "6d7b84a1-0491-41bb-a485-93f26b86b4d5",
+            "annotations": [
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "condition_occurrence",
+        "lineageTag": "b0668766-4a81-4bac-a7b4-2240b57bd7a4",
+        "columns": [
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "f8bb8f8d-5fb7-4af0-9433-cf69548258b1",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_source_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "condition_source_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "e51ed5e9-f7c6-4678-adfe-15411b22035b",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_start_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "condition_start_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "7e6e9622-b41b-45c5-97ba-3882e83d655c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_start_date",
+            "dataType": "dateTime",
+            "sourceColumn": "condition_start_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "97688c41-cee4-49d3-ab0e-11f97c93f092",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "condition_status_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "condition_status_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "3af20bd0-b4f2-446a-a2da-b0f339550c17",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "provider_id",
+            "dataType": "int64",
+            "sourceColumn": "provider_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "8bd27587-b37d-46ff-8882-9446732a8a8c",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_occurrence_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_occurrence_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "9f04de2f-96ef-4a18-9523-5f4be8892abf",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_detail_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_detail_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "770c7f1e-a5d1-4565-a5bf-82845003be55",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_type_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "condition_type_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "7375736c-cf10-4639-8449-5fa7b372fa19",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_source_value",
+            "dataType": "string",
+            "sourceColumn": "condition_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "32d4e6d2-6049-4eab-ab19-3056f6b694e0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "7ed64e8a-bc05-4466-8dfc-fbd00f113299",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_status_source_value",
+            "dataType": "string",
+            "sourceColumn": "condition_status_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "6930a878-0858-4272-bdfc-1eae10248a13",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_end_date",
+            "dataType": "dateTime",
+            "sourceColumn": "condition_end_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "ea12e4d0-0a09-47cd-bb24-119881e96aa4",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "condition_occurrence_id",
+            "dataType": "int64",
+            "sourceColumn": "condition_occurrence_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "bb8559b2-1a39-49ce-9c5d-55db4c964371",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "stop_reason",
+            "dataType": "string",
+            "sourceColumn": "stop_reason",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "697daad2-f41a-452c-9eba-7b819bf2437e",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "condition_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "3e15cc66-6d98-4705-837f-fbb9d437df98",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_end_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "condition_end_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "f494a012-2067-4621-8c51-8fee1833a11d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "person_id",
+            "dataType": "int64",
+            "sourceColumn": "person_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "95129365-6d77-4474-aa2b-be172f7e912a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_text_source_value",
+            "dataType": "string",
+            "sourceColumn": "condition_text_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "7c9710ff-27b2-4db8-b13d-0e42138bbd55",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "type": "calculated",
+            "name": "TypeOfDiabetes",
+            "expression": [
+              "",
+              "SWITCH(",
+              "    TRUE(),",
+              "    condition_occurrence[condition_source_value] = \"46635009\", \"Type I\",",
+              "    condition_occurrence[condition_source_value] = \"44054006\", \"Type II\",",
+              "    \"Non - Diabetic\"",
+              ")"
+            ],
+            "lineageTag": "ca6f0030-2ae2-4cdb-901f-a1cfbb7325e0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "type": "calculated",
+            "name": "DiabeticStatus",
+            "expression": [
+              "",
+              "IF(",
+              "    'condition_occurrence'[TypeOfDiabetes] IN {",
+              "        \"Type I\", \"Type I - Predictive\",",
+              "        \"Type II\", \"Type II - Predictive\"",
+              "    },",
+              "    \"Diabetic\",",
+              "    \"Non - Diabetic\"",
+              ")"
+            ],
+            "lineageTag": "0905635b-f3db-4a4f-b2ac-d6fd4e64258e",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "condition_occurrence",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_condition_occurrence = Source{[Schema=\"dbo\",Item=\"condition_occurrence\"]}[Data]",
+                "in",
+                "    dbo_condition_occurrence"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "PatientCountByCondition",
+            "expression": [
+              "DISTINCTCOUNT(condition_occurrence[person_id])",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "d3602b6a-67b9-45cf-a2d8-dc2dc8f08765"
+          },
+          {
+            "name": "count_diabetic",
+            "expression": [
+              "",
+              "CALCULATE(",
+              "    DISTINCTCOUNT(condition_occurrence[person_id]),",
+              "    condition_occurrence[TypeOfDiabetes] IN {",
+              "        \"Type I\", \"Type I - Predictive\", ",
+              "        \"Type II\", \"Type II - Predictive\"",
+              "    }",
+              ")"
+            ],
+            "formatString": "0",
+            "lineageTag": "33162db0-a9f4-4794-bd02-8d9fad31d9c7"
+          },
+          {
+            "name": "count_non_diabetic",
+            "expression": [
+              "",
+              "CALCULATE(",
+              "    DISTINCTCOUNT(condition_occurrence[person_id]),",
+              "    NOT(",
+              "        condition_occurrence[TypeOfDiabetes] IN {",
+              "            \"Type I\", \"Type I - Predictive\", ",
+              "            \"Type II\", \"Type II - Predictive\"",
+              "        }",
+              "    )",
+              ")"
+            ],
+            "formatString": "0",
+            "lineageTag": "e40c0401-60bd-40b1-888b-eeb691c82bb5"
+          },
+          {
+            "name": "count_type_I",
+            "expression": [
+              "",
+              "CALCULATE(",
+              "    DISTINCTCOUNT(condition_occurrence[person_id]),",
+              "    condition_occurrence[TypeOfDiabetes] = \"Type I\"",
+              ")"
+            ],
+            "formatString": "0",
+            "lineageTag": "561453a2-1c33-4c93-8f83-31859afc08e7"
+          },
+          {
+            "name": "count_type_II",
+            "expression": [
+              "",
+              "CALCULATE(",
+              "    DISTINCTCOUNT(condition_occurrence[person_id]),",
+              "    condition_occurrence[TypeOfDiabetes] = \"Type II\"",
+              ")"
+            ],
+            "formatString": "0",
+            "lineageTag": "f54d1364-a5a0-4f9a-9e59-e8b0021142c8"
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "location",
+        "lineageTag": "7b2fb6a9-25e2-46fd-a512-a05ca8e719cd",
+        "columns": [
+          {
+            "name": "county",
+            "dataType": "string",
+            "sourceColumn": "county",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "f4e196f2-09c6-479d-958b-96da1d0c93fa",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "6870c61d-094d-4631-972e-b14eab51190a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "longitude",
+            "dataType": "double",
+            "sourceColumn": "longitude",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "ba4b8a34-62af-42f6-871a-b97a962372eb",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "latitude",
+            "dataType": "double",
+            "sourceColumn": "latitude",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "565eff7d-c8aa-4f8d-9e10-81da99c4972f",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "city",
+            "dataType": "string",
+            "sourceColumn": "city",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "d34f2663-666a-4820-b87d-45a344312343",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "state",
+            "dataType": "string",
+            "sourceColumn": "state",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "4968b59f-604f-43e9-89f9-db9b6dd48e2c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "country_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "country_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "ba70bfb2-44a4-4151-bb0a-a03f7d39e1ef",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "location_id",
+            "dataType": "int64",
+            "sourceColumn": "location_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "6f540793-f1f4-4657-b755-804ccf62d69b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "address_1",
+            "dataType": "string",
+            "sourceColumn": "address_1",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "d433834b-7e85-43bc-a195-352d9b04f55c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "341d508c-d2b8-45ea-914b-54db5946c35b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "location_source_value",
+            "dataType": "string",
+            "sourceColumn": "location_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "47688d82-d781-4b37-a44a-ed42a761110c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "country_source_value",
+            "dataType": "string",
+            "sourceColumn": "country_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "e5015c85-2a14-4f16-b414-e0da336b38e4",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "address_2",
+            "dataType": "string",
+            "sourceColumn": "address_2",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "af2d3993-4f08-4934-87e6-9e3db12be4ea",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "zip",
+            "dataType": "string",
+            "sourceColumn": "zip",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "2aef7bdd-c9e2-4c3d-8c12-e840e8632e98",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "country",
+            "dataType": "string",
+            "sourceColumn": "country",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "0acfdd61-9df2-45c8-b9db-022ab0560918",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "location",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_location = Source{[Schema=\"dbo\",Item=\"location\"]}[Data]",
+                "in",
+                "    dbo_location"
+              ]
+            }
+          }
+        ],
+        "hierarchies": [
+          {
+            "name": "state Hierarchy",
+            "lineageTag": "6329ac95-e644-453d-a399-69eec5e37a65",
+            "levels": [
+              {
+                "name": "state",
+                "ordinal": 0,
+                "column": "state",
+                "lineageTag": "678fe3a5-f7df-4927-8adc-17c4029d8585"
+              },
+              {
+                "name": "city",
+                "ordinal": 1,
+                "column": "city",
+                "lineageTag": "4f7b0d5e-83b3-43b8-9426-69dd39edbb9c"
+              },
+              {
+                "name": "county",
+                "ordinal": 2,
+                "column": "county",
+                "lineageTag": "f5cc8faf-40ef-4dec-8dcf-b077d9bf8d7c"
+              },
+              {
+                "name": "zip",
+                "ordinal": 3,
+                "column": "zip",
+                "lineageTag": "603a33c1-f045-49e0-985d-e7daebe814cf"
+              }
+            ]
+          },
+          {
+            "name": "address_1 Hierarchy",
+            "lineageTag": "bd9396de-28cb-47e0-a1d6-e1ffd357bfe6",
+            "levels": [
+              {
+                "name": "address_1",
+                "ordinal": 0,
+                "column": "address_1",
+                "lineageTag": "bfbd2809-7fae-4b1b-b60d-7f9f3e91c31d"
+              }
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "person",
+        "lineageTag": "80c69ce0-4629-4b58-b672-d3e43a98e850",
+        "columns": [
+          {
+            "name": "provider_id",
+            "dataType": "int64",
+            "sourceColumn": "provider_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "022df35e-c442-4c4e-887d-c06272e6f826",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "birth_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "birth_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "ccd3e823-34ac-46fe-8d8e-cf701c50e3cf",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "person_source_value",
+            "dataType": "string",
+            "sourceColumn": "person_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "4e0614cb-7fa7-4399-a7c6-479a84c71b1e",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "race_source_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "race_source_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "716256d1-a602-4e5b-ab5a-1d184b6f2d92",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "person_id",
+            "dataType": "int64",
+            "sourceColumn": "person_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "39ce21a8-7135-4e3e-b0ad-6de23f3c906c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ethnicity_source_value",
+            "dataType": "string",
+            "sourceColumn": "ethnicity_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "0f132009-e9ee-49e7-adcb-263ed0b89237",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ethnicity_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "ethnicity_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "fbfd6be4-2f74-4236-bd5a-6a77d629ba86",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "day_of_birth",
+            "dataType": "int64",
+            "sourceColumn": "day_of_birth",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "88abb25d-c224-484e-8c5f-70ea72426b22",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ethnicity_source_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "ethnicity_source_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "5151bc1a-8c08-41b9-bd68-8e03447f2540",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "race_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "race_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "53a45a61-b742-496b-a79a-34dde2b8a248",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "location_id",
+            "dataType": "int64",
+            "sourceColumn": "location_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "f622da2d-e14d-4d22-a202-9bedd6bd76e5",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "9beba4b7-4ea6-471a-a963-6f21a5d3d50b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "race_source_value",
+            "dataType": "string",
+            "sourceColumn": "race_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "49314698-3238-441a-b6da-a0fdc6153972",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "care_site_id",
+            "dataType": "int64",
+            "sourceColumn": "care_site_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "6238cecc-7de4-4762-b763-2e3ed7db5658",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "year_of_birth",
+            "dataType": "int64",
+            "sourceColumn": "year_of_birth",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "7f0914dd-dc8d-4eec-b25e-d37ccc6e6059",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "gender_source_value",
+            "dataType": "string",
+            "sourceColumn": "gender_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "9cdadfd0-23d7-487c-ab82-a0a89a78664f",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "2168a859-f2c1-4bef-b65a-e75bf361aea7",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "month_of_birth",
+            "dataType": "int64",
+            "sourceColumn": "month_of_birth",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "18bcf16f-f651-4587-8264-3b51f3143305",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "gender_source_concept_id",
+            "dataType": "int64",
+            "isHidden": true,
+            "sourceColumn": "gender_source_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "5760c111-e581-40cd-a215-4c5ee18162f9",
+            "summarizeBy": "sum",
+            "changedProperties": [
+              {
+                "property": "IsHidden"
+              }
+            ],
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "gender_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "gender_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "be94db92-cf87-4adc-8d20-c66aab2212ba",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "type": "calculated",
+            "name": "AgeGroup",
+            "expression": [
+              "SWITCH(",
+              "    TRUE(),",
+              "    DATEDIFF(person[birth_datetime], TODAY(), YEAR) < 18, \"Under 18\",",
+              "    DATEDIFF(person[birth_datetime], TODAY(), YEAR) >= 18 && DATEDIFF(person[birth_datetime], TODAY(), YEAR) <= 35, \"18-35\",",
+              "    DATEDIFF(person[birth_datetime], TODAY(), YEAR) > 35 && DATEDIFF(person[birth_datetime], TODAY(), YEAR) <= 50, \"36-50\",",
+              "    DATEDIFF(person[birth_datetime], TODAY(), YEAR) > 50 && DATEDIFF(person[birth_datetime], TODAY(), YEAR) <= 65, \"51-65\",",
+              "    DATEDIFF(person[birth_datetime], TODAY(), YEAR) > 65, \"Over 65\",",
+              "    \"Unknown\"",
+              ")"
+            ],
+            "lineageTag": "4058af01-e36b-45eb-8c1b-25dd732a2ab0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "race_source_display_value",
+            "dataType": "string",
+            "sourceColumn": "race_source_display_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "fb604602-b516-4c0d-a31c-ed07e1168cb3",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ethnicity_source_display_value",
+            "dataType": "string",
+            "sourceColumn": "ethnicity_source_display_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "3b09dd12-6f2a-47a9-848d-fc836c2e51f1",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "person",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_person = Source{[Schema=\"dbo\",Item=\"person\"]}[Data]",
+                "in",
+                "    dbo_person"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "count_gender_female",
+            "expression": "COALESCE(CALCULATE(COUNTROWS('person'), 'person'[gender_source_value] = \"female\"),0)",
+            "formatString": "0",
+            "lineageTag": "67865166-0308-4b9d-8001-cce5907d5ed0"
+          },
+          {
+            "name": "count_gender_male",
+            "expression": "COALESCE(CALCULATE(COUNTROWS('person'), 'person'[gender_source_value] = \"male\"),0)",
+            "formatString": "0",
+            "lineageTag": "eeb17f6b-cf38-4b89-881b-fe6d3cc6cced"
+          },
+          {
+            "name": "count_gender_unkown",
+            "expression": "COALESCE(CALCULATE(COUNTROWS('person'), 'person'[gender_source_value] = \"unknown\"),0)",
+            "formatString": "0",
+            "lineageTag": "78f6baf1-c018-405d-9dca-5624e0a3f883"
+          },
+          {
+            "name": "PatientsByAgeGroup",
+            "expression": [
+              "CALCULATE(",
+              "    COUNT('person'[person_id]),",
+              "    ALLEXCEPT('person', 'person'[AgeGroup])",
+              ")"
+            ],
+            "formatString": "0",
+            "lineageTag": "ac322231-b1e9-428f-bbef-eac42c6cc010"
+          }
+        ],
+        "hierarchies": [
+          {
+            "name": "care_site_id Hierarchy",
+            "lineageTag": "b0434ac1-bc18-4e6d-a46c-df4a2fce1049",
+            "levels": [
+              {
+                "name": "care_site_id",
+                "ordinal": 0,
+                "column": "care_site_id",
+                "lineageTag": "cf2939eb-8d81-4fc3-b0b2-2c472d8cbab2"
+              },
+              {
+                "name": "SourceModifiedOn",
+                "ordinal": 1,
+                "column": "SourceModifiedOn",
+                "lineageTag": "20ece0cf-4543-4006-8a6c-f1a1d4506e7a"
+              }
+            ]
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "visit_occurrence",
+        "lineageTag": "13133338-1eb6-4df9-b7a3-9fd6454d1335",
+        "columns": [
+          {
+            "name": "discharged_to_source_value",
+            "dataType": "string",
+            "sourceColumn": "discharged_to_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "a2378bcd-5068-4d5d-a05f-971c10289902",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_start_date",
+            "dataType": "dateTime",
+            "sourceColumn": "visit_start_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "bc8e00ec-3397-4820-9f42-836d75ba545f",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "visit_source_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_source_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "88e79ee9-3de1-49db-98b9-721fd7107236",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_type_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_type_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "0d8d501e-0e4a-4368-aee7-fdaf28465bb1",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_source_value",
+            "dataType": "string",
+            "sourceColumn": "visit_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "99f10ff4-a1dd-4e46-983e-746fc32b3308",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "provider_id",
+            "dataType": "int64",
+            "sourceColumn": "provider_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "d8978f4f-0662-4a77-a890-0674aace4a9e",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_start_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "visit_start_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "772667ed-5cf2-43d9-8455-79e4e0fc7bc0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "admitted_from_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "admitted_from_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "d73cd4bd-94ea-493a-8b7d-4bc87046b511",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "person_id",
+            "dataType": "int64",
+            "sourceColumn": "person_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "77ff5353-e587-41f4-ac5c-438d5d81da39",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_occurrence_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_occurrence_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "98fa4459-eeb4-407b-a624-d7e3d5d87207",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "8c7bf7f9-6e17-4668-bd50-10be595451e0",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "2ffa3a9b-21c4-4874-b918-25108a2e9c71",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "admitted_from_source_value",
+            "dataType": "string",
+            "sourceColumn": "admitted_from_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "54cdb8d4-b6ec-4c71-8a21-fb57da75e8e5",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "care_site_id",
+            "dataType": "int64",
+            "sourceColumn": "care_site_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "36d3ca96-c577-478f-8c4b-1a1a078b1eab",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "discharged_to_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "discharged_to_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "19d8754b-6696-428b-873a-dc8b51ef5afa",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "eacd343c-dd9f-490d-8dde-c6bd0650c084",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_end_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "visit_end_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "cca869b7-5278-48ab-8fe5-634aa6762f0b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "preceding_visit_occurrence_id",
+            "dataType": "int64",
+            "sourceColumn": "preceding_visit_occurrence_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "21a12cb6-4e04-479b-90ec-71a252cba327",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_end_date",
+            "dataType": "dateTime",
+            "sourceColumn": "visit_end_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "f1137296-88e0-402c-9d03-3ad8ebd2f0fd",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "visit_start_date_quarter",
+            "dataType": "string",
+            "sourceColumn": "visit_start_date_quarter",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "d88a9f86-0e06-41cf-b033-6726f6a707ef",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_end_date_year",
+            "dataType": "int64",
+            "sourceColumn": "visit_end_date_year",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "e913ca45-cdfc-4692-aa32-5948527a9814",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_length_of_stay_minutes",
+            "dataType": "int64",
+            "sourceColumn": "visit_length_of_stay_minutes",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "c7226084-4013-4e1b-90b3-2603d4052424",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_start_date_year",
+            "dataType": "int64",
+            "sourceColumn": "visit_start_date_year",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "7a582f22-e645-41ec-9a81-8997db50d765",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_end_date_quarter",
+            "dataType": "string",
+            "sourceColumn": "visit_end_date_quarter",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "d35606b2-0857-4b81-9936-692ba03980c0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_start_date_month",
+            "dataType": "int64",
+            "sourceColumn": "visit_start_date_month",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "3293f0ca-5b24-4ed7-b15f-aa1c5a1df699",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_end_date_month",
+            "dataType": "int64",
+            "sourceColumn": "visit_end_date_month",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "2f4a666b-b09d-4f4d-8e35-0252e4189639",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "servicetype_to_source_value",
+            "dataType": "string",
+            "sourceColumn": "servicetype_to_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "6f7e5b5b-4027-4e8b-aba2-96c5a8e13c51",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "readmission",
+            "dataType": "boolean",
+            "sourceColumn": "readmission",
+            "formatString": "\"TRUE\";\"TRUE\";\"FALSE\"",
+            "sourceProviderType": "bit",
+            "lineageTag": "e2e856a2-842c-45bc-a3ed-62fa13707474",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "servicetype_to_display_text",
+            "dataType": "string",
+            "sourceColumn": "servicetype_to_display_text",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "2443c1ab-b966-48bb-ba82-d369c5ecb121",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "visit_occurrence",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_visit_occurrence = Source{[Schema=\"dbo\",Item=\"visit_occurrence\"]}[Data]",
+                "in",
+                "    dbo_visit_occurrence"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "VisitCountByAgeGroup",
+            "expression": [
+              "",
+              "CALCULATE(",
+              "    COUNT(visit_occurrence[visit_occurrence_id]),",
+              "    ALL(person),",
+              "    VALUES(person[AgeGroup])",
+              ")"
+            ],
+            "formatString": "0",
+            "lineageTag": "305c9db6-2fda-42a5-91f3-2406501d54c3"
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "procedure_occurrence",
+        "lineageTag": "fa11d662-b37f-449c-bfe9-798d4e5ea854",
+        "columns": [
+          {
+            "name": "procedure_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "procedure_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "e5a7bee0-d7e9-4204-9edc-5d3595df3c48",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "procedure_date",
+            "dataType": "dateTime",
+            "sourceColumn": "procedure_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "d967be5a-248f-47b0-9301-23f534cfea40",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "modifier_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "modifier_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "7fbde4fe-8866-41d1-a9e4-237448deebc4",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "7316912d-3805-4bea-9cda-974ef15ea507",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "procedure_occurrence_id",
+            "dataType": "int64",
+            "sourceColumn": "procedure_occurrence_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "6331f673-dc4d-499c-9fa7-78d55a5bbf52",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "procedure_source_value",
+            "dataType": "string",
+            "sourceColumn": "procedure_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "86cea8ff-25a6-49f2-9c8b-1819ee3d1d5a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "quantity",
+            "dataType": "int64",
+            "sourceColumn": "quantity",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "65a3d92d-6836-4696-8213-294fc7f5953c",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_occurrence_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_occurrence_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "22eab7d6-840d-4789-84b9-f2a5b48e1115",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "procedure_type_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "procedure_type_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "6e3f9482-d3dc-4084-a87e-486a063e3f4d",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "79a80172-8447-437d-99c2-a6626d33c2d2",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "procedure_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "procedure_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "45bb3336-ee90-4a29-bd65-ef7ea84a1c6d",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "provider_id",
+            "dataType": "int64",
+            "sourceColumn": "provider_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "ad228387-099f-4537-bd7a-26abaf0259b7",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "procedure_source_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "procedure_source_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "57076418-ee63-430f-ab44-e5fd60ba1a73",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "modifier_source_value",
+            "dataType": "string",
+            "sourceColumn": "modifier_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "3718b456-bd10-4f90-8df5-28adcfc19dbf",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "procedure_end_date",
+            "dataType": "dateTime",
+            "sourceColumn": "procedure_end_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "07ebf943-5aad-4a8f-a6e6-c56d1e062578",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "procedure_end_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "procedure_end_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "2116de66-d41b-421f-ab3e-5605449c75a6",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_detail_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_detail_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "5f9947e6-4a72-40e1-914a-d9990199cfc4",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "person_id",
+            "dataType": "int64",
+            "sourceColumn": "person_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "aa987201-b210-4c38-8687-9cd0b13d33a6",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "procedure_occurrence",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_procedure_occurrence = Source{[Schema=\"dbo\",Item=\"procedure_occurrence\"]}[Data]",
+                "in",
+                "    dbo_procedure_occurrence"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "measurement",
+        "lineageTag": "daa7cf66-f9e9-4542-a915-dabc475f4f49",
+        "columns": [
+          {
+            "name": "person_id",
+            "dataType": "int64",
+            "sourceColumn": "person_id",
+            "formatString": "0",
+            "sourceProviderType": "bigint",
+            "lineageTag": "b46c9c27-4b63-4f5b-8644-e2060543cedb",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "meas_event_field_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "meas_event_field_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "d8973968-7c3b-43be-86c4-4bd318023915",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_time",
+            "dataType": "string",
+            "sourceColumn": "measurement_time",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "de587bd0-681e-4d22-8763-507658da47ad",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "measurement_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "b2ce92c8-64d5-48da-a44a-9ffc1c562b77",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_concept_id",
+            "dataType": "string",
+            "sourceColumn": "measurement_concept_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "d0f780a0-5438-4ea1-9efb-0b30dce0d34c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_id",
+            "dataType": "int64",
+            "sourceColumn": "measurement_id",
+            "formatString": "0",
+            "sourceProviderType": "bigint",
+            "lineageTag": "4c54cdf8-0f2b-4851-b2e8-c2f2fc250715",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "range_high",
+            "dataType": "double",
+            "sourceColumn": "range_high",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "2cbf7b5d-f7af-454f-b72e-09f86309de4e",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "visit_detail_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_detail_id",
+            "formatString": "0",
+            "sourceProviderType": "bigint",
+            "lineageTag": "0df7a464-070b-41b7-acc4-09180ce39131",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "unit_source_concept_id",
+            "dataType": "string",
+            "sourceColumn": "unit_source_concept_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "0e5910ed-635f-4668-8a2e-2864b851476c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_event_id",
+            "dataType": "int64",
+            "sourceColumn": "measurement_event_id",
+            "formatString": "0",
+            "sourceProviderType": "bigint",
+            "lineageTag": "ecec806a-b751-4339-a518-ff48088285a3",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "provider_id",
+            "dataType": "int64",
+            "sourceColumn": "provider_id",
+            "formatString": "0",
+            "sourceProviderType": "bigint",
+            "lineageTag": "4986ae91-3e5e-4404-bd40-2a2b1fb08dbd",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_date",
+            "dataType": "dateTime",
+            "sourceColumn": "measurement_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "6a3cd753-81cd-418a-a489-9adf8390ad28",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "value_source_value",
+            "dataType": "string",
+            "sourceColumn": "value_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "8372a85d-0a5d-40f6-9f17-0dc523d09b75",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_text_source_value",
+            "dataType": "string",
+            "sourceColumn": "measurement_text_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "b02b9d02-7133-40a3-94b5-be2d313512e7",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "30a24a50-522e-4b86-b0a5-dea7e2c79997",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "visit_occurrence_id",
+            "dataType": "int64",
+            "sourceColumn": "visit_occurrence_id",
+            "formatString": "0",
+            "sourceProviderType": "bigint",
+            "lineageTag": "bf2a822b-b1eb-4719-8a9a-e7efb08f96e2",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_source_value",
+            "dataType": "string",
+            "sourceColumn": "measurement_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "2f509c47-4904-403b-a11c-9b0f25c57c84",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "4df6e1e5-fbce-4aac-9192-1548dea2eb83",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_type_concept_id",
+            "dataType": "string",
+            "sourceColumn": "measurement_type_concept_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "89b26ac0-9b46-496c-b859-79e0ebd715b6",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "value_as_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "value_as_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "0d0744bf-f46c-4310-906c-c138b7b13106",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "range_low",
+            "dataType": "double",
+            "sourceColumn": "range_low",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "2e425b1b-b837-4ec4-9b39-15048bd1f9bb",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "value_as_number",
+            "dataType": "double",
+            "sourceColumn": "value_as_number",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "ae340b64-c39d-42e0-bc6f-0523791bc6c2",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "PBI_FormatHint",
+                "value": "{\"isGeneralNumber\":true}"
+              }
+            ]
+          },
+          {
+            "name": "unit_concept_id",
+            "dataType": "string",
+            "sourceColumn": "unit_concept_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "46f2479b-20e6-4fcb-a11b-3ae1cf166cb1",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "msftSourceRecordId",
+            "dataType": "string",
+            "sourceColumn": "msftSourceRecordId",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "47447c9c-5928-40f2-9abb-e3264ddbc724",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "measurement_source_concept_id",
+            "dataType": "string",
+            "sourceColumn": "measurement_source_concept_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "476df7a4-184d-4c57-b94e-404c526b9c17",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "unit_source_value",
+            "dataType": "string",
+            "sourceColumn": "unit_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "92a142b0-a114-492b-9896-09672e17de98",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "msftSourceTableName",
+            "dataType": "string",
+            "sourceColumn": "msftSourceTableName",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "b55e9186-dd4c-47b8-a52e-c094b5422438",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "msftModifiedDatetime",
+            "dataType": "dateTime",
+            "sourceColumn": "msftModifiedDatetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "9406df2c-a614-407c-b123-9e4fa5ae4660",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "operator_concept_id",
+            "dataType": "int64",
+            "sourceColumn": "operator_concept_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "be4b8b39-66b8-482d-961d-a1ce9a551829",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "measurement",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_measurement = Source{[Schema=\"dbo\",Item=\"measurement\"]}[Data]",
+                "in",
+                "    dbo_measurement"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "count_high_Hemoglobin_A1c",
+            "expression": [
+              "",
+              "CALCULATE(",
+              "    DISTINCTCOUNT(Measurement[person_id]),",
+              "    Measurement[measurement_text_source_value] = \"Hemoglobin A1c/Hemoglobin.total in Blood\",",
+              "    Measurement[value_as_number] >= 0.8",
+              ")"
+            ],
+            "formatString": "0",
+            "lineageTag": "99dbb97b-9a37-405a-96e5-20c7ad485b89"
+          },
+          {
+            "name": "count_low_Hemoglobin_A1c",
+            "expression": [
+              "",
+              "CALCULATE(",
+              "    DISTINCTCOUNT(Measurement[person_id]),",
+              "    Measurement[measurement_text_source_value] = \"Hemoglobin A1c/Hemoglobin.total in Blood\",",
+              "    Measurement[value_as_number] < 0.8",
+              ")"
+            ],
+            "formatString": "0",
+            "lineageTag": "3255d5ba-d60a-401e-b5aa-44a82ac6a561"
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "care_plan",
+        "lineageTag": "9bab279e-6090-4ecb-b598-44ef79c3233e",
+        "columns": [
+          {
+            "name": "description",
+            "dataType": "string",
+            "sourceColumn": "description",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "9629a33b-e450-474b-b3e4-7770bb39191e",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "period_start_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "period_start_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "49dadddc-11eb-46a1-a26d-f27d5062ff44",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "period_end_datetime",
+            "dataType": "dateTime",
+            "sourceColumn": "period_end_datetime",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "5cc88433-d00f-4797-af22-b3f0623052b1",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "44d6cc6b-5b9c-412b-8966-2ebd50123656",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "period_end_date_quarter",
+            "dataType": "string",
+            "sourceColumn": "period_end_date_quarter",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "3d9ab9fa-d951-4e62-83a5-89270ee893c2",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "status",
+            "dataType": "string",
+            "sourceColumn": "status",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "a6e8320e-f72b-41ce-b6f9-4d8f620b6f85",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "period_end_date_year",
+            "dataType": "int64",
+            "sourceColumn": "period_end_date_year",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "bee7f1a4-7651-4a61-a8b2-3acd3cdbe595",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "period_end_date",
+            "dataType": "dateTime",
+            "sourceColumn": "period_end_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "4377d1f8-aa8e-4544-9672-80e2d9d14d59",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "category_source_value",
+            "dataType": "string",
+            "sourceColumn": "category_source_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "dbd295e1-5b44-4585-8173-968c14232ead",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "period_start_date_year",
+            "dataType": "int64",
+            "sourceColumn": "period_start_date_year",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "bac491d0-224e-4b1c-a1e0-cce774375f72",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "period_start_date",
+            "dataType": "dateTime",
+            "sourceColumn": "period_start_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "e779bd9f-ebcf-4bf9-a39b-9e1d0c09e14e",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "person_id",
+            "dataType": "int64",
+            "sourceColumn": "person_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "5f19c0e2-bfe9-46c2-9594-578da83937e5",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "period_start_date_quarter",
+            "dataType": "string",
+            "sourceColumn": "period_start_date_quarter",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "6e9cee91-67fe-440d-b551-48764bc8e507",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "category_code",
+            "dataType": "string",
+            "sourceColumn": "category_code",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "a16aa93d-d2a4-472a-b371-9d8a42e38f7d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "care_plan_id",
+            "dataType": "string",
+            "sourceColumn": "care_plan_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "b85c140f-1fbd-4bbd-8207-15aacc0acab9",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "325f44e7-b707-4340-9388-778f9afc74f2",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "title",
+            "dataType": "string",
+            "sourceColumn": "title",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "c9695c1c-e7da-4376-93d0-b030fef528dd",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "care_plan",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_care_plan = Source{[Schema=\"dbo\",Item=\"care_plan\"]}[Data]",
+                "in",
+                "    dbo_care_plan"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "care_plan_activities",
+        "lineageTag": "ab643da7-54be-446b-b40a-ec03c4cf4677",
+        "columns": [
+          {
+            "name": "daily_amount_value",
+            "dataType": "int64",
+            "sourceColumn": "daily_amount_value",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "35cd5d75-c2ac-4559-a1c2-a9a3ef8b4af1",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "5f96e6e1-e687-477c-9a4e-c7cf834a7474",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "status",
+            "dataType": "string",
+            "sourceColumn": "status",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "22233b9a-fcff-462d-80ed-244f349947ae",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "kind",
+            "dataType": "string",
+            "sourceColumn": "kind",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "43b14f9b-f9c0-4891-84fc-f5574def0ca0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "care_plan_id",
+            "dataType": "string",
+            "sourceColumn": "care_plan_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "f9fce7fe-8b9e-4920-aef1-c6739f65e0f8",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "quantity_value",
+            "dataType": "int64",
+            "sourceColumn": "quantity_value",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "cbd5bd63-83c0-4424-8b1f-a11861c4c0fc",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "8cc20b12-9a18-4fa8-9cc3-63183f48ca05",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "type_code",
+            "dataType": "string",
+            "sourceColumn": "type_code",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "ef0319e3-cf79-4149-bfa5-76241d223100",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "care_plan_activity_id",
+            "dataType": "string",
+            "sourceColumn": "care_plan_activity_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "747b974b-0320-47fa-a16f-675515bc3220",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "type_text",
+            "dataType": "dateTime",
+            "sourceColumn": "type_text",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "2604359b-70d5-40db-b2c3-16d0eae39dfc",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "care_plan_activities",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_care_plan_activities = Source{[Schema=\"dbo\",Item=\"care_plan_activities\"]}[Data]",
+                "in",
+                "    dbo_care_plan_activities"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "care_plan_addresses",
+        "lineageTag": "e968f3cb-13b2-483c-80cb-030b2867cbd5",
+        "columns": [
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "c8b1e213-8597-4f6c-8827-d3f01ba5b90d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_id",
+            "dataType": "string",
+            "sourceColumn": "condition_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "e9cdbd2a-b2dc-49dd-9540-6e27ce78642a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "condition_idOrig",
+            "dataType": "string",
+            "sourceColumn": "condition_idOrig",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "ec13d650-a933-4190-a71a-080e7856770b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "care_plan_id",
+            "dataType": "string",
+            "sourceColumn": "care_plan_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "7652cac9-2d80-4577-92c3-56af7d245307",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "a84cebe3-f917-47e6-a72e-3bfd539a3b9f",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "care_plan_addresses_id",
+            "dataType": "string",
+            "sourceColumn": "care_plan_addresses_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "ed2c805d-3639-4dfd-bf98-33105f8b87e7",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "care_plan_addresses",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_care_plan_addresses = Source{[Schema=\"dbo\",Item=\"care_plan_addresses\"]}[Data]",
+                "in",
+                "    dbo_care_plan_addresses"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "care_plan_goal",
+        "lineageTag": "bdfb7e2c-9bbe-4bd7-b928-9f1a16e058af",
+        "columns": [
+          {
+            "name": "care_plan_goal_id",
+            "dataType": "string",
+            "isNullable": false,
+            "sourceColumn": "care_plan_goal_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "3c1cca8f-315b-41d1-8ad2-7393d762ba0d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "care_plan_id",
+            "dataType": "string",
+            "isNullable": false,
+            "sourceColumn": "care_plan_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "a3ddb3df-e84f-4383-83a7-df1c2868ec3a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "goal_id",
+            "dataType": "string",
+            "sourceColumn": "goal_id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "a8c18e4d-c906-4e1b-b400-5446e225b32f",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "goal_idOrig",
+            "dataType": "string",
+            "sourceColumn": "goal_idOrig",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "bf2651b1-ba0b-4338-b88d-d126fc3e037f",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "care_plan_goal",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_care_plan_goal = Source{[Schema=\"dbo\",Item=\"care_plan_goal\"]}[Data]",
+                "in",
+                "    dbo_care_plan_goal"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Exception"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "patient_location_zip",
+        "lineageTag": "47bf0c03-4cd1-476f-892b-3f418209a126",
+        "columns": [
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "f06c7e6e-a77d-49eb-8f20-325aa5fba35b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "city",
+            "dataType": "string",
+            "sourceColumn": "city",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "1308da37-d2f9-472b-a4f5-896b91498e60",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "state",
+            "dataType": "string",
+            "sourceColumn": "state",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "c6dd2bf9-adb1-4283-aa54-b53233af0a3c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "17f828bf-1ff2-4768-aeaa-0abf2a528603",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "zip",
+            "dataType": "string",
+            "sourceColumn": "zip",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "75d2d26b-a4b1-46a0-9fbb-efa802414d4b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "country",
+            "dataType": "string",
+            "sourceColumn": "country",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "22b34bbc-d4b5-4f1a-96a5-b2f62bdbf5ec",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "patient_location_zip",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_patient_location_zip = Source{[Schema=\"dbo\",Item=\"patient_location_zip\"]}[Data]",
+                "in",
+                "    dbo_patient_location_zip"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Exception"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "sdoh_category",
+        "lineageTag": "7885a8c2-ef12-4381-bf2d-64079416e941",
+        "columns": [
+          {
+            "name": "subcategory_id",
+            "dataType": "int64",
+            "sourceColumn": "subcategory_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "e793cce2-8959-4e28-b0c4-bfd01159c16d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "subcategory_description",
+            "dataType": "string",
+            "sourceColumn": "subcategory_description",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "bbed36b6-abc5-4b41-81e1-1d6988708589",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "39c2fa7d-d9a4-4bf9-839a-aff0738b083f",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "category_description",
+            "dataType": "string",
+            "sourceColumn": "category_description",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "a4074fb5-55dc-4864-b92c-75458eee5ad8",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "category_name",
+            "dataType": "string",
+            "sourceColumn": "category_name",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "375b960c-f058-4783-9b41-1683dee11936",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "c6468aa3-e58f-4870-b4e1-3858c9722a04",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "subcategory_name",
+            "dataType": "string",
+            "sourceColumn": "subcategory_name",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "2734e162-e3b1-495b-9064-fb51c532dfdc",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "category_id",
+            "dataType": "int64",
+            "sourceColumn": "category_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "1307ce64-e8af-4924-9758-92b1e292485d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "sdoh_category",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_sdoh_category = Source{[Schema=\"dbo\",Item=\"sdoh_category\"]}[Data]",
+                "in",
+                "    dbo_sdoh_category"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "sdoh_datasetmetadata",
+        "lineageTag": "bd1ab65e-7447-4c37-a4ed-4c62e148430d",
+        "columns": [
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "00ed143e-1e42-41b5-a74a-c50662a7fa4a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "sdoh_datasetmetadata_id",
+            "dataType": "int64",
+            "sourceColumn": "sdoh_datasetmetadata_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "c4078f2c-143a-4ecf-8c07-729af0aa8975",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "publisher_name",
+            "dataType": "string",
+            "sourceColumn": "publisher_name",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "c8915623-1f90-4fdd-87d7-839b691ff34d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "published_date",
+            "dataType": "dateTime",
+            "sourceColumn": "published_date",
+            "formatString": "Long Date",
+            "sourceProviderType": "date",
+            "lineageTag": "b3d5e3f9-1288-4c3d-abce-a7d0fb9074ce",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              },
+              {
+                "name": "UnderlyingDateTimeDataType",
+                "value": "Date"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "3dbaf3e4-4cef-4f1d-b25f-fdb56cf71a44",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "dataset_name",
+            "dataType": "string",
+            "sourceColumn": "dataset_name",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "1c271314-72f1-4a15-9899-7074791a9463",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "sdoh_datasetmetadata",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_sdoh_datasetmetadata = Source{[Schema=\"dbo\",Item=\"sdoh_datasetmetadata\"]}[Data]",
+                "in",
+                "    dbo_sdoh_datasetmetadata"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "sdoh_unitofmeasure",
+        "lineageTag": "41c1509d-37c6-47ba-9662-990968de7426",
+        "columns": [
+          {
+            "name": "description",
+            "dataType": "string",
+            "sourceColumn": "description",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "66ad1beb-0ae8-4c0a-9b1b-c4ce5abaf4e8",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "abbreviation",
+            "dataType": "string",
+            "sourceColumn": "abbreviation",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "c9978bd0-df90-4732-bad4-725a1e487a85",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "da4fa2ba-ba60-4e44-aff6-8b5c9d48a5aa",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "name",
+            "dataType": "string",
+            "sourceColumn": "name",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "1fc7e4c0-ace4-4ca3-955b-f9519a57c1a8",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "cd02bd6f-bb1f-44a1-895c-06e5f6b7f94a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "unit_of_measure_id",
+            "dataType": "int64",
+            "sourceColumn": "unit_of_measure_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "a7e96324-1180-4140-93c9-0a00f20b0895",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "sdoh_unitofmeasure",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_sdoh_unitofmeasure = Source{[Schema=\"dbo\",Item=\"sdoh_unitofmeasure\"]}[Data]",
+                "in",
+                "    dbo_sdoh_unitofmeasure"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "social_determinant",
+        "lineageTag": "6188f92e-cc3a-4279-9339-8adbdcd29358",
+        "columns": [
+          {
+            "name": "description",
+            "dataType": "string",
+            "sourceColumn": "description",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "07d76902-ee34-4dd0-8add-546cad35a1da",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "location_JSON",
+            "dataType": "string",
+            "sourceColumn": "location_JSON",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "7a18f6b0-0c81-4d37-b2fc-6916bc74bb03",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "location_value",
+            "dataType": "string",
+            "sourceColumn": "location_value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "a8ea904c-1886-4350-baaa-d761931cf18c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "category_id",
+            "dataType": "int64",
+            "sourceColumn": "category_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "ea50575b-db85-4f2e-961e-5878aaa154ec",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "9e4698f6-a321-424c-b881-7be6843e4dd7",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "sdoh_datasetmetadata_id",
+            "dataType": "int64",
+            "sourceColumn": "sdoh_datasetmetadata_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "63f83e43-0647-4944-ad59-0941161130f8",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "value",
+            "dataType": "string",
+            "sourceColumn": "value",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "efe2d3bc-6c92-4720-8382-dc3e9c9aea7f",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "harmonization_key",
+            "dataType": "string",
+            "sourceColumn": "harmonization_key",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "76804b4c-3f0d-4fba-a185-6e29587b3b4b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "value_as_number",
+            "dataType": "double",
+            "sourceColumn": "value_as_number",
+            "formatString": "0.00",
+            "sourceProviderType": "decimal(18, 8)",
+            "lineageTag": "f9d8bc74-ac23-48e4-a921-5ae3fbe7de2e",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "name": "unit_of_measure_id",
+            "dataType": "int64",
+            "sourceColumn": "unit_of_measure_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "03e2a017-b3f1-4388-b29c-9e744c594539",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "name",
+            "dataType": "string",
+            "sourceColumn": "name",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "46726ede-45f1-4c7c-bfa5-243a71f9175d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "1065c37a-c53b-47b4-a028-854ca0b126af",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "location_type",
+            "dataType": "string",
+            "sourceColumn": "location_type",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "d04f414c-ad10-4dfb-a592-74c128b3d4c0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "social_determinant_id",
+            "dataType": "int64",
+            "sourceColumn": "social_determinant_id",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "c7ea32cd-dc7d-4c59-a379-9ff8945d68c2",
+            "summarizeBy": "sum",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "social_determinant",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_social_determinant = Source{[Schema=\"dbo\",Item=\"social_determinant\"]}[Data]",
+                "in",
+                "    dbo_social_determinant"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "rehospitalization_nonmetro",
+            "expression": [
+              "",
+              "CALCULATE(",
+              "    SUMX(",
+              "        social_determinant,",
+              "        IF( social_determinant[name] = \"LTC_AVG_OBS_REHOSP_RATE\", social_determinant[value_as_number], 0 )",
+              "    ),",
+              "    -- Filter to include only counties where the nonmetro indicator equals 1",
+              "    FILTER(",
+              "        ALL(zip_to_fips_mapping),",
+              "        CALCULATE(",
+              "            MAX( social_determinant[value_as_number] ),",
+              "            social_determinant[name] = \"Nonmetro2013\"",
+              "        ) = 1",
+              "    )",
+              ")"
+            ],
+            "formatString": "0",
+            "lineageTag": "7cec53f7-02e1-4dce-87bf-9a0b38951647"
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          }
+        ]
+      },
+      {
+        "name": "sdoh_fips",
+        "lineageTag": "b8cd8ea7-070b-418a-8b7b-b4770fca43a1",
+        "columns": [
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "722dbbaf-710f-4358-9694-00e69f0057a5",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "locationType",
+            "dataType": "string",
+            "sourceColumn": "locationType",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "2fe28f8b-110a-4c27-828e-48ed13547b0c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "fips_code",
+            "dataType": "string",
+            "sourceColumn": "fips_code",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "d311db27-2cc0-4425-a7b3-01017bdc9e81",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "9fd6ab05-6991-41ee-a42c-c8d0593b5978",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "sdoh_fips",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_sdoh_fips = Source{[Schema=\"dbo\",Item=\"sdoh_fips\"]}[Data]",
+                "in",
+                "    dbo_sdoh_fips"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Exception"
+          }
+        ]
+      },
+      {
+        "name": "zip_to_fips_mapping",
+        "lineageTag": "4632787b-a0fd-4227-8402-0184e9b1263d",
+        "columns": [
+          {
+            "name": "zip",
+            "dataType": "string",
+            "sourceColumn": "zip",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "8a5ba175-6e65-4e2c-8804-183d92ccd586",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "fcef94a3-c155-4399-9566-e884a8af57aa",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "countyFips",
+            "dataType": "string",
+            "sourceColumn": "countyFips",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "946c6891-ebf1-42d0-b7b9-ff0e1745ce69",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "id",
+            "dataType": "string",
+            "sourceColumn": "id",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "16338fa7-0dac-445f-85e2-6d110a192a78",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "4f95a75c-38f2-488d-9a23-7d6d7a6d18bd",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "stateAbbreviation",
+            "dataType": "string",
+            "sourceColumn": "stateAbbreviation",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "3e6500f1-d34d-46a9-add9-7b7854e12e6e",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "countyName",
+            "dataType": "string",
+            "sourceColumn": "countyName",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "309856d9-2f8c-4bc1-b624-9b2f79b3d82c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "zip_to_fips_mapping",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_zip_to_fips_mapping = Source{[Schema=\"dbo\",Item=\"zip_to_fips_mapping\"]}[Data]",
+                "in",
+                "    dbo_zip_to_fips_mapping"
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "name": "1a43fae6-1215-b648-c134-b985814900e1",
+        "fromTable": "location",
+        "fromColumn": "location_id",
+        "toTable": "person",
+        "toColumn": "location_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "dd632c48-3414-6f89-145a-6dcf24ebae6b",
+        "fromTable": "procedure_occurrence",
+        "fromColumn": "person_id",
+        "toTable": "person",
+        "toColumn": "person_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "73317908-5c2c-ce40-192d-8d177ec33567",
+        "fromTable": "cost",
+        "fromColumn": "person_id",
+        "toTable": "person",
+        "toColumn": "person_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "7446364c-1e9b-6b6b-62ea-baf26f780926",
+        "fromTable": "condition_occurrence",
+        "fromColumn": "person_id",
+        "toTable": "person",
+        "toColumn": "person_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "94b58dc4-62a6-b61d-4c43-e7f69d0105dc",
+        "fromTable": "visit_occurrence",
+        "fromColumn": "person_id",
+        "toTable": "person",
+        "toColumn": "person_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "bb403b31-8d8e-c7d4-70d2-a7b3a745f0a1",
+        "fromTable": "measurement",
+        "fromColumn": "person_id",
+        "toTable": "person",
+        "toColumn": "person_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "3d7a5b19-1b9d-4463-0fc4-2e20db4422d8",
+        "fromTable": "care_plan",
+        "fromColumn": "person_id",
+        "toTable": "person",
+        "toColumn": "person_id",
+        "isActive": false,
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "47f3ef3c-375b-ac39-4b03-68cfcb8bf02f",
+        "fromTable": "care_plan_activities",
+        "fromColumn": "care_plan_id",
+        "toTable": "care_plan",
+        "toColumn": "care_plan_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "4c4a212a-eec0-f350-d3b3-8f35eb86b654",
+        "fromTable": "care_plan_addresses",
+        "fromColumn": "care_plan_id",
+        "toTable": "care_plan",
+        "toColumn": "care_plan_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "16ddcee0-fbe2-5603-1b16-8bfea26fad8f",
+        "fromTable": "care_plan_goal",
+        "fromColumn": "care_plan_id",
+        "toTable": "care_plan",
+        "toColumn": "care_plan_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "aa00068b-0bd6-3e88-5387-1a096b9fc069",
+        "fromTable": "location",
+        "fromColumn": "zip",
+        "toTable": "patient_location_zip",
+        "toColumn": "zip",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "664506eb-0386-30cd-0f23-9f117778e8ac",
+        "fromTable": "social_determinant",
+        "fromColumn": "location_value",
+        "toTable": "sdoh_fips",
+        "toColumn": "fips_code",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "79a50e93-1e3b-5d28-57d1-5fcf1011ee56",
+        "fromTable": "social_determinant",
+        "fromColumn": "name",
+        "toTable": "sdoh_datasetmetadata",
+        "toColumn": "sdoh_datasetmetadata_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "355339ba-d6f1-e885-374f-fbf76c3a332c",
+        "fromTable": "social_determinant",
+        "fromColumn": "category_id",
+        "toTable": "sdoh_category",
+        "toColumn": "subcategory_id",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "501377df-6c5d-e309-34e2-542e46071ef9",
+        "fromTable": "social_determinant",
+        "fromColumn": "unit_of_measure_id",
+        "toTable": "sdoh_unitofmeasure",
+        "toColumn": "unit_of_measure_id",
+        "crossFilteringBehavior": "bothDirections",
+        "relyOnReferentialIntegrity": true
+      },
+      {
+        "name": "288eeec4-18c8-bfa5-a332-ef9f0d8c58c7",
+        "fromTable": "zip_to_fips_mapping",
+        "fromColumn": "zip",
+        "toTable": "patient_location_zip",
+        "toColumn": "zip",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "b97ec95a-7658-d23b-236d-14e1a7dc732c",
+        "fromTable": "zip_to_fips_mapping",
+        "fromColumn": "countyFips",
+        "toTable": "sdoh_fips",
+        "toColumn": "fips_code",
+        "crossFilteringBehavior": "bothDirections"
+      }
+    ],
+    "cultures": [
+      {
+        "name": "en-IN",
+        "linguisticMetadata": {
+          "content": {
+            "Version": "1.0.0",
+            "Language": "en-US",
+            "Entities": {
+              "condition_occurrence.patientcountbycondition": {
+                "Binding": {
+                  "ConceptualEntity": "condition_occurrence",
+                  "ConceptualProperty": "PatientCountByCondition"
+                },
+                "State": "Generated"
+              },
+              "condition_occurrence.condition_text_source_value": {
+                "Binding": {
+                  "ConceptualEntity": "condition_occurrence",
+                  "ConceptualProperty": "condition_text_source_value"
+                },
+                "State": "Generated"
+              },
+              "person.patientsbyagegroup": {
+                "Binding": {
+                  "ConceptualEntity": "person",
+                  "ConceptualProperty": "PatientsByAgeGroup"
+                },
+                "State": "Generated"
+              },
+              "person.count_gender_female": {
+                "Binding": {
+                  "ConceptualEntity": "person",
+                  "ConceptualProperty": "count_gender_female"
+                },
+                "State": "Generated"
+              },
+              "person.count_gender_male": {
+                "Binding": {
+                  "ConceptualEntity": "person",
+                  "ConceptualProperty": "count_gender_male"
+                },
+                "State": "Generated"
+              },
+              "person.count_gender_unkown": {
+                "Binding": {
+                  "ConceptualEntity": "person",
+                  "ConceptualProperty": "count_gender_unkown"
+                },
+                "State": "Generated"
+              },
+              "cost.bill_end_date_quarter": {
+                "Binding": {
+                  "ConceptualEntity": "cost",
+                  "ConceptualProperty": "bill_end_date_quarter"
+                },
+                "State": "Generated"
+              },
+              "cost.bill_end_date_year": {
+                "Binding": {
+                  "ConceptualEntity": "cost",
+                  "ConceptualProperty": "bill_end_date_year"
+                },
+                "State": "Generated"
+              },
+              "cost.cost_gender_female": {
+                "Binding": {
+                  "ConceptualEntity": "cost",
+                  "ConceptualProperty": "cost_gender_female"
+                },
+                "State": "Generated"
+              },
+              "cost.cost_gender_male": {
+                "Binding": {
+                  "ConceptualEntity": "cost",
+                  "ConceptualProperty": "cost_gender_male"
+                },
+                "State": "Generated"
+              },
+              "cost.cost_gender_unknown": {
+                "Binding": {
+                  "ConceptualEntity": "cost",
+                  "ConceptualProperty": "cost_gender_unknown"
+                },
+                "State": "Generated"
+              },
+              "cost.totalcostbycondition": {
+                "Binding": {
+                  "ConceptualEntity": "cost",
+                  "ConceptualProperty": "TotalCostByCondition"
+                },
+                "State": "Generated"
+              }
+            }
+          },
+          "contentType": "json"
+        }
+      }
+    ],
+    "annotations": [
+      {
+        "name": "PBI_QueryOrder",
+        "value": "[\"cost\",\"condition_occurrence\",\"location\",\"person\",\"visit_occurrence\",\"procedure_occurrence\",\"measurement\",\"care_plan\",\"care_plan_activities\",\"care_plan_addresses\",\"care_plan_goal\",\"patient_location_zip\",\"sdoh_category\",\"sdoh_datasetmetadata\",\"sdoh_unitofmeasure\",\"social_determinant\",\"sdoh_fips\",\"zip_to_fips_mapping\"]"
+      },
+      {
+        "name": "__PBI_TimeIntelligenceEnabled",
+        "value": "1"
+      },
+      {
+        "name": "PBIDesktopVersion",
+        "value": "2.142.7616.1 (Main)+5bcff2d62d31e8c65f2b7afb79b341ec2d915a67"
+      },
+      {
+        "name": "PBI_ProTooling",
+        "value": "[\"WebModelingEdit\"]"
+      },
+      {
+        "name": "__PBIService_Versioning_SaveVersion",
+        "value": "8abdfe7c-0f45-4cd0-826e-f13195024caf"
+      }
+    ]
+  }
+}

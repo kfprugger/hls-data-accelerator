@@ -1,0 +1,119 @@
+{
+	"$schema": "../../../../../configuration-schemas/DBSchemaConfig_schema.json",
+	"fields": [
+		{
+			"name": "SourceModifiedOn",
+			"description": "Used for comparing with source system records to know when a records was changed in the source",
+			"tables": ["*" ],
+			"type": "timestamp",
+			"timestampFormat": "yyyy-MM-ddTHH:mm:ssZ",
+			"enabled": true
+		},
+		{
+			"name": "SourceTable",
+			"description": "Used for comparing with source system records to know when a records was changed in the source",
+			"tables": [ "*"],
+			"type": "string",
+			"enabled": true
+		},
+		{
+			"name": "CorrelationId",
+			"description": "Used for harmonizing clinical data with non-clinical data",
+			"tables": [ "IdmPatient" ],
+			"type": "string",
+			"enabled": true
+		},
+		{
+			"name": "FromName",
+			"description": "Used for storing email from name",
+			"tables": [ "EmailCommunication" ],
+			"type": "string",
+			"enabled": true
+		},
+		{
+			"name": "ServiceType",
+			"description": "Used for for storing marketing Journey service line",
+			"tables": [ "MarketingCampaignTask" ],
+			"type": "string",
+			"enabled": true
+		},
+		{
+			"name": "FromEmail",
+			"description": "Used for for storing from email address",
+			"tables": [ "EmailCommunication" ],
+			"type": "string",
+			"enabled": true
+		},
+		{
+			"name": "CreatedOn",
+			"description": "Used for storing created on value",
+			"tables": [ "IdmCommunication","EmailCommunication","MarketingCampaignTask","ApplicationCommunication","SmsCommunication" ],
+			"type": "timestamp",
+			"enabled": true
+		},
+		{
+			"name": "StateCode",
+			"description": "Used to indicate the state of a record",
+			"tables": [ "IdmCommunication","EmailCommunication","MarketingCampaignTask","ApplicationCommunication","SmsCommunication"],
+			"type": "string",
+			"enabled": true
+		}
+	],
+	"partitionFields": [
+		{
+			"name": "prYear",
+			"description": "partition by year",
+			"tables": [],
+			"type": "integer",
+			"partition": true,
+			"order": 30,
+			"enabled": true
+		},
+		{
+			"name": "prMonth",
+			"description": "Partition by month",
+			"tables": [],
+			"type": "integer",
+			"partition": true,
+			"order": 40,
+			"enabled": true
+		},
+		{
+			"name": "prDay",
+			"description": "partition by day",
+			"tables": [],
+			"type": "integer",
+			"partition": true,
+			"order": 50,
+			"enabled": true
+		},
+		{
+			"name": "prPersonId",
+			"description": "partition by personId",
+			"tables": [],
+			"type": "long",
+			"partition": true,
+			"order": 20,
+			"enabled": true
+		},
+		{
+			"name": "prLocationId",
+			"description": "partition by locationId",
+			"tables": [],
+			"type": "long",
+			"partition": true,
+			"order": 10,
+			"enabled": true
+		}
+	],
+	"referenceTableRanges": [
+		{
+			"table": "Concept",
+			"valueRanges": [ "1-10000000" ]
+		}
+	],
+	"configuration": {
+		"modifiedOnTargetField": "SourceModifiedOn",
+		"sourceTableField": "SourceTable"
+	}
+}

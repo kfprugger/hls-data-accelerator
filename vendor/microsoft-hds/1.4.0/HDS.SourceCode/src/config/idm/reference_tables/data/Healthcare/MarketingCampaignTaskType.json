@@ -1,0 +1,88 @@
+{
+  "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceData_schema.json",
+  "adrmTableName": "MarketingCampaignTaskType",
+  "fieldMapping": [
+    {
+      "adrmFieldName": "MarketingCampaignTaskTypeId",
+      "referenceFieldName": "id"
+    },
+    {
+      "adrmFieldName": "MarketingCampaignTaskTypeName",
+      "referenceFieldName": "name"
+    },
+    {
+      "adrmFieldName": "MarketingCampaignTaskTypeDescription",
+      "referenceFieldName": "description"
+    }
+  ],
+  "data": [
+    {
+      "id": 20000000,
+      "name": "JourneyAction"
+    },
+    {
+      "id": 20000001,
+      "name": "Journey"
+    },
+    {
+      "id": 20000002,
+      "name": "JourneyInstance"
+    },
+    {
+      "id": 20000003,
+      "name": "JourneyEvent"
+    },
+    {
+      "id": 20000004,
+      "name": "EmailSent"
+    },
+    {
+      "id": 20000005,
+      "name": "EmailOpened"
+    },
+    {
+      "id": 20000006,
+      "name": "SmsSent"
+    },
+    {
+      "id": 20000007,
+      "name": "ActionEvent"
+    },
+    {
+      "id": 20000008,
+      "name": "EmailClicked"
+    },
+    {
+      "id": 20000009,
+      "name": "EmailDelivered"
+    },
+    {
+      "id": 20000010,
+      "name": "SmsDelivered"
+    },
+    {
+      "id": 20000011,
+      "name": "SmsLinkClicked"
+    },
+    {
+      "id": 20000012,
+      "name": "SmsNotSent"
+    },
+    {
+      "id": 20000013,
+      "name": "PushNotificationOpened"
+    },
+    {
+      "id": 20000014,
+      "name": "PushNotificationLinkClicked"
+    },
+    {
+      "id": 20000015,
+      "name": "PushNotificationSent"
+    },
+    {
+      "id": 20000016,
+      "name": "PushNotificationNotSent"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+    "properties": {
+        "activities": [
+            {
+                "name": "cma_silver_gold_transformation",
+                "description": "This notebook activity transforms data from the silver lakehouse to the Care Management Analytics Data Model and ingest the data into the Gold lakehouse.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+                "type": "TridentNotebook",
+                "dependsOn": [],
+                "typeProperties": {
+                    "notebookId": "%%cma_silver_gold_transformation_notebook_id%%",
+                    "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+							"type": "string"
+						}
+					}
+                }
+            }
+        ]
+    }
+}

@@ -1,0 +1,849 @@
+{
+  "bronze": {
+    "source_artifact_path": "dist/healthcare-tables/1.4.0/Bronze",
+    "folders": [
+      {
+        "name": "External",
+        "subFolders": [
+          {
+            "name": "Claims"
+          },
+          {
+            "name": "Clinical",
+            "subFolders": [
+              {
+                "name": "FHIR-NDJSON",
+                "subFolders": [
+                  {
+                    "name": "AHDS-FHIR"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Imaging",
+            "subFolders": [
+              {
+                "name": "DICOM",
+                "subFolders": [
+                  {
+                    "name": "AHDS-DICOM"
+                  }
+                ]
+              },
+              {
+                "name": "OPERATIONS"
+              }
+            ]
+          },
+          {
+            "name": "Genomics"
+          },
+          {
+            "name": "DaxCopilot"
+          }
+        ]
+      },
+      {
+        "name": "Inventory",
+        "subFolders": [
+          {
+            "name": "Claims"
+          },
+          {
+            "name": "Clinical",
+            "subFolders": [
+              {
+                "name": "FHIR-NDJSON",
+                "subFolders": [
+                  {
+                    "name": "FHIR-HDS",
+                    "subFolders" : [
+                      {
+                        "name": "InventoryFiles"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Imaging",
+            "subFolders": [
+              {
+                "name": "DICOM",
+                "subFolders": [
+                  {
+                    "name": "DICOM-HDS",
+                    "subFolders" : [
+                      {
+                        "name": "InventoryFiles"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Genomics"
+          }
+        ]
+      },
+      {
+        "name": "Ingest",
+        "subFolders": [
+          {
+            "name": "Claims",
+            "subFolders": [
+              {
+                "name": "CCLF",
+                "subFolders": [
+                  {
+                    "name": "CCLF-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Clinical",
+            "subFolders": [
+              {
+                "name": "FHIR-NDJSON",
+                "subFolders": [
+                  {
+                    "name": "AHDS-FHIR"
+                  },
+                  {
+                    "name": "FHIR-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Imaging",
+            "subFolders": [
+              {
+                "name": "DICOM",
+                "subFolders": [
+                  {
+                    "name": "DICOM-HDS"
+                  }
+                ]
+              },
+              {
+                "name": "OPERATIONS",
+                "subFolders": [
+                  {
+                    "name": "DICOM-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Genomics"
+          },
+          {
+            "name": "SDOH",
+            "subFolders": [
+              {
+                "name": "CSV"
+              },
+              {
+                "name": "XLSX"
+              },
+              {
+                "name": "XLS"
+              }
+            ]
+          },
+          {
+            "name": "AIEnrichments",
+            "subFolders": [
+              {
+                "name": "Text",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Object",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Embedding",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Segmentation2D",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Segmentation3D",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Process",
+        "subFolders": [
+          {
+            "name": "Claims",
+            "subFolders": [
+              {
+                "name": "CCLF",
+                "subFolders": [
+                  {
+                    "name": "CCLF-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Clinical",
+            "subFolders": [
+              {
+                "name": "FHIR-NDJSON",
+                "subFolders": [
+                  {
+                    "name": "AHDS-FHIR"
+                  },
+                  {
+                    "name": "FHIR-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Imaging",
+            "subFolders": [
+              {
+                "name": "DICOM",
+                "subFolders": [
+                  {
+                    "name": "DICOM-HDS"
+                  }
+                ]
+              },
+              {
+                "name": "OPERATIONS",
+                "subFolders": [
+                  {
+                    "name": "DICOM-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Genomics"
+          },
+          {
+            "name": "SDOH"
+          },
+          {
+            "name": "AIEnrichments",
+            "subFolders": [
+              {
+                "name": "Text",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Object",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Embedding",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Segmentation2D",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Segmentation3D",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Failed",
+        "subFolders": [
+          {
+            "name": "Claims",
+            "subFolders": [
+              {
+                "name": "CCLF",
+                "subFolders": [
+                  {
+                    "name": "CCLF-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Clinical",
+            "subFolders": [
+              {
+                "name": "FHIR-NDJSON",
+                "subFolders": [
+                  {
+                    "name": "AHDS-FHIR"
+                  },
+                  {
+                    "name": "FHIR-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Imaging",
+            "subFolders": [
+              {
+                "name": "DICOM",
+                "subFolders": [
+                  {
+                    "name": "DICOM-HDS"
+                  }
+                ]
+              },
+              {
+                "name": "OPERATIONS",
+                "subFolders": [
+                  {
+                    "name": "DICOM-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Genomics"
+          },
+          {
+            "name": "SDOH"
+          },
+          {
+            "name": "AIEnrichments",
+            "subFolders": [
+              {
+                "name": "Text",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Object",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Embedding",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Segmentation2D",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              },
+              {
+                "name": "Segmentation3D",
+                "subFolders": [
+                      {
+                        "name": "Fabric-HDS"
+                      },
+                      {
+                        "name": "External"
+                      }
+                    ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "SampleData",
+        "subFolders": [
+          {
+            "name": "Claims"
+          },
+          {
+            "name": "Clinical",
+            "subFolders": [
+              {
+                "name": "FHIR-NDJSON",
+                "subFolders": [
+                  {
+                    "name": "FHIR-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Imaging",
+            "subFolders": [
+              {
+                "name": "DICOM",
+                "subFolders": [
+                  {
+                    "name": "DICOM-HDS"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "name": "SDOH",
+            "subFolders": [
+              {
+                "name": "CSV"
+              },
+              {
+                "name": "XLSX"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "ReferenceData",
+        "subFolders": [
+          {
+            "name": "Clinical",
+            "subFolders": [
+              {
+                "name": "OMOP"
+              }
+            ]
+          },
+          {
+            "name": "SDOH"
+          }
+        ]
+      }
+    ],
+    
+    "tables": [
+      "ClinicalFhir",
+      "ImagingDicom",
+      "ClaimsCclfHeader",
+      "ClaimsCclfBeneficiaryDemographicsFile",
+      "ClaimsCclfBeneficiaryXREFFile",
+      "ClaimsCclfDiagnosisCode",
+      "ClaimsCclfDMEFile",
+      "ClaimsCclfLineItemDetails",
+      "ClaimsCclfPartDFile",
+      "ClaimsCclfPhysiciansFile",
+      "ClaimsCclfProcedureCode",
+      "AIEnrichments",
+      "DaxCopilotData",
+      "SdohDatasets"
+    ]
+  },
+  "admin": {
+    "source_artifact_path": "dist/healthcare-tables/1.4.0/Administrative",
+    "tables": [
+      "BusinessEvents",
+      "ExecutionSummary"
+    ],
+    "folders": [
+      {
+        "name": "HealthDataManager",
+        "subFolders": [
+          {
+            "name": "DMHConfiguration"
+          },
+          {
+            "name": "DMHSampleData"
+          },
+          {
+            "name": "DMHCheckpoint"
+          }
+        ]
+      }
+    ]
+  },
+  "silver": {
+    "source_artifact_path": "dist/healthcare-tables/1.4.0/Silver",
+    "tables": [
+      "Account",
+      "ActivityDefinition",
+      "AdverseEvent",
+      "AllergyIntolerance",
+      "ApplicationCommunication",
+      "Appointment",
+      "AppointmentResponse",
+      "AuditEvent",
+      "Basic",
+      "Binary",
+      "BiologicallyDerivedProduct",
+      "BodyStructure",
+      "Bundle",
+      "CapabilityStatement",
+      "CarePlan",
+      "CareTeam",
+      "CatalogEntry",
+      "ChargeItem",
+      "ChargeItemDefinition",
+      "Claim",
+      "ClaimResponse",
+      "ClinicalImpression",
+      "CodeSystem",
+      "Communication",
+      "CommunicationMethod",
+      "CommunicationRequest",
+      "CommunicationStatus",
+      "CommunicationStatusType",
+      "CompartmentDefinition",
+      "Composition",
+      "ConceptMap",
+      "Condition",
+      "Consent",
+      "Contract",
+      "Coverage",
+      "CoverageEligibilityRequest",
+      "CoverageEligibilityResponse",
+      "DetectedIssue",
+      "Device",
+      "DeviceDefinition",
+      "DeviceMetric",
+      "DeviceRequest",
+      "DeviceUseStatement",
+      "DiagnosticReport",
+      "DocumentManifest",
+      "DocumentReference",
+      "DocumentReferenceContent",
+      "EffectEvidenceSynthesis",
+      "EmailCommunication",
+      "Encounter",
+      "Endpoint",
+      "EnrollmentRequest",
+      "EnrollmentResponse",
+      "EpisodeOfCare",
+      "EventDefinition",
+      "Evidence",
+      "EvidenceVariable",
+      "ExampleScenario",
+      "ExplanationOfBenefit",
+      "FamilyMemberHistory",
+      "Flag",
+      "Goal",
+      "GraphDefinition",
+      "Group",
+      "GuidanceResponse",
+      "HealthcareService",
+      "IdmCommunication",
+      "IdmPatient",
+      "ImagingMetastore",
+      "ImagingStudy",
+      "Immunization",
+      "ImmunizationEvaluation",
+      "ImmunizationRecommendation",
+      "ImplementationGuide",
+      "InsurancePlan",
+      "Invoice",
+      "Language",
+      "Library",
+      "Linkage",
+      "List",
+      "Location",
+      "MarketingCampaignTask",
+      "MarketingCampaignTaskCommunication",
+      "MarketingCampaignTaskRelatedParty",
+      "MarketingCampaignTaskStatus",
+      "MarketingCampaignTaskType",
+      "Measure",
+      "MeasureReport",
+      "Media",
+      "Medication",
+      "MedicationAdministration",
+      "MedicationDispense",
+      "MedicationKnowledge",
+      "MedicationRequest",
+      "MedicationStatement",
+      "MedicinalProduct",
+      "MedicinalProductAuthorization",
+      "MedicinalProductContraindiction",
+      "MedicinalProductIndictation",
+      "MedicinalProductIngredient",
+      "MedicinalProductInteraction",
+      "MedicinalProductManufactured",
+      "MedicinalProductPackaged",
+      "MedicinalProductPharmaceutical",
+      "MedicinalProductUndesirableEffect",
+      "MessageDefinition",
+      "MessageHeader",
+      "MolecularSequence",
+      "NamingSystem",
+      "NutritionOrder",
+      "Observation",
+      "ObservationDefinition",
+      "OperationDefinition",
+      "OperationOutcome",
+      "Organization",
+      "OrganizationAffiliation",
+      "Parameters",
+      "Party",
+      "PartyType",
+      "Patient",
+      "PaymentNotice",
+      "PaymentReconciliation",
+      "Person",
+      "PlanDefinition",
+      "Practitioner",
+      "PractitionerRole",
+      "Procedure",
+      "Provenance",
+      "Questionnaire",
+      "QuestionnaireResponse",
+      "RelatedCommunication",
+      "RelatedMarketingCampaignTask",
+      "RelatedPerson",
+      "RequestGroup",
+      "ResearchDefinition",
+      "ResearchElementDefinition",
+      "ResearchStudy",
+      "ResearchSubject",
+      "RiskAssessment",
+      "RiskEvidenceSynthesis",
+      "Schedule",
+      "SearchParameter",
+      "ServiceRequest",
+      "Slot",
+      "SmsCommunication",
+      "SocialDeterminant",
+      "SocialDeterminantCategory",
+      "SocialDeterminantDataSetMetadata",
+      "SocialDeterminantSubCategory",
+      "SoftwareProduct",
+      "SoftwareProductVersion",
+      "Specimen",
+      "SpecimenDefinition",
+      "StructureDefinition",
+      "StructureMap",
+      "Subscription",
+      "Substance",
+      "SubstanceNucleicAcid",
+      "SubstancePolymer",
+      "SubstanceProtein",
+      "SubstanceReferenceInformation",
+      "SubstanceSourceMaterial",
+      "SubstanceSpecification",
+      "SupplyDelivery",
+      "SupplyRequest",
+      "Task",
+      "TaskPartyRelationshipType",
+      "TaskRelationshipType",
+      "TaskStatusType",
+      "TerminologyCapabilities",
+      "TestReport",
+      "TestScript",
+      "UnitOfMeasure",
+      "ValueSet",
+      "VerificationResult",
+      "VisionPrescription",
+      "DaxTranscripts",
+      "TextEnrichments",
+      "ObjectEnrichments",
+      "EmbeddingEnrichments",
+      "Segmentation2DEnrichments",
+      "Segmentation3DEnrichments",
+      "ZipToFipsMapping"
+    ]
+  },
+  "omop": {
+    "source_artifact_path": "dist/healthcare-tables/1.4.0/Omop",
+    "tables": [
+      "care_site",
+      "cdm_source",
+      "cohort",
+      "cohort_definition",
+      "concept",
+      "concept_ancestor",
+      "concept_class",
+      "concept_relationship",
+      "concept_synonym",
+      "condition_era",
+      "condition_occurrence",
+      "cost",
+      "death",
+      "device_exposure",
+      "domain",
+      "dose_era",
+      "drug_era",
+      "drug_exposure",
+      "drug_strength",
+      "episode",
+      "episode_event",
+      "fact_relationship",
+      "fhir_system_to_omop_vocab_mapping",
+      "image_occurrence",
+      "location",
+      "measurement",
+      "metadata",
+      "note",
+      "note_nlp",
+      "observation",
+      "observation_period",
+      "payer_plan_period",
+      "person",
+      "procedure_occurrence",
+      "provider",
+      "relationship",
+      "source_to_concept_map",
+      "specimen",
+      "visit_detail",
+      "visit_occurrence",
+      "vocabulary"
+    ]
+  },
+  "poa-gold": {
+    "source_artifact_path": "dist/healthcare-tables/1.4.0/Gold",
+    "tables": [
+      "AppointmentDim",
+      "AppointmentTransitionFact",
+      "AttributionModelDim",
+      "EncounterDim",
+      "JourneyDim",
+      "LocationDim",
+      "MarketingAssetDim",
+      "MarketingChannelDim",
+      "MarketingEventFact",
+      "PatientDim",
+      "ServiceLineDim"
+    ]
+  },
+  "cma-gold": {
+    "source_artifact_path": "dist/healthcare-tables/1.4.0/Gold",
+    "tables": [
+      "person",
+      "location",
+      "visit_occurrence",
+      "condition_occurrence",
+      "procedure_occurrence",
+      "cost",
+      "measurement",
+      "care_plan",
+      "care_plan_activities",
+      "care_plan_addresses",
+      "care_plan_goal",
+      "social_determinant",
+      "sdoh_unitofmeasure",
+      "sdoh_category",
+      "sdoh_datasetmetadata",
+      "zip_to_fips_mapping",
+      "patient_location_zip",
+      "sdoh_fips"
+    ]
+  },
+  "customer-insights": {
+    "source_artifact_path": "dist/healthcare-tables/1.4.0/CustomerInsights",
+    "tables": []
+  }
+}

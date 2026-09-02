@@ -1,0 +1,49 @@
+{
+    "name": "Appointment column configuration",
+    "autoFlattenStruct": false,
+    "retainSourceColumns": false,
+    "stringifyComplexTypes": false,
+    "extendWithDefaultRules": false,
+    "columns": [
+        {
+            "name": "Id",
+            "style": "expr",
+            "expression": "id_orig"
+        },
+        {
+            "name": "Type",
+            "style": "expr",
+            "expression": "appointmentType.coding[0].code"
+        },
+        {
+            "name": "AppointmentStart",
+            "style": "expr",
+            "expression": "start"
+        },
+        {
+            "name": "AppointmentEnd",
+            "style": "expr",
+            "expression": "end"
+        },
+        {
+            "name": "Status",
+            "style": "expr",
+            "expression": "status"
+        },
+        {
+            "name": "ServiceCategory",
+            "style": "expr",
+            "expression": "serviceCategory[0].coding[0].code"
+        },
+        {
+            "name": "ServiceType",
+            "style": "expr",
+            "expression": "serviceType[0].coding[0].code"
+        },
+        {
+            "name": "LastUpdated",
+            "style": "col",
+            "expression": "meta.lastUpdated"
+        }
+    ]
+}

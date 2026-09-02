@@ -1,0 +1,859 @@
+{
+    "name": "resource configuration",
+    "resources": [
+        {
+            "name": "Patient",
+            "schema": {
+                "path": "patient.avsc"
+            }
+        },
+        {
+            "name": "Encounter",
+            "schema": {
+                "path": "encounter.avsc"
+            }
+        },
+        {
+            "name": "Observation",
+            "schema": {
+                "path": "observation.avsc"
+            }
+        },
+        {
+            "name": "DiagnosticReport",
+            "schema": {
+                "path": "diagnosticreport.avsc"
+            }
+        },
+        {
+            "name": "CarePlan",
+            "schema": {
+                "path": "careplan.avsc"
+            }
+        },
+        {
+            "name": "CareTeam",
+            "schema": {
+                "path": "careteam.avsc"
+            }
+        },
+        {
+            "name": "ExplanationOfBenefit",
+            "schema": {
+                "path": "explanationofbenefit.avsc"
+            }
+        },
+        {
+            "name": "Immunization",
+            "schema": {
+                "path": "immunization.avsc"
+            }
+        },
+        {
+            "name": "Location",
+            "schema": {
+                "path": "location.avsc"
+            }
+        },
+        {
+            "name": "Medication",
+            "schema": {
+                "path": "medication.avsc"
+            }
+        },
+        {
+            "name": "AllergyIntolerance",
+            "schema": {
+                "path": "allergyintolerance.avsc"
+            }
+        },
+        {
+            "name": "Appointment",
+            "schema": {
+                "path": "appointment.avsc"
+            }
+        },
+        {
+            "name": "ServiceRequest",
+            "schema": {
+                "path": "servicerequest.avsc"
+            }
+        },
+        {
+            "name": "Binary",
+            "schema": {
+                "path": "binary.avsc"
+            }
+        },
+        {
+            "name": "Endpoint",
+            "schema": {
+                "path": "endpoint.avsc"
+            }
+        },
+        {
+            "name": "List",
+            "schema": {
+                "path": "list.avsc"
+            }
+        },
+        {
+            "name": "ResearchStudy",
+            "schema": {
+                "path": "researchstudy.avsc"
+            }
+        },
+        {
+            "name": "Specimen",
+            "schema": {
+                "path": "specimen.avsc"
+            }
+        },
+        {
+            "name": "RequestGroup",
+            "schema": {
+                "path": "requestgroup.avsc"
+            }
+        },
+        {
+            "name": "ValueSet",
+            "schema": {
+                "path": "valueset.avsc"
+            }
+        },
+        {
+            "name": "Practitioner",
+            "schema": {
+                "path": "practitioner.avsc"
+            },
+            "flattenSchemaFile": "practitioner.columnsconfig.json"
+        },
+        {
+            "name": "PractitionerRole",
+            "schema": {
+                "path": "practitionerrole.avsc"
+            }
+        },
+        {
+            "name": "Organization",
+            "schema": {
+                "path": "organization.avsc"
+            }
+        },
+        {
+            "name": "Condition",
+            "schema": {
+                "path": "condition.avsc"
+            }
+        },
+        {
+            "name": "MedicationRequest",
+            "schema": {
+                "path": "medicationrequest.avsc"
+            },
+            "flattenSchemaFile": "medicationrequest.columnsconfig.json"
+        },
+        {
+            "name": "Procedure",
+            "schema": {
+                "path": "procedure.avsc"
+            }
+        },
+        {
+            "name": "DocumentReference",
+            "schema": {
+                "path": "documentreference.avsc"
+            },
+            "children": [
+                {
+                    "name": "DocumentReferenceContent",
+                    "flattenSchemaFile": "documentreference.content.columnsconfig.json"
+                }
+            ]
+        },
+        {
+            "name": "Account",
+            "schema": {
+                "path": "account.avsc"
+            }
+        },
+        {
+            "name": "ActivityDefinition",
+            "schema": {
+                "path": "activitydefinition.avsc"
+            }
+        },
+        {
+            "name": "AdministrableProductDefinition",
+            "schema": {
+                "path": "administrableproductdefinition.avsc"
+            }
+        },
+        {
+            "name": "AdverseEvent",
+            "schema": {
+                "path": "adverseevent.avsc"
+            }
+        },
+        {
+            "name": "AppointmentResponse",
+            "schema": {
+                "path": "appointmentresponse.avsc"
+            }
+        },
+        {
+            "name": "AuditEvent",
+            "schema": {
+                "path": "auditevent.avsc"
+            }
+        },
+        {
+            "name": "Basic",
+            "schema": {
+                "path": "basic.avsc"
+            }
+        },
+        {
+            "name": "BiologicallyDerivedProduct",
+            "schema": {
+                "path": "biologicallyderivedproduct.avsc"
+            }
+        },
+        {
+            "name": "BodyStructure",
+            "schema": {
+                "path": "bodystructure.avsc"
+            }
+        },
+        {
+            "name": "Bundle",
+            "schema": {
+                "path": "bundle.avsc"
+            }
+        },
+        {
+            "name": "CapabilityStatement",
+            "schema": {
+                "path": "capabilitystatement.avsc"
+            }
+        },
+        {
+            "name": "CatalogEntry",
+            "schema": {
+                "path": "catalogentry.avsc"
+            }
+        },
+        {
+            "name": "ChargeItem",
+            "schema": {
+                "path": "chargeitem.avsc"
+            }
+        },
+        {
+            "name": "ChargeItemDefinition",
+            "schema": {
+                "path": "chargeitemdefinition.avsc"
+            }
+        },
+        {
+            "name": "Citation",
+            "schema": {
+                "path": "citation.avsc"
+            }
+        },
+        {
+            "name": "Claim",
+            "schema": {
+                "path": "claim.avsc"
+            }
+        },
+        {
+            "name": "ClaimResponse",
+            "schema": {
+                "path": "claimresponse.avsc"
+            }
+        },
+        {
+            "name": "ClinicalImpression",
+            "schema": {
+                "path": "clinicalimpression.avsc"
+            }
+        },
+        {
+            "name": "ClinicalUseDefinition",
+            "schema": {
+                "path": "clinicalusedefinition.avsc"
+            }
+        },
+        {
+            "name": "Communication",
+            "schema": {
+                "path": "communication.avsc"
+            }
+        },
+        {
+            "name": "CommunicationRequest",
+            "schema": {
+                "path": "communicationrequest.avsc"
+            }
+        },
+        {
+            "name": "CompartmentDefinition",
+            "schema": {
+                "path": "compartmentdefinition.avsc"
+            }
+        },
+        {
+            "name": "ConceptMap",
+            "schema": {
+                "path": "conceptmap.avsc"
+            }
+        },
+        {
+            "name": "Coverage",
+            "schema": {
+                "path": "coverage.avsc"
+            }
+        },
+        {
+            "name": "CoverageEligibilityRequest",
+            "schema": {
+                "path": "coverageeligibilityrequest.avsc"
+            }
+        },
+        {
+            "name": "CoverageEligibilityResponse",
+            "schema": {
+                "path": "coverageeligibilityresponse.avsc"
+            }
+        },
+        {
+            "name": "DetectedIssue",
+            "schema": {
+                "path": "detectedissue.avsc"
+            }
+        },
+        {
+            "name": "Device",
+            "schema": {
+                "path": "device.avsc"
+            }
+        },
+        {
+            "name": "DeviceDefinition",
+            "schema": {
+                "path": "devicedefinition.avsc"
+            }
+        },
+        {
+            "name": "DeviceMetric",
+            "schema": {
+                "path": "devicemetric.avsc"
+            }
+        },
+        {
+            "name": "DeviceRequest",
+            "schema": {
+                "path": "devicerequest.avsc"
+            }
+        },
+        {
+            "name": "DeviceUseStatement",
+            "schema": {
+                "path": "deviceusestatement.avsc"
+            }
+        },
+        {
+            "name": "DocumentManifest",
+            "schema": {
+                "path": "documentmanifest.avsc"
+            }
+        },
+        {
+            "name": "EnrollmentRequest",
+            "schema": {
+                "path": "enrollmentrequest.avsc"
+            }
+        },
+        {
+            "name": "EnrollmentResponse",
+            "schema": {
+                "path": "enrollmentresponse.avsc"
+            }
+        },
+        {
+            "name": "EpisodeOfCare",
+            "schema": {
+                "path": "episodeofcare.avsc"
+            }
+        },
+        {
+            "name": "EventDefinition",
+            "schema": {
+                "path": "eventdefinition.avsc"
+            }
+        },
+        {
+            "name": "Evidence",
+            "schema": {
+                "path": "evidence.avsc"
+            }
+        },
+        {
+            "name": "EvidenceVariable",
+            "schema": {
+                "path": "evidencevariable.avsc"
+            }
+        },
+        {
+            "name": "FamilyMemberHistory",
+            "schema": {
+                "path": "familymemberhistory.avsc"
+            }
+        },
+        {
+            "name": "Flag",
+            "schema": {
+                "path": "flag.avsc"
+            }
+        },
+        {
+            "name": "Goal",
+            "schema": {
+                "path": "goal.avsc"
+            }
+        },
+        {
+            "name": "Group",
+            "schema": {
+                "path": "group.avsc"
+            }
+        },
+        {
+            "name": "GuidanceResponse",
+            "schema": {
+                "path": "guidanceresponse.avsc"
+            }
+        },
+        {
+            "name": "HealthcareService",
+            "schema": {
+                "path": "healthcareservice.avsc"
+            }
+        },
+        {
+            "name": "ImagingStudy",
+            "schema": {
+                "path": "imagingstudy.avsc"
+            }
+        },
+        {
+            "name": "ImmunizationEvaluation",
+            "schema": {
+                "path": "immunizationevaluation.avsc"
+            }
+        },
+        {
+            "name": "ImmunizationRecommendation",
+            "schema": {
+                "path": "immunizationrecommendation.avsc"
+            }
+        },
+        {
+            "name": "Ingredient",
+            "schema": {
+                "path": "ingredient.avsc"
+            }
+        },
+        {
+            "name": "InsurancePlan",
+            "schema": {
+                "path": "insuranceplan.avsc"
+            }
+        },
+        {
+            "name": "Invoice",
+            "schema": {
+                "path": "invoice.avsc"
+            }
+        },
+        {
+            "name": "Library",
+            "schema": {
+                "path": "library.avsc"
+            }
+        },
+        {
+            "name": "Linkage",
+            "schema": {
+                "path": "linkage.avsc"
+            }
+        },
+        {
+            "name": "ManufacturedItemDefinition",
+            "schema": {
+                "path": "manufactureditemdefinition.avsc"
+            }
+        },
+        {
+            "name": "Measure",
+            "schema": {
+                "path": "measure.avsc"
+            }
+        },
+        {
+            "name": "MeasureReport",
+            "schema": {
+                "path": "measurereport.avsc"
+            }
+        },
+        {
+            "name": "Media",
+            "schema": {
+                "path": "media.avsc"
+            }
+        },
+        {
+            "name": "MedicationAdministration",
+            "schema": {
+                "path": "medicationadministration.avsc"
+            }
+        },
+        {
+            "name": "MedicationDispense",
+            "schema": {
+                "path": "medicationdispense.avsc"
+            }
+        },
+        {
+            "name": "MedicationKnowledge",
+            "schema": {
+                "path": "medicationknowledge.avsc"
+            }
+        },
+        {
+            "name": "MedicationStatement",
+            "schema": {
+                "path": "medicationstatement.avsc"
+            }
+        },
+        {
+            "name": "MedicinalProductDefinition",
+            "schema": {
+                "path": "medicinalproductdefinition.avsc"
+            }
+        },
+        {
+            "name": "MessageDefinition",
+            "schema": {
+                "path": "messagedefinition.avsc"
+            }
+        },
+        {
+            "name": "MessageHeader",
+            "schema": {
+                "path": "messageheader.avsc"
+            }
+        },
+        {
+            "name": "MolecularSequence",
+            "schema": {
+                "path": "molecularsequence.avsc"
+            }
+        },
+        {
+            "name": "NamingSystem",
+            "schema": {
+                "path": "namingsystem.avsc"
+            }
+        },
+        {
+            "name": "NutritionOrder",
+            "schema": {
+                "path": "nutritionorder.avsc"
+            }
+        },
+        {
+            "name": "NutritionProduct",
+            "schema": {
+                "path": "nutritionproduct.avsc"
+            }
+        },
+        {
+            "name": "ObservationDefinition",
+            "schema": {
+                "path": "observationdefinition.avsc"
+            }
+        },
+        {
+            "name": "OperationOutcome",
+            "schema": {
+                "path": "operationoutcome.avsc"
+            }
+        },
+        {
+            "name": "OrganizationAffiliation",
+            "schema": {
+                "path": "organizationaffiliation.avsc"
+            }
+        },
+        {
+            "name": "PaymentNotice",
+            "schema": {
+                "path": "paymentnotice.avsc"
+            }
+        },
+        {
+            "name": "PaymentReconciliation",
+            "schema": {
+                "path": "paymentreconciliation.avsc"
+            }
+        },
+        {
+            "name": "Person",
+            "schema": {
+                "path": "person.avsc"
+            }
+        },
+        {
+            "name": "Provenance",
+            "schema": {
+                "path": "provenance.avsc"
+            }
+        },
+        {
+            "name": "RelatedPerson",
+            "schema": {
+                "path": "relatedperson.avsc"
+            }
+        },
+        {
+            "name": "ResearchDefinition",
+            "schema": {
+                "path": "researchdefinition.avsc"
+            }
+        },
+        {
+            "name": "ResearchElementDefinition",
+            "schema": {
+                "path": "researchelementdefinition.avsc"
+            }
+        },
+        {
+            "name": "ResearchSubject",
+            "schema": {
+                "path": "researchsubject.avsc"
+            }
+        },
+        {
+            "name": "RiskAssessment",
+            "schema": {
+                "path": "riskassessment.avsc"
+            }
+        },
+        {
+            "name": "Schedule",
+            "schema": {
+                "path": "schedule.avsc"
+            }
+        },
+        {
+            "name": "SearchParameter",
+            "schema": {
+                "path": "searchparameter.avsc"
+            }
+        },
+        {
+            "name": "Slot",
+            "schema": {
+                "path": "slot.avsc"
+            }
+        },
+        {
+            "name": "SpecimenDefinition",
+            "schema": {
+                "path": "specimendefinition.avsc"
+            }
+        },
+        {
+            "name": "StructureDefinition",
+            "schema": {
+                "path": "structuredefinition.avsc"
+            }
+        },
+        {
+            "name": "Subscription",
+            "schema": {
+                "path": "subscription.avsc"
+            }
+        },
+        {
+            "name": "SubscriptionStatus",
+            "schema": {
+                "path": "subscriptionstatus.avsc"
+            }
+        },
+        {
+            "name": "SubscriptionTopic",
+            "schema": {
+                "path": "subscriptiontopic.avsc"
+            }
+        },
+        {
+            "name": "Substance",
+            "schema": {
+                "path": "substance.avsc"
+            }
+        },
+        {
+            "name": "SupplyDelivery",
+            "schema": {
+                "path": "supplydelivery.avsc"
+            }
+        },
+        {
+            "name": "SupplyRequest",
+            "schema": {
+                "path": "supplyrequest.avsc"
+            }
+        },
+        {
+            "name": "Task",
+            "schema": {
+                "path": "task.avsc"
+            }
+        },
+        {
+            "name": "TerminologyCapabilities",
+            "schema": {
+                "path": "terminologycapabilities.avsc"
+            }
+        },
+        {
+            "name": "TestReport",
+            "schema": {
+                "path": "testreport.avsc"
+            }
+        },
+        {
+            "name": "TestScript",
+            "schema": {
+                "path": "testscript.avsc"
+            }
+        },
+        {
+            "name": "VerificationResult",
+            "schema": {
+                "path": "verificationresult.avsc"
+            }
+        },
+        {
+            "name": "VisionPrescription",
+            "schema": {
+                "path": "visionprescription.avsc"
+            }
+        },
+        {
+            "name": "CodeSystem",
+            "schema": {
+                "path": "codesystem.avsc"
+            }
+        },
+        {
+            "name": "Composition",
+            "schema": {
+                "path": "composition.avsc"
+            }
+        },
+        {
+            "name": "Consent",
+            "schema": {
+                "path": "consent.avsc"
+            }
+        },
+        {
+            "name": "Contract",
+            "schema": {
+                "path": "contract.avsc"
+            }
+        },
+        {
+            "name": "EvidenceReport",
+            "schema": {
+                "path": "evidencereport.avsc"
+            }
+        },
+        {
+            "name": "ExampleScenario",
+            "schema": {
+                "path": "examplescenario.avsc"
+            }
+        },
+        {
+            "name": "GraphDefinition",
+            "schema": {
+                "path": "graphdefinition.avsc"
+            }
+        },
+        {
+            "name": "ImplementationGuide",
+            "schema": {
+                "path": "implementationguide.avsc"
+            }
+        },
+        {
+            "name": "OperationDefinition",
+            "schema": {
+                "path": "operationdefinition.avsc"
+            }
+        },
+        {
+            "name": "PackagedProductDefinition",
+            "schema": {
+                "path": "packagedproductdefinition.avsc"
+            }
+        },
+        {
+            "name": "Parameters",
+            "schema": {
+                "path": "parameters.avsc"
+            }
+        },
+        {
+            "name": "PlanDefinition",
+            "schema": {
+                "path": "plandefinition.avsc"
+            }
+        },
+        {
+            "name": "Questionnaire",
+            "schema": {
+                "path": "questionnaire.avsc"
+            }
+        },
+        {
+            "name": "QuestionnaireResponse",
+            "schema": {
+                "path": "questionnaireresponse.avsc"
+            }
+        },
+        {
+            "name": "RegulatedAuthorization",
+            "schema": {
+                "path": "regulatedauthorization.avsc"
+            }
+        },
+        {
+            "name": "StructureMap",
+            "schema": {
+                "path": "structuremap.avsc"
+            }
+        },
+        {
+            "name": "SubstanceDefinition",
+            "schema": {
+                "path": "substancedefinition.avsc"
+            }
+        }
+    ]
+}

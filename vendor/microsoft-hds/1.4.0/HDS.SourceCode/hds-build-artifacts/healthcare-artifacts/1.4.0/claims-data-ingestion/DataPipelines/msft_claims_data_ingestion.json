@@ -1,0 +1,114 @@
+{
+  "properties": {
+    "activities": [
+      {
+        "name": "raw_process_movement",
+        "description": "This notebook will leverage the Healthcare Data Solutions library to move/extract (extract ZIP files and move) files for multiple HDS modalities, which contain various namespaces and file extensions. This framework will move/extract (extract ZIP files and move) files based on the 'file_orchestration_config' configuration, which contains mapping details such as modality, modality_format, extension etc.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [],
+        "typeProperties": {
+          "notebookId": "%%raw_process_movement_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"modality\":\"Claims\",\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+							"type": "string"
+						}
+					}
+        }
+      },
+      {
+        "name": "claims_landing_zone_delta_tables_ingestion",
+        "description": "This notebook ingests claims data files from a configurable drop folder and organizes them into a structured folder hierarchy based on date (yyyy/mm/dd). It processes the files and populates the corresponding delta tables.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "raw_process_movement",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%claims_extract_bronze_ingestion_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+            "inline_params": {
+              "value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+              "type": "string"
+            }
+					}
+        }
+      },
+      {
+        "name": "claims_fhir_conversion",
+        "description": "This notebook leverages the TransformToFHIRNDJSON function from the Healthcare Data Solutions library to convert claims data from the respective delta tables into various FHIR resources—such as Claims and ExplanationOfBenefit—in the Bronze Fhir4.3 format. The output is saved as ndjson files.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "claims_landing_zone_delta_tables_ingestion",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%claims_fhir_conversion_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+            "inline_params": {
+              "value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+              "type": "string"
+            }
+					}
+        }
+      },
+      {
+        "name": "fhir_ndjson_bronze_ingestion",
+        "description": "This notebook activity facilitates the ingestion of FHIR ndjson data into Delta tables within the bronze lake house.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "claims_fhir_conversion",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%fhir_ndjson_bronze_ingestion_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+							"type": "string"
+						}
+					}
+        }
+      },
+      {
+        "name": "bronze_silver_flatten",
+        "description": "This notebook activity transforms and flattens the data from the bronze lake house and ingests the data into the silver lake house.\nPlease note that there should not be more than one instance of this notebook running as this will cause inconsistent results.",
+        "type": "TridentNotebook",
+        "dependsOn": [
+          {
+            "activity": "fhir_ndjson_bronze_ingestion",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "typeProperties": {
+          "notebookId": "%%bronze_silver_flatten_notebook_id%%",
+          "workspaceId": "%%workspace_id%%",
+					"parameters": {
+						"inline_params": {
+							"value": "{\"pipeline_runId\":\"@{pipeline().RunId}\",\"pipeline_name\":\"@{pipeline().PipelineName}\"}",
+							"type": "string"
+						}
+					}
+        }
+      }
+    ]
+  }
+}

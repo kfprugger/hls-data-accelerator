@@ -1,0 +1,36 @@
+{
+  "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceMapping_schema.json",
+  "values": [
+    {
+      "targetKey": 1,
+      "sourceKeys": [
+        "Active"
+      ]
+    },
+    {
+      "targetKey": 2,
+      "sourceKeys": [
+        "Inactive",
+        100
+      ]
+    },
+    {
+      "targetKey": 3,
+      "sourceKeys": [
+        1
+      ]
+    },
+    {
+      "targetKey": 4,
+      "sourceKeys": [
+        2
+      ]
+    },
+    {
+      "targetKey": 5,
+      "sourceKeys": [
+        3
+      ]
+    }
+  ]
+}

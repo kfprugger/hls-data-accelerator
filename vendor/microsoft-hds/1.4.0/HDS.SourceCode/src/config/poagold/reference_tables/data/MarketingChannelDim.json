@@ -1,0 +1,80 @@
+{
+    "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceData_schema.json",
+    "adrmTableName": "MarketingChannelDim",
+    "fieldMapping": [
+        {
+            "adrmFieldName": "ChannelKey",
+            "referenceFieldName": "id"
+        },
+        {
+            "adrmFieldName": "ChannelName",
+            "referenceFieldName": "name"
+        },
+        {
+            "adrmFieldName": "ChannelAction",
+            "referenceFieldName": "action"
+        }
+    ],
+    "data": [
+        {
+            "id": 1,
+            "name": "Email",
+            "action": "Sent"
+        },
+        {
+            "id": 2,
+            "name": "Email",
+            "action": "Delivered"
+        },
+        {
+            "id": 3,
+            "name": "Email",
+            "action": "Opened"
+        },
+        {
+            "id": 4,
+            "name": "Email",
+            "action": "Clicked"
+        },
+        {
+            "id": 5,
+            "name": "Sms",
+            "action": "Sent"
+        },
+        {
+            "id": 6,
+            "name": "Sms",
+            "action": "Clicked"
+        },
+        {
+            "id": 7,
+            "name": "Sms",
+            "action": "Delivered"
+        },
+        {
+            "id": 8,
+            "name": "Sms",
+            "action": "NotSent"
+        },
+        {
+            "id": 9,
+            "name": "PushNotification",
+            "action": "Sent"
+        },
+        {
+            "id": 10,
+            "name": "PushNotification",
+            "action": "Clicked"
+        },
+        {
+            "id": 11,
+            "name": "PushNotification",
+            "action": "Opened"
+        },
+        {
+            "id": 12,
+            "name": "PushNotification",
+            "action": "NotSent"
+        }
+    ]
+}

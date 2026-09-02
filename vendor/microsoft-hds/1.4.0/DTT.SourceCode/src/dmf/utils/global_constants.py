@@ -1,0 +1,55 @@
+import datetime
+
+
+class GlobalConstants:
+    SOURCE_DB: str = 'dataverse_aadatamoveme_unq858ad1bf76fb44cbbf3c5335bee61'
+    SINK_DB_NAME = 'Banking'
+    ID_GENERATOR_DB_NAME = 'Banking'
+    LOCATION_ID_MAPPING_TABLE_NAME = 'DUMMY_LOCATION_ID_MAPPING'
+    COUNTRY_ID_MAPPING_TABLE_NAME = 'DUMMY_COUNTRY_ID_MAPPING'
+    STATE_ID_MAPPING_TABLE_NAME = 'DUMMY_STATE_ID_MAPPING'
+    JOB_TITLE_ID_MAPPING_TABLE_NAME = 'DUMMY_JOB_TITLE_ID_MAPPING'
+    CUSTOMER_ID_MAPPING_TABLE_NAME = 'CUSTOMER_ID_MAPPING'
+    HOUSEHOLD_ID_MAPPING_TABLE_NAME = 'HOUSEHOLD_ID_MAPPING'
+    CUSTOMER_ACCOUNT_ID_MAPPING_TABLE_NAME = 'CUSTOMER_ACCOUNT_ID_MAPPING'
+    ID_FIELD_PARTITION_DIVIDER = 10000
+    LOCATION_ID_FIELD_PARTITION_DIVIDER = 2  # should be 10000, but with small test data it all ends in a single partition
+    CUSTOMER_ID_FIELD_PARTITION_DIVIDER = 2  # should be 10000, but with small test data it all ends in a single partition
+    DATE_FORMAT = "%Y-%m-%d"
+    END_OF_TIME_PY_DT = datetime.datetime(2100, 1, 1)
+    END_OF_TIME_DATE = END_OF_TIME_PY_DT.strftime(DATE_FORMAT)
+    # minimum unix time supported on Windows platforms by time module
+    START_OF_TIME_PY_DT = datetime.datetime(1970, 1, 2)
+
+    START_OF_TIME_DATE = START_OF_TIME_PY_DT.strftime(DATE_FORMAT)
+
+    MIN_DATE = datetime.datetime.min
+
+    CUSTOMER_ID_GUID_COLUMN_NAME = "CustomerIdGuid"
+    HOUSEHOLD_ID_GUID_COLUMN_NAME = "HouseholdIdGuid"
+    CUSTOMER_ID_COLUMN_NAME = "CustomerId"
+    HOUSEHOLD_ID_COLUMN_NAME = "HouseholdId"
+    PARTY_ID_GUID_COLUMN_NAME = "PartyIdGuid"
+    PARTY_ID_COLUMN_NAME = "PartyId"
+
+    DUMMY_ID = 0
+    DATAVERSE_ID_COLUMN_NAME = "DATAVERSE_ID"
+
+    SPARK_CONFIG_SECONDARY_LAKE_ROOT_VARIABLE = "spark.dmf.secondarylake.root"
+    SPARK_CONFIG_ADAPTER_NAME_VARIABLE = "spark.dmf.adapter_name"
+    SPARK_CONFIG_DTT_START_EXECUTION_TIMESTAMP = "spark.dmf.start_execution_timestamp"
+    SPARK_CONFIG_DTT_DMF_SQL_SHUFFLE_PARTITIONS = "spark.dtt.dmf.sql.shuffle.partitions"
+    SPARK_CONFIG_DTT_DMF_SOURCE_DATA_PARTITIONS = "spark.dtt.dmf.source.data_partitions"
+
+    ID_MAPPING_TABLE_NAME_SUFFIX = '_ID_MAPPING'
+    INTERNAL_ID_COLUMN_NAME = "INTERNAL_ID"
+    EXTERNAL_ID_COLUMN_NAME = "EXTERNAL_ID"
+    FEED_ID_COLUMN_NAME = "FEED_ID"
+    ADRM_ID_COLUMN_NAME = "ADRM_ID"
+    ID_MAPPING_COMPOUND_KEY_SEPARATOR = "|"
+    ID_MAPPING_PATH = 'KEY_MAPPING'
+
+    ACTIVE_VALUE = 0
+    INACTIVE_VALUE = 1
+
+    REFERENCE_MAPPING_PATH = "REFERENCE_MAPPING"

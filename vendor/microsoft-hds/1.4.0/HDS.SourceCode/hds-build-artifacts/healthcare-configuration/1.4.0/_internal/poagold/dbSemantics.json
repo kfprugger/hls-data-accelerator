@@ -1,0 +1,15 @@
+{
+    "referenceTables": [
+        {
+            "table": "AttributionModelDim",
+            "keyField": "AttributionModelKey",
+            "nameField": "AttributionModelName"
+        },
+        {
+            "table": "MarketingChannelDim",
+            "keyField": "ChannelKey",
+            "nameField": "ChannelKey"
+        }
+    ],
+    "modifiedOnTargetField": "SourceModifiedOn"
+}

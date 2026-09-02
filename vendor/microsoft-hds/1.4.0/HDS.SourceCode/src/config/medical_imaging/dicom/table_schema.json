@@ -1,0 +1,245 @@
+{
+    "ImagingDicom": {
+        "friendlyname": "ImagingDicom",
+        "description": "This table stores the information about DICOM Imaging Metadata which is extracted from DICOM tags. Also, It has the few normalized key columns extracted from metadata.",
+        "format": "delta",
+        "schema": {
+            "fields": [
+                {
+                    "metadata": {"columnName" : "studyInstanceUid","tag" : "0020000D"},
+                    "name": "StudyInstanceUID",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "patientName","tag" : "00100010"},
+                    "name": "PatientName",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "patientSex","tag" : "00100040"},
+                    "name": "PatientSex",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "patientId","tag" : "00100020"},
+                    "name": "PatientID",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "patientBirthDate","tag" : "00100030"},
+                    "name": "PatientBirthDate",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "accessionNumber","tag" : "00080050"},
+                    "name": "AccessionNumber",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "referringPhysicianName","tag" : "00080090"},
+                    "name": "ReferringPhysicianName",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "studyDate","tag" : "00080020"},
+                    "name": "StudyDate",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "studyDescription","tag" : "00081030"},
+                    "name": "StudyDescription",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "modalitiesInStudy","tag" : "00080061"},
+                    "name": "ModalitiesInStudy",
+                    "nullable": true,
+                    "type": {
+                        "containsNull": true,
+                        "elementType": "string",
+                        "type": "array"
+                    }
+                },
+                {
+                    "metadata": {"columnName" : "modalitiesInStudy_string","tag" : ""},
+                    "name": "ModalitiesInStudy_string",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "seriesInstanceUid","tag" : "0020000E"},
+                    "name": "SeriesInstanceUID",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "modality","tag" : "00080060"},
+                    "name": "Modality",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "performedProcedureStepStartDate","tag" : "00400244"},
+                    "name": "PerformedProcedureStepStartDate",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "manufacturerModelName","tag" : "00081090"},
+                    "name": "ManufacturerModelName",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "sopInstanceUid","tag" : "00080018"},
+                    "name": "SOPInstanceUID",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "studyTime","tag" : "00080030"},
+                    "name": "StudyTime",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "timezoneOffsetFromUtc","tag" : "00080201"},
+                    "name": "TimezoneOffsetFromUTC",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "numberOfStudyRelatedSeries","tag" : "00201206"},
+                    "name": "NumberOfStudyRelatedSeries",
+                    "nullable": true,
+                    "type": "integer"
+                },
+                {
+                    "metadata": {"columnName" : "numberOfStudyRelatedInstances","tag" : "00201208"},
+                    "name": "NumberOfStudyRelatedInstances",
+                    "nullable": true,
+                    "type": "integer"
+                },
+                {
+                    "metadata": {"columnName" : "seriesNumber","tag" : "00200011"},
+                    "name": "SeriesNumber",
+                    "nullable": true,
+                    "type": "integer"
+                },
+                {
+                    "metadata": {"columnName" : "seriesDescription","tag" : "0008103E"},
+                    "name": "SeriesDescription",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "numberOfSeriesRelatedInstances","tag" : "00201209"},
+                    "name": "NumberOfSeriesRelatedInstances",
+                    "nullable": true,
+                    "type": "integer"
+                },
+                {
+                    "metadata": {"columnName" : "bodyPartExamined","tag" : "00180015"},
+                    "name": "BodyPartExamined",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "laterality","tag" : "00200060"},
+                    "name": "Laterality",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "seriesDate","tag" : "00080021"},
+                    "name": "SeriesDate",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "seriesTime","tag" : "00080031"},
+                    "name": "SeriesTime",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "sopClassUid","tag" : "00080016"},
+                    "name": "SOPClassUID",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "instanceNumber","tag" : "00200013"},
+                    "name": "InstanceNumber",
+                    "nullable": true,
+                    "type": "integer"
+                },
+                {
+                    "metadata": {"columnName" : "documentTitle","tag" : "00420010"},
+                    "name": "DocumentTitle",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "metadata_string","tag" : ""},
+                    "name": "Metadata_string",
+                    "nullable": true,
+                    "type": "string"
+                },
+                {
+                    "metadata": {"columnName" : "metadata","tag" : ""},
+                    "name": "Metadata",
+                    "nullable": true,
+                    "type": {
+                        "keyType": "string",
+                        "type": "map",
+                        "valueContainsNull": true,
+                        "valueType": {
+                            "fields": [
+                                {
+                                    "metadata": {},
+                                    "name": "vr",
+                                    "nullable": true,
+                                    "type": "string"
+                                },
+                                {
+                                    "metadata": {},
+                                    "name": "Value",
+                                    "nullable": true,
+                                    "type": {
+                                        "containsNull": true,
+                                        "elementType": "string",
+                                        "type": "array"
+                                    }
+                                }
+                            ],
+                            "type": "struct"
+                        }
+                    }
+                },
+                {
+                    "metadata": {"columnName" : "createdDatetime","tag" : ""},
+                    "name": "createdDatetime",
+                    "nullable": true,
+                    "type": "timestamp"
+                },
+                {
+                    "metadata": {"columnName" : "issuerOfPatientId","tag" : "00100021"},
+                    "name": "IssuerOfPatientID",
+                    "nullable": true,
+                    "type": "string"
+                }
+            ],
+            "type": "struct"
+        }
+    }
+}

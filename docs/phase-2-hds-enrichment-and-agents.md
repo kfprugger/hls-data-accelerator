@@ -1,0 +1,302 @@
+# Stage 2 — Active Patient Telemetry
+
+⏱️ **Typical Duration:** ~35 minutes | 🛠️ **Fabric Workloads:** Real-Time Intelligence, Healthcare Data Solutions, Data Agents | 🔑 **Min Roles:** Azure Owner, Fabric Admin
+
+---
+
+> [!NOTE]
+> **Deployment prerequisite:** Stage 1 and the automated `Phase 3: HDS Source Deployment` contract must be complete. A normal `Deploy-All.ps1` run satisfies this automatically; a standalone Phase 2 run fails fast if the source contract is incomplete. See the root [Prerequisites](../README.md#prerequisites).
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph AZ["Azure Resources"]
+        ADLS["ADLS Gen2\n(fhir-export +\ndicom-output)"]
+        FHIR["FHIR Service"]
+    end
+
+    subgraph FAB["Microsoft Fabric Workspace"]
+        direction TB
+
+        subgraph RTI["Real-Time Intelligence"]
+            EVH["Eventhouse\n(MasimoKQLDB)"]
+            TR["TelemetryRaw"]
+            AH["AlertHistory"]
+            SC_P["SilverPatient\n(KQL shortcut)"]
+            SC_C["SilverCondition\n(KQL shortcut)"]
+            SC_D["SilverDevice\n(KQL shortcut)"]
+            SC_L["SilverLocation\n(KQL shortcut)"]
+            SC_E["SilverEncounter\n(KQL shortcut)"]
+            SC_B["SilverBasic\n(KQL shortcut)"]
+            FN["Enriched KQL Functions\n• fn_ClinicalAlerts\n• fn_AlertLocationMap"]
+            MAP["Clinical Alerts Map\n(4-tile dashboard)"]
+        end
+
+        subgraph HDS["Healthcare Data Solutions"]
+            BZ["Bronze Lakehouse\n(FHIR-HDS shortcut)"]
+            SLV["Silver Lakehouse\n(Patient, Condition,\nDevice, Location,\nEncounter, Basic)"]
+            PIPE_C["Clinical Pipeline"]
+            PIPE_I["Imaging Pipeline"]
+            PIPE_O["OMOP Pipeline"]
+            GOLD["Gold OMOP Lakehouse"]
+        end
+
+        subgraph AGENTS["Data Agents"]
+            P360["Patient 360 Agent"]
+            TRIAGE["Clinical Triage Agent"]
+        end
+    end
+
+    FHIR -->|"$export"| ADLS
+    ADLS -->|"OneLake shortcut\n(Bronze FHIR-HDS)"| BZ
+    BZ --> PIPE_C --> SLV
+    ADLS -->|"DICOM shortcut"| BZ
+    BZ --> PIPE_I --> SLV
+    SLV --> PIPE_O --> GOLD
+
+    SLV -.->|"Delta table\nshortcuts"| SC_P & SC_C & SC_D & SC_L & SC_E & SC_B
+    TR --> FN
+    AH --> FN
+    SC_P & SC_C & SC_B -.-> FN
+    FN --> MAP
+
+    EVH --- TR & AH
+    SC_P & SC_C & SC_D & SC_L & SC_E & SC_B --- EVH
+
+    P360 -->|KQL| EVH
+    P360 -->|SQL| SLV
+    TRIAGE -->|KQL| EVH
+    TRIAGE -->|SQL| SLV
+
+    style AZ fill:#e6f3ff,stroke:#0078d4,stroke-width:2px
+    style FAB fill:#f0e6ff,stroke:#8000d4,stroke-width:2px
+    style RTI fill:#fff3e6,stroke:#ff8c00
+    style HDS fill:#e6ffe6,stroke:#00a000
+    style AGENTS fill:#ffe6e6,stroke:#d40000
+```
+
+---
+
+## Step 5 — Fabric RTI Phase 2
+
+**Script:** `deploy-fabric-rti.ps1 -Phase2`
+
+### 5a — Bronze Lakehouse Shortcut
+
+Creates a OneLake shortcut named `FHIR-HDS` in the Bronze Lakehouse pointing to the FHIR `$export` data in ADLS Gen2. The shortcut name **must** be `FHIR-HDS` to match the HDS namespace path at `Files/Ingest/Clinical/FHIR-NDJSON/FHIR-HDS`.
+
+### 5b — KQL Shortcuts to Silver Lakehouse
+
+Creates 6 KQL external tables via OneLake shortcuts, connecting the Eventhouse to the Silver Lakehouse's delta tables:
+
+| External Table | Silver Source | Key Fields |
+|----------------|-------------|------------|
+| `SilverPatient` | Patient | `idOrig`, `name`, `birthDate`, `gender`, `address` |
+| `SilverCondition` | Condition | `code`, `subject`, `clinicalStatus` |
+| `SilverDevice` | Device | `serialNumber`, `type`, `manufacturer` |
+| `SilverLocation` | Location | `name`, `address`, `position` |
+| `SilverEncounter` | Encounter | `subject`, `period`, `location`, `class` |
+| `SilverBasic` | Basic (DeviceAssociation) | `code`, `subject`, `extension` (device ref) |
+
+> **Note:** Silver Lakehouse columns like `code`, `subject`, `name`, `location`, `period`, `position`, `address` are **dynamic** type. The `extension` column is **string** type and requires `parse_json()`.
+
+### 5c — Enriched KQL Functions
+
+| Function | Purpose |
+|----------|---------|
+| `fn_ClinicalAlerts` | Joins telemetry with patient context via DeviceAssociation; adds severity escalation for COPD, CHF, asthma, hypertension |
+| `fn_AlertLocationMap` | Joins alerts with Encounter → Location for hospital-level geolocation; defaults to Nashville, TN for unmapped patients |
+
+### 5d — Clinical Alerts Map Dashboard
+
+4-tile dashboard with 30-second auto-refresh:
+
+| Tile | Visual | Data |
+|------|--------|------|
+| Alert Locations | Map (bubble) | `fn_AlertLocationMap(60)` — grouped by hospital, sized by count |
+| Alerts by Hospital | Bar chart | Severity breakdown per hospital |
+| Total Active Alerts | Card | Alert count |
+| Alert Detail | Table | Device, patient, tier, vitals, location |
+
+### 5e — DICOM Shortcut + HDS Pipelines
+
+**Script:** `phase-2/storage-access-trusted-workspace.ps1`
+
+Creates the DICOM OneLake shortcut and triggers HDS pipelines:
+1. **DICOM shortcut** — ADLS Gen2 `dicom-output` → Bronze Lakehouse `/Files/Ingest/Imaging/DICOM/DICOM-HDS/`
+2. **Optional SDoH/claims sidecar pipelines** — discovered from live Fabric DataPipeline items and invoked best-effort/non-blocking if deployed; sidecar pipelines may no-op or fail non-blocking when their source data is absent
+3. **Clinical pipeline** — flows FHIR clinical data into Silver tables
+4. **CMA pipeline** — if Care Management Analytics was included in the HDS deployment, invokes `healthcare1_msft_cma` as a non-blocking Silver consumer after Clinical/Silver readiness passes; it no longer waits for OMOP
+5. **Imaging pipeline** — flows DICOM metadata into Silver imaging tables after clinical completes
+6. **OMOP pipeline** — populates Gold OMOP CDM v5.4 tables from Silver data after Clinical and Imaging complete
+
+> **Pipeline order matters:** the default deployment monitor order is optional SDoH/claims sidecars → Clinical → optional CMA → Imaging → OMOP. Sidecars start best-effort before the Clinical wait when matching live pipeline names are deployed. CMA starts after Clinical/Silver readiness and does not block Imaging, OMOP, or the deployment result.
+
+```powershell
+# Standalone Phase 2
+.\Deploy-All.ps1 -Phase2 `
+    -ResourceGroupName "rg-medtech-rti-fhir" `
+    -Location "eastus" `
+    -FabricWorkspaceName "med-device-rti-hds" `
+    -Tags @{SecurityControl='Ignore'}
+```
+
+---
+
+## Step 6 — Data Agents
+
+**Script:** `phase-2/deploy-data-agents.ps1`
+
+Deploys two AI-powered Data Agents with **dual-datasource architecture**:
+
+```mermaid
+flowchart LR
+    subgraph Agent["Data Agent"]
+        INS["Instructions\n(inline KQL + SQL patterns)"]
+    end
+
+    subgraph KQL["KQL Datasource"]
+        TR["TelemetryRaw"]
+        AH["AlertHistory"]
+    end
+
+    subgraph LH["Lakehouse SQL Datasource"]
+        P["dbo.Patient"]
+        C["dbo.Condition"]
+        B["dbo.Basic\n(DeviceAssociation)"]
+        D["dbo.Device"]
+    end
+
+    Agent -->|"KQL queries"| KQL
+    Agent -->|"SQL queries"| LH
+
+    style Agent fill:#ffe6e6,stroke:#d40000,stroke-width:2px
+    style KQL fill:#fff3e6,stroke:#ff8c00
+    style LH fill:#e6ffe6,stroke:#00a000
+```
+
+### Agent Comparison Matrix
+
+| | **Patient 360** | **Clinical Triage** | **Cohorting Agent** (Phase 3) |
+|---|---|---|---|
+| **Purpose** | Unified single-patient view — demographics + conditions + live vitals | Alert-first triage — prioritize critical situations across ALL devices | Clinical cohort builder — find patient populations matching criteria |
+| **Primary question** | "Tell me about patient X" | "What needs attention right now?" | "Find all COPD patients with chest CTs" |
+| **Data sources** | KQL (telemetry) + Silver Lakehouse (FHIR) | KQL (telemetry) + Silver Lakehouse (FHIR) | Silver Lakehouse (FHIR) + Gold OMOP Lakehouse |
+| **KQL access** | Yes | Yes | No |
+| **Gold OMOP access** | No | No | Yes |
+| **Focus** | Single-patient deep dive | Multi-device alert scanning | Population-level cohort queries |
+| **Workflow** | Patient → device → vitals | Alerts → devices → patients | Criteria → matching population |
+
+### Patient 360 Agent
+
+Unified patient view across FHIR clinical data and real-time telemetry:
+- Latest vital signs per device (SpO2, pulse rate, perfusion index)
+- Device status (online/stale/offline)
+- Patient demographics, conditions, device assignments
+- Cross-datasource lookups: *"Show patient info for device MASIMO-RADIUS7-0033"*
+
+### Clinical Triage Agent
+
+Rapid triage decisions with alert prioritization:
+- Multi-metric alert detection (SpO2 + pulse rate combined)
+- Severity tiers: CRITICAL / URGENT / WARNING
+- Cross-datasource patient identification for alerting devices
+- Sample queries: *"Run a clinical triage"*, *"Which devices have low SpO2? Look up the patients."*
+
+### Key Data Patterns
+
+| Table | Access | Key Fields |
+|-------|--------|------------|
+| `TelemetryRaw` | KQL | `device_id`, `timestamp` (string!), `telemetry.spo2`, `telemetry.pr` |
+| `AlertHistory` | KQL | Historical alert records |
+| `dbo.Basic` | SQL | Device-patient associations via `code_string`, `extension`, `subject_string` |
+| `dbo.Condition` | SQL | Patient diagnoses via `code_string`, `subject_string` |
+| `dbo.Patient` | SQL | Demographics via `name_string`, `idOrig` |
+
+> **Critical:** Device associations in `dbo.Basic` use code `'device-assoc'` (not `'ASSIGNED'`). The `code_string` column is a JSON **object** (not array) — use `JSON_VALUE(code_string, '$.coding[0].code')`.
+
+### Sample Queries for End Users
+
+**Patient 360 Agent:**
+
+| Query | What It Tests |
+|-------|---------------|
+| "Show me all patient names" | Patient name extraction from `name_string` JSON |
+| "Show latest readings for all devices" | KQL telemetry query |
+| "Which devices are currently online?" | Device status classification |
+| "Show patient info for device MASIMO-RADIUS7-0001" | Cross-datasource: KQL vitals + Lakehouse patient lookup |
+| "Which patients have COPD?" | SQL condition search |
+| "Full Patient 360 for a respiratory patient with active telemetry" | Full cross-datasource deep dive |
+| "What conditions does the patient on device MASIMO-RADIUS7-0033 have?" | Device → patient → conditions chain |
+
+**Clinical Triage Agent:**
+
+| Query | What It Tests |
+|-------|---------------|
+| "Run a clinical triage" | Multi-metric alert scan with severity tiers |
+| "Which devices have low SpO2?" | SpO2 alert detection from KQL |
+| "Check SpO2 alerts and look up the patient info" | Cross-datasource: KQL alerts + Lakehouse patient mapping |
+| "Show device status" | ONLINE/STALE/OFFLINE classification |
+| "Are there any critical alerts right now?" | CRITICAL tier filtering |
+
+**Cohorting Agent** (Phase 3):
+
+| Query | What It Tests |
+|-------|---------------|
+| "List all patients with their names" | Silver Lakehouse name extraction |
+| "Find patients with diabetes" | Condition-based cohort from Silver |
+| "How many patients have imaging studies?" | ImagingStudy count |
+| "Find COPD patients with chest CTs in the last 6 months" | Multi-table cohort join |
+
+```powershell
+# Deploy both agents
+.\phase-2\deploy-data-agents.ps1 -FabricWorkspaceName "med-device-rti-hds"
+
+# Deploy individually
+.\phase-2\deploy-data-agents.ps1 -Patient360Only
+.\phase-2\deploy-data-agents.ps1 -TriageOnly
+
+# Quick-update existing agent definitions
+.\utilities\update-agents-inline.ps1
+```
+
+---
+
+## Running Phase 2
+
+```powershell
+# Full Phase 2 (shortcuts + pipelines + agents)
+.\Deploy-All.ps1 -Phase2 `
+    -ResourceGroupName "rg-medtech-rti-fhir" `
+    -Location "eastus" `
+    -FabricWorkspaceName "med-device-rti-hds" `
+    -Tags @{SecurityControl='Ignore'}
+
+# With explicit Silver Lakehouse ID (auto-detected if omitted)
+.\Deploy-All.ps1 -Phase2 `
+    -SilverLakehouseId "<guid>" `
+    -SilverLakehouseName "healthcare1_silver" `
+    ...
+```
+
+---
+
+### 🏁 Stage 2 Success Verification Checklist
+
+Ensure all of the following components are verified before moving on to Stage 3:
+
+> [!IMPORTANT]
+> **Stage 2 Verification Checkpoints:**
+> - [ ] **Bronze Lakehouse Shortcut:** A OneLake shortcut named `FHIR-HDS` exists in the Bronze Lakehouse pointing to the FHIR `$export` folder in your ADLS Gen2 storage.
+> - [ ] **HDS Lakehouse Tables:** Verify that HDS clinical pipelines successfully flattened FHIR JSON and populated `dbo.Patient`, `dbo.Condition`, `dbo.Basic`, `dbo.Device`, `dbo.Location`, and `dbo.Encounter` in the Silver Lakehouse.
+> - [ ] **KQL External Shortcuts:** Verify the 6 `Silver*` external tables are queryable in `MasimoEventhouse` (e.g., `SilverPatient | take 5` returns records).
+> - [ ] **Enriched Alerting:** The `fn_ClinicalAlerts` function successfully resolves and blends patient metadata with live telemetry vitals (warning, urgent, critical severity tiers).
+> - [ ] **Alerts Map Dashboard:** The 4-tile clinical map dashboard successfully loads and visualizes alerts geolocated to care facilities.
+> - [ ] **Data Agents Deployed:** Both the **Patient 360** and **Clinical Triage** Data Agents are deployed to the Fabric workspace.
+> - [ ] **Agent Federation:** Send a test query to the Patient 360 Agent asking *"Show vitals and conditions for the patient associated with device MASIMO-RADIUS7-0033"*. Verify it federates across KQL vitals and SQL Silver tables.
+
+---
+
+**Previous:** [← Stage 1 — Data Fabric Foundation](phase-1-infrastructure-and-ingestion.md) · **Next:** [Stage 3 — Multimodal Cohorting & Imaging →](phase-3-imaging-and-cohorting.md) · **Overview:** [← README](../README.md)

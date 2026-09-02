@@ -1,0 +1,125 @@
+{
+  "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceData_schema.json",
+  "adrmTableName": "TaskStatusType",
+  "fieldMapping": [
+    {
+      "adrmFieldName": "TaskStatusTypeId",
+      "referenceFieldName": "id"
+    },
+    {
+      "adrmFieldName": "TaskStatusTypeName",
+      "referenceFieldName": "name"
+    },
+    {
+      "adrmFieldName": "TaskStatusTypeDescription",
+      "referenceFieldName": "description"
+    }
+  ],
+  "data": [
+    {
+      "id": 1,
+      "name": "Draft"
+    },
+    {
+      "id": 2,
+      "name": "Live"
+    },
+    {
+      "id": 3,
+      "name": "Stopped"
+    },
+    {
+      "id": 4,
+      "name": "Publishing"
+    },
+    {
+      "id": 5,
+      "name": "Draining"
+    },
+    {
+      "id": 6,
+      "name": "Deleted"
+    },
+    {
+      "id": 7,
+      "name": "Completing"
+    },
+    {
+      "id": 8,
+      "name": "Completed"
+    },
+    {
+      "id": 9,
+      "name": "Inprogress"
+    },
+    {
+      "id": 10,
+      "name": "CancelledByExitEvent"
+    },
+    {
+      "id": 11,
+      "name": "CancelledBySupressionSegment"
+    },
+    {
+      "id": 12,
+      "name": "CancelledByJourneyStopped"
+    },
+    {
+      "id": 13,
+      "name": "CancelledByActionFailure"
+    },
+    {
+      "id": 14,
+      "name": "Inflow"
+    },
+    {
+      "id": 15,
+      "name": "Processed"
+    },
+    {
+      "id": 16,
+      "name": "EntryProcessed"
+    },
+    {
+      "id": 17,
+      "name": "Dropoff"
+    },
+    {
+      "id": 18,
+      "name": "Postponed"
+    },
+    {
+      "id": 19,
+      "name": "Resumed"
+    },
+    {
+      "id": 20,
+      "name": "SystemFailure"
+    },
+    {
+      "id": 21,
+      "name": "EntrySystemFailure"
+    },
+    {
+      "id": 22,
+      "name": "Exited"
+    },
+    {
+      "id": 23,
+      "name": "PreEntryDropoff"
+    },
+    {
+      "id": 24,
+      "name": "ProfileResolvedWithRetry"
+    },
+    {
+      "id": 25,
+      "name": "ProfileUnresolved"
+    },
+    {
+      "id": 26,
+      "name": "Undefined"
+    }
+
+  ]
+}

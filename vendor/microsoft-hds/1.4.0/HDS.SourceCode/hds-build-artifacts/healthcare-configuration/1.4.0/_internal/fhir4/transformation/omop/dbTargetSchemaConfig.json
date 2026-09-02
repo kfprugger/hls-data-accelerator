@@ -1,0 +1,76 @@
+{
+	"fields" :[
+		{
+			"name": "SourceModifiedOn",
+			"description": "Used for comparing with source system records to know when a records was changed in the source",
+			"tables":["person","observation_period","visit_occurrence","visit_detail","condition_occurrence","drug_exposure","procedure_occurrence","device_exposure","measurement","observation","death","note","specimen","location", "provider", "care_site", "note_nlp", "image_occurrence"],
+			"type": "timestamp",
+			"timestampFormat": "yyyy-MM-ddTHH:mm:ssZ",
+			"enabled": true
+		},
+		{
+			"name": "SourceTable",
+			"description": "Used for comparing with source system records to know when a records was changed in the source",
+			"tables":["person","observation_period","visit_occurrence","visit_detail","condition_occurrence","drug_exposure","procedure_occurrence","device_exposure","measurement","observation","death","note","specimen","location", "provider", "care_site", "note_nlp", "image_occurrence"],
+			"type": "string",
+			"enabled": true
+		}
+	],
+	"partitionFields": [
+		{
+			"name": "prYear",
+			"description": "partition by year",
+			"tables": [],
+			"type": "integer",
+			"partition": true,
+			"order": 30,
+			"enabled": true
+		},
+		{
+			"name": "prMonth",
+			"description": "Partition by month",
+			"tables": [],
+			"type": "integer",
+			"partition": true,
+			"order": 40,
+			"enabled": true
+		},
+		{
+			"name": "prDay",
+			"description": "partition by day",
+			"tables": [],
+			"type": "integer",
+			"partition": true,
+			"order": 50,
+			"enabled": true
+		},
+		{
+			"name": "prPersonId",
+			"description": "partition by personId",
+			"tables": [],
+			"type": "long",
+			"partition": true,
+			"order": 20,
+			"enabled": true
+		},
+		{
+			"name": "prLocationId",
+			"description": "partition by locationId",
+			"tables": [],
+			"type": "long",
+			"partition": true,
+			"order": 10,
+			"enabled": true
+		}
+	],
+	"referenceTableRanges": [
+		{
+			"table": "Concept",
+			"valueRanges": ["1-10000000"]
+		}
+	],
+	"configuration": {
+		"modifiedOnTargetField": "SourceModifiedOn",
+	  "sourceTableField": "SourceTable"
+  	}
+}

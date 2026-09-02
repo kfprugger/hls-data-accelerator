@@ -1,0 +1,136 @@
+{
+  "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceData_schema.json",
+  "adrmTableName": "TaskPartyRelationshipType",
+  "fieldMapping": [
+    {
+      "adrmFieldName": "TaskPartyRelationshipTypeId",
+      "referenceFieldName": "id"
+    },
+    {
+      "adrmFieldName": "TaskPartyRelationshipTypeName",
+      "referenceFieldName": "name"
+    },
+    {
+      "adrmFieldName": "TaskPartyRelationshipTypeDescription",
+      "referenceFieldName": "description"
+    }
+  ],
+  "data": [
+    {
+      "id": 20000000,
+      "name": "JourneyInstance Related Patient"
+    },
+    {
+      "id": 20000001,
+      "name": "ActionEvent Related Patient"
+    },
+    {
+      "id": 20000002,
+      "name": "ActionEvent Related Organization"
+    },
+    {
+      "id": 20000003,
+      "name": "JourneyEvent Related Patient"
+    },
+    {
+      "id": 20000004,
+      "name": "JourneyEvent Related Organization"
+    },
+    {
+      "id": 20000005,
+      "name": "EmailClicked Related Patient"
+    },
+    {
+      "id": 20000006,
+      "name": "EmailClicked Related Organization"
+    },
+    {
+      "id": 20000007,
+      "name": "EmailDelivered Related Patient"
+    },
+    {
+      "id": 20000008,
+      "name": "EmailDelivered Related Organization"
+    },
+    {
+      "id": 20000009,
+      "name": "EmailOpened Related Patient"
+    },
+    {
+      "id": 20000010,
+      "name": "EmailOpened Related Organization"
+    },
+    {
+      "id": 20000011,
+      "name": "EmailSent Related Patient "
+    },
+    {
+      "id": 20000012,
+      "name": "EmailSent Related Organization"
+    },
+    {
+      "id": 20000013,
+      "name": "SmsDelivered Related Patient"
+    },
+    {
+      "id": 20000014,
+      "name": "SmsDelivered Related Organization"
+    },
+    {
+      "id": 20000015,
+      "name": "SmsLinkClicked Related Patient"
+    },
+    {
+      "id": 20000016,
+      "name": "SmsLinkClicked Related Organization"
+    },
+    {
+      "id": 20000017,
+      "name": "SmsSent Related Patient "
+    },
+    {
+      "id": 20000018,
+      "name": "SmsSent Related Organization"
+    },
+    {
+      "id": 20000019,
+      "name": "SmsNotSent Related Patient"
+    },
+    {
+      "id": 20000020,
+      "name": "SmsNotSent Related Organization"
+    },
+    {
+      "id": 20000021,
+      "name": "PushNotificationOpened Related Patient"
+    },
+    {
+      "id": 20000022,
+      "name": "PushNotificationOpened Related Organization"
+    },
+    {
+      "id": 20000023,
+      "name": "PushNotificationLinkClicked Related Patient "
+    },
+    {
+      "id": 20000024,
+      "name": "PushNotificationLinkClicked Related Organization"
+    },
+    {
+      "id": 20000025,
+      "name": "PushNotificationSent Related Patient"
+    },
+    {
+      "id": 20000026,
+      "name": "PushNotificationSent Related Organization"
+    },
+    {
+      "id": 20000027,
+      "name": "PushNotificationNotSent Related Patient"
+    },
+    {
+      "id": 20000028,
+      "name": "PushNotificationNotSent Related Organization"
+    }
+  ]
+}

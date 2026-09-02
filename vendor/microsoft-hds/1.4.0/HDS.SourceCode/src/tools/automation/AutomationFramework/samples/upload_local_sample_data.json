@@ -1,0 +1,50 @@
+{
+    "name": "Sample Data Upload",
+    "description": "A sample test for uploading sample data",
+    "initial_context": {
+        "targetEnvironment": "msit",
+        "workspaceDisplayName": "HDS_local_sample_data"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": "true"
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Test lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Test",
+                "description": "A lakehouse for test artifacts",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "test_lakehouse"
+            ]
+        },
+        {
+            "type": "UploadFilesToLakehouse",
+            "description": "Uploading local sample data",
+            "ignore": "false",
+            "parameters": {
+                "target_environment": "$targetEnvironment",
+                "workspace": "$workspace",
+                "target_lakehouse": "$test_lakehouse",
+                "local_src_path": "/src/tools/automation/AutomationFramework/resources/sample_data/5_dataset",
+                "destination_path": "Files/Ingest/Clinical/FHIR-NDJSON/FHIR-HDS"
+            },
+            "outputs": []
+        }
+    ]
+}

@@ -1,0 +1,586 @@
+{
+  "healthcare-artifacts": {
+    "1.4.0": {
+      "ai-enrichments": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_ai_enrichments_ingestion.json"
+          ]
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_ai_enrichments_bronze_ingestion.ipynb",
+            "msft_ai_enrichments_conversational_data_execution.ipynb",
+            "msft_ai_enrichments_medimage_insight_execution.ipynb",
+            "msft_ai_enrichments_medimage_parse_execution.ipynb",
+            "msft_ai_enrichments_silver_ingestion.ipynb",
+            "msft_ai_enrichments_ta4h_execution.ipynb"
+          ]
+        }
+      },
+      "care-management-analytics": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_cma.json"
+          ]
+        },
+        "Datasets": {
+          "CareManagementAnalytics": {
+            "__files__": [
+              "definition.pbism",
+              "model.bim"
+            ]
+          }
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_cma_silver_gold_transformation.ipynb"
+          ]
+        },
+        "Reports": {
+          "CareManagementAnalytics": {
+            "__files__": [
+              "CY24SU08.json",
+              "definition.pbir",
+              "report.json"
+            ]
+          }
+        }
+      },
+      "claims-data-ingestion": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_claims_data_ingestion.json"
+          ]
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_claims_extract_bronze_ingestion.ipynb",
+            "msft_claims_fhir_conversion.ipynb"
+          ]
+        }
+      },
+      "dax-conversational-data-enrichments": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_dax_copilot_data_transformation.json"
+          ]
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_dax_bronze_ingestion.ipynb",
+            "msft_dax_silver_ingestion.ipynb"
+          ]
+        }
+      },
+      "dicom-data-ingestion": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_imaging_patch_with_clinical_foundation_ingestion.json",
+            "msft_imaging_with_clinical_foundation_ingestion.json"
+          ]
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_imaging_dicom_extract_bronze_ingestion.ipynb",
+            "msft_imaging_dicom_fhir_conversion.ipynb",
+            "msft_imaging_dicom_patch_file_bronze_ingestion.ipynb",
+            "msft_imaging_dicom_silver_metastore_transformation.ipynb"
+          ]
+        }
+      },
+      "fhir-data-ingestion": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_clinical_ahds_fhirservice_export.json"
+          ]
+        }
+      },
+      "omop-analytics": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_omop_analytics.json"
+          ]
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_omop_drug_exposure_era_sample.ipynb",
+            "msft_omop_drug_exposure_insights_sample.ipynb",
+            "msft_omop_silver_gold_transformation.ipynb"
+          ]
+        }
+      },
+      "patient-outreach-analytics": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_customer_insights.json"
+          ]
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_ci_silver_customerinsights_transformation.ipynb"
+          ]
+        }
+      },
+      "patient-outreach-analytics-advanced": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_poa_ingestion.json"
+          ]
+        },
+        "Datasets": {
+          "PatientOutreachAdvanced": {
+            "__files__": [
+              "definition.pbidataset",
+              "model.bim"
+            ]
+          }
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_poa_bronze_silver_transformation.ipynb",
+            "msft_poa_silver_gold_tranformation.ipynb"
+          ]
+        },
+        "Reports": {
+          "PatientOutreachAdvanced": {
+            "__files__": [
+              "CY24SU02.json",
+              "definition.pbir",
+              "report.json"
+            ]
+          }
+        }
+      },
+      "relational-fhir-data-foundations": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_clinical_data_foundation_ingestion.json"
+          ]
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_ahds_fhirservice_export.ipynb",
+            "msft_alm_helper.ipynb",
+            "msft_bronze_silver_flatten.ipynb",
+            "msft_config_notebook.ipynb",
+            "msft_fhir_flattening_sample.ipynb",
+            "msft_fhir_ndjson_bronze_ingestion.ipynb",
+            "msft_generic_dtt_transformation.ipynb",
+            "msft_raw_process_movement.ipynb"
+          ]
+        }
+      },
+      "social-determinants-of-health": {
+        "DataPipelines": {
+          "__files__": [
+            "msft_sdoh_ingestion.json"
+          ]
+        },
+        "Notebooks": {
+          "__files__": [
+            "msft_sdoh_bronze_silver_flatten.ipynb",
+            "msft_sdoh_raw_extract_bronze_ingestion.ipynb"
+          ]
+        }
+      }
+    }
+  },
+  "healthcare-configuration": {
+    "1.4.0": {
+      "_internal": {
+        "ai_enrichment": {
+          "output_types": {
+            "__files__": [
+              "common.json",
+              "embedding.json",
+              "object.json",
+              "segmentation2d.json",
+              "segmentation3d.json",
+              "text.json"
+            ]
+          }
+        },
+        "claims": {
+          "cclf": {
+            "__files__": [
+              "cclf_fhir_mapping.json",
+              "cclf_file_config.json"
+            ]
+          }
+        },
+        "cma": {
+          "transformation": {
+            "clinical": {
+              "__files__": [
+                "adapter.json",
+                "dbSemantics.json",
+                "dbSemanticsConfig.json",
+                "dbTargetSchema.json",
+                "dbTargetSchemaConfig.json",
+                "dmfAdapterSchema.json"
+              ]
+            }
+          }
+        },
+        "dax": {
+          "resources": {
+            "__files__": [
+              "transcripts.json"
+            ]
+          }
+        },
+        "fhir4": {
+          "extension_support": {
+            "__files__": [
+              "extensionschema.avsc"
+            ]
+          },
+          "schema": {
+            "bronze": {
+              "__files__": [
+                "ClinicalFhir.avsc"
+              ]
+            },
+            "businessevents": {
+              "__files__": [
+                "BusinessEvents.avsc"
+              ]
+            },
+            "silver": {
+              "__files__": [
+                "account.avsc",
+                "activitydefinition.avsc",
+                "adverseevent.avsc",
+                "allergyintolerance.avsc",
+                "appointment.avsc",
+                "appointmentresponse.avsc",
+                "auditevent.avsc",
+                "basic.avsc",
+                "binary.avsc",
+                "biologicallyderivedproduct.avsc",
+                "bodystructure.avsc",
+                "bundle.avsc",
+                "capabilitystatement.avsc",
+                "careplan.avsc",
+                "careteam.avsc",
+                "catalogentry.avsc",
+                "chargeitem.avsc",
+                "chargeitemdefinition.avsc",
+                "claim.avsc",
+                "claimresponse.avsc",
+                "clinicalimpression.avsc",
+                "codesystem.avsc",
+                "communication.avsc",
+                "communicationrequest.avsc",
+                "compartmentdefinition.avsc",
+                "composition.avsc",
+                "conceptmap.avsc",
+                "condition.avsc",
+                "consent.avsc",
+                "contract.avsc",
+                "coverage.avsc",
+                "coverageeligibilityrequest.avsc",
+                "coverageeligibilityresponse.avsc",
+                "detectedissue.avsc",
+                "device.avsc",
+                "devicedefinition.avsc",
+                "devicemetric.avsc",
+                "devicerequest.avsc",
+                "deviceusestatement.avsc",
+                "diagnosticreport.avsc",
+                "documentmanifest.avsc",
+                "documentreference.avsc",
+                "effectevidencesynthesis.avsc",
+                "encounter.avsc",
+                "endpoint.avsc",
+                "enrollmentrequest.avsc",
+                "enrollmentresponse.avsc",
+                "episodeofcare.avsc",
+                "eventdefinition.avsc",
+                "evidence.avsc",
+                "evidencevariable.avsc",
+                "examplescenario.avsc",
+                "examplescenario_instance.avsc",
+                "explanationofbenefit.avsc",
+                "familymemberhistory.avsc",
+                "flag.avsc",
+                "goal.avsc",
+                "graphdefinition.avsc",
+                "group.avsc",
+                "guidanceresponse.avsc",
+                "healthcareservice.avsc",
+                "imagingstudy.avsc",
+                "immunization.avsc",
+                "immunizationevaluation.avsc",
+                "immunizationrecommendation.avsc",
+                "implementationguide.avsc",
+                "insuranceplan.avsc",
+                "invoice.avsc",
+                "library.avsc",
+                "linkage.avsc",
+                "list.avsc",
+                "location.avsc",
+                "measure.avsc",
+                "measurereport.avsc",
+                "media.avsc",
+                "medication.avsc",
+                "medicationadministration.avsc",
+                "medicationdispense.avsc",
+                "medicationknowledge.avsc",
+                "medicationrequest.avsc",
+                "medicationstatement.avsc",
+                "medicinalproduct.avsc",
+                "medicinalproductauthorization.avsc",
+                "medicinalproductcontraindication.avsc",
+                "medicinalproductindication.avsc",
+                "medicinalproductingredient.avsc",
+                "medicinalproductinteraction.avsc",
+                "medicinalproductmanufactured.avsc",
+                "medicinalproductpackaged.avsc",
+                "medicinalproductpharmaceutical.avsc",
+                "medicinalproductundesirableeffect.avsc",
+                "messagedefinition.avsc",
+                "messageheader.avsc",
+                "molecularsequence.avsc",
+                "namingsystem.avsc",
+                "nutritionorder.avsc",
+                "observation.avsc",
+                "observationdefinition.avsc",
+                "operationdefinition.avsc",
+                "operationoutcome.avsc",
+                "organization.avsc",
+                "organizationaffiliation.avsc",
+                "parameters.avsc",
+                "patient.avsc",
+                "paymentnotice.avsc",
+                "paymentreconciliation.avsc",
+                "person.avsc",
+                "plandefinition.avsc",
+                "practitioner.avsc",
+                "practitionerrole.avsc",
+                "procedure.avsc",
+                "provenance.avsc",
+                "questionnaire.avsc",
+                "questionnaireresponse.avsc",
+                "relatedperson.avsc",
+                "requestgroup.avsc",
+                "researchdefinition.avsc",
+                "researchelementdefinition.avsc",
+                "researchstudy.avsc",
+                "researchsubject.avsc",
+                "riskassessment.avsc",
+                "riskevidencesynthesis.avsc",
+                "schedule.avsc",
+                "searchparameter.avsc",
+                "servicerequest.avsc",
+                "slot.avsc",
+                "specimen.avsc",
+                "specimendefinition.avsc",
+                "structuredefinition.avsc",
+                "structuremap.avsc",
+                "subscription.avsc",
+                "substance.avsc",
+                "substancenucleicacid.avsc",
+                "substancepolymer.avsc",
+                "substanceprotein.avsc",
+                "substancereferenceinformation.avsc",
+                "substancesourcematerial.avsc",
+                "substancespecification.avsc",
+                "supplydelivery.avsc",
+                "supplyrequest.avsc",
+                "task.avsc",
+                "terminologycapabilities.avsc",
+                "testreport.avsc",
+                "testscript.avsc",
+                "valueset.avsc",
+                "verificationresult.avsc",
+                "visionprescription.avsc"
+              ]
+            }
+          },
+          "transformation": {
+            "ci": {
+              "__files__": [
+                "appointment.columnsconfig.json",
+                "appointmentparticipant.columnsconfig.json",
+                "careplan.columnsconfig.json",
+                "careplan.conditions.columnsconfig.json",
+                "condition.columnsconfig.json",
+                "encounter.columnsconfig.json",
+                "encounterparticipant.columnsconfig.json",
+                "flatten_config.json",
+                "goal.columnsconfig.json",
+                "location.columnsconfig.json",
+                "patient.address.columnsconfig.json",
+                "patient.columnsconfig.json",
+                "practitioner.address.columnsconfig.json",
+                "practitioner.columnsconfig.json"
+              ]
+            },
+            "flatten": {
+              "__files__": [
+                "documentreference.content.columnsconfig.json",
+                "flatten_config.json",
+                "medicationrequest.columnsconfig.json",
+                "practitioner.columnsconfig.json"
+              ]
+            },
+            "omop": {
+              "__files__": [
+                "dbSemantics.json",
+                "dbSemanticsConfig.json",
+                "dbTargetSchema.json",
+                "dbTargetSchemaConfig.json",
+                "dmfAdapter.json",
+                "dmfAdapterSchema.json"
+              ]
+            }
+          }
+        },
+        "file_orchestration": {
+          "__files__": [
+            "fileOrchestrationConfig.json"
+          ]
+        },
+        "idm": {
+          "__files__": [
+            "adapter.json",
+            "dbConfig.json",
+            "dbSemantics.json",
+            "dbSemanticsConfig.json",
+            "dbTargetSchema.json",
+            "environment.json"
+          ],
+          "reference_tables": {
+            "data": {
+              "Common": {
+                "__files__": [
+                  "CommunicationMethod.json",
+                  "CommunicationStatusType.json",
+                  "Language.json",
+                  "PartyType.json",
+                  "TaskStatusType.json"
+                ]
+              },
+              "Healthcare": {
+                "__files__": [
+                  "MarketingCampaignTaskType.json",
+                  "TaskPartyRelationshipType.json",
+                  "TaskRelationshipType.json"
+                ]
+              }
+            },
+            "mapping": {
+              "Healthcare": {
+                "HLC-IDM": {
+                  "__files__": [
+                    "CommunicationMethod.json",
+                    "CommunicationStatusType.json",
+                    "Language.json",
+                    "MarketingCampaignTaskType.json",
+                    "PartyType.json",
+                    "TaskPartyRelationshipType.json",
+                    "TaskRelationshipType.json",
+                    "TaskStatusType.json"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "medical_imaging": {
+          "dicom": {
+            "__files__": [
+              "metadata_fhir_mapping.json",
+              "table_schema.json"
+            ]
+          }
+        },
+        "omop": {
+          "scripts": {
+            "5_4": {
+              "__files__": [
+                "omop_tables.sql"
+              ]
+            },
+            "__files__": [
+              "omop_extension.sql"
+            ]
+          }
+        },
+        "poagold": {
+          "__files__": [
+            "adapter.json",
+            "dbSemantics.json",
+            "dbSemanticsConfig.json",
+            "dbSourceSchema.json",
+            "dbTargetSchema.json",
+            "dbTargetSchemaConfig.json"
+          ],
+          "reference_tables": {
+            "data": {
+              "__files__": [
+                "AttributionModelDim.json",
+                "MarketingChannelDim.json"
+              ]
+            },
+            "mapping": {
+              "__files__": [
+                "AttributionModelDim.json",
+                "MarketingChannelDim.json"
+              ]
+            }
+          }
+        },
+        "sdoh": {
+          "__files__": [
+            "adapter.json",
+            "dbConfig.json",
+            "dbSemantics.json",
+            "dbSemanticsConfig.json",
+            "dbTargetSchema.json",
+            "sdohDataTablesMapping.json",
+            "sdohMetaDataTablesMapping.json"
+          ],
+          "reference_tables": {
+            "data": {
+              "__files__": [
+                ".gitkeep"
+              ]
+            }
+          }
+        }
+      },
+      "system-configurations": {
+        "__files__": [
+          "LakehouseHydrationManifest.json",
+          "deploymentParametersConfiguration.template.json",
+          "fileOrchestrationConfig.json",
+          "validationConfig.json"
+        ]
+      }
+    }
+  },
+  "healthcare-libraries": {
+    "1.4.0": {
+      "__files__": [
+        "environment.yml",
+        "hds-*.whl",
+        "dtt-*.whl"
+      ]
+    }
+  },
+  "healthcare-tables": {
+    "1.4.0": {
+      "__folder__": [
+        "Administrative",
+        "Bronze",
+        "CustomerInsights",
+        "Gold",
+        "Omop",
+        "Silver"
+      ]
+    }
+  }
+}

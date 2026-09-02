@@ -1,0 +1,23 @@
+{
+  "$schema": "https://industryaidata.blob.core.windows.net/dtt-common/dtt_schemas/1.0/referenceMapping_schema.json",
+  "values": [
+    {
+      "targetKey": 1,
+      "sourceKeys": [
+        "email"
+      ]
+    },
+    {
+      "targetKey": 2,
+      "sourceKeys": [
+        "sms"
+      ]
+    },
+    {
+      "targetKey": 3,
+      "sourceKeys": [
+        "push"
+      ]
+    }
+  ]
+}

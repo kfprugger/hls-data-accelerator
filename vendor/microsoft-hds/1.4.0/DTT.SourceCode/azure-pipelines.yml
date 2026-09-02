@@ -1,0 +1,65 @@
+# Azure DevOps PR Validation Pipeline for DTT
+# Purpose: wheel build + structural validation + artifact publish
+
+pr:
+  branches:
+    include:
+      - features/download_center
+
+parameters:
+  - name: runPreCommit
+    displayName: 'Run Pre-commit Checks'
+    type: boolean
+    default: false
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    displayName: Checkout repository
+
+  - task: UsePythonVersion@0
+    displayName: Setup Python 3.11
+    inputs:
+      versionSpec: "3.11"
+      addToPath: true
+
+  - script: |
+      python -m pip install --upgrade pip
+    displayName: Upgrade pip
+
+  - script: |
+      python -m pip install -r requirements/requirements.txt
+    displayName: Install Dependencies
+
+  - ${{ if eq(parameters.runPreCommit, true) }}:
+    - script: |
+        python -m pip install -r requirements/pre-commit-requirements.txt
+        pre-commit run --config .pre-commit-pipeline-config.yaml --all-files
+      displayName: Run Pre-commit Checks (Optional)
+
+  - script: |
+      python -m pip install build
+      python scripts/pr_pipeline.py build-wheel
+    displayName: Build Wheel
+
+  - script: |
+      python scripts/pr_pipeline.py verify-wheel
+    displayName: Verify Wheel
+
+  - script: |
+      python scripts/pr_pipeline.py compare-wheel
+    displayName: Compare Wheel with Master Reference
+
+  - script: |
+      mkdir -p "$(Build.ArtifactStagingDirectory)"
+      cp dist/*.whl "$(Build.ArtifactStagingDirectory)/"
+    displayName: Stage Wheel Artifact
+
+  - task: PublishBuildArtifacts@1
+    displayName: Upload Artifact
+    inputs:
+      PathtoPublish: "$(Build.ArtifactStagingDirectory)"
+      ArtifactName: dtt-wheel
+      publishLocation: Container

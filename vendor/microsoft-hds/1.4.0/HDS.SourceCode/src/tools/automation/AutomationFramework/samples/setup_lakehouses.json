@@ -1,0 +1,70 @@
+{
+    "name": "Setup lakehouses",
+    "description": "A common sub step for creating lakehouses",
+    "targetEnvironment": "",
+    "initial_context": {},
+    "tasks": [
+    {
+        "type": "CreateLakehouse",
+        "ignore": "false",
+        "params": {
+            "displayName": "Config",
+            "description": "A config lakehouse",
+            "workspace": "$test_workspace",
+            "subfolders": [
+                "Ingest/Clinical/FHIR-NDJSON/Fabric-HDS",
+                "Process/Clinical/FHIR-NDJSON/Fabric-HDS",
+                "Failed/Clinical/FHIR-NDJSON/Fabric-HDS",
+                "External/Clinical/FHIR-NDJSON/AHDS"
+            ]
+        },
+        "outputs": [
+            "config_lakehouse"
+        ]
+    },
+    {
+        "type": "CreateLakehouse",
+        "ignore": "false",
+        "params": {
+            "displayName": "Bronze",
+            "description": "A sample bronze lakehouse",
+            "workspace": "$test_workspace",
+            "subfolders": [
+                "Ingest/Clinical/FHIR-NDJSON/Fabric-HDS",
+                "Process/Clinical/FHIR-NDJSON/Fabric-HDS",
+                "Failed/Clinical/FHIR-NDJSON/Fabric-HDS",
+                "External/Clinical/FHIR-NDJSON/AHDS"
+            ]
+        },
+        "outputs": [
+            "bronze_lakehouse"
+        ]
+    },
+    {
+        "type": "CreateLakehouse",
+        "ignore": "false",
+        "params": {
+            "displayName": "Silver",
+            "description": "A silver lakehouse",
+            "workspace": "$test_workspace",
+            "subfolders": []
+        },
+        "outputs": [
+            "silver_lakehouse"
+        ]
+    },
+    {
+        "type": "CreateLakehouse",
+        "ignore": "false",
+        "params": {
+            "displayName": "Administration",
+            "description": "An admin lakehouse",
+            "workspace": "$test_workspace",
+            "subfolders": []
+        },
+        "outputs": [
+            "administration_lakehouse"
+        ]
+    }
+]
+}

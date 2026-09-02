@@ -1,0 +1,63 @@
+{
+    "name": "Sample Data Upload",
+    "description": "A sample test for uploading sample data",
+    "initial_context": {
+        "targetEnvironment": "msit",
+        "workspaceDisplayName": "HDS_local_sample_data"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": "true"
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Test lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Test",
+                "description": "A lakehouse for test artifacts",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "test_lakehouse"
+            ]
+        },
+        {
+            "type": "UploadFilesToLakehouse",
+            "description": "Uploading Tables to a lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "target_environment": "$targetEnvironment",
+                "workspace": "$workspace",
+                "target_lakehouse": "$test_lakehouse",
+                "local_src_path": "/dist/healthcare-tables/1.2.0/Bronze",
+                "destination_path": "Tables"
+            },
+            "outputs": []
+        },
+        {
+            "type": "UploadFilesToLakehouse",
+            "description": "Uploading Files to a lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "target_environment": "$targetEnvironment",
+                "workspace": "$workspace",
+                "target_lakehouse": "$test_lakehouse",
+                "local_src_path": "/dist/healthcare-configuration/1.2.0/system-configurations",
+                "destination_path": "Files/TestFolder/system-configuration"
+            },
+            "outputs": []
+        }
+    ]
+}

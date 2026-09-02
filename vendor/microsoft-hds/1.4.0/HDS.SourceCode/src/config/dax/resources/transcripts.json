@@ -1,0 +1,261 @@
+{
+  "fields": [
+    {
+      "metadata": {},
+      "name": "payload_version",
+      "nullable": true,
+      "type": "string"
+    },
+    {
+      "metadata": {},
+      "name": "language",
+      "nullable": true,
+      "type": "string"
+    },
+    {
+      "metadata": {},
+      "name": "encounter",
+      "nullable": true,
+      "type": {
+        "fields": [
+          {
+            "metadata": {},
+            "name": "correlation_id",
+            "nullable": true,
+            "type": "string"
+          },
+          {
+            "metadata": {},
+            "name": "external_encounter_id",
+            "nullable": true,
+            "type": "string"
+          },
+          {
+            "metadata": {},
+            "name": "status",
+            "nullable": true,
+            "type": "string"
+          },
+          {
+            "metadata": {},
+            "name": "date_of_encounter",
+            "nullable": true,
+            "type": "timestamp"
+          },
+          {
+            "metadata": {},
+            "name": "patient",
+            "nullable": true,
+            "type": {
+              "fields": [
+                {
+                  "metadata": {},
+                  "name": "name_details",
+                  "nullable": true,
+                  "type": {
+                    "fields": [
+                      {
+                        "metadata": {},
+                        "name": "given_name",
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      {
+                        "metadata": {},
+                        "name": "family_name",
+                        "nullable": true,
+                        "type": "string"
+                      }
+                    ],
+                    "type": "struct"
+                  }
+                },
+                {
+                  "metadata": {},
+                  "name": "gender",
+                  "nullable": true,
+                  "type": "string"
+                },
+                {
+                  "metadata": {},
+                  "name": "medical_record_number",
+                  "nullable": true,
+                  "type": "string"
+                },
+                {
+                  "metadata": {},
+                  "name": "external_patient_id",
+                  "nullable": true,
+                  "type": "string"
+                }
+              ],
+              "type": "struct"
+            }
+          },
+          {
+            "metadata": {},
+            "name": "practitioner",
+            "nullable": true,
+            "type": {
+              "fields": [
+                {
+                  "metadata": {},
+                  "name": "full_name",
+                  "nullable": true,
+                  "type": "string"
+                }
+              ],
+              "type": "struct"
+            }
+          },
+          {
+            "metadata": {},
+            "name": "organization_id",
+            "nullable": true,
+            "type": "string"
+          },
+          {
+            "metadata": {},
+            "name": "user_id",
+            "nullable": true,
+            "type": "string"
+          },
+          {
+            "metadata": {},
+            "name": "recording_locales",
+            "nullable": true,
+            "type": {
+              "containsNull": true,
+              "elementType": "string",
+              "type": "array"
+            }
+          },
+          {
+            "metadata": {},
+            "name": "report_locale",
+            "nullable": true,
+            "type": "string"
+          },
+          {
+            "metadata": {},
+            "name": "ui_locale",
+            "nullable": true,
+            "type": "string"
+          }
+        ],
+        "type": "struct"
+      }
+    },
+    {
+      "metadata": {},
+      "name": "recordings",
+      "nullable": true,
+      "type": {
+        "containsNull": true,
+        "elementType": {
+          "fields": [
+            {
+              "metadata": {},
+              "name": "id",
+              "nullable": true,
+              "type": "string"
+            },
+            {
+              "metadata": {},
+              "name": "first_turn",
+              "nullable": true,
+              "type": "integer"
+            },
+            {
+              "metadata": {},
+              "name": "last_turn",
+              "nullable": true,
+              "type": "integer"
+            },
+            {
+              "metadata": {},
+              "name": "length",
+              "nullable": true,
+              "type": "string"
+            },
+            {
+              "metadata": {},
+              "name": "creation_date",
+              "nullable": true,
+              "type": "timestamp"
+            }
+          ],
+          "type": "struct"
+        },
+        "type": "array"
+      }
+    },
+    {
+      "metadata": {},
+      "name": "transcript",
+      "nullable": true,
+      "type": {
+        "fields": [
+          {
+            "metadata": {},
+            "name": "speaker_count",
+            "nullable": true,
+            "type": "integer"
+          },
+          {
+            "metadata": {},
+            "name": "turns",
+            "nullable": true,
+            "type": {
+              "containsNull": true,
+              "elementType": {
+                "fields": [
+                  {
+                    "metadata": {},
+                    "name": "index",
+                    "nullable": true,
+                    "type": "integer"
+                  },
+                  {
+                    "metadata": {},
+                    "name": "speaker",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  {
+                    "metadata": {},
+                    "name": "text",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  {
+                    "metadata": {},
+                    "name": "start_time",
+                    "nullable": true,
+                    "type": "timestamp"
+                  },
+                  {
+                    "metadata": {},
+                    "name": "end_time",
+                    "nullable": true,
+                    "type": "timestamp"
+                  }
+                ],
+                "type": "struct"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "metadata": {},
+            "name": "webVTT",
+            "nullable": true,
+            "type": "string"
+          }
+        ],
+        "type": "struct"
+      }
+    }
+  ],
+  "type": "struct"
+}

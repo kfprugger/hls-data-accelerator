@@ -1,0 +1,14 @@
+{  
+    "version": "4.0",  
+    "datasetReference": {  
+        "byPath": null,  
+        "byConnection": {  
+            "connectionString": "Data Source=powerbi://%%powerbi_endpoint%%/v1.0/myorg/%%workspace_name%%;Initial Catalog=%%semantic_model_name%%;",  
+            "pbiServiceModelId": null,  
+            "pbiModelVirtualServerName": "sobe_wowvirtualserver",  
+            "pbiModelDatabaseName": "%%semantic_model_id%%",  
+            "name": "EntityDataSource",  
+            "connectionType": "pbiServiceXmlaStyleLive"  
+        }  
+    }  
+}  

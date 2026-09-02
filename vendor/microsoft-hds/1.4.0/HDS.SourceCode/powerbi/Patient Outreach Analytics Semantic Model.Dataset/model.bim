@@ -1,0 +1,2030 @@
+{
+  "name": "SemanticModel",
+  "compatibilityLevel": 1550,
+  "model": {
+    "culture": "en-CA",
+    "dataAccessOptions": {
+      "legacyRedirects": true,
+      "returnErrorValuesAsNull": true
+    },
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "sourceQueryCulture": "en-CA",
+    "tables": [
+      {
+        "name": "AppointmentDim",
+        "lineageTag": "db4dda19-df09-4c5d-a4d9-288c93076947",
+        "columns": [
+          {
+            "name": "AppointmentKey",
+            "dataType": "int64",
+            "sourceColumn": "AppointmentKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "c84a274d-5b1b-45f0-ae20-5be934c43889",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "AppointmentScheduledDate",
+            "dataType": "dateTime",
+            "sourceColumn": "AppointmentScheduledDate",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "097ea3a4-a7db-493c-b3a7-88479b0a0b28",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "AppointmentStartDate",
+            "dataType": "dateTime",
+            "sourceColumn": "AppointmentStartDate",
+            "formatString": "Long Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "a43fee85-1374-4b11-998a-508af2dd91f2",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "AppointmentEndDate",
+            "dataType": "dateTime",
+            "sourceColumn": "AppointmentEndDate",
+            "formatString": "Long Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "7d5c7939-80ba-4338-b7dd-56170a11d8f1",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "LocationKey",
+            "dataType": "int64",
+            "sourceColumn": "LocationKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "f80681df-3e36-4e80-a947-1045d235203a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "PatientKey",
+            "dataType": "int64",
+            "isNullable": false,
+            "sourceColumn": "PatientKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "15f6834d-3b18-47c7-a807-4a3018253cbb",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "name": "ServiceLineKey",
+            "dataType": "int64",
+            "isNullable": false,
+            "sourceColumn": "ServiceLineKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "58063da4-9f51-4a7d-bb40-73172598b3b3",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "5a94007d-4935-4ea5-ba35-2400cb47d544",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "00c8a5cf-ef20-45a1-865d-3b86938dde1d",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "type": "calculated",
+            "name": "AppointmentCreatedDay",
+            "expression": "DATE(YEAR('AppointmentDim'[AppointmentScheduledDate]), MONTH('AppointmentDim'[AppointmentScheduledDate]), DAY('AppointmentDim'[AppointmentScheduledDate]))",
+            "formatString": "General Date",
+            "lineageTag": "a4d18ae7-64f0-4b23-9c44-70cccc29e050",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "AppointmentDim",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_appointmentdim = Source{[Schema=\"dbo\",Item=\"AppointmentDim\"]}[Data]",
+                "in",
+                "    dbo_appointmentdim"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "AppointmentTransitionFact",
+        "lineageTag": "e027bfab-8b49-4840-8e19-bf2d3a33825a",
+        "columns": [
+          {
+            "name": "AppointmentTransitionKey",
+            "dataType": "int64",
+            "isNullable": false,
+            "sourceColumn": "AppointmentTransitionKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "5515c124-ced9-4332-aac9-a21903e093ee",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "name": "AppointmentKey",
+            "dataType": "int64",
+            "sourceColumn": "AppointmentKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "603685f9-9877-4c19-a897-7601b545b7e5",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "Status",
+            "dataType": "string",
+            "sourceColumn": "Status",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "10d43392-0dcf-4f21-9ff8-b98d024cc895",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "83e59453-ec57-4b26-9774-3e3e32043a9b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "6b3bb7e6-eb1d-44f8-9867-b57ee06d96e0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "AppointmentTransitionFact",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_appointmenttransitionfact = Source{[Schema=\"dbo\",Item=\"AppointmentTransitionFact\"]}[Data]",
+                "in",
+                "    dbo_appointmenttransitionfact"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "AttributionModelDim",
+        "lineageTag": "014f1fe8-444e-426b-bbbe-afb8b86e051e",
+        "columns": [
+          {
+            "name": "AttributionModelKey",
+            "dataType": "int64",
+            "isNullable": false,
+            "sourceColumn": "AttributionModelKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "d6c31d29-f990-4742-882d-1e83001c9617",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "name": "AttributionModelName",
+            "dataType": "string",
+            "sourceColumn": "AttributionModelName",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "9cc43e00-f732-41a0-87da-1f4533775b43",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "AttributionModelDim",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_attributionmodeldim = Source{[Schema=\"dbo\",Item=\"AttributionModelDim\"]}[Data]",
+                "in",
+                "    dbo_attributionmodeldim"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "JourneyDim",
+        "lineageTag": "3d4c5d9d-1f31-417c-b7a6-7f1c9e3c6d3f",
+        "columns": [
+          {
+            "name": "JourneyKey",
+            "dataType": "int64",
+            "sourceColumn": "JourneyKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "e829e9f5-3dce-477c-acb7-c533cd995d06",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "Name",
+            "dataType": "string",
+            "isNullable": false,
+            "sourceColumn": "Name",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "c0e0b5f4-eba7-40c9-a403-77fb0f2754a7",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "Status",
+            "dataType": "string",
+            "sourceColumn": "Status",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "8b250811-9a8a-4036-bea7-8b72ba209b03",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "StartDate",
+            "dataType": "dateTime",
+            "sourceColumn": "StartDate",
+            "formatString": "Long Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "a1c78564-228f-4b2c-8ff5-ddcc13bc66b0",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ServiceLineKey",
+            "dataType": "int64",
+            "sourceColumn": "ServiceLineKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "eafcf742-54d2-46f8-9bf9-f78a0c58609b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "72503f6e-9bc8-48bd-983e-618fc1479762",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "918f1c8b-d21d-4abc-946c-37cadecb3a8c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "JourneyDim",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_journeydim = Source{[Schema=\"dbo\",Item=\"JourneyDim\"]}[Data]",
+                "in",
+                "    dbo_journeydim"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "EncounterDim",
+        "lineageTag": "ba9dc5ba-cdd0-4892-9389-ac4df0e260d5",
+        "columns": [
+          {
+            "name": "EncounterKey",
+            "dataType": "int64",
+            "sourceColumn": "EncounterKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "4fa6bc1b-c32b-4f52-8b4b-334a064bd33b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "name": "PatientKey",
+            "dataType": "int64",
+            "sourceColumn": "PatientKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "3465b08f-a94b-4844-a78c-1aef690d9afc",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "name": "EncounterStartDate",
+            "dataType": "dateTime",
+            "sourceColumn": "EncounterStartDate",
+            "formatString": "Long Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "3c57d600-b38a-4eb9-9418-e01533a64c97",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "EncounterEndDate",
+            "dataType": "dateTime",
+            "sourceColumn": "EncounterEndDate",
+            "formatString": "Long Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "e420376e-7e09-491c-b314-6ea31a966a69",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ServiceLineKey",
+            "dataType": "string",
+            "sourceColumn": "ServiceLineKey",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "f40e5765-f1e4-48df-8f35-970c651a43e7",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "AppointmentKey",
+            "dataType": "string",
+            "sourceColumn": "AppointmentKey",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "ca265fe8-85fe-4ce7-ad0f-324d01cc38a3",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "EncounterStatus",
+            "dataType": "string",
+            "sourceColumn": "EncounterStatus",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "3e74a6a1-bbbb-4209-a259-ea36883b29a4",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "82444f07-2b0d-4c6f-9d89-9bf4074f1dc6",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "fcb4a79d-e830-4d80-8b1b-9d0641d7aa7a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "EncounterDim",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_encounterdim = Source{[Schema=\"dbo\",Item=\"EncounterDim\"]}[Data]",
+                "in",
+                "    dbo_encounterdim"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "LocationDim",
+        "lineageTag": "1a7153d8-6ec5-4d0e-b959-51222ccdc549",
+        "columns": [
+          {
+            "name": "LocationKey",
+            "dataType": "int64",
+            "sourceColumn": "LocationKey",
+            "formatString": "0",
+            "sourceProviderType": "bigint",
+            "lineageTag": "c2c0d031-a7a5-42b2-9f08-1a7bf8a2e2ea",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "LocationName",
+            "dataType": "string",
+            "sourceColumn": "LocationName",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "4950e0cc-71aa-47c7-83dc-e9cf0e5bc9c2",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "City",
+            "dataType": "string",
+            "sourceColumn": "City",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "df156e83-5c06-4384-a49f-30976e97015a",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "Country",
+            "dataType": "string",
+            "sourceColumn": "Country",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "4f54531a-5f53-4928-8f9c-1475e7c9d85c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "Street",
+            "dataType": "string",
+            "sourceColumn": "Street",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "21f6335e-bfe6-4cd5-b9d9-d3dcefa843c5",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "Zipcode",
+            "dataType": "int64",
+            "sourceColumn": "Zipcode",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "436f2d80-1bb1-4afc-a0dd-9088482e8e77",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "2f4bf8b0-4cd4-428b-b89e-5a315c172db2",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "9d73952f-be03-4218-91ec-b0cd796220d2",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "LocationDim",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_locationdim = Source{[Schema=\"dbo\",Item=\"LocationDim\"]}[Data]",
+                "in",
+                "    dbo_locationdim"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "MarketingAssetDim",
+        "lineageTag": "06fce10c-ead7-4181-b32f-aa56dae99805",
+        "columns": [
+          {
+            "name": "AssetKey",
+            "dataType": "int64",
+            "sourceColumn": "AssetKey",
+            "formatString": "0",
+            "sourceProviderType": "bigint",
+            "lineageTag": "7cf1a37a-036d-4b2f-85c6-3dec14b4801c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "AssetType",
+            "dataType": "string",
+            "sourceColumn": "AssetType",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "52d2d318-9c44-4e80-96ff-deb603ca007c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "AssetName",
+            "dataType": "string",
+            "sourceColumn": "AssetName",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "19e1dbdb-0474-4f29-933d-ab40459af40e",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "15f1ee73-1d4c-47ac-abcd-586ead6ea7be",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "f055c2c5-0698-4feb-aa42-654efa339af1",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "MarketingAssetDim",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_marketingassetdim = Source{[Schema=\"dbo\",Item=\"MarketingAssetDim\"]}[Data]",
+                "in",
+                "    dbo_marketingassetdim"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "MarketingChannelDim",
+        "lineageTag": "4d26ca18-1593-4a52-a49b-627e7a90f69d",
+        "columns": [
+          {
+            "name": "ChannelName",
+            "dataType": "string",
+            "sourceColumn": "ChannelName",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "60da2742-c723-4cf0-9abc-d7fbec2244da",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ChannelAction",
+            "dataType": "string",
+            "sourceColumn": "ChannelAction",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "86c38da0-f038-419f-befa-1e5fb6d68e05",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ChannelKey",
+            "dataType": "int64",
+            "sourceColumn": "ChannelKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "9267d595-159e-4831-a8e1-e3d758a05ba2",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "MarketingChannelDim",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_marketingchanneldim = Source{[Schema=\"dbo\",Item=\"MarketingChannelDim\"]}[Data]",
+                "in",
+                "    dbo_marketingchanneldim"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "MarketingEventFact",
+        "lineageTag": "81159bea-9c7c-406c-931d-724456d3a292",
+        "columns": [
+          {
+            "name": "MarketingEventKey",
+            "dataType": "int64",
+            "sourceColumn": "MarketingEventKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "91ab695e-d845-4432-ba18-533f09ecaec9",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "name": "JourneyKey",
+            "dataType": "int64",
+            "sourceColumn": "JourneyKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "f49b96c6-83de-44a6-8c7e-b44fae8c88ab",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ChannelKey",
+            "dataType": "int64",
+            "sourceColumn": "ChannelKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "76b0ead8-4d6c-4710-a904-594d8a8f22d9",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "PatientKey",
+            "dataType": "int64",
+            "sourceColumn": "PatientKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "5e2fa7ca-8f72-47df-bf8b-2138d571c840",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "AppointmentKey",
+            "dataType": "int64",
+            "sourceColumn": "AppointmentKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "8bd081a6-875b-4e48-bc5c-c3235eb110c3",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "EventDate",
+            "dataType": "dateTime",
+            "sourceColumn": "EventDate",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "dd76104c-d5d6-4a9c-ba5b-7a05eb1617be",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "EventMonthYear",
+            "dataType": "string",
+            "sourceColumn": "EventMonthYear",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "eec0f356-2694-474e-b315-7d097ac424a1",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "AssetKey",
+            "dataType": "int64",
+            "sourceColumn": "AssetKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "dd56b0aa-3541-4d91-b43d-ecb85b1a37bc",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "2f190157-e530-4782-bc36-a8fd262bb1c7",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "b24cb91d-8377-4903-b5b8-c6b1b455f017",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "MarketingEventFact",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_marketingeventfact = Source{[Schema=\"dbo\",Item=\"MarketingEventFact\"]}[Data]",
+                "in",
+                "    dbo_marketingeventfact"
+              ]
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "AttributionModelCriteria",
+            "expression": [
+              "",
+              "// Initialize a DAX variable to store the selected option from 'attributionmodeldim' table.  ",
+              "// If no value is selected, the default value will be 2.  ",
+              "VAR SelectedOption = SELECTEDVALUE('AttributionModelDim'[AttributionModelKey], 2)  ",
+              "  ",
+              "// Return the result based on the selected option.  ",
+              "// If the selected option is 1, then check if 'RankingbyEventDate' equals to 1. If true, return 1, else return blank.  ",
+              "// If the selected option is not 1, return 1.  ",
+              "RETURN    ",
+              "IF(    ",
+              "    SelectedOption = 1,  // Check if the selected option is 1  ",
+              "    IF([RankingbyEventDate] = 1, 1, BLANK()),  // If selected option is 1, further check 'RankingbyEventDate'  ",
+              "    1  // If selected option is not 1, return 1  ",
+              ")    "
+            ],
+            "lineageTag": "84161449-f98d-4c30-b91a-a280b270d39a"
+          },
+          {
+            "name": "RankingbyEventDate",
+            "description": "Rank of every unique appointment in the events, using the latest EventDate associated with that Appointment ID",
+            "expression": [
+              "",
+              "VAR CurrentAppointmentKey = MAX('MarketingEventFact'[AppointmentKey])  ",
+              "VAR CurrentEventDate = MAX('MarketingEventFact'[EventDate])  ",
+              "RETURN  ",
+              "COUNTROWS(  ",
+              "    FILTER(  ",
+              "        CALCULATETABLE(  ",
+              "            'MarketingEventFact',  ",
+              "            ALLEXCEPT('MarketingEventFact', 'MarketingEventFact'[AppointmentKey])",
+              "        ),  ",
+              "        'MarketingEventFact'[AppointmentKey] = CurrentAppointmentKey  ",
+              "            && 'MarketingEventFact'[EventDate] >= CurrentEventDate  ",
+              "    )  ",
+              ")  ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "2439178a-f76f-4d61-aa62-f607a2b7e856"
+          },
+          {
+            "name": "PatientsWithNewServiceline",
+            "description": "Total count of patients without previous appointments for the same service line prior before the selected time frame.",
+            "expression": [
+              "",
+              "VAR MinEventDate = CALCULATE(MIN(MarketingEventFact[EventDate])) ",
+              "VAR SelectedServiceLineKey = SELECTEDVALUE('ServiceLineDim'[ServiceLineKey])  ",
+              "VAR SelectedJourneyKey = SELECTEDVALUE('JourneyDim'[JourneyKey])  ",
+              "//calculate the number of unique patients (\"PatientsWithNewServiceline\") who haven't had any appointments or encounters in a selected service line before a specified date (\"MinEventDate\"), but have had at least one fulfilled appointment and one finished encounter on or before the same date, regardless of the service line.",
+              "VAR NewPatientIds =   ",
+              "//The PatientKey is not blank.",
+              "//The patient does not have a previous appointment, i.e., there is no record in the appointmentdim table with the same PatientKey, a AppointmentScheduledDate ///before //the EventDate from the marketingeventfact table, and an appointment status of \"fulfilled\".",
+              "//Or, the patient does not have a previous encounter, i.e., there is no record in the encounterdim table with the same PatientKey, an EncounterStartDate before the //EventDate from the marketingeventfact table, and an encounter status of \"finished\".",
+              "//If either a past appointment or encounter exists, the patient will not be included in the count of new patients.",
+              "CALCULATETABLE (    ",
+              "        // VALUES gets distinct values from the column  ",
+              "        VALUES ( 'MarketingEventFact'[PatientKey] ),    ",
+              "        // FILTER returns all rows from a table meeting the filter condition  ",
+              "        FILTER (    ",
+              "            'MarketingEventFact',    ",
+              "            // Checks if PatientKey is not blank  ",
+              "            NOT ( ISBLANK ( MarketingEventFact[PatientKey] ) )    ",
+              "                && (    ",
+              "                    // Calculate the number of rows in 'appointmentdim' where:  ",
+              "                    CALCULATE (    ",
+              "                        COUNTROWS ( 'AppointmentDim' ),    ",
+              "                        FILTER (    ",
+              "                            ALL ( 'AppointmentDim' ),    ",
+              "                            // Ensures PatientKey is not blank  ",
+              "                            NOT ( ISBLANK ( 'AppointmentDim'[PatientKey] ) )    ",
+              "                                // Checks if PatientKey in 'appointmentdim' matches the earlier row context 'marketingeventfact'[PatientKey]  ",
+              "                                && 'AppointmentDim'[PatientKey] = EARLIER ( 'MarketingEventFact'[PatientKey] )    ",
+              "                                // Checks if AppointmentScheduledDate is less than the minimum EventDate  ",
+              "                                && 'AppointmentDim'[AppointmentScheduledDate] < MIN ( 'MarketingEventFact'[EventDate] )    ",
+              "                                // Checks if the status of the appointment is \"fulfilled\"  ",
+              "                                 && (   ",
+              "                                    VAR LookupResult =     ",
+              "                                        LOOKUPVALUE ( 'AppointmentTransitionFact'[Status], 'AppointmentTransitionFact'[AppointmentKey], 'AppointmentDim'[AppointmentKey], \"True\" )    ",
+              "                                    RETURN    ",
+              "                                        IF (    ",
+              "                                            LookupResult = \"True\",     ",
+              "                                            TRUE,     ",
+              "                                            LookupResult = \"fulfilled\"    ",
+              "                                        )    ",
+              "                                )       ",
+              "                        )    ",
+              "                    ) = 0    ",
+              "                )    ",
+              "                && (    ",
+              "                    // Calculate the number of rows in 'encounterdim' where:  ",
+              "                    CALCULATE (    ",
+              "                        COUNTROWS ( 'EncounterDim' ),    ",
+              "                        FILTER (    ",
+              "                            'EncounterDim',    ",
+              "                            // Ensures PatientKey is not blank  ",
+              "                            NOT ( ISBLANK ( 'EncounterDim'[PatientKey] ) )    ",
+              "                                // Checks if PatientKey in 'encounterdim' matches the earlier row context 'marketingeventfact'[PatientKey]  ",
+              "                                && 'EncounterDim'[PatientKey] = EARLIER ( 'MarketingEventFact'[PatientKey] )    ",
+              "                                // Checks if EncounterStartDate is less than the minimum EventDate  ",
+              "                                && 'EncounterDim'[EncounterStartDate] < MIN ( 'MarketingEventFact'[EventDate] )    ",
+              "                                // Checks if the status of the encounter is \"finished\"  ",
+              "                                && 'EncounterDim'[EncounterStatus] = \"finished\"    ",
+              "                        )    ",
+              "                    ) = 0    ",
+              "                )    ",
+              "        )    ",
+              "    )  ",
+              "RETURN    CALCULATE(   ",
+              "    DISTINCTCOUNT('MarketingEventFact'[PatientKey]),   ",
+              "    FILTER(        ",
+              "        ALLSELECTED(MarketingEventFact[PatientKey]), ",
+              "        NOT(ISBLANK(MarketingEventFact[PatientKey])) && ",
+              "        VAR CurrentPatientKey = MarketingEventFact[PatientKey]  ",
+              "        VAR ServiceLineKeysList =    ",
+              "        CALCULATETABLE (    ",
+              "            VALUES ( JourneyDim[ServiceLineKey] ),    ",
+              "            FILTER (    ",
+              "                JourneyDim,    ",
+              "                 IF(    ",
+              "                                ISBLANK(SelectedJourneyKey),    ",
+              "                                JourneyDim[JourneyKey] IN    ",
+              "                    CALCULATETABLE (    ",
+              "                        VALUES ( MarketingEventFact[JourneyKey] ) ,  ",
+              "                        MarketingEventFact[EventDate] >= MinEventDate   ",
+              "                    ),       ",
+              "                                JourneyDim[JourneyKey] = SelectedJourneyKey    ",
+              "                            )    ",
+              "               ",
+              "            )    ",
+              "        )     ",
+              "        RETURN        ",
+              "        (       ",
+              "            (      ",
+              "                CALCULATE(          ",
+              "    ALLSELECTED(AppointmentDim[PatientKey]),       ",
+              "    FILTER(          ",
+              "        AppointmentDim,      ",
+              "          NOT(ISBLANK(AppointmentDim[PatientKey])) &&  ",
+              "        AppointmentDim[PatientKey] = CurrentPatientKey      ",
+              "        && AppointmentDim[AppointmentScheduledDate] <= MinEventDate     ",
+              "        && (      ",
+              "            IF(      ",
+              "                ISBLANK(SelectedServiceLineKey),      ",
+              "                AppointmentDim[ServiceLineKey] IN ServiceLineKeysList,      ",
+              "                AppointmentDim[ServiceLineKey] = SelectedServiceLineKey      ",
+              "            )      ",
+              "        ",
+              "        )    ",
+              "    )          ",
+              ")=0   ",
+              "",
+              "            )  && (      ",
+              "                CALCULATE(        ",
+              "                    ALLSELECTED(EncounterDim[PatientKey]),     ",
+              "                    FILTER(        ",
+              "                        EncounterDim,     ",
+              "                        EncounterDim[PatientKey] = CurrentPatientKey    ",
+              "                        && EncounterDim[EncounterStartDate] <= MinEventDate   ",
+              "                         && (    ",
+              "                            IF(    ",
+              "                                ISBLANK(SelectedServiceLineKey),    ",
+              "                                EncounterDim[ServiceLineKey] IN ServiceLineKeysList,    ",
+              "                                EncounterDim[ServiceLineKey] = SelectedServiceLineKey    ",
+              "                            )    ",
+              "                     ",
+              "                    )  ",
+              "                    )        ",
+              "                )=0    ",
+              "            )  ",
+              "        )  && NOT(CurrentPatientKey IN NewPatientIds )    ",
+              "    )   ",
+              ") ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "9dde6abb-52d4-497f-ab1b-81187c9ee57a"
+          },
+          {
+            "name": "PatientsInJourney",
+            "description": "Total number of patients participating in the selected journeys during the selected time frame",
+            "expression": [
+              "",
+              "VAR SummaryTable =   ",
+              "    SUMMARIZE(       ",
+              "        'MarketingEventFact',        ",
+              "        'MarketingEventFact'[JourneyKey],       ",
+              "        'MarketingEventFact'[PatientKey]       ",
+              "    )  ",
+              "RETURN  ",
+              "    CALCULATE(    ",
+              "        COUNTROWS(SummaryTable),    ",
+              "        NOT(ISBLANK('MarketingEventFact'[PatientKey])) // Exclude records with null PatientKey    ",
+              "    )    ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "88f43cd6-78ff-4c41-969e-7f1ff7d7b60b"
+          },
+          {
+            "name": "AppointmentsInfluencedByEmailActions",
+            "description": "Total count of unique appointments that were scheduled following the event of opening an email or clicking an email",
+            "expression": [
+              "",
+              "VAR SelectedOption = SELECTEDVALUE('AttributionModelDim'[AttributionModelKey], 2)          ",
+              "VAR SelectedJourneyKey = SELECTEDVALUE('JourneyDim'[JourneyKey])         ",
+              "VAR SelectedChannelKey = SELECTEDVALUE('MarketingChannelDim'[ChannelKey])         ",
+              "VAR SelectedServiceLineKey = SELECTEDVALUE('ServiceLineDim'[ServiceLineKey])        ",
+              "VAR SelectedChannelName = SELECTEDVALUE('MarketingChannelDim'[ChannelName], \"Email\")    ",
+              "VAR MinEventDate = CALCULATE(MIN('MarketingEventFact'[EventDate]))    ",
+              "// Calculate the number of Appointments Influenced by Email Actions    ",
+              "// Check if the selected channel name is \"Email\"    ",
+              "RETURN       ",
+              "IF (SelectedChannelName = \"Email\",      ",
+              "    // Calculate the distinct count of appointments based on the given conditions    ",
+              "    CALCULATE (            ",
+              "        DISTINCTCOUNT('MarketingEventFact'[AppointmentKey]),            ",
+              "        FILTER (            ",
+              "            ALLSELECTED('MarketingEventFact'),            ",
+              "            NOT(ISBLANK(MarketingEventFact[PatientKey])) &&    ",
+              "            NOT(ISBLANK(MarketingEventFact[AppointmentKey]))  &&    ",
+              "            (            ",
+              "                LOOKUPVALUE('MarketingChannelDim'[ChannelName], 'MarketingChannelDim'[ChannelKey], 'MarketingEventFact'[ChannelKey]) = SelectedChannelName ",
+              "            ) &&    ",
+              "            (ISBLANK(SelectedJourneyKey) || 'MarketingEventFact'[JourneyKey] = SelectedJourneyKey) &&    ",
+              "            (ISBLANK(SelectedChannelKey) || 'MarketingEventFact'[ChannelKey] = SelectedChannelKey) &&    ",
+              "            (ISBLANK(SelectedServiceLineKey) || RELATED(AppointmentDim[ServiceLineKey]) = SelectedServiceLineKey)        ",
+              "  ",
+              "            // Return the result based on the selected option    ",
+              "            && IF(              ",
+              "                SelectedOption = 1,  // Check if the selected option is 1            ",
+              "                IF([RankingbyEventDate] = 1, 1, BLANK()),  // If selected option is 1, further check 'RankingbyEventDate'            ",
+              "                1  // If selected option is not 1, return 1            ",
+              "            )     ",
+              "        )            ",
+              "    ),      ",
+              "    BLANK() // Return blank if SelectedChannelName is not \"Email\"      ",
+              ")    ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "a94afb02-2b1b-42c8-9f64-710b56c064b7"
+          },
+          {
+            "name": "AppointmentsInfluencedBySMSActions",
+            "description": "Total count of unique appointments scheduled after the sms delivery event or sms clicked event",
+            "expression": [
+              "",
+              "VAR SelectedOption = SELECTEDVALUE('AttributionModelDim'[AttributionModelKey], 2)  ",
+              "VAR SelectedJourneyKey = SELECTEDVALUE('JourneyDim'[JourneyKey])  ",
+              "VAR SelectedChannelKey = SELECTEDVALUE('MarketingChannelDim'[ChannelKey])  ",
+              "VAR SelectedServiceLineKey = SELECTEDVALUE('ServiceLineDim'[ServiceLineKey])  ",
+              "VAR SelectedChannelName = SELECTEDVALUE('MarketingChannelDim'[ChannelName], \"Sms\")  ",
+              "VAR MinEventDate = CALCULATE(MIN('MarketingEventFact'[EventDate]))  ",
+              "// Calculate the number of Appointments Influenced by SMS Actions  ",
+              "// Check if the selected channel name is \"Sms\"  ",
+              "RETURN  ",
+              "IF(  ",
+              "    SelectedChannelName = \"Sms\",  ",
+              "    // Calculate the distinct count of appointments based on the given conditions  ",
+              "    CALCULATE(  ",
+              "        DISTINCTCOUNT('MarketingEventFact'[AppointmentKey]),  ",
+              "        FILTER(  ",
+              "            ALLSELECTED('MarketingEventFact'),  ",
+              "            NOT(ISBLANK(MarketingEventFact[AppointmentKey]))  ",
+              "                && (LOOKUPVALUE('MarketingChannelDim'[ChannelName], 'MarketingChannelDim'[ChannelKey], 'MarketingEventFact'[ChannelKey]) = SelectedChannelName)  ",
+              "                && (ISBLANK(SelectedJourneyKey) || 'MarketingEventFact'[JourneyKey] = SelectedJourneyKey)  ",
+              "                && (ISBLANK(SelectedChannelKey) || 'MarketingEventFact'[ChannelKey] = SelectedChannelKey)  ",
+              "                && (ISBLANK(SelectedServiceLineKey) || RELATED(AppointmentDim[ServiceLineKey]) = SelectedServiceLineKey)  ",
+              "                // Return the result based on the selected option  ",
+              "                && IF(  ",
+              "                    SelectedOption = 1, // Check if the selected option is 1  ",
+              "                    IF([RankingbyEventDate] = 1, 1, BLANK()), // If selected option is 1, further check 'RankingbyEventDate'  ",
+              "                    1 // If selected option is not 1, return 1  ",
+              "                )  ",
+              "        )  ",
+              "    ),  ",
+              "    BLANK() // Return blank if SelectedChannelName is not \"Sms\"  ",
+              ")  ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "cbbd6dec-11d7-401f-bb61-860c607d5506"
+          },
+          {
+            "name": "AppointmentsInfluencedByPushNotificationActions",
+            "description": "Total count of unique appointments that were scheduled following the event of opening a push notification or clicking a push notification",
+            "expression": [
+              "",
+              "VAR SelectedOption = SELECTEDVALUE('AttributionModelDim'[AttributionModelKey], 2)          ",
+              "VAR SelectedJourneyKey = SELECTEDVALUE('JourneyDim'[JourneyKey])         ",
+              "VAR SelectedChannelKey = SELECTEDVALUE('MarketingChannelDim'[ChannelKey])         ",
+              "VAR SelectedServiceLineKey = SELECTEDVALUE('ServiceLineDim'[ServiceLineKey])        ",
+              "VAR SelectedChannelName = SELECTEDVALUE('MarketingChannelDim'[ChannelName], \"PushNotification\")    ",
+              "VAR MinEventDate = CALCULATE(MIN('MarketingEventFact'[EventDate]))    ",
+              "// Calculate the number of Appointments Influenced by Email Actions    ",
+              "// Check if the selected channel name is \"Email\"    ",
+              "RETURN       ",
+              "IF (SelectedChannelName = \"PushNotification\",      ",
+              "    // Calculate the distinct count of appointments based on the given conditions    ",
+              "    CALCULATE (            ",
+              "        DISTINCTCOUNT('MarketingEventFact'[AppointmentKey]),            ",
+              "        FILTER (            ",
+              "            ALLSELECTED('MarketingEventFact'),            ",
+              "            NOT(ISBLANK(MarketingEventFact[PatientKey])) &&    ",
+              "            NOT(ISBLANK(MarketingEventFact[AppointmentKey])) &&    ",
+              "            (            ",
+              "                LOOKUPVALUE('MarketingChannelDim'[ChannelName], 'MarketingChannelDim'[ChannelKey], 'MarketingEventFact'[ChannelKey]) = SelectedChannelName   ",
+              "                         ",
+              "            ) &&    ",
+              "            (ISBLANK(SelectedJourneyKey) || 'MarketingEventFact'[JourneyKey] = SelectedJourneyKey) &&    ",
+              "            (ISBLANK(SelectedChannelKey) || 'MarketingEventFact'[ChannelKey] = SelectedChannelKey) &&    ",
+              "            (ISBLANK(SelectedServiceLineKey) || RELATED(AppointmentDim[ServiceLineKey]) = SelectedServiceLineKey)        ",
+              "  ",
+              "            // Return the result based on the selected option    ",
+              "            && IF(              ",
+              "                SelectedOption = 1,  // Check if the selected option is 1            ",
+              "                IF([RankingbyEventDate] = 1, 1, BLANK()),  // If selected option is 1, further check 'RankingbyEventDate'            ",
+              "                1  // If selected option is not 1, return 1            ",
+              "            )      ",
+              "        )            ",
+              "    ),      ",
+              "    BLANK() // Return blank if SelectedChannelName is not \"Email\"      ",
+              ")    ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "88d5d5d4-6a07-45bb-a005-b44678675580"
+          },
+          {
+            "name": "InfluencedAppointments",
+            "expression": "[AppointmentsInfluencedByEmailActions] +[AppointmentsInfluencedByPushNotificationActions] +[AppointmentsInfluencedBySMSActions]",
+            "formatString": "0",
+            "lineageTag": "5959f894-7e94-4a85-9d20-c52c9a22c7c6"
+          },
+          {
+            "name": "NewPatients",
+            "description": [
+              "Total number of patients with no prior appointments before the selected time period",
+              ""
+            ],
+            "expression": [
+              "",
+              "// Calculate the minimum EventDate from the marketingeventfact table  ",
+              "VAR MinEventDate =  ",
+              "    MIN ( 'MarketingEventFact'[EventDate] )  ",
+              "  ",
+              "// Get the distinct PatientKeys from the marketingeventfact table where PatientKey is not blank  ",
+              "VAR FilteredPatientKeys =  ",
+              "    CALCULATETABLE (  ",
+              "        DISTINCT ( 'MarketingEventFact'[PatientKey] ),  ",
+              "        NOT ( ISBLANK ( 'MarketingEventFact'[PatientKey] ) )  ",
+              "    )  ",
+              "  ",
+              "// Get the distinct PatientKeys from the appointmentdim table where PatientKey is not blank,  ",
+              "// AppointmentScheduledDate is less than MinEventDate, and appointment status is \"fulfilled\"  ",
+              "VAR FilteredAppointments =  ",
+              "    CALCULATETABLE (  ",
+              "        DISTINCT ( 'AppointmentDim'[PatientKey] ),  ",
+              "        NOT ( ISBLANK ( 'AppointmentDim'[PatientKey] ) ),  ",
+              "        'AppointmentDim'[AppointmentScheduledDate] < MinEventDate,  ",
+              "        TREATAS (  ",
+              "            CALCULATETABLE (  ",
+              "                VALUES ( 'AppointmentTransitionFact'[AppointmentKey] ),  ",
+              "                'AppointmentTransitionFact'[Status] = \"fulfilled\"  ",
+              "            ),  ",
+              "            'AppointmentDim'[AppointmentKey]  ",
+              "        )  ",
+              "    )  ",
+              "  ",
+              "// Get the distinct PatientKeys from the encounterdim table where PatientKey is not blank,  ",
+              "// EncounterStartDate is less than MinEventDate, and encounter status is \"finished\"  ",
+              "VAR FilteredEncounters =  ",
+              "    CALCULATETABLE (  ",
+              "        DISTINCT ( 'EncounterDim'[PatientKey] ),  ",
+              "        NOT ( ISBLANK ( 'EncounterDim'[PatientKey] ) ),  ",
+              "        'EncounterDim'[EncounterStartDate] < MinEventDate,  ",
+              "        'EncounterDim'[EncounterStatus] = \"finished\"  ",
+              "    )  ",
+              "  ",
+              "// Subtract the union of FilteredAppointments and FilteredEncounters from FilteredPatientKeys  ",
+              "// to get the new patient keys  ",
+              "VAR NewPatientKeys =  ",
+              "    EXCEPT (  ",
+              "        FilteredPatientKeys,  ",
+              "        UNION ( FilteredAppointments, FilteredEncounters )  ",
+              "    )  ",
+              "  ",
+              "// Return the number of rows in the NewPatientKeys variable (i.e., the count of new patients)  ",
+              "RETURN  ",
+              "    COUNTROWS ( NewPatientKeys )  ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "905330b4-0740-4286-b279-cfb08a4ebf67"
+          },
+          {
+            "name": "BookedAppointments",
+            "description": "This represents the total count of unique appointments, with the status \"booked\", which were scheduled during selected time period,",
+            "expression": [
+              "",
+              "CALCULATE(  ",
+              "    DISTINCTCOUNT('MarketingEventFact'[AppointmentKey]),  ",
+              "    // Filter the rows in the 'appointmenttransitionfact' table where Status is \"booked\"  ",
+              "    'AppointmentTransitionFact'[Status] = \"booked\",  ",
+              "    // Filter the rows in the 'appointmentDim' table where AppointmentScheduledDate is greater than or equal to the minimum EventDate in the 'marketingeventfact' table  ",
+              "    'AppointmentDim'[AppointmentScheduledDate] >= MIN('MarketingEventFact'[EventDate])  ",
+              ")  ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "64c67cc7-a7f0-4c3b-a737-cf1f5ee5a9ef"
+          },
+          {
+            "name": "NewPatientsToServiceLine",
+            "description": [
+              "Total count of patients without previous appointments for the same service line prior before the selected time frame.",
+              ""
+            ],
+            "expression": [
+              "",
+              "IF (  ",
+              "    ISBLANK ( [PatientsWithNewServiceline] ),  ",
+              "    [NewPatients],  ",
+              "    [PatientsWithNewServiceline] + [NewPatients]  ",
+              ")  ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "3c4b164d-1933-4bb9-83d0-21eed8d02943"
+          },
+          {
+            "name": "CompletedAppointments",
+            "description": "The number of individual appointments scheduled within the chosen timeframe that have been booked and subsequently fulfilled or proposed.",
+            "expression": [
+              "",
+              "CALCULATE(  ",
+              "    DISTINCTCOUNT('MarketingEventFact'[AppointmentKey]),  ",
+              "    // Filter the rows in the 'appointmenttransitionfact' table where Status is \"booked\"  ",
+              "    'AppointmentTransitionFact'[Status] = \"fulfilled\",  ",
+              "    // Filter the rows in the 'appointmentDim' table where AppointmentScheduledDate is greater than or equal to the minimum EventDate in the 'marketingeventfact' table  ",
+              "    'AppointmentDim'[AppointmentScheduledDate] >= MIN('MarketingEventFact'[EventDate])  ",
+              ")  ",
+              ""
+            ],
+            "formatString": "0",
+            "lineageTag": "97f49047-870b-4590-b788-28e365dfaed4"
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "PatientDim",
+        "lineageTag": "70dc1f30-3885-4fdd-a60f-72370a88f0f9",
+        "columns": [
+          {
+            "name": "PatientKey",
+            "dataType": "int64",
+            "sourceColumn": "PatientKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "d7b09916-d147-4f1c-812a-ad8d3ce26247",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "FirstName",
+            "dataType": "string",
+            "sourceColumn": "FirstName",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "a4e96ed2-76b7-433b-902c-4adb8fac1c3b",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "LastName",
+            "dataType": "string",
+            "sourceColumn": "LastName",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "edeb4f76-b251-453d-8217-7b67db5dd079",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "7ced49e3-744f-47c9-bba5-7494acd9b4ed",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "6caa2604-8ca4-45ed-b5c3-c019aa668245",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "PatientDim",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_patientdim = Source{[Schema=\"dbo\",Item=\"PatientDim\"]}[Data]",
+                "in",
+                "    dbo_patientdim"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      },
+      {
+        "name": "ServiceLineDim",
+        "lineageTag": "42e609a0-5c23-43b1-918e-5d15a10f95dd",
+        "columns": [
+          {
+            "name": "ServiceLineKey",
+            "dataType": "int64",
+            "sourceColumn": "ServiceLineKey",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "1f72915e-9a35-451d-8f0c-3e4dc6be4654",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "User"
+              }
+            ]
+          },
+          {
+            "name": "Name",
+            "dataType": "string",
+            "sourceColumn": "Name",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "8e9159b8-4fd8-4b07-8bb4-41ce0f91eb8c",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "ServiceLineNum",
+            "dataType": "int64",
+            "sourceColumn": "ServiceLineNum",
+            "formatString": "0",
+            "sourceProviderType": "int",
+            "lineageTag": "38517956-835f-49e3-8ca8-4c765a5901c1",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceTable",
+            "dataType": "string",
+            "sourceColumn": "SourceTable",
+            "sourceProviderType": "varchar(8000)",
+            "lineageTag": "6b5b80a9-b51a-4f88-a1f4-fece4c139cce",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          },
+          {
+            "name": "SourceModifiedOn",
+            "dataType": "dateTime",
+            "sourceColumn": "SourceModifiedOn",
+            "formatString": "General Date",
+            "sourceProviderType": "datetime2",
+            "lineageTag": "637ddd78-adb9-4bdf-b3a1-3261105f943f",
+            "summarizeBy": "none",
+            "annotations": [
+              {
+                "name": "SummarizationSetBy",
+                "value": "Automatic"
+              }
+            ]
+          }
+        ],
+        "partitions": [
+          {
+            "name": "ServiceLineDim",
+            "mode": "directQuery",
+            "source": {
+              "type": "m",
+              "expression": [
+                "let",
+                "    Source = Sql.Database(\"%%sql_endpoint%%\", \"%%default_lakehouse_name%%\"),",
+                "    dbo_servicelinedim = Source{[Schema=\"dbo\",Item=\"ServiceLineDim\"]}[Data]",
+                "in",
+                "    dbo_servicelinedim"
+              ]
+            }
+          }
+        ],
+        "annotations": [
+          {
+            "name": "PBI_ResultType",
+            "value": "Table"
+          },
+          {
+            "name": "PBI_NavigationStepName",
+            "value": "Navigation"
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "name": "3e8f121f-b779-4910-9716-21c892b318d5",
+        "fromTable": "MarketingEventFact",
+        "fromColumn": "AppointmentKey",
+        "toTable": "AppointmentDim",
+        "toColumn": "AppointmentKey"
+      },
+      {
+        "name": "3f0fe3ad-c208-4954-99ca-303ad542b07a",
+        "fromTable": "MarketingEventFact",
+        "fromColumn": "PatientKey",
+        "toTable": "PatientDim",
+        "toColumn": "PatientKey"
+      },
+      {
+        "name": "b307dd88-d5f6-45a1-ad15-9b236036bde0",
+        "fromTable": "MarketingEventFact",
+        "fromColumn": "JourneyKey",
+        "toTable": "JourneyDim",
+        "toColumn": "JourneyKey"
+      },
+      {
+        "name": "29d3ceaf-0efd-43bf-b899-1d52f2dba005",
+        "fromTable": "MarketingEventFact",
+        "fromColumn": "AssetKey",
+        "toTable": "MarketingAssetDim",
+        "toColumn": "AssetKey"
+      },
+      {
+        "name": "10a6c3b4-89b4-4b56-92d2-2470c1c99da5",
+        "fromTable": "MarketingEventFact",
+        "fromColumn": "ChannelKey",
+        "toTable": "MarketingChannelDim",
+        "toColumn": "ChannelKey",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "3ac5c305-df9f-3ab2-8fa4-5b46a02370ff",
+        "fromTable": "AppointmentTransitionFact",
+        "fromColumn": "AppointmentKey",
+        "toTable": "AppointmentDim",
+        "toColumn": "AppointmentKey"
+      },
+      {
+        "name": "d762fe60-5479-410a-c192-9113405eca1e",
+        "fromTable": "AppointmentDim",
+        "fromColumn": "LocationKey",
+        "toTable": "LocationDim",
+        "toColumn": "LocationKey"
+      },
+      {
+        "name": "d35415a3-8340-1e7b-e80d-c302ed94ce66",
+        "fromTable": "JourneyDim",
+        "fromColumn": "ServiceLineKey",
+        "toTable": "ServiceLineDim",
+        "toColumn": "ServiceLineKey",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "ab3cf88f-1ee6-8c44-6b57-a95ff908f580",
+        "fromTable": "EncounterDim",
+        "fromColumn": "AppointmentKey",
+        "toTable": "AppointmentDim",
+        "toColumn": "AppointmentKey",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "b7b9709f-5a13-025c-f559-12ebfb106b25",
+        "toCardinality": "many",
+        "fromTable": "AppointmentTransitionFact",
+        "fromColumn": "AppointmentKey",
+        "toTable": "MarketingEventFact",
+        "toColumn": "AppointmentKey",
+        "crossFilteringBehavior": "bothDirections"
+      },
+      {
+        "name": "f8753e36-bdd3-015a-3ec0-0150befe6823",
+        "fromTable": "EncounterDim",
+        "fromColumn": "PatientKey",
+        "toTable": "PatientDim",
+        "toColumn": "PatientKey"
+      }
+    ],
+    "cultures": [
+      {
+        "name": "en-CA",
+        "linguisticMetadata": {
+          "content": {
+            "Version": "2.0.0",
+            "Language": "en-US",
+            "Entities": {
+              "journeydim.name": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "JourneyDim",
+                    "ConceptualProperty": "Name"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Journey name": {
+                      "State": "Suggested",
+                      "Source": {
+                        "Type": "External",
+                        "Agent": "PowerBI.VisualColumnRename"
+                      },
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "marketingeventfact.appointmentsinfluencedbypushnotificationactions": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "MarketingEventFact",
+                    "ConceptualProperty": "AppointmentsInfluencedByPushNotificationActions"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "PushNotification": {
+                      "State": "Suggested",
+                      "Source": {
+                        "Type": "External",
+                        "Agent": "PowerBI.VisualColumnRename"
+                      },
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "marketingeventfact.appointmentsinfluencedbysmsactions": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "MarketingEventFact",
+                    "ConceptualProperty": "AppointmentsInfluencedBySMSActions"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Sms": {
+                      "State": "Suggested",
+                      "Source": {
+                        "Type": "External",
+                        "Agent": "PowerBI.VisualColumnRename"
+                      },
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              },
+              "marketingeventfact.appointmentsinfluencedbyemailactions": {
+                "Definition": {
+                  "Binding": {
+                    "ConceptualEntity": "MarketingEventFact",
+                    "ConceptualProperty": "AppointmentsInfluencedByEmailActions"
+                  }
+                },
+                "State": "Generated",
+                "Terms": [
+                  {
+                    "Email": {
+                      "State": "Suggested",
+                      "Source": {
+                        "Type": "External",
+                        "Agent": "PowerBI.VisualColumnRename"
+                      },
+                      "Weight": 0.9
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "contentType": "json"
+        }
+      }
+    ],
+    "annotations": [
+      {
+        "name": "PBI_QueryOrder",
+        "value": "[\"AppointmentDim\",\"AppointmentTransitionFact\",\"AttributionModelDim\",\"JourneyDim\",\"EncounterDim\",\"LocationDim\",\"MarketingAssetDim\",\"MarketingChannelDim\",\"MarketingEventFact\",\"PatientDim\",\"ServiceLineDim\"]"
+      },
+      {
+        "name": "__PBI_TimeIntelligenceEnabled",
+        "value": "1"
+      },
+      {
+        "name": "PBIDesktopVersion",
+        "value": "2.142.7630.1 (Main)+a54ea922f68eddcbfc3ce93bd6c4b691ff471d19"
+      },
+      {
+        "name": "PBI_ProTooling",
+        "value": "[\"WebModelingEdit\",\"Copilot\",\"CopilotMeasureDescriptions\",\"DaxQueryView_Desktop\"]"
+      }
+    ]
+  }
+}

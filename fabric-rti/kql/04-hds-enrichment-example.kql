@@ -1,0 +1,187 @@
+// ============================================================================
+// 04-hds-enrichment-example.kql
+// Connecting HDS Silver Lakehouse to the Eventhouse for enriched alerts.
+//
+// *** AUTOMATED BY PHASE 2 ***
+// These commands are now executed automatically by:
+//   .\deploy-fabric-rti.ps1 -Phase2
+//
+// The script auto-discovers the Silver Lakehouse ID and creates the external
+// tables as OneLake shortcuts. You only need to run these manually if Phase 2
+// fails or you want to customize the schema.
+//
+// After deploying Healthcare Data Solutions Clinical Foundations:
+//   1. The Silver Lakehouse contains flattened FHIR R4 tables (Patient,
+//      Device, Condition, Observation, etc.)
+//   2. Phase 2 creates external tables (OneLake shortcuts) from the
+//      Eventhouse to the Silver Lakehouse delta tables.
+//   3. The enriched fn_ClinicalAlerts function joins real-time telemetry
+//      with patient demographics and qualifying conditions.
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// OPTION A: External tables pointing to Silver Lakehouse delta tables
+// These are created AUTOMATICALLY by: .\deploy-fabric-rti.ps1 -Phase2
+//
+// Phase 2 uses a two-step process:
+//   1. Create an OneLake shortcut on the KQL Database (path="/Tables")
+//   2. Create an external table (kind=delta) via KQL management API
+//
+// The URL must use the OneLake DFS endpoint with ;impersonate suffix:
+//   https://onelake.dfs.fabric.microsoft.com/<workspace_id>/<kql_db_id>/Tables/<shortcut_name>;impersonate
+//
+// To run manually, replace <workspace_id> and <kql_db_id> with actual
+// values from your Fabric portal URLs. You must FIRST create the shortcut
+// via Fabric REST API before the external table command will work.
+// ---------------------------------------------------------------------------
+
+// Step 1 (for each table): Create shortcut via Fabric REST API
+// POST /workspaces/<workspace_id>/items/<kql_db_id>/shortcuts?shortcutConflictPolicy=CreateOrOverwrite
+// Body: { "name": "SilverPatient", "path": "/Tables", "target": { "oneLake": { "workspaceId": "<workspace_id>", "itemId": "<silver_lakehouse_id>", "path": "Tables/Patient" } } }
+
+// Step 2 (for each table): Create external table via KQL management command
+// The ;impersonate suffix is MANDATORY for Fabric KQL external tables.
+
+.create-or-alter external table SilverPatient kind=delta
+(
+    h@'https://onelake.dfs.fabric.microsoft.com/<workspace_id>/<kql_db_id>/Tables/SilverPatient;impersonate'
+)
+
+.create-or-alter external table SilverCondition kind=delta
+(
+    h@'https://onelake.dfs.fabric.microsoft.com/<workspace_id>/<kql_db_id>/Tables/SilverCondition;impersonate'
+)
+
+.create-or-alter external table SilverDevice kind=delta
+(
+    h@'https://onelake.dfs.fabric.microsoft.com/<workspace_id>/<kql_db_id>/Tables/SilverDevice;impersonate'
+)
+
+.create-or-alter external table SilverLocation kind=delta
+(
+    h@'https://onelake.dfs.fabric.microsoft.com/<workspace_id>/<kql_db_id>/Tables/SilverLocation;impersonate'
+)
+
+.create-or-alter external table SilverEncounter kind=delta
+(
+    h@'https://onelake.dfs.fabric.microsoft.com/<workspace_id>/<kql_db_id>/Tables/SilverEncounter;impersonate'
+)
+
+// ---------------------------------------------------------------------------
+// OPTION B: Enriched fn_ClinicalAlerts using Silver Lakehouse data
+//
+// This replaces the base fn_ClinicalAlerts function once the external
+// tables above are created. It joins real-time telemetry alerts with
+// FHIR patient/condition context from HDS.
+//
+// *** DEPLOYED AUTOMATICALLY by: .\deploy-fabric-rti.ps1 -Phase2 ***
+// ---------------------------------------------------------------------------
+
+// Phase 2 auto-deploys this function. To run manually, uncomment below:
+/*
+.create-or-alter function with (
+    docstring = "Enriched clinical alerts with HDS Silver Lakehouse patient context",
+    folder = "ClinicalAlerts"
+) fn_ClinicalAlerts(windowMinutes: int = 5) {
+    // --- Patient-Device mapping via Silver Lakehouse ---
+    // The Silver LH Device table contains references back to patients.
+    // We also query Conditions for COPD (SNOMED 13645005) and CHF (84114007).
+    let device_patient_map = external_table('SilverDevice')
+        | where isnotempty(patient_reference)
+        | project device_identifier = tostring(identifier[0].value),
+                  patient_ref = patient_reference;
+    //
+    let patient_info = external_table('SilverPatient')
+        | project patient_id = id,
+                  patient_name = coalesce(name_text, strcat(name_given, " ", name_family)),
+                  gender, birthDate;
+    //
+    let high_risk_conditions = external_table('SilverCondition')
+        | mv-expand coding = code_coding
+        | where tostring(coding.code) in (
+            "13645005",   // COPD (SNOMED)
+            "84114007",   // Heart failure (SNOMED)
+            "195967001",  // Asthma (SNOMED)
+            "233604007",  // Pneumonia (SNOMED)
+            "59621000"    // Hypertension (SNOMED)
+          )
+        | summarize conditions = make_set(tostring(coding.display)) by patient_ref = subject_reference
+        | extend conditions_str = strcat_array(conditions, ", ");
+    //
+    // --- Real-time telemetry alerts ---
+    let spo2_alerts = fn_SpO2Alerts(windowMinutes)
+        | project device_id, alert_time, spo2_tier = alert_tier,
+                  spo2_value = metric_value, spo2_message = message;
+    let pr_alerts = fn_PulseRateAlerts(windowMinutes)
+        | project device_id, alert_time, pr_tier = alert_tier,
+                  pr_value = metric_value, pr_message = message;
+    //
+    let latest = TelemetryRaw
+        | where timestamp > ago(1m * windowMinutes)
+        | summarize arg_max(timestamp, *) by device_id
+        | project device_id,
+                  current_spo2  = todouble(telemetry.spo2),
+                  current_pr    = toint(telemetry.pr),
+                  current_pi    = todouble(telemetry.pi),
+                  current_sphb  = todouble(telemetry.sphb),
+                  signal_iq     = toint(telemetry.signal_iq);
+    //
+    // --- Enrich with patient context ---
+    latest
+    | join kind=leftouter spo2_alerts on device_id
+    | join kind=leftouter pr_alerts   on device_id
+    | where isnotempty(spo2_tier) or isnotempty(pr_tier)
+    | join kind=leftouter device_patient_map on $left.device_id == $right.device_identifier
+    | join kind=leftouter patient_info on $left.patient_ref == $right.patient_id
+    | join kind=leftouter high_risk_conditions on $left.patient_ref == $right.patient_ref1
+    //
+    // --- Severity escalation based on patient conditions ---
+    | extend
+        has_high_risk = isnotempty(conditions_str),
+        base_tier = case(
+            spo2_tier == "CRITICAL" or pr_tier == "CRITICAL", "CRITICAL",
+            spo2_tier == "URGENT"   or pr_tier == "URGENT",   "URGENT",
+            "WARNING"
+        )
+    | extend
+        // Escalate tier if patient has high-risk conditions
+        final_tier = case(
+            base_tier == "CRITICAL", "CRITICAL",
+            base_tier == "URGENT" and has_high_risk, "CRITICAL",
+            base_tier == "WARNING" and has_high_risk, "URGENT",
+            base_tier
+        ),
+        alert_type = case(
+            isnotempty(spo2_tier) and isnotempty(pr_tier), "MULTI_METRIC",
+            isnotempty(spo2_tier), "SPO2_LOW",
+            "PR_ABNORMAL"
+        )
+    //
+    // --- Final projection ---
+    | project
+        alert_id      = strcat("ALERT-", device_id, "-", format_datetime(now(), "yyyyMMddHHmmss")),
+        alert_time    = coalesce(alert_time, alert_time1, now()),
+        device_id,
+        patient_id    = coalesce(patient_id, ""),
+        patient_name  = coalesce(patient_name, "(not linked)"),
+        alert_tier    = final_tier,
+        alert_type,
+        spo2          = current_spo2,
+        pr            = current_pr,
+        pi            = current_pi,
+        sphb          = current_sphb,
+        signal_iq,
+        qualifying_conditions = coalesce(conditions_str, ""),
+        escalated     = (final_tier != base_tier),
+        message       = strcat(
+            final_tier, " ALERT",
+            iff(final_tier != base_tier, " (ESCALATED)", ""),
+            " | Patient: ", coalesce(patient_name, "Unknown"),
+            " | Device: ", device_id,
+            " | SpO2: ", tostring(current_spo2), "%",
+            " | PR: ", tostring(current_pr), " bpm",
+            iff(has_high_risk, strcat(" | Conditions: ", conditions_str), "")
+        )
+    | order by alert_tier asc, device_id asc
+}
+*/

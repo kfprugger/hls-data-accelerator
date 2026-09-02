@@ -1,0 +1,1230 @@
+{
+  "id": "sha1(concat_ws(' ', col('sourceSystem'), col('currentClaimUniqueIdentifier'), lit('ExplanationOfBenefit')))",
+  "meta": {
+    "lastUpdated": "current_timestamp()"
+  },
+  "resourceType": "lit('ExplanationOfBenefit')",
+  "identifier": [
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+            "code": "lit('CLM')",
+            "display": "lit('Claim Unique Identifier')"
+          }
+        ],
+        "text": "lit('Current Claim Unique Identifier')"
+      },
+      "system": "lit('http://cms.gov/cclf/identifier/cur-clm-uniq-id')",
+      "value": "col('currentClaimUniqueIdentifier')"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/sid/us-mbi')",
+            "code": "col('medicareBeneficiaryIdentifier')",
+            "display": "lit('Medicare Beneficiary Identifier')"
+          }
+        ]
+      },
+      "system": "lit('http://hl7.org/fhir/sid/us-mbi')",
+      "value": "col('medicareBeneficiaryIdentifier')"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/sid/us-mbi')",
+            "code": "col('beneficiaryHicNumber')"
+          }
+        ]
+      },
+      "value": "col('beneficiaryHicNumber')"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/rx_srvc_rfrnc_num')"
+          }
+        ]
+      }
+    }
+  ],
+  "patient": {
+    "identifier": {
+      "type": {
+        "coding": [
+          {
+            "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+            "code": "lit('MBI')"
+          }
+        ]
+      },
+      "value": "col('medicareBeneficiaryIdentifier')"
+    }
+  },
+  "contained": [
+    {
+      "identifier": [
+        {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+                "code": "lit('PRN')"
+              }
+            ]
+          },
+          "value": "col('providerOscarNumber')"
+        },
+        {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+                "code": "lit('PRN')"
+              }
+            ]
+          },
+          "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+          "value": "col('claimFacilityProviderOscarNumber')"
+        },
+        {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+                "code": "lit('PRN')"
+              }
+            ]
+          },
+          "system": "lit('http://terminology.hl7.org/CodeSystem/v2-0203')",
+          "value": "col('claimProviderOscarNumber')"
+        },
+        {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('http://hl7.org/fhir/sid/us-npi')",
+                "code": "lit('npi')"
+              }
+            ]
+          },
+          "system": "lit('http://hl7.org/fhir/sid/us-npi')",
+          "value": "col('facilityProviderNpiNumber')"
+        }
+      ]
+
+    },
+    {
+      "resourceType": "lit('Patient')",
+      "id": "lit('patient1')",
+      "address": [
+        {
+
+          "city": "col('beneficiaryCity')",
+          "state": "col('beneficiaryState')",
+          "postalCode": "col('beneficiaryZipCode')",
+          "extension": [
+            {
+              "valueString": "col('beneficiaryZipCodeExt')"
+            }
+          ]
+        }
+      ],
+      "birthDate": "col('beneficiaryDateOfBirth')",
+      "gender": "col('beneficiarySexCode')",
+      "deceasedDateTime": "col('beneficiaryDeathDate')",
+      "name": [
+        {
+          "family": "col('beneficiaryLastName')",
+          "given": [
+            {
+              "firstname": "col('beneficiaryFirstName')",
+              "middlename": "col('beneficiaryMiddleName')"
+            }
+          ]
+        }
+      ],
+      "extension": [
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/race')",
+          "valueCoding": {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/race')",
+            "code": "col('beneficiaryRaceCode')"
+          }
+        }
+      ]
+    },
+    {
+      "resourceType": "lit('Coverage')",
+      "id": "lit('coverageid')",
+      "extension": [
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/ms_cd')",
+          "valueCoding": {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/ms_cd')",
+            "code": "col('beneficiaryMedicareStatusCode')"
+          }
+        },
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/dual_01')",
+          "valueCoding": {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/dual_01')",
+            "code": "col('beneficiaryDualStatusCode')"
+          }
+        },
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/orec')",
+          "valueCoding": {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/orec')",
+            "code": "col('beneficiaryOriginalEntitlementReasonCode')"
+          }
+        },
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/buyin01')",
+          "valueCoding": {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/buyin01')",
+            "code": "col('beneficiaryEntitlementBuyinIndicator')"
+          }
+        }
+      ],
+      "period": {
+        "start": "col('beneEntitlementPartABeginDate')",
+        "end": "col('beneEntitlementPartBBeginDate')"
+      }
+    }
+  ],
+  "status": "col('claimAdjustmentTypeCode')",
+  "billablePeriod": {
+    "start": "col('claimFromDate')",
+    "end": "col('claimThruDate')",
+    "extension": [
+      {
+        "url": "lit('https://bluebutton.cms.gov/resources/variables/claim_query_cd')",
+        "valueCoding": {
+          "system": "lit('https://bluebutton.cms.gov/resources/variables/claim_query_cd')",
+          "code": "col('claimQueryCode')"
+        }
+      }
+    ]
+  },
+  "disposition": "col('claimDispositionCode')",
+  "type": {
+    "coding": [
+      {
+        "system": "lit('https://bluebutton.cms.gov/resources/variables/nch_clm_type_cd')",
+        "code": "col('claimTypeCode')"
+      },
+      {
+        "system": "lit('https://bluebutton.cms.gov/resources/variables/nch_clm_type_cd')",
+        "code": "col('claimOutpatientServiceTypeCode')"
+      }
+    ]
+  },
+  "facility": {
+    "identifier": {
+      "type": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType')",
+            "code": "lit('npi')",
+            "display": "lit('National Provider Identifier')"
+          }
+        ]
+      },
+      "value": "col('claimServiceProviderGenericIdNumber')"
+    },
+    "extension": [
+      {
+        "url": "lit('https://bluebutton.cms.gov/resources/variables/clm_fac_type_cd')",
+        "valueCoding": {
+          "system": "lit('https://bluebutton.cms.gov/resources/variables/clm_fac_type_cd')",
+          "code": "col('claimBillFacilityTypeCode')"
+        }
+      },
+      {
+        "url": "lit('https://bluebutton.cms.gov/resources/variables/phrmcy_srvc_type_cd')",
+        "valueCoding": {
+          "system": "lit('https://bluebutton.cms.gov/resources/variables/phrmcy_srvc_type_cd')",
+          "code": "col('claimPharmacyServiceTypeCode')"
+        }
+      }
+    ]
+
+  },
+  "payment": {
+    "amount": {
+      "system": "lit('urn:iso:std:iso:4217')",
+      "currency": "lit('USD')",
+      "value": "col('claimPaymentAmount')"
+    }
+  },
+  "total": [
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/codesystem/adjudication')",
+            "code": "lit('https://bluebutton.cms.gov/resources/variables/clm_tot_chrg_amt')"
+          }
+        ]
+      },
+      "amount": {
+        "value": "col('totalClaimChargeAmount')"
+      }
+    }
+  ],
+  "benefitBalance": [
+    {
+      "financial": [
+        {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('https://bluebutton.cms.gov/resources/variables/clm_pps_cptl_ime_amt')",
+                "code": "lit('https://bluebutton.cms.gov/resources/variables/clm_pps_cptl_ime_amt')"
+              }
+            ]
+          },
+          "usedMoney": {
+            "value": "col('claimCapitalIndirectMedicalEducationAmount')",
+            "currency": "lit('USD')"
+          }
+
+        }
+      ]
+    },
+    {
+      "financial": [
+        {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('https://bluebutton.cms.gov/resources/variables/clm_pps_cptl_dsprprtnt_shr_amt')",
+                "code": "lit('https://bluebutton.cms.gov/resources/variables/clm_pps_cptl_dsprprtnt_shr_amt')"
+              }
+            ]
+          },
+          "usedMoney": {
+            "value": "col('claimCapitalDisproportionateAmount')",
+            "currency": "lit('USD')"
+          }
+
+        }
+      ]
+    }
+  ],
+  "diagnosis": [
+    {
+      "onAdmission": {
+        "coding": [
+          {
+            "system": "lit('http://terminology.hl7.org/CodeSystem/diagnosis-on-admission')",
+            "code": "col('claimPresentOnAdmissionIndicator')"
+
+          }
+        ]
+      },
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/ValueSet/icd-10')",
+            "code": "col('diagnosisCode')"
+          }
+        ]
+      }
+    },
+    {
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/sid/icd-9-cm')",
+            "code": "col('principalDiagnosisCode')"
+          }
+        ]
+      },
+      "type": [
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/diagnosis-type')",
+              "code": "lit('principal')",
+              "display": "lit('Principal Diagnosis')"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/sid/icd-9-cm')",
+            "code": "col('admittingDiagnosisCode')"
+          }
+        ]
+      },
+      "type": [
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/diagnosis-type')",
+              "code": "lit('admitting')",
+              "display": "lit('Admitting Diagnosis')"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "sequence": "lit('1')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisFirstCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('2')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisSecondCode')",
+            "display": "col('claimDiagnosisSecondCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('3')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisThirdCode')",
+            "display": "col('claimDiagnosisThirdCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('4')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisFourthCode')",
+            "display": "col('claimDiagnosisFourthCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('5')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisFifthCode')",
+            "display": "col('claimDiagnosisFifthCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('6')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisSixthCode')",
+            "display": "col('claimDiagnosisSixthCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('7')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisSeventhCode')",
+            "display": "col('claimDiagnosisSeventhCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('8')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisEighthCode')",
+            "display": "col('claimDiagnosisEighthCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('9')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisNinthCode')",
+            "display": "col('claimDiagnosisNinthCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('10')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisTenthCode')",
+            "display": "col('claimDiagnosisTenthCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('11')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisEleventhCode')",
+            "display": "col('claimDiagnosisEleventhCode')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('12')",
+      "diagnosisCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('http://www.cms.gov/Medicare/Coding/ICD9ProviderDiagnosticCodes')",
+            "code": "col('claimDiagnosisTwelfthCode')",
+            "display": "col('claimDiagnosisTwelfthCode')"
+          }
+        ]
+      }
+    }
+
+  ],
+  "careTeam": [
+    {
+      "sequence": "lit('1')",
+      "provider": {
+        "identifier": {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType')",
+                "code": "lit('npi')",
+                "display": "lit('National Provider Identifier')"
+              }
+            ]
+          },
+          "value": "col('operatingProviderNpiNumber')"
+        }
+      },
+      "role": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBClaimCareTeamRole')",
+            "code": "lit('operating')",
+            "display": "lit('Operating')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('2')",
+      "provider": {
+        "identifier": {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType')",
+                "code": "lit('npi')",
+                "display": "lit('National Provider Identifier')"
+              }
+            ]
+          },
+          "value": "col('attendingProviderNpiNumber')"
+        }
+      },
+      "role": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBClaimCareTeamRole')",
+            "code": "lit('attending')",
+            "display": "lit('Attending')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('3')",
+      "provider": {
+        "identifier": {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType')",
+                "code": "lit('npi')",
+                "display": "lit('National Provider Identifier')"
+              }
+            ]
+          },
+          "value": "col('otherProviderNpiNumber')"
+        }
+      },
+      "role": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBClaimCareTeamRole')",
+            "code": "lit('otheroperating')",
+            "display": "lit('Other Operating')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('4')",
+      "provider": {
+        "identifier": {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType')",
+                "code": "lit('npi')",
+                "display": "lit('National Provider Identifier')"
+              }
+            ]
+          },
+          "value": "col('claimPrescribingProviderGenericIdNumber')"
+        }
+      },
+      "role": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBClaimCareTeamRole')",
+            "code": "lit('prescribing')",
+            "display": "lit('Prescribing')"
+          }
+        ]
+      }
+    },
+    {
+      "sequence": "lit('5')",
+      "provider": {
+        "identifier":{
+          "system": "lit('http://hl7.org/fhir/sid/us-npi')",
+          "value": "col('claimFacilityProviderNpiNumber')"
+        }
+      }
+    },
+    {
+      "sequence": "lit('6')",
+      "provider": {
+        "identifier": {
+          "system": "lit('http://hl7.org/fhir/sid/us-npi')",
+          "value": "col('claimOperatingProviderNpiNumber')"
+        }
+      }
+    },
+    {
+      "sequence": "lit('7')",
+      "provider": {
+        "identifier": {
+          "system": "lit('http://hl7.org/fhir/sid/us-npi')",
+          "value": "col('claimAttendingProviderNpiNumber')"
+        }
+      }
+    },
+    {
+      "sequence": "lit('8')",
+      "provider": {
+        "identifier": {
+          "system": "lit('http://hl7.org/fhir/sid/us-npi')",
+          "value": "col('claimOtherProviderNpiNumber')"
+        }
+      }
+    },
+    {
+      "sequence": "lit('9')",
+      "provider": {
+        "identifier": {
+          "type": {
+            "coding": [
+              {
+                "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType')",
+                "code": "lit('npi')",
+                "display": "lit('National Provider Identifier')"
+              }
+            ]
+          },
+          "value": "col('renderingProviderNpiNumber')"
+        }
+      },
+      "role": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBIdentifierType')",
+            "code": "lit('performing')",
+            "display": "lit('Performing')"
+          }
+        ]
+      }
+    }
+  ],
+  "supportingInfo": [
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/nch_prmry_pyr_cd')",
+            "code": "col('claimNchPrimaryPayerCode')"
+          }
+        ]
+      }
+    },
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/clm_drg_cd')",
+            "value": "col('diagnosisRelatedGroupCode')"
+          }
+        ]
+      }
+    },
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/ptnt_dschrg_stus_cd')",
+            "display": "lit('discharge-status')",
+            "code": "col('beneficiaryPatientStatusCode')"
+          }
+        ]
+      }
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBSupportingInfoType')",
+            "code": "lit('refillnum')",
+            "display": "lit('Refill number')"
+          }
+        ]
+      },
+      "valueQuantity": {
+        "value": "col('claimLinePrescriptionFillNumber')"
+      }
+    },
+    {
+      "code": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/daw_prod_slctn_cd')",
+            "code": "col('claimDispenseAsWrittenDawProductSelectionCode')",
+            "display": "col('claimDispenseAsWrittenDawProductSelectionCode')"
+          }
+        ]
+      }
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBSupportingInfoType')",
+            "code": "col('claimDispenseAsWrittenDawProductSelectionCode')"
+          }
+        ]
+      },
+      "code": {
+        "coding": [
+          {
+            "system": "lit('http://terminology.hl7.org/CodeSystem/v3-ActCode')",
+            "code": "col('claimDispenseAsWrittenDawProductSelectionCode')"
+          }
+        ]
+      }
+
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBSupportingInfoType')",
+            "code": "lit('admissionperiod')"
+          }
+        ]
+      },
+      "timingPeriod": {
+        "start": "col('dateBeneficiaryEnrolledInHospice')",
+        "end": "col('dateBeneficiaryEndedHospice')"
+      }
+
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/nch_wkly_proc_dt')",
+            "code": "col('claimDispenseAsWrittenDawProductSelectionCode')"
+          }
+        ]
+      },
+      "code": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/nch_wkly_proc_dt')",
+            "code": "col('claimDispenseAsWrittenDawProductSelectionCode')"
+          }
+        ]
+      }
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBSupportingInfoType')",
+            "code": "lit('dayssupply')",
+            "display": "lit('Days Supply')"
+          }
+        ]
+      },
+      "valueQuantity": {
+        "value": "col('claimLineDaysSupplyQuantity')"
+      }
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBSupportingInfoType')",
+            "code": "lit('clmrecvddate')"
+
+          }
+        ]
+      },
+      "timingDate": "col('claimEffectiveDate')"
+
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/codesystem/information')",
+            "code": "lit('https://bluebutton.cms.gov/resources/variables/clm_ip_admsn_type_cd')",
+            "display": "lit('Claim Inpatient Admission Type Code')"
+          }
+        ]
+      },
+      "code": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/clm_ip_admsn_type_cd')",
+            "code": "col('claimAdmissionTypeCode')"
+          }
+        ]
+      }
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/codesystem/information')",
+            "code": "lit('https://bluebutton.cms.gov/resources/variables/clm_src_ip_admsn_cd')",
+            "display": "lit('Claim Inpatient Admission Type Code')"
+          }
+        ]
+      },
+      "code": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/clm_src_ip_admsn_cd')",
+            "code": "col('claimAdmissionSourceCode')"
+          }
+        ]
+      }
+    },
+    {
+      "category": {
+        "coding": [
+          {
+            "system": "lit('http://hl7.org/fhir/us/carin-bb/CodeSystem/C4BBSupportingInfoType')",
+            "code": "lit('typeofbill')",
+            "display": "lit('Type of Bill')"
+          }
+        ]
+      },
+      "code": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/clm_freq_cd')",
+            "code": "col('claimBillFrequencyCode')"
+          }
+        ]
+      }
+    }
+  ],
+  "referral": {
+    "identifier": {
+      "system": "lit('http://hl7.org/fhir/sid/us-npi')",
+      "value": "col('orderingProviderNpiNumber')"
+    }
+
+  },
+  "procedure": [
+    {
+      "sequence": "col('claimValueSequenceNumber')",
+      "date": "col('procedurePerformedDate')",
+      "procedureCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/codesystem/diagnosis-type')",
+            "code": "col('procedureCode')"
+          }
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "sequence": "col('claimLineNumber')",
+      "productOrService": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+            "code": "col('hcpcsCode')"
+          },
+          {
+            "system": "lit('http://hl7.org/fhir/sid/ndc')",
+            "code": "col('ndcCode')"
+          }
+        ]
+      },
+      "servicedPeriod": {
+        "start": "col('claimLineFromDate')",
+        "end": "col('claimLineThruDate')"
+      },
+      "revenue": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/rev_cntr')",
+            "code": "col('productRevenueCenterCode')"
+          }
+        ]
+      },
+      "quantity": {
+        "value": "col('claimLineServiceUnitQuantity')"
+      },
+      "adjudication": [
+        {
+          "category": {
+            "coding": [
+              {
+                "system": "lit('https://bluebutton.cms.gov/resources/codesystem/adjudication')",
+                "code": "lit('https://bluebutton.cms.gov/resources/variables/rev_cntr_prvdr_pmt_amt')"
+              }
+            ]
+          },
+          "amount": {
+            "value": "col('coveredPaidAmount')",
+            "currency": "lit('USD')"
+          }
+        },
+        {
+          "category": {
+            "coding": [
+              {
+                "code": "lit('https://bluebutton.cms.gov/resources/variables/ptnt_pay_amt')"
+              }
+            ]
+          },
+          "amount": {
+            "value": "col('claimLineBeneficiaryPaymentAmount')",
+            "currency": "lit('USD')"
+          }
+        },
+        {
+          "category": {
+            "coding": [
+              {
+                "system": "lit('https://bluebutton.cms.gov/resources/variables/line_alowd_chrg_amt')",
+                "code": "lit('Line Allowed Charge Amount')"
+              }
+            ]
+          },
+          "amount": {
+            "value": "col('claimLineAllowedChargesAmount')",
+            "currency": "lit('USD')"
+          }
+        },
+        {
+          "category": {
+            "coding": [
+              {
+                "system": "lit('https://bluebutton.cms.gov/resources/codesystem/adjudication')",
+                "code": "lit('https://bluebutton.cms.gov/resources/variables/rev_cntr_prvdr_pmt_amt')"
+              }
+            ]
+          },
+          "amount": {
+            "value": "col('coveredPaidAmount')",
+            "currency": "lit('USD')"
+          }
+        },
+        {
+          "category": {
+            "coding": [
+              {
+                "system": "lit('https://bluebutton.cms.gov/resources/codesystem/adjudication')",
+                "code": "lit('https://bluebutton.cms.gov/resources/variables/line_nch_pmt_amt')"
+              }
+            ],
+            "display": "lit('Line NCH Medicare Payment Amount')"
+          },
+          "amount": {
+            "value": "col('claimLineNchPaymentAmount')",
+            "currency": "lit('USD')"
+          }
+        }
+
+      ],
+      "location": {
+        "locationAddress": {
+          "state": "col('federalInformationProcessingStandardsStateCode')"
+        }
+      },
+      "modifier": [
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('firstModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('secondModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('thirdModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('fourthModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('fifthModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('hcpcsFirstModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('hcpcsSecondModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('hcpcsThirdModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('hcpcsFourthModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/codesystem/hcpcs')",
+              "code": "col('hcpcsFifthModifierCode')"
+            }
+          ]
+        },
+        {
+          "coding": [
+            {
+              "system": "lit('https://bluebutton.cms.gov/resources/variables/rev_cntr')",
+              "code": "col('claimRevenueApcHippsCode')"
+            }
+          ]
+        }
+      ],
+      "locationCodeableConcept": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/line_place_of_srvc_cd')",
+            "code": "col('claimPlaceOfServiceCode')"
+          }
+        ],
+        "extension": [
+          {
+            "valueCoding": {
+              "system": "lit('https://bluebutton.cms.gov/resources/variables/prvdr_state_cd')",
+              "code": "col('renderingProviderFipsStateCode')"
+            }
+          }
+        ]
+      },
+      "category": {
+        "coding": [
+          {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/line_cms_type_srvc_cd')",
+            "code": "col('claimFederalTypeServiceCode')"
+          }
+        ]
+      },
+      "extension": [
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/line_bene_prmry_pyr_cd')",
+          "valueCoding": {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/line_bene_prmry_pyr_cd')",
+            "code": "col('claimPrimaryPayerCode')"
+          }
+        },
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/tax_num')",
+          "valueCoding": {
+            "code": "col('claimProviderTaxNumber')"
+          }
+        },
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/line_prcsg_ind_cd')",
+          "valueCoding": {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/line_prcsg_ind_cd')",
+            "code": "col('claimLineProcessingIndicatorCode')"
+          }
+        },
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/betos_cd')",
+          "valueCoding": {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/betos_cd')",
+            "code": "col('hcpcsBetosCode')"
+          }
+        },
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/suplrnum')",
+          "valueIdentifier": {
+            "value": "col('paytoProviderNpiNumber')"
+          }
+        },
+        {
+          "url": "lit('https://bluebutton.cms.gov/resources/variables/line_prcsg_ind_cd')",
+          "valueCoding": {
+            "system": "lit('https://bluebutton.cms.gov/resources/variables/line_prcsg_ind_cd')",
+            "code": "col('claimProcessingIndicatorCode')"
+          }
+        }
+
+      ]
+
+    }
+  ],
+  "extension": [
+    {
+      "url": "lit('https://bluebutton.cms.gov/resources/variables/clm_srvc_clsfctn_type_cd')",
+      "valueCoding": {
+        "system": "lit('https://bluebutton.cms.gov/resources/variables/clm_fac_type_cd')",
+        "code": "col('claimBillClassificationCode')"
+      }
+    },
+    {
+      "url": "lit('https://bluebutton.cms.gov/resources/variables/clm_mdcr_non_pmt_rsn_cd')",
+      "valueCoding": {
+        "system": "lit('https://bluebutton.cms.gov/resources/variables/clm_mdcr_non_pmt_rsn_cd')",
+        "code": "col('claimMedicareNonPaymentReasonCode')"
+      }
+    },
+    {
+      "url": "lit('https://bluebutton.cms.gov/resources/variables/ime_op_clm_val_amt')",
+      "valueMoney": {
+        "value": "col('claimOperationalIndirectMedicalEducationAmount')"
+      }
+    },
+    {
+      "url": "lit('https://bluebutton.cms.gov/resources/variables/clm_uncompd_care_pmt_amt')",
+      "valueMoney": {
+        "value": "col('claimHealthInsuranceProspectivePaymentSystemUncompensatedCareAmount')"
+      }
+    },
+    {
+      "url": "lit('https://bluebutton.cms.gov/resources/variables/dsh_op_clm_val_amt')",
+      "valueMoney": {
+        "value": "col('claimOperationalDisproportionateAmount')",
+        "currency": "lit('USD')",
+        "system": "lit('urn:iso:std:iso:4217')"
+      }
+    },
+    {
+      "url": "lit('https://bluebutton.cms.gov/resources/variables/carr_clm_pmt_dnl_cd')",
+      "valueCoding": {
+        "system": "lit('https://bluebutton.cms.gov/resources/variables/carr_clm_pmt_dnl_cd')",
+        "code": "col('claimCarrierPaymentDenialCode')"
+      }
+    },
+    {
+      "url": "lit('https://bluebutton.cms.gov/resources/variables/carr_clm_cntl_num')",
+      "valueIdentifier": {
+        "value": "col('claimControlNumber')"
+      }
+    }
+
+  ]
+
+}

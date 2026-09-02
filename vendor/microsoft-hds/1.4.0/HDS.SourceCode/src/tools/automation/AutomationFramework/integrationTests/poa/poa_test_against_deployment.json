@@ -1,0 +1,236 @@
+{
+    "name": "POA Data Ingestion E2E",
+    "description": "A test for POA data ingestion",
+    "initial_context": {
+        "targetEnvironment": "dxt",
+        "workspaceDisplayName": "HDS_IT_POA",
+        "uniquePrefix": "healthcare1",
+        "dist_path": "dist",
+        "validation_notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/poa",
+        "execution_summary_notebook_path": "src/tools/automation/AutomationFramework/resources/notebooks/clinical"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": true
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateHdsItem",
+            "description": "Create a new hds item",
+            "parameters": {
+                "workspace": "$workspace",
+                "solution_display_name": "healthcare1"
+            },
+            "outputs": [
+                "solution_artifact_id"
+            ]
+        },
+        {
+            "type": "PublishEnvironment",
+            "description": "Creating an environment used by test notebooks",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "TestEnvironment",
+                "dist_path": "$dist_path",
+                "workspace": "$workspace",
+                "upload_local_libraries": false,
+                "environment_yml_path": "src/tools/automation/AutomationFramework/resources/configs/environment.yml"
+            },
+            "outputs": [
+                "test_environment"
+            ]
+        },
+        {
+            "type": "DeployHdsCapabilities",
+            "description": "Deploy foundations capablity",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id",
+                "capabilities": [
+                    {
+                        "capabilityKey": "relational-fhir-data-foundations",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "sample-data",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "patient-outreach-analytics-advanced",
+                        "userParameters": []
+                    }
+                ],
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": []
+        },
+        {
+            "type": "PollCapabilityDeployment",
+            "description": "Poll capability deployment",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id"
+            },
+            "outputs": []
+        },
+        {
+            "type": "GetSolutionEnvironment",
+            "description": "Get deployed environment",
+            "parameters": {
+                "workspace": "$workspace",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "solution_environment"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Add deployed bronze lakehouse to the runtime context",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "bronze",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "bronze_lakehouse"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Add the deployed admin lakehouse to the runtime context",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "admin",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "administration_lakehouse"
+            ]
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Test lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Test",
+                "description": "A lakehouse for test artifacts",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "test_lakehouse"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Get deployed silver lakehouse",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "silver",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "silver_lakehouse"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Get deployed silver lakehouse",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "poa_gold",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "poagold_lakehouse"
+            ]
+        },
+        {
+            "type": "WaitForEnvironmentPublish",
+            "description": "Waiting for test env to publish",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$solution_environment"
+            }
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up capability deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "$validation_notebooks_path",
+                "notebookName": "poa_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/Tests/poa/poa_deployment_tests_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities": {
+                        "relational-fhir-data-foundations": "1.2.0",
+                        "sample-data": "1.2.0",
+                        "patient-outreach-analytics-advanced": "1.2.0"
+                    }
+                }
+            },
+            "outputs": [
+                "poa_deployment_tests_notebook_id"
+            ]
+        },
+        {
+            "type": "RunNotebook",
+            "description": "Running poa deployment tests notebook",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebook_id": "$poa_deployment_tests_notebook_id",
+                "default_lakehouse": "$bronze_lakehouse"
+            },
+            "outputs": [
+                "poa_deployment_tests_notebook_run_id"
+            ]
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Polling validation notebook completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$poa_deployment_tests_notebook_id",
+                "job_id": "$poa_deployment_tests_notebook_run_id"
+            }
+        },
+        {
+            "type": "ParseTestResults",
+            "ignore": "false",
+            "description": "Polling POA validation notebook test results",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse": "$test_lakehouse",
+                "deployment_environment": "$targetEnvironment",
+                "test_name": "POA Integration"
+            }
+        }
+    ]
+}

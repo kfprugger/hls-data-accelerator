@@ -1,0 +1,104 @@
+{
+  "fields": [
+    {
+      "metadata": {},
+      "name": "context",
+      "nullable": true,
+      "description": "Context of the enrichment",
+      "type": {
+        "fields": [
+          {
+            "metadata": {},
+            "name": "enrichment_context_id",
+            "nullable": true,
+            "type": "string",
+            "description": "Unique identifier of the enrichment context"
+          },
+          {
+            "metadata": {},
+            "name": "model_configuration",
+            "nullable": true,
+            "description": "Configuration of the model used for the enrichment",
+            "fields": {},
+            "type": {
+              "type": "map",
+              "keyType": "string",
+              "valueType": "string",
+              "valueContainsNull": true
+              }
+          },
+          {
+            "metadata": {},
+            "name": "enrichment_input",
+            "nullable": true,
+            "description": "Input to the enrichment. patient_id must exist here",
+            "fields":{},
+            "type": {
+              "type": "map",
+              "keyType": "string",
+              "valueType": "string",
+              "valueContainsNull": true
+              }
+          }
+        ],
+        "type": "struct"
+      }
+    },
+    {
+      "metadata": {},
+      "name": "outputs",
+      "nullable": true,
+      "description": "List of outputs",
+      "type": {
+        "containsNull": true,
+        "elementType": {
+          "fields": [
+            {
+              "metadata": {},
+              "name": "type",
+              "nullable": true,
+              "type": "string",
+              "description": "Type of the output. Type is either, text, object, embedding, segmentation2D or segmentation3D"
+            },
+            {
+              "metadata": {},
+              "name": "value",
+              "nullable": true,
+              "type": "string",
+              "description": "Value of the output"
+            },
+            {
+              "metadata": {},
+              "name": "confidence_score",
+              "nullable": true,
+              "type": "double",
+              "description": "Confidence score for the enrichment/prediction if the model supports it"
+            },
+            {
+              "metadata": {},
+              "name": "description",
+              "nullable": true,
+              "type": "string",
+              "description": "Description of the output"
+            }
+          ],
+          "type": "struct"
+        },
+        "type": "array"
+      }
+    },
+    {
+      "metadata": {},
+      "name": "enrichment_generation_id",
+      "nullable": true,
+      "type": "string"
+    },
+    {
+      "metadata": {},
+      "name": "enrichment_definition_id",
+      "nullable": true,
+      "type": "string"
+    }
+  ],
+  "type": "struct"
+}

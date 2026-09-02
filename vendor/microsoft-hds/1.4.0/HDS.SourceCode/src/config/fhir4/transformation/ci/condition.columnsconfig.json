@@ -1,0 +1,40 @@
+{
+    "name": "Condition column configuration",
+    "autoFlattenStruct": false,
+    "retainSourceColumns": false,
+    "stringifyComplexTypes": false,
+    "extendWithDefaultRules": false,
+    "columns": [
+        {
+            "name": "Id",
+            "style": "expr",
+            "expression": "idOrig"
+        },
+        {
+            "name": "Severity",
+            "style": "expr",
+            "expression": "severity.coding[0].display"
+        },
+        {
+            "name": "Code",
+            "style": "expr",
+            "expression": "code.coding[0].display"
+        },
+        {
+            "name": "Encounter",
+            "style": "expr",
+            "expression": "encounter.idOrig"
+        },
+        {
+            "name": "SubjectPatient",
+            "style": "expr",
+            "expression": "subject.idOrig"
+        },
+        {
+          "name": "LastUpdated",
+          "style": "col",
+          "expression": "meta.lastUpdated"
+        }
+
+    ]
+}

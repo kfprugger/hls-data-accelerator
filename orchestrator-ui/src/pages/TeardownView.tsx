@@ -1,0 +1,1008 @@
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Checkbox,
+  Dropdown,
+  Field,
+  Option,
+  Subtitle1,
+  Text,
+  Title2,
+  Tooltip,
+  makeStyles,
+  tokens,
+} from "@fluentui/react-components";
+import {
+  DeleteRegular,
+  ArrowSyncRegular,
+  SearchRegular,
+  ChevronDownRegular,
+  ChevronUpRegular,
+  LockClosedRegular,
+  LockOpenRegular,
+  LinkRegular,
+} from "@fluentui/react-icons";
+import {
+  getDeploymentCapacity,
+  getLocks,
+  listSubscriptions,
+  reconcileTeardowns,
+  setLock,
+  startTeardown,
+  startTeardownBatch,
+  type DeploymentCapacityMapping,
+} from "../api";
+import { useAppState } from "../AppState";
+import { typeBadge } from "../components/TypeBadges";
+import { MockDataBanner } from "../components/MockDataBanner";
+import {
+  getMockSubscriptions,
+  scanForTeardownCandidates,
+  startMockTeardown,
+  type TeardownCandidate,
+  type MockSubscription,
+} from "../mockDeployment";
+
+const useStyles = makeStyles({
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: tokens.spacingVerticalL,
+  },
+  scanControls: {
+    display: "flex",
+    alignItems: "flex-end",
+    gap: tokens.spacingHorizontalL,
+    marginBottom: tokens.spacingVerticalL,
+  },
+  candidateList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalS,
+  },
+  candidateCard: {
+    transition: "box-shadow 0.2s ease, transform 0.15s ease",
+    cursor: "pointer",
+    ":hover": {
+      boxShadow: tokens.shadow4,
+      transform: "translateY(-1px)",
+    },
+  },
+  candidateCardSelected: {
+    border: `2px solid ${tokens.colorPaletteRedForeground1}`,
+    boxShadow: tokens.shadow8,
+  },
+  candidateCardPaired: {
+    borderLeft: `3px solid ${tokens.colorBrandStroke1}`,
+    backgroundColor: tokens.colorBrandBackground2,
+  },
+  candidateRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalM,
+    width: "100%",
+  },
+  candidateInfo: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalXXS,
+  },
+  candidateName: {
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalS,
+  },
+  artifactList: {
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalL}`,
+    backgroundColor: tokens.colorNeutralBackground3,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    fontSize: tokens.fontSizeBase200,
+    lineHeight: "1.6",
+    fontFamily: "'Cascadia Code', 'Consolas', monospace",
+    maxHeight: "200px",
+    overflowY: "auto" as const,
+  },
+  actions: {
+    display: "flex",
+    gap: tokens.spacingHorizontalM,
+    marginTop: tokens.spacingVerticalXL,
+  },
+  warning: {
+    padding: tokens.spacingHorizontalM,
+    backgroundColor: tokens.colorStatusDangerBackground1,
+    borderLeft: `4px solid ${tokens.colorStatusDangerBorderActive}`,
+    borderRadius: tokens.borderRadiusMedium,
+    color: tokens.colorStatusDangerForeground1,
+    fontSize: tokens.fontSizeBase300,
+    fontWeight: tokens.fontWeightSemibold,
+    marginBottom: tokens.spacingVerticalL,
+  },
+  error: {
+    color: tokens.colorStatusDangerForeground1,
+    fontSize: tokens.fontSizeBase200,
+    marginTop: tokens.spacingVerticalS,
+  },
+  sectionTitle: {
+    marginTop: tokens.spacingVerticalXL,
+    marginBottom: tokens.spacingVerticalS,
+  },
+  sectionDesc: {
+    color: tokens.colorNeutralForeground3,
+    marginBottom: tokens.spacingVerticalS,
+    display: "block" as const,
+  },
+  emptyState: {
+    padding: tokens.spacingVerticalXL,
+    textAlign: "center" as const,
+    color: tokens.colorNeutralForeground3,
+  },
+  scanStatus: {
+    marginBottom: tokens.spacingVerticalL,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+    backgroundColor: tokens.colorNeutralBackground3,
+    borderRadius: tokens.borderRadiusMedium,
+    border: `1px solid ${tokens.colorNeutralStroke2}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: tokens.spacingHorizontalL,
+    flexWrap: "wrap" as const,
+  },
+  scanMeta: {
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalS,
+    flexWrap: "wrap" as const,
+  },
+});
+
+function statusBadge(status: string) {
+  switch (status) {
+    case "full":
+      return <Badge color="success">Full Deploy</Badge>;
+    case "partial":
+      return <Badge color="warning">Partial</Badge>;
+    case "orphaned":
+      return <Badge color="danger">Orphaned</Badge>;
+    case "active":
+      return <Badge color="informative">Active</Badge>;
+    default:
+      return <Badge color="subtle">{status}</Badge>;
+  }
+}
+
+export function TeardownView() {
+  const styles = useStyles();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const scanPollRef = useRef<number | null>(null);
+  const activeScanIdRef = useRef<string | null>(null);
+  const hasInitializedRef = useRef(false);
+  const normalizeResourceId = useCallback((id: string) => id.replace(/^\//, ""), []);
+  const { selectedSubscription, setSelectedSubscription, teardownScan, refreshTeardownScan, subscriptions: ctxSubscriptions } = useAppState();
+  const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [error, setError] = useState("");
+  const [subscriptions, setSubscriptions] = useState<MockSubscription[]>(getMockSubscriptions());
+  const [candidates, setCandidates] = useState<TeardownCandidate[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [lockedIds, setLockedIds] = useState<Set<string>>(new Set());
+  const [scanned, setScanned] = useState(false);
+  const [usingMock, setUsingMock] = useState(false);
+  const [showAllHDS, setShowAllHDS] = useState(() => searchParams.get("allHds") === "1");
+  const [capacityMappings, setCapacityMappings] = useState<Map<string, DeploymentCapacityMapping>>(new Map());
+  const capacityFetchedRef = useRef<Set<string>>(new Set());
+  const [scanPhase, setScanPhase] = useState("");
+  const [scanMessage, setScanMessage] = useState("");
+  const [scanCounts, setScanCounts] = useState({ fabric: 0, azure: 0, spn: 0 });
+  const [dryRun, setDryRun] = useState(true);
+
+  // Load locks from backend on mount
+  useEffect(() => {
+    getLocks()
+      .then((ids: string[]) => {
+        if (ids.length > 0) setLockedIds(new Set(ids.map(normalizeResourceId)));
+      })
+      .catch(() => {
+        // Fall back to localStorage
+        try {
+          const saved = localStorage.getItem("teardown-locks");
+          if (saved) setLockedIds(new Set(JSON.parse(saved).map((id: string) => normalizeResourceId(id))));
+        } catch { /* ignore */ }
+      });
+  }, [normalizeResourceId]);
+
+  useEffect(() => {
+    const initialExpanded = searchParams.get("expanded") ?? "";
+    if (initialExpanded) {
+      setExpandedIds(new Set(initialExpanded.split(",").filter(Boolean)));
+    }
+    const sub = searchParams.get("subscription") ?? "";
+    if (sub && !selectedSubscription) {
+      setSelectedSubscription(sub);
+    }
+  // Read initial URL state once on mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist locks to backend (and localStorage fallback) whenever they change
+  const persistLocks = useCallback((ids: Set<string>, prevIds: Set<string>) => {
+    // Find added and removed locks
+    for (const id of ids) {
+      if (!prevIds.has(id)) {
+        setLock(id, true).catch(() => {});
+      }
+    }
+    for (const id of prevIds) {
+      if (!ids.has(id)) {
+        setLock(id, false).catch(() => {});
+      }
+    }
+    localStorage.setItem("teardown-locks", JSON.stringify([...ids]));
+  }, [normalizeResourceId]);
+
+  useEffect(() => {
+    // Guard against React StrictMode double-mount
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
+    // Prefer context subscriptions (fetched at app mount); fall back to /api/scan
+    if (ctxSubscriptions.length > 0) {
+      setSubscriptions(ctxSubscriptions);
+      if (!selectedSubscription) setSelectedSubscription(ctxSubscriptions[0].id);
+    } else {
+      listSubscriptions()
+        .then((subs: MockSubscription[]) => {
+          if (subs.length > 0) {
+            setSubscriptions(subs);
+            if (!selectedSubscription) setSelectedSubscription(subs[0].id);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // If a global scan is already running or completed, seed UI from it.
+    // Otherwise stay idle until the user clicks Scan Resources.
+    if (teardownScan.status === "completed" || teardownScan.status === "running") {
+      setCandidates((teardownScan.candidates as TeardownCandidate[]) ?? []);
+      setScanCounts(teardownScan.counts);
+      setScanPhase(teardownScan.phase || teardownScan.status);
+      setScanMessage(teardownScan.message || "Resource scan running...");
+      if (teardownScan.status === "completed") {
+        setScanned(true);
+        setScanning(false);
+      } else {
+        setScanning(true);
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep candidates in sync with the global background scan
+  useEffect(() => {
+    if (teardownScan.status === "completed") {
+      setCandidates((teardownScan.candidates as TeardownCandidate[]) ?? []);
+      setScanCounts(teardownScan.counts);
+      setScanPhase(teardownScan.phase || "completed");
+      setScanMessage(teardownScan.message || "Resource scan completed.");
+      setError("");
+      setScanned(true);
+      setScanning(false);
+    } else if (teardownScan.status === "running") {
+      setCandidates((teardownScan.candidates as TeardownCandidate[]) ?? []);
+      setScanCounts(teardownScan.counts);
+      setScanPhase(teardownScan.phase || "running");
+      setScanMessage(teardownScan.message || "Scanning resources...");
+      setError("");
+      setScanning(true);
+    } else if (teardownScan.status === "failed") {
+      setScanning(false);
+      if (!candidates.length) setError(teardownScan.error || "Background scan failed");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teardownScan.status, teardownScan.candidates, teardownScan.counts, teardownScan.phase, teardownScan.message]);
+
+  useEffect(() => {
+    return () => {
+      if (scanPollRef.current) {
+        window.clearInterval(scanPollRef.current);
+        scanPollRef.current = null;
+      }
+      activeScanIdRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const azureRgs = candidates.filter((candidate) => candidate.type === "azure");
+    for (const rg of azureRgs) {
+      if (capacityFetchedRef.current.has(rg.name)) {
+        continue;
+      }
+      capacityFetchedRef.current.add(rg.name);
+      getDeploymentCapacity(rg.name)
+        .then((mapping) => {
+          if (mapping) {
+            setCapacityMappings((prev) => {
+              const next = new Map(prev);
+              next.set(rg.name, mapping);
+              return next;
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [candidates]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (selectedSubscription) next.set("subscription", selectedSubscription);
+    if (showAllHDS) next.set("allHds", "1");
+    if (expandedIds.size > 0) next.set("expanded", Array.from(expandedIds).join(","));
+    setSearchParams(next, { replace: true });
+  }, [selectedSubscription, showAllHDS, expandedIds, setSearchParams]);
+
+  const handleScan = () => {
+    if (!selectedSubscription) {
+      setScanning(false);
+      setError("Select a subscription before scanning resources.");
+      return;
+    }
+    if (scanPollRef.current) {
+      window.clearInterval(scanPollRef.current);
+      scanPollRef.current = null;
+    }
+    activeScanIdRef.current = Math.random().toString(36).slice(2);
+    setScanning(true);
+    setScanned(false);
+    setUsingMock(false);
+    setError("");
+    setSelectedIds(new Set());
+    setCandidates([]);
+    setCapacityMappings(new Map());
+    capacityFetchedRef.current = new Set();
+    setScanPhase("starting");
+    setScanMessage("Starting teardown scan...");
+    setScanCounts({ fabric: 0, azure: 0, spn: 0 });
+    refreshTeardownScan(selectedSubscription);
+  };
+
+  const handleMockScan = () => {
+    setError("Demo mode: showing mock teardown candidates only. No live resources are listed.");
+    setCandidates(scanForTeardownCandidates(selectedSubscription));
+    setScanned(true);
+    setScanning(false);
+    setUsingMock(true);
+    setSelectedIds(new Set());
+    setCapacityMappings(new Map());
+    capacityFetchedRef.current = new Set();
+  };
+
+  const toggleSelected = (id: string) => {
+    if (lockedIds.has(normalizeResourceId(id))) return;
+    const candidate = candidates.find((c) => c.id === id);
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const selecting = !next.has(id);
+
+      if (selecting) {
+        next.add(id);
+        // Auto-select matching SPNs when a Fabric workspace is selected
+        if (candidate?.type === "fabric") {
+          const matchingSpns = candidates.filter(
+            (c) => c.type === "spn" && c.name === candidate.name && !lockedIds.has(normalizeResourceId(c.id))
+          );
+          for (const spn of matchingSpns) {
+            next.add(spn.id);
+          }
+        }
+      } else {
+        next.delete(id);
+        // Auto-deselect matching SPNs when a Fabric workspace is deselected
+        if (candidate?.type === "fabric") {
+          const matchingSpns = candidates.filter(
+            (c) => c.type === "spn" && c.name === candidate.name
+          );
+          for (const spn of matchingSpns) {
+            next.delete(spn.id);
+          }
+        }
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(candidates.filter((c) => !lockedIds.has(normalizeResourceId(c.id))).map((c) => c.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const toggleLocked = (id: string) => {
+    setLockedIds((prev) => {
+      const next = new Set(prev);
+      const candidate = candidates.find((c) => c.id === id);
+      const normalizedId = normalizeResourceId(id);
+      const locking = !next.has(normalizedId);
+
+      if (locking) {
+        next.add(normalizedId);
+        setSelectedIds((sel) => {
+          const nextSel = new Set(sel);
+          nextSel.delete(id);
+          return nextSel;
+        });
+
+        if (candidate?.type === "fabric") {
+          const matchingSpns = candidates.filter(
+            (c) => c.type === "spn" && c.name === candidate.name
+          );
+          for (const spn of matchingSpns) {
+            next.add(normalizeResourceId(spn.id));
+            setSelectedIds((sel) => {
+              const nextSel = new Set(sel);
+              nextSel.delete(spn.id);
+              return nextSel;
+            });
+          }
+        }
+      } else {
+        next.delete(normalizedId);
+
+        if (candidate?.type === "fabric") {
+          const matchingSpns = candidates.filter(
+            (c) => c.type === "spn" && c.name === candidate.name
+          );
+          for (const spn of matchingSpns) {
+            next.delete(normalizeResourceId(spn.id));
+          }
+        }
+      }
+      persistLocks(next, prev);
+      return next;
+    });
+  };
+
+  const unlocked = candidates.filter((c) => !lockedIds.has(normalizeResourceId(c.id)));
+  const allSelected = unlocked.length > 0 && selectedIds.size === unlocked.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < unlocked.length;
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleTeardown = async () => {
+    if (selectedIds.size === 0) {
+      setError("Select at least one resource to tear down.");
+      return;
+    }
+    const selected = candidates.filter((c) => selectedIds.has(c.id));
+    const names = selected.map((c) => `${c.type}: ${c.name}${c.resourceCount !== undefined ? ` (${c.resourceCount} item/resource${c.resourceCount === 1 ? "" : "s"})` : ""}${c.detail ? ` — ${c.detail}` : ""}`).join("\n  ");
+    if (dryRun) {
+      window.alert(`Dry run only — no resources will be deleted.\n\nPlanned targets:\n  ${names}\n\nTurn off Dry run when you are ready to execute teardown.`);
+      return;
+    }
+    const confirmation = window.confirm(
+      `Permanently delete ${selectedIds.size} resource(s)?\n\nImpact preview:\n  ${names}\n\nEach target runs in its own teardown job. Paired workspace + Azure RG deletes are grouped when both are selected. This action cannot be undone.\n\nAre you sure you want to continue?`
+    );
+    if (!confirmation) return;
+
+    setLoading(true);
+    setError("");
+
+    // Group selection into independent teardown jobs so multiple workspaces
+    // and multiple Azure RGs each run in their own parallel pipeline rather
+    // than being forced through a single sequential request.
+    //
+    // Pairing rule: a Fabric workspace and an Azure RG that deploy together
+    // (same capacityMapping) are submitted as ONE job so the backend can keep
+    // them logically linked in the history view.
+    type TeardownJob = { fabric_workspace_name: string; resource_group_name: string; delete_workspace: boolean; delete_azure_rg: boolean };
+    const jobs: TeardownJob[] = [];
+    const selectedFabric = selected.filter((c) => c.type === "fabric");
+    const selectedAzure = selected.filter((c) => c.type === "azure");
+    const pairedRgNames = new Set<string>();
+
+    for (const ws of selectedFabric) {
+      // Find a paired Azure RG that maps to this workspace AND is also selected
+      const pairedRg = [...capacityMappings.entries()].find(
+        ([rgName, m]) => m.workspaceName === ws.name && selectedAzure.some((a) => a.name === rgName),
+      );
+      const rgName = pairedRg?.[0] ?? "";
+      if (rgName) pairedRgNames.add(rgName);
+      jobs.push({
+        fabric_workspace_name: ws.name,
+        resource_group_name: rgName,
+        delete_workspace: true,
+        delete_azure_rg: !!rgName,
+      });
+    }
+
+    // Any Azure RG that wasn't paired becomes its own standalone job
+    for (const rg of selectedAzure) {
+      if (pairedRgNames.has(rg.name)) continue;
+      jobs.push({
+        fabric_workspace_name: "",
+        resource_group_name: rg.name,
+        delete_workspace: false,
+        delete_azure_rg: true,
+      });
+    }
+
+    // Use the backend batch endpoint for multi-job teardowns so operators get
+    // one durable page with every child job instead of a generic history jump.
+    try {
+      if (jobs.length === 1) {
+        const result = await startTeardown(jobs[0]);
+        setLoading(false);
+        navigate(`/monitor/${encodeURIComponent(result.instanceId)}`);
+      } else {
+        const result = await startTeardownBatch(jobs);
+        setLoading(false);
+        navigate(`/teardown/batch/${encodeURIComponent(result.batchId)}`);
+      }
+      return;
+    } catch {
+      setError("Backend teardown API unavailable. Running mock teardown monitor.");
+      for (const candidate of selected) {
+        startMockTeardown(candidate);
+      }
+    }
+
+    setLoading(false);
+    navigate("/teardown/monitor");
+  };
+
+  const renderCandidate = (c: TeardownCandidate) => {
+    const isSelected = selectedIds.has(c.id);
+    const isExpanded = expandedIds.has(c.id);
+    const isLocked = lockedIds.has(normalizeResourceId(c.id));
+    const isPaired = pairedIds.has(c.id);
+
+    const openHistoryForCandidate = (event: React.MouseEvent) => {
+      event.stopPropagation();
+      const query = c.type === "azure" ? c.name : c.name;
+      navigate(`/history?type=teardown&q=${encodeURIComponent(query)}`);
+    };
+    const colorIdx = pairColorIndex.get(c.id) ?? 0;
+    const pairColor = PAIR_COLORS[colorIdx % PAIR_COLORS.length];
+
+    // For paired Azure RGs, look up the matching workspace name for the tooltip
+    const pairedWorkspaceName = isPaired && c.type === "azure" && capacityMappings.has(c.name)
+      ? capacityMappings.get(c.name)!.workspaceName
+      : undefined;
+    const pairedRgName = isPaired && c.type === "fabric"
+      ? [...capacityMappings.entries()].find(([, m]) => m.workspaceName === c.name)?.[0]
+      : undefined;
+
+    return (
+      <Card
+        key={c.id}
+        className={`${styles.candidateCard} ${isSelected ? styles.candidateCardSelected : ""} ${isPaired && !isSelected ? styles.candidateCardPaired : ""}`}
+        size="small"
+        role="button"
+        tabIndex={0}
+        onClick={() => toggleSelected(c.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleSelected(c.id);
+          }
+        }}
+        style={{
+          ...(isLocked ? { opacity: 0.6 } : {}),
+          ...(isPaired && !isSelected
+            ? {
+                backgroundColor: pairColor.bg,
+                borderLeft: `3px solid ${pairColor.border}`,
+              }
+            : {}),
+        }}
+      >
+        <CardHeader
+          header={
+            <div className={styles.candidateRow}>
+              <Checkbox
+                checked={isSelected}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(_, data) => {
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (data.checked) next.add(c.id);
+                    else next.delete(c.id);
+                    return next;
+                  });
+                  if (c.type === "fabric") {
+                    const matchingSpns = candidates.filter(
+                      (sp) => sp.type === "spn" && sp.name === c.name && !lockedIds.has(normalizeResourceId(sp.id))
+                    );
+                    if (matchingSpns.length) {
+                      setSelectedIds((prev) => {
+                        const next = new Set(prev);
+                        for (const spn of matchingSpns) {
+                          if (data.checked) next.add(spn.id);
+                          else next.delete(spn.id);
+                        }
+                        return next;
+                      });
+                    }
+                  }
+                }}
+                disabled={isLocked}
+              />
+              <div className={styles.candidateInfo}>
+                <div className={styles.candidateName}>
+                  {typeBadge(c.type)}
+                  <Button appearance="transparent" size="small" onClick={openHistoryForCandidate} style={{ padding: 0, minWidth: 0 }}>
+                    <Text weight="semibold" underline>{c.name}</Text>
+                  </Button>
+                  {statusBadge(c.status)}
+                  {c.previouslyDeployed && <Badge color="informative" size="small">Previously Deployed</Badge>}
+                  {isLocked && <Badge color="subtle">Locked</Badge>}
+                </div>
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                  {c.detail}
+                </Text>
+                {c.type === "fabric" && isPaired && pairedRgName && capacityMappings.has(pairedRgName) && (() => {
+                  const m = capacityMappings.get(pairedRgName)!;
+                  return (
+                    <div style={{ display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center", marginTop: 2 }}>
+                      <Badge color="brand" size="small">Fabric Capacity</Badge>
+                      <Text size={200}>{m.capacityName}</Text>
+                    </div>
+                  );
+                })()}
+                {c.resourceCount !== undefined && c.type === "azure" && (
+                  <Text size={200}>
+                    Resources discovered: {c.resourceCount}
+                  </Text>
+                )}
+                {c.resourceCount !== undefined && c.type !== "azure" && (
+                  <Text size={200}>
+                    Resources: {c.resourceCount}/{c.expectedCount}
+                  </Text>
+                )}
+              </div>
+              {isPaired && (
+                <Tooltip
+                  content={pairedWorkspaceName
+                    ? `Linked with Fabric workspace: ${pairedWorkspaceName}`
+                    : pairedRgName
+                      ? `Linked with Azure RG: ${pairedRgName}`
+                      : "Linked deployment"}
+                  relationship="label"
+                >
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "3px",
+                    padding: `2px ${tokens.spacingHorizontalS}`,
+                    borderRadius: tokens.borderRadiusMedium,
+                    backgroundColor: pairColor.badge,
+                    color: pairColor.badgeText,
+                    fontSize: tokens.fontSizeBase100,
+                    fontWeight: tokens.fontWeightSemibold,
+                    cursor: "default",
+                    whiteSpace: "nowrap" as const,
+                  }}>
+                    <LinkRegular style={{ fontSize: "11px" }} />
+                    <span>{pairedWorkspaceName ?? pairedRgName ?? "Linked"}</span>
+                  </div>
+                </Tooltip>
+              )}
+              <Tooltip
+                content={isLocked ? "Unlock to allow teardown" : "Lock to prevent accidental deletion"}
+                relationship="label"
+              >
+                <Button
+                  appearance="subtle"
+                  icon={isLocked ? <LockClosedRegular /> : <LockOpenRegular />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleLocked(c.id);
+                  }}
+                  size="small"
+                  style={isLocked ? { color: tokens.colorPaletteRedForeground1 } : undefined}
+                />
+              </Tooltip>
+              <Button
+                appearance="subtle"
+                icon={isExpanded ? <ChevronUpRegular /> : <ChevronDownRegular />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleExpanded(c.id);
+                }}
+                size="small"
+              />
+            </div>
+          }
+        />
+        {isExpanded && c.matchedArtifacts && (
+          <div className={styles.artifactList}>
+            {c.matchedArtifacts.map((a, i) => (
+              <div key={i}>• {a}</div>
+            ))}
+          </div>
+        )}
+      </Card>
+    );
+  };
+
+  // Compute paired IDs: Azure RG ↔ Fabric workspace that share a name via capacity mapping
+  // Assign each pair a unique color index for visual distinction
+  const pairedIds = new Set<string>();
+  const pairColorIndex = new Map<string, number>(); // candidate id → color index
+  let pairIdx = 0;
+  for (const [rgName, mapping] of capacityMappings) {
+    if (mapping.workspaceName) {
+      const rgCandidate = candidates.find((c) => c.type === "azure" && c.name === rgName);
+      const wsCandidate = candidates.find((c) => c.type === "fabric" && c.name === mapping.workspaceName);
+      if (rgCandidate && wsCandidate) {
+        pairedIds.add(rgCandidate.id);
+        pairedIds.add(wsCandidate.id);
+        pairColorIndex.set(rgCandidate.id, pairIdx);
+        pairColorIndex.set(wsCandidate.id, pairIdx);
+        pairIdx++;
+      }
+    }
+  }
+
+  // Palette of distinct accent colors for paired deployments
+  const PAIR_COLORS: Array<{ border: string; bg: string; badge: string; badgeText: string }> = [
+    { border: tokens.colorBrandStroke1,                bg: tokens.colorBrandBackground2,                badge: tokens.colorBrandBackground,                badgeText: tokens.colorNeutralForegroundOnBrand },
+    { border: tokens.colorPalettePurpleForeground2,    bg: tokens.colorPalettePurpleBackground2,        badge: tokens.colorPalettePurpleForeground2,        badgeText: "#fff" },
+    { border: tokens.colorPaletteTealForeground2,      bg: tokens.colorPaletteTealBackground2,          badge: tokens.colorPaletteTealForeground2,          badgeText: "#fff" },
+    { border: tokens.colorPaletteMarigoldForeground2,  bg: tokens.colorPaletteMarigoldBackground2,      badge: tokens.colorPaletteMarigoldForeground2,      badgeText: "#fff" },
+    { border: tokens.colorPaletteBerryForeground2,     bg: tokens.colorPaletteBerryBackground2,         badge: tokens.colorPaletteBerryForeground2,         badgeText: "#fff" },
+  ];
+
+  const sortCandidatesDesc = (items: TeardownCandidate[]) =>
+    [...items].sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" }));
+
+  const allFabricCandidates = sortCandidatesDesc(candidates.filter((c) => c.type === "fabric"));
+  // Default: only show workspaces with all 3 criteria (qualified). When showAllHDS is on, also show partial HDS workspaces.
+  const qualifiedFabricCandidates = sortCandidatesDesc(allFabricCandidates.filter((c) => c.qualified !== false));
+  const partialHdsCandidates = sortCandidatesDesc(allFabricCandidates.filter((c) => c.qualified === false));
+  const fabricCandidates = showAllHDS && !scanning ? allFabricCandidates : qualifiedFabricCandidates;
+  const azureCandidates = sortCandidatesDesc(candidates.filter((c) => c.type === "azure"));
+
+  // SPNs: show orphaned identities by default even when their workspace is gone;
+  // active SPNs stay tied to qualified workspaces unless the operator opts into all partial deployments.
+  const qualifiedWsNames = new Set(qualifiedFabricCandidates.map((c) => c.name));
+  const allSpnCandidates = sortCandidatesDesc(candidates.filter((c) => c.type === "spn"));
+  const spnCandidates = showAllHDS && !scanning
+    ? allSpnCandidates
+    : sortCandidatesDesc(allSpnCandidates.filter((c) => c.status === "orphaned" || qualifiedWsNames.has(c.name)));
+
+  const handleReconcile = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await reconcileTeardowns();
+      setScanMessage(result.reconciled ? `Reconciled ${result.reconciled} teardown run(s).` : "No interrupted teardown runs needed reconciliation.");
+    } catch {
+      setError("Unable to reconcile teardown history right now.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      {usingMock && <MockDataBanner />}
+      <div className={styles.header}>
+        <Title2>Teardown — Resource Scanner</Title2>
+      </div>
+
+      {/* Subscription selector + scan */}
+      <div className={styles.scanControls}>
+        <Field label="Azure Subscription" style={{ minWidth: 300 }}>
+          <Dropdown
+            value={subscriptions.find((s) => s.id === selectedSubscription)?.name ?? "Select…"}
+            selectedOptions={[selectedSubscription]}
+            onOptionSelect={(_, data) => setSelectedSubscription(data.optionValue as string)}
+          >
+            {subscriptions.map((s) => (
+              <Option key={s.id} value={s.id}>{s.name}</Option>
+            ))}
+          </Dropdown>
+        </Field>
+        <Button
+          appearance="primary"
+          icon={scanning ? <ArrowSyncRegular /> : <SearchRegular />}
+          onClick={handleScan}
+          disabled={scanning || !selectedSubscription}
+        >
+          {scanning ? "Scanning…" : "Scan Resources"}
+        </Button>
+        <Button appearance="secondary" icon={<ArrowSyncRegular />} onClick={handleReconcile} disabled={loading || scanning}>
+          Reconcile history
+        </Button>
+        <Tooltip content="Demo mode uses generated teardown candidates and never lists live resources." relationship="description">
+          <Button appearance="secondary" onClick={handleMockScan} disabled={scanning}>
+            Use demo data
+          </Button>
+        </Tooltip>
+      </div>
+
+      {scanning && (
+        <div className={styles.scanStatus}>
+          <div>
+            <Text weight="semibold">{scanMessage || "Scanning resources..."}</Text>
+            <Text size={200} style={{ color: tokens.colorNeutralForeground3, display: "block" }}>
+              Fully-qualified candidates appear below as discovered. Partial matches will appear after the scan completes.
+            </Text>
+          </div>
+          <div className={styles.scanMeta}>
+            <Badge color="brand">{scanPhase || "starting"}</Badge>
+            <Badge color="informative">Fabric {scanCounts.fabric}</Badge>
+            <Badge color="informative">Azure {scanCounts.azure}</Badge>
+            <Badge color="informative">Entra {scanCounts.spn}</Badge>
+          </div>
+        </div>
+      )}
+
+      {scanned && candidates.length > 0 && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: tokens.spacingHorizontalM,
+          marginBottom: tokens.spacingVerticalM,
+          padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+          backgroundColor: tokens.colorNeutralBackground3,
+          borderRadius: tokens.borderRadiusMedium,
+        }}>
+          <Checkbox
+            checked={allSelected ? true : someSelected ? "mixed" : false}
+            onChange={() => (allSelected ? deselectAll() : selectAll())}
+            label={
+              allSelected
+                ? "Deselect all"
+                : lockedIds.size > 0
+                  ? `Select all unlocked (${unlocked.length} of ${candidates.length})`
+                  : `Select all (${candidates.length} resources)`
+            }
+          />
+        </div>
+      )}
+
+      {!scanned && !scanning && !error && (
+        <div className={styles.candidateList}>
+          <Card size="small">
+            <CardHeader
+              header={<Text weight="semibold">Ready to scan live resources</Text>}
+              description="Live teardown discovery is intentionally on demand because it enumerates Fabric workspaces, Azure resources, and Entra identities."
+            />
+          </Card>
+          <Card size="small"><CardHeader header={<Text>Scanning discovers Fabric, Azure, and identity artifacts.</Text>} /></Card>
+        </div>
+      )}
+
+      {scanned && candidates.length === 0 && (
+        <div className={styles.emptyState}>No matching deployment resources found.</div>
+      )}
+
+      {(fabricCandidates.length > 0 || partialHdsCandidates.length > 0) && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: tokens.spacingVerticalXL, marginBottom: tokens.spacingVerticalXXS }}>
+            <Subtitle1 className={styles.sectionTitle} style={{ marginTop: 0, marginBottom: 0 }}>
+              Fabric Workspaces ({fabricCandidates.length})
+            </Subtitle1>
+            {!scanning && partialHdsCandidates.length > 0 && (
+              <Checkbox
+                checked={showAllHDS}
+                onChange={(_, d) => setShowAllHDS(!!d.checked)}
+                label={`Show all HDS workspaces (${partialHdsCandidates.length} partial)`}
+              />
+            )}
+          </div>
+          <Text size={200} className={styles.sectionDesc}>
+            Workspaces with HDS, MasimoEventhouse, and fn_ClinicalAlerts deployed
+          </Text>
+          <div className={styles.candidateList}>
+            {fabricCandidates.map(renderCandidate)}
+          </div>
+          {fabricCandidates.length === 0 && (
+            <div className={styles.emptyState} style={{ padding: tokens.spacingVerticalM }}>
+              No fully-qualified workspaces found. {partialHdsCandidates.length > 0 ? "Enable \"Show all HDS workspaces\" to see partial deployments." : ""}
+            </div>
+          )}
+        </>
+      )}
+
+      {azureCandidates.length > 0 && (
+        <>
+          <Subtitle1 className={styles.sectionTitle}>
+            Azure Resource Groups ({azureCandidates.length})
+          </Subtitle1>
+          <Text size={200} className={styles.sectionDesc}>
+            Resource groups with Event Hub, ACR, FHIR Service, and emulator resources (expected: 11)
+          </Text>
+          <div className={styles.candidateList}>
+            {azureCandidates.map(renderCandidate)}
+          </div>
+        </>
+      )}
+
+      {spnCandidates.length > 0 && (
+        <>
+          <Subtitle1 className={styles.sectionTitle}>
+            Workspace Identity SPNs ({spnCandidates.length}{!showAllHDS && allSpnCandidates.length > spnCandidates.length ? ` of ${allSpnCandidates.length}` : ""})
+          </Subtitle1>
+          <Text size={200} className={styles.sectionDesc}>
+            App registrations matching workspace identity naming from prior deployments
+            {!showAllHDS && allSpnCandidates.length > spnCandidates.length && (
+              <> — {allSpnCandidates.length - spnCandidates.length} hidden (partial workspaces)</>
+            )}
+          </Text>
+          <div className={styles.candidateList}>
+            {spnCandidates.map(renderCandidate)}
+          </div>
+        </>
+      )}
+
+      {selectedIds.size > 0 && (() => {
+        const selected = candidates.filter((c) => selectedIds.has(c.id));
+        const hasFabric = selected.some((c) => c.type === "fabric");
+        const hasAzure = selected.some((c) => c.type === "azure");
+        const hasBoth = hasFabric && hasAzure;
+        const mode = hasBoth
+          ? "Teardown-All"
+          : hasFabric
+            ? "Fabric Teardown"
+            : hasAzure
+              ? "Azure Teardown"
+              : "SPN Cleanup";
+
+        return (
+          <>
+            <div className={styles.warning} style={{ marginTop: tokens.spacingVerticalXL }}>
+              {selectedIds.size} resource(s) selected for deletion.
+              {hasBoth && " Both Fabric workspace and Azure RG selected — will run Teardown-All (complete cleanup)."}
+              {dryRun ? " Dry run is ON, so the next click only previews the plan." : " This action cannot be undone."}
+            </div>
+            <Card size="small" style={{ marginTop: tokens.spacingVerticalS }}>
+              <CardHeader header={<Text weight="semibold" size={300}>Teardown plan</Text>} />
+              <div style={{ padding: `0 ${tokens.spacingHorizontalL} ${tokens.spacingVerticalM}`, display: "grid", gap: tokens.spacingVerticalXS }}>
+                {selected.slice(0, 8).map((item) => (
+                  <Text key={item.id} size={200}>{item.type.toUpperCase()} · {item.name}</Text>
+                ))}
+                {selected.length > 8 && <Text size={200}>+{selected.length - 8} more target(s)</Text>}
+                <Checkbox checked={dryRun} onChange={(_, data) => setDryRun(!!data.checked)} label="Dry run — preview only, do not delete resources" />
+              </div>
+            </Card>
+            <div className={styles.actions}>
+              <Button
+                appearance="primary"
+                icon={<DeleteRegular />}
+                onClick={handleTeardown}
+                disabled={loading}
+                style={{ backgroundColor: tokens.colorPaletteRedBackground3 }}
+              >
+                {loading ? "Starting teardown…" : dryRun ? `Preview ${selectedIds.size} resource(s)` : `${mode}: Delete ${selectedIds.size} resource(s)`}
+              </Button>
+              <Button appearance="subtle" onClick={deselectAll}>
+                Clear selection
+              </Button>
+            </div>
+          </>
+        );
+      })()}
+
+      {error && <div className={styles.error}>{error}</div>}
+    </div>
+  );
+}

@@ -1,0 +1,42 @@
+{
+  "name": "Encounter participant column configuration",
+  "retainSourceColumns": false,
+  "stringifyComplexTypes": false,
+  "extendWithDefaultRules": false,
+  "explode": {
+    "name": "participant_expl",
+    "expression": "participant"
+  },
+  "columns": [
+    {
+      "name": "Id",
+      "style": "expr",
+      "expression": "concat(id_orig,'-',index)"
+    },
+    {
+      "name": "EncounterId",
+      "style": "expr",
+      "expression": "id_orig"
+    },
+    {
+      "name": "Type",
+      "style": "expr",
+      "expression": "participant_expl.type.coding[0].code[0]"
+    },
+    {
+      "name": "ParticipantId",
+      "style": "expr",
+      "expression": "participant_expl.individual.id_orig"
+    },
+    {
+      "name": "ParticipantType",
+      "style": "expr",
+      "expression": "participant_expl.individual.type"
+    },
+    {
+      "name": "LastUpdated",
+      "style": "col",
+      "expression": "meta.lastUpdated"
+    }
+  ]
+}

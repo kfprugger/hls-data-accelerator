@@ -1,0 +1,167 @@
+{
+    "name": "clinical_data_foundations_ingestion_e2e",
+    "description": "An integration test for clinical foundations",
+    "initial_context": {
+        "targetEnvironment": "MSIT",
+        "workspaceDisplayName": "HDS_IT_NoComp",
+        "uniquePrefix": "healthcare1",
+        "dist_path": "dist"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": true
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateHdsItem",
+            "description": "Create a new hds item",
+            "parameters": {
+                "workspace": "$workspace",
+                "solution_display_name": "healthcare1"
+            },
+            "outputs": [
+                "solution_artifact_id"
+            ]
+        },
+        {
+            "type": "DeployHdsCapabilities",
+            "description": "Deploy foundations capablity",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id",
+                "capabilities": [
+                    {
+                        "capabilityKey":"relational-fhir-data-foundations",
+                        "userParameters":[]
+                    },
+                    {
+                        "capabilityKey":"sample-data",
+                        "userParameters":[]
+                    }
+                ],
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": []
+        },
+        {
+            "type": "PollCapabilityDeployment",
+            "description": "Poll capability deployment",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id"
+            },
+            "outputs": []
+        },
+        {
+            "type": "GetSolutionEnvironment",
+            "description": "Get deployed environment",
+            "parameters": {
+                "workspace": "$workspace",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "environment"
+            ]
+        },
+        {
+            "type": "RemoveEnvironmentLibraries",
+            "description": "Removing libraries from default environment",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$environment"
+            }
+        },
+        {
+            "type": "PublishEnvironment",
+            "description": "Publishing an environment with local libraries",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$environment",
+                "dist_path": "$dist_path",
+                "libraries_relative_path": "/healthcare-libraries/1.1.0/"
+            },
+            "outputs": []
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Get the deployed admin lakehouse",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "admin",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "admin_lakehouse"
+            ]
+        },
+        {
+            "type": "UpdateDeploymentParameters",
+            "description": "Updating deployment parameters",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse": "$admin_lakehouse",
+                "parameter_updates": [
+                    {
+                        "activity_name": "healthcare1_msft_fhir_ndjson_bronze_ingestion",
+                        "parameter_name": "compression_enabled",
+                        "new_value": "false"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "LakehouseToLakehouseFolderCopy",
+            "description": "Copy sample data to ingest",
+            "parameters": {
+                "displayName": "move_sample_data",
+                "source_lakehouse": "healthcare1_msft_bronze",
+                "source_lakehouse_subpath": "SampleData/Clinical/FHIR-NDJSON/FHIR-HDS/51KSyntheticPatients",
+                "target_lakehouse": "healthcare1_msft_bronze",
+                "target_lakehouse_directory": "Ingest/Clinical/FHIR-NDJSON/FHIR-HDS"
+            }
+        },
+        {
+            "type": "WaitForEnvironmentPublish",
+            "description": "Waiting for test env to publish",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$environment"
+            }
+        },
+        {
+            "type": "RunDataPipeline",
+            "description": "Running Omop analytics pipelines",
+            "parameters": {
+                "workspace": "$workspace",
+                "dataPipelineName": "healthcare1_msft_clinical_data_foundation_ingestion",
+                "pipelineParameters": {}
+            },
+            "outputs": [
+                "data_pipeline_id",
+                "pipeline_run_id"
+            ]
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Poll pipeline completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$data_pipeline_id",
+                "job_id": "$pipeline_run_id"
+            },
+            "outputs": []
+        }
+    ]
+}

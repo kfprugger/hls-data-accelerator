@@ -1,0 +1,345 @@
+{
+    "name": "Customer Insights E2E",
+    "description": "A test for customer insights data ingestion",
+    "initial_context": {
+        "targetEnvironment": "dxt",
+        "workspaceDisplayName": "HDS_IT_CI",
+        "uniquePrefix": "healthcare1",
+        "dist_path": "dist",
+        "validation_notebooks_path": "src/tools/automation/AutomationFramework/resources/notebooks/ci"
+    },
+    "tasks": [
+        {
+            "type": "CreateWorkspace",
+            "description": "Creating a new test workspace",
+            "parameters": {
+                "displayName": "$workspaceDisplayName",
+                "description": "A test ws",
+                "add_datetime_postfix": true
+            },
+            "outputs": [
+                "workspace",
+                "capacityId"
+            ]
+        },
+        {
+            "type": "CreateHdsItem",
+            "description": "Create a new hds item",
+            "parameters": {
+                "workspace": "$workspace",
+                "solution_display_name": "healthcare1"
+            },
+            "outputs": [
+                "solution_artifact_id"
+            ]
+        },
+        {
+            "type": "PublishEnvironment",
+            "description": "Creating an environment used by test notebooks",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "TestEnvironment",
+                "dist_path": "$dist_path",
+                "workspace": "$workspace",
+                "upload_local_libraries": false,
+                "environment_yml_path": "src/tools/automation/AutomationFramework/resources/configs/environment.yml"
+            },
+            "outputs": [
+                "test_environment"
+            ]
+        },
+        {
+            "type": "DeployHdsCapabilities",
+            "description": "Deploy foundations capablity",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id",
+                "capabilities": [
+                    {
+                        "capabilityKey": "relational-fhir-data-foundations",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "sample-data",
+                        "userParameters": []
+                    },
+                    {
+                        "capabilityKey": "patient-outreach-analytics",
+                        "userParameters": []
+                    }
+                ],
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": []
+        },
+        {
+            "type": "PollCapabilityDeployment",
+            "description": "Poll capability deployment",
+            "parameters": {
+                "capacityId": "$capacityId",
+                "workspace": "$workspace",
+                "solution_artifact_id": "$solution_artifact_id"
+            },
+            "outputs": []
+        },
+        {
+            "type": "GetSolutionEnvironment",
+            "description": "Get deployed environment",
+            "parameters": {
+                "workspace": "$workspace",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "solution_environment"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Add deployed bronze lakehouse to the runtime context",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "bronze",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "bronze_lakehouse"
+            ]
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up notebook to copy sample data",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$solution_environment",
+                "notebooks_path": "/src/tools/automation/AutomationFramework/resources/notebooks/",
+                "notebookName": "copy_folder.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "source_path": "/Files/SampleData/Clinical/FHIR-NDJSON/FHIR-HDS/51KSyntheticPatients",
+                    "destination_directory_path": "/Files/Ingest/Clinical/FHIR-NDJSON/FHIR-HDS/",
+                    "action": "copy"
+                }
+            },
+            "outputs": [
+                "copy_sample_data_notebook_id"
+            ]
+        },
+        {
+            "type": "GetSolutionLakehouse",
+            "description": "Add the deployed admin lakehouse to the runtime context",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse_name": "admin",
+                "uniquePrefix": "$uniquePrefix"
+            },
+            "outputs": [
+                "admin_lakehouse"
+            ]
+        },
+        {
+            "type": "UpdateDeploymentParameters",
+            "description": "Updating deployment parameters",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse": "$admin_lakehouse",
+                "parameter_updates": [
+                    {
+                        "activity_name": "healthcare1_msft_fhir_ndjson_bronze_ingestion",
+                        "parameter_name": "compression_enabled",
+                        "new_value": "false"
+                    },
+                    {
+                        "activity_name": "healthcare1_msft_fhir_ndjson_bronze_ingestion",
+                        "parameter_name": "move_failed_files_enabled",
+                        "new_value": "false"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "RunNotebook",
+            "description": "Running copy sample data notebook",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$solution_environment",
+                "notebook_id": "$copy_sample_data_notebook_id",
+                "default_lakehouse": "$bronze_lakehouse"
+            },
+            "outputs": [
+                "copy_sample_data_notebook_run_id"
+            ]
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Polling copy sample data notebook completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$copy_sample_data_notebook_id",
+                "job_id": "$copy_sample_data_notebook_run_id"
+            }
+        },
+        {
+            "type": "CreateLakehouse",
+            "description": "Creating a Test lakehouse",
+            "ignore": "false",
+            "parameters": {
+                "displayName": "Test",
+                "description": "A lakehouse for test artifacts",
+                "workspace": "$workspace",
+                "subfolders": []
+            },
+            "outputs": [
+                "test_lakehouse"
+            ]
+        },
+        {
+            "type": "SetupNotebook",
+            "description": "Setting up capability deployment tests notebook",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebooks_path": "$validation_notebooks_path",
+                "notebookName": "ci_deployment_tests.ipynb",
+                "lakehouseConfig": {
+                    "default_lakehouse_name": "healthcare1_msft_bronze",
+                    "known_lakehouses": [
+                        "healthcare1_msft_bronze"
+                    ]
+                },
+                "notebook_parameters": {
+                    "workspace_id": "%%workspace_id%%",
+                    "bronze_lakehouse_id": "%%bronze_lakehouse_id%%",
+                    "destination_lakehouse_id": "%%test_lakehouse_id%%",
+                    "destination_lakehouse_path": "Files/SampleData/CI/ci_deployment_tests_results.xml",
+                    "deployment_environment": "$targetEnvironment",
+                    "prefix": "$uniquePrefix",
+                    "expected_installed_capabilities": {
+                        "relational-fhir-data-foundations": "1.1.0",
+                        "sample-data": "1.0.0",
+                        "patient-outreach-analytics": "1.1.0"
+                    }
+                }
+            },
+            "outputs": [
+                "hds_ci_deployment_tests_notebook_id"
+            ]
+        },
+        {
+            "type": "RemoveEnvironmentLibraries",
+            "description": "Removing libraries from default environment",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$solution_environment"
+            }
+        },
+        {
+            "type": "UploadLibrary",
+            "description": "Uploading library to the solution environment",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$solution_environment",
+                "upload_local_libraries": false,
+                "libraries_relative_path": "dist/healthcare-libraries/1.2.0/",
+                "environment_yml_path": "src/tools/automation/AutomationFramework/resources/configs/environment.yml"
+            },
+            "outputs": []
+        },
+        {
+            "type": "PublishEnvironment",
+            "description": "Publishing the HDS environment",
+            "ignore": "false",
+            "parameters": {
+                "environment": "$solution_environment",
+                "workspace": "$workspace",
+                "upload_local_libraries": false
+            },
+            "outputs": []
+        },
+        {
+            "type": "WaitForEnvironmentPublish",
+            "description": "Waiting for solution env to publish",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$solution_environment"
+            }
+        },
+        {
+            "type": "WaitForEnvironmentPublish",
+            "description": "Waiting for test env to publish",
+            "ignore": "false",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment"
+            }
+        },
+        {
+            "type": "RunDataPipeline",
+            "description": "Running Customer Insights with clinical foundation ingestion pipeline",
+            "parameters": {
+                "workspace": "$workspace",
+                "dataPipelineName": "healthcare1_msft_customer_insights",
+                "pipelineParameters": {}
+            },
+            "outputs": [
+                "data_pipeline_id",
+                "pipeline_run_id"
+            ]
+        },
+        {
+            "type": "RunNotebook",
+            "description": "Running Customer Insights deployment tests notebook",
+            "parameters": {
+                "workspace": "$workspace",
+                "environment": "$test_environment",
+                "notebook_id": "$hds_ci_deployment_tests_notebook_id",
+                "default_lakehouse": "$bronze_lakehouse"
+            },
+            "outputs": [
+                "hds_ci_deployment_tests_notebook_run_id"
+            ]
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Polling validation notebook completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$hds_ci_deployment_tests_notebook_id",
+                "job_id": "$hds_ci_deployment_tests_notebook_run_id"
+            }
+        },
+        {
+            "type": "PollJobCompletion",
+            "description": "Poll pipeline completion",
+            "parameters": {
+                "workspace": "$workspace",
+                "item_id": "$data_pipeline_id",
+                "job_id": "$pipeline_run_id"
+            },
+            "outputs": []
+        },
+        {
+            "type": "ParseTestResults",
+            "ignore": "false",
+            "description": "Polling Customer Insights validation notebook test results",
+            "parameters": {
+                "workspace": "$workspace",
+                "lakehouse": "$test_lakehouse",
+                "deployment_environment": "$targetEnvironment",
+                "test_name": "Customer Insights Integration"
+            }
+        }
+    ]
+}
