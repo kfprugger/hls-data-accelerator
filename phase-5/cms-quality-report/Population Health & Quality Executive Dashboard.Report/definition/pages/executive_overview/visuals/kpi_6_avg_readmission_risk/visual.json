@@ -1,0 +1,38 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "kpi_6_avg_readmission_risk",
+  "position": {
+    "x": 1050,
+    "y": 18,
+    "z": 1005,
+    "height": 100,
+    "width": 195,
+    "tabOrder": 1005
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Avg Readmission Risk"
+                }
+              },
+              "queryRef": "_Measures.Avg Readmission Risk",
+              "nativeQueryRef": "Avg Readmission Risk"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "claim_detail",
+  "position": {
+    "x": 15,
+    "y": 410,
+    "z": 3000,
+    "height": 290,
+    "width": 925,
+    "tabOrder": 3000
+  },
+  "visual": {
+    "visualType": "table",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fact_claim"
+                    }
+                  },
+                  "Property": "claim_id"
+                }
+              },
+              "queryRef": "fact_claim.claim_id",
+              "nativeQueryRef": "claim_id"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fact_claim"
+                    }
+                  },
+                  "Property": "payer_category"
+                }
+              },
+              "queryRef": "fact_claim.payer_category",
+              "nativeQueryRef": "payer_category"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fact_claim"
+                    }
+                  },
+                  "Property": "claim_status"
+                }
+              },
+              "queryRef": "fact_claim.claim_status",
+              "nativeQueryRef": "claim_status"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fact_claim"
+                    }
+                  },
+                  "Property": "billed_amount"
+                }
+              },
+              "queryRef": "fact_claim.billed_amount",
+              "nativeQueryRef": "billed_amount"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fact_claim"
+                    }
+                  },
+                  "Property": "paid_amount"
+                }
+              },
+              "queryRef": "fact_claim.paid_amount",
+              "nativeQueryRef": "paid_amount"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

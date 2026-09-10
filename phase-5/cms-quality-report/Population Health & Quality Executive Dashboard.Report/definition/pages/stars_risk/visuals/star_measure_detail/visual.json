@@ -1,0 +1,80 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "star_measure_detail",
+  "position": {
+    "x": 15,
+    "y": 410,
+    "z": 3000,
+    "height": 290,
+    "width": 925,
+    "tabOrder": 3000
+  },
+  "visual": {
+    "visualType": "table",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "star_rating_detail"
+                    }
+                  },
+                  "Property": "measure_name"
+                }
+              },
+              "queryRef": "star_rating_detail.measure_name",
+              "nativeQueryRef": "measure_name"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "star_rating_detail"
+                    }
+                  },
+                  "Property": "quality_rate"
+                }
+              },
+              "queryRef": "star_rating_detail.quality_rate",
+              "nativeQueryRef": "quality_rate"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "star_rating_detail"
+                    }
+                  },
+                  "Property": "benchmark_rate"
+                }
+              },
+              "queryRef": "star_rating_detail.benchmark_rate",
+              "nativeQueryRef": "benchmark_rate"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "star_rating_detail"
+                    }
+                  },
+                  "Property": "star_rating"
+                }
+              },
+              "queryRef": "star_rating_detail.star_rating",
+              "nativeQueryRef": "star_rating"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

@@ -3848,6 +3848,8 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             $qualityReportName = 'Population Health & Quality Dashboard'
             $qualityModelDir = Join-Path $reportDir 'Population Health & Quality Dashboard.SemanticModel'
             $qualityReportDir = Join-Path $reportDir 'Population Health & Quality Dashboard.Report'
+            $qualityExecutiveReportName = 'Population Health & Quality Executive Dashboard'
+            $qualityExecutiveReportDir = Join-Path $reportDir 'Population Health & Quality Executive Dashboard.Report'
 
             $goldItems = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items?type=Lakehouse" -Label 'List reporting lakehouses').value
             $reportingGold = $goldItems | Where-Object { $_.displayName -eq 'healthcare1_reporting_gold' } | Select-Object -First 1
@@ -3889,8 +3891,22 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                 Wait-P5FabricOperation -Response $reportResponse -Label 'Create quality report'
                 $qualityReport = Wait-P5ItemByName -Type 'Report' -DisplayName $qualityReportName
             }
-            Write-Host "  ✓ Quality semantic model/report: $qualityModelName ($qualityDatasetId) / $qualityReportName" -ForegroundColor Green
-            Write-Host "    10 pages deployed from PBIR artifacts" -ForegroundColor DarkGray
+            if (-not (Test-Path $qualityExecutiveReportDir)) { throw "Consolidated quality report directory not found: $qualityExecutiveReportDir" }
+            $qualityExecutiveReportDefinition = New-P5ItemDefinitionFromDirectory -ItemDirectory $qualityExecutiveReportDir -Format 'PBIR' -Replacements @{ '__SEMANTIC_MODEL_CONNECTION__' = $modelConnection }
+            $qualityExecutiveReports = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items?type=Report" -Label 'List consolidated quality reports').value
+            $qualityExecutiveReport = $qualityExecutiveReports | Where-Object { $_.displayName -eq $qualityExecutiveReportName } | Select-Object -First 1
+            if ($qualityExecutiveReport) {
+                $qualityExecutiveReportBody = @{ definition = $qualityExecutiveReportDefinition } | ConvertTo-Json -Depth 100 -Compress
+                $qualityExecutiveReportResponse = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items/$($qualityExecutiveReport.id)/updateDefinition" -Body $qualityExecutiveReportBody -Label 'Update consolidated quality report'
+                Wait-P5FabricOperation -Response $qualityExecutiveReportResponse -Label 'Update consolidated quality report'
+            } else {
+                $qualityExecutiveReportBody = @{ displayName = $qualityExecutiveReportName; type = 'Report'; definition = $qualityExecutiveReportDefinition } | ConvertTo-Json -Depth 100 -Compress
+                $qualityExecutiveReportResponse = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items" -Body $qualityExecutiveReportBody -Label 'Create consolidated quality report'
+                Wait-P5FabricOperation -Response $qualityExecutiveReportResponse -Label 'Create consolidated quality report'
+                $qualityExecutiveReport = Wait-P5ItemByName -Type 'Report' -DisplayName $qualityExecutiveReportName
+            }
+            Write-Host "  ✓ Quality semantic model/reports: $qualityModelName ($qualityDatasetId) / $qualityReportName / $qualityExecutiveReportName" -ForegroundColor Green
+            Write-Host "    Original 10-page report and consolidated 5-page executive dashboard deployed from PBIR artifacts" -ForegroundColor DarkGray
             # --- Programmatic SPN Credential Patching ---
             $spnSuccess = $false
             $kvName = (az keyvault list --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)

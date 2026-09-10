@@ -1,0 +1,57 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "monthly_pmpm",
+  "position": {
+    "x": 435,
+    "y": 140,
+    "z": 2001,
+    "height": 250,
+    "width": 400,
+    "tabOrder": 2001
+  },
+  "visual": {
+    "visualType": "lineChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "agg_utilization_summary"
+                    }
+                  },
+                  "Property": "service_month"
+                }
+              },
+              "queryRef": "agg_utilization_summary.service_month",
+              "nativeQueryRef": "service_month",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Monthly PMPM"
+                }
+              },
+              "queryRef": "_Measures.Monthly PMPM",
+              "nativeQueryRef": "Monthly PMPM"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

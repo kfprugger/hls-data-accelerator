@@ -1,0 +1,57 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "quality_by_measure",
+  "position": {
+    "x": 15,
+    "y": 140,
+    "z": 2000,
+    "height": 250,
+    "width": 400,
+    "tabOrder": 2000
+  },
+  "visual": {
+    "visualType": "barChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "agg_quality_measures"
+                    }
+                  },
+                  "Property": "measure_name"
+                }
+              },
+              "queryRef": "agg_quality_measures.measure_name",
+              "nativeQueryRef": "measure_name",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Quality Rate"
+                }
+              },
+              "queryRef": "_Measures.Quality Rate",
+              "nativeQueryRef": "Quality Rate"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "risk_tier_members",
+  "position": {
+    "x": 855,
+    "y": 140,
+    "z": 2002,
+    "height": 540,
+    "width": 400,
+    "tabOrder": 2002
+  },
+  "visual": {
+    "visualType": "donutChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "agg_risk_scores"
+                    }
+                  },
+                  "Property": "risk_tier"
+                }
+              },
+              "queryRef": "agg_risk_scores.risk_tier",
+              "nativeQueryRef": "risk_tier",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Risk Member Count"
+                }
+              },
+              "queryRef": "_Measures.Risk Member Count",
+              "nativeQueryRef": "Risk Member Count"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "kpi_4_non-adherent_patients",
+  "position": {
+    "x": 921,
+    "y": 18,
+    "z": 1003,
+    "height": 100,
+    "width": 290,
+    "tabOrder": 1003
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Non-Adherent Patients"
+                }
+              },
+              "queryRef": "_Measures.Non-Adherent Patients",
+              "nativeQueryRef": "Non-Adherent Patients"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

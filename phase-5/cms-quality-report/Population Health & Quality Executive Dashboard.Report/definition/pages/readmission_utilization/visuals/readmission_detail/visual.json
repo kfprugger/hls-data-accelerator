@@ -1,0 +1,94 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "readmission_detail",
+  "position": {
+    "x": 15,
+    "y": 410,
+    "z": 3000,
+    "height": 290,
+    "width": 925,
+    "tabOrder": 3000
+  },
+  "visual": {
+    "visualType": "table",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "readmission_risk_scores"
+                    }
+                  },
+                  "Property": "encounter_id"
+                }
+              },
+              "queryRef": "readmission_risk_scores.encounter_id",
+              "nativeQueryRef": "encounter_id"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "readmission_risk_scores"
+                    }
+                  },
+                  "Property": "risk_probability"
+                }
+              },
+              "queryRef": "readmission_risk_scores.risk_probability",
+              "nativeQueryRef": "risk_probability"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "readmission_risk_scores"
+                    }
+                  },
+                  "Property": "risk_tier"
+                }
+              },
+              "queryRef": "readmission_risk_scores.risk_tier",
+              "nativeQueryRef": "risk_tier"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "readmission_risk_scores"
+                    }
+                  },
+                  "Property": "payer_category"
+                }
+              },
+              "queryRef": "readmission_risk_scores.payer_category",
+              "nativeQueryRef": "payer_category"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "readmission_risk_scores"
+                    }
+                  },
+                  "Property": "los_days"
+                }
+              },
+              "queryRef": "readmission_risk_scores.los_days",
+              "nativeQueryRef": "los_days"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

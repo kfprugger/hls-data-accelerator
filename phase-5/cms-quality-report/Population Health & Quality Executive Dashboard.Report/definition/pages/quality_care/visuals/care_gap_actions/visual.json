@@ -1,0 +1,80 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "care_gap_actions",
+  "position": {
+    "x": 15,
+    "y": 410,
+    "z": 3000,
+    "height": 290,
+    "width": 925,
+    "tabOrder": 3000
+  },
+  "visual": {
+    "visualType": "table",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "care_gaps"
+                    }
+                  },
+                  "Property": "patient_id"
+                }
+              },
+              "queryRef": "care_gaps.patient_id",
+              "nativeQueryRef": "patient_id"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "care_gaps"
+                    }
+                  },
+                  "Property": "gap_type"
+                }
+              },
+              "queryRef": "care_gaps.gap_type",
+              "nativeQueryRef": "gap_type"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "care_gaps"
+                    }
+                  },
+                  "Property": "days_overdue"
+                }
+              },
+              "queryRef": "care_gaps.days_overdue",
+              "nativeQueryRef": "days_overdue"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "care_gaps"
+                    }
+                  },
+                  "Property": "recommended_action"
+                }
+              },
+              "queryRef": "care_gaps.recommended_action",
+              "nativeQueryRef": "recommended_action"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

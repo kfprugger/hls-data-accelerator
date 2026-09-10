@@ -1,0 +1,57 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "quality_by_payer",
+  "position": {
+    "x": 15,
+    "y": 140,
+    "z": 2000,
+    "height": 540,
+    "width": 400,
+    "tabOrder": 2000
+  },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "agg_quality_measures"
+                    }
+                  },
+                  "Property": "payer_category"
+                }
+              },
+              "queryRef": "agg_quality_measures.payer_category",
+              "nativeQueryRef": "payer_category",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Quality Rate"
+                }
+              },
+              "queryRef": "_Measures.Quality Rate",
+              "nativeQueryRef": "Quality Rate"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

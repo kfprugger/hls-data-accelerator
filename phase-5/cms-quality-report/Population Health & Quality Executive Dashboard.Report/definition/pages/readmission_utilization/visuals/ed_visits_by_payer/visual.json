@@ -1,0 +1,57 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "ed_visits_by_payer",
+  "position": {
+    "x": 855,
+    "y": 140,
+    "z": 2002,
+    "height": 250,
+    "width": 400,
+    "tabOrder": 2002
+  },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "agg_utilization_by_payer"
+                    }
+                  },
+                  "Property": "payer_category"
+                }
+              },
+              "queryRef": "agg_utilization_by_payer.payer_category",
+              "nativeQueryRef": "payer_category",
+              "active": true
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "_Measures"
+                    }
+                  },
+                  "Property": "Payer ED Visits"
+                }
+              },
+              "queryRef": "_Measures.Payer ED Visits",
+              "nativeQueryRef": "Payer ED Visits"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

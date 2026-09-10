@@ -32,6 +32,11 @@ table _Measures
 			COUNTROWS(FILTER(care_gaps, [gap_status] = "open"))
 		lineageTag: 99999999-aaaa-bbbb-cccc-999999999995
 
+	measure 'Care Gap Count' =
+			COALESCE(COUNTROWS(care_gaps), 0)
+		formatString: #,0
+		lineageTag: 99999999-aaaa-bbbb-cccc-999999999a07
+
 	measure 'Total Billed' =
 			SUM(fact_claim[billed_amount])
 		formatString: \$#,0
@@ -48,9 +53,12 @@ table _Measures
 		lineageTag: 99999999-aaaa-bbbb-cccc-999999999998
 
 	measure 'Denial Rate' =
-			DIVIDE(
-				COUNTROWS(FILTER(fact_claim, [denial_flag] = 1)),
-				COUNTROWS(fact_claim),
+			COALESCE(
+				DIVIDE(
+					COUNTROWS(FILTER(fact_claim, [denial_flag] = 1)),
+					COUNTROWS(fact_claim),
+					0
+				),
 				0
 			)
 		formatString: 0.0%
@@ -197,12 +205,12 @@ table _Measures
 		lineageTag: 99999999-aaaa-bbbb-cccc-9999999999d4
 
 	measure 'High Risk Members' =
-			COUNTROWS(FILTER(agg_risk_scores, [risk_tier] = "Very High" || [risk_tier] = "High"))
+			COALESCE(COUNTROWS(FILTER(agg_risk_scores, [risk_tier] = "Very High" || [risk_tier] = "High")), 0)
 		formatString: #,0
 		lineageTag: 99999999-aaaa-bbbb-cccc-9999999999d5
 
 	measure 'Total Revenue at Risk' =
-			SUM(revenue_opportunity[potential_revenue_uplift])
+			COALESCE(SUM(revenue_opportunity[potential_revenue_uplift]), 0)
 		formatString: \$#,0
 		lineageTag: 99999999-aaaa-bbbb-cccc-9999999999d6
 
@@ -302,3 +310,33 @@ table _Measures
 			MAX(agg_utilization_summary[pmpm]) - MAX(agg_utilization_summary[benchmark_pmpm])
 		formatString: \$#,0.00
 		lineageTag: 99999999-aaaa-bbbb-cccc-9999999999fb
+
+	measure 'Adherence Members' =
+			COALESCE(COUNTROWS(agg_medication_adherence), 0)
+		formatString: #,0
+		lineageTag: 99999999-aaaa-bbbb-cccc-999999999a01
+
+	measure 'Risk Member Count' =
+			COALESCE(COUNTROWS(agg_risk_scores), 0)
+		formatString: #,0
+		lineageTag: 99999999-aaaa-bbbb-cccc-999999999a02
+
+	measure 'Readmission Encounter Count' =
+			COALESCE(COUNTROWS(readmission_risk_scores), 0)
+		formatString: #,0
+		lineageTag: 99999999-aaaa-bbbb-cccc-999999999a03
+
+	measure 'Measure Star Rating' =
+			AVERAGE(star_rating_detail[star_rating])
+		formatString: 0.0
+		lineageTag: 99999999-aaaa-bbbb-cccc-999999999a04
+
+	measure 'Monthly PMPM' =
+			MAX(agg_utilization_summary[pmpm])
+		formatString: \$#,0.00
+		lineageTag: 99999999-aaaa-bbbb-cccc-999999999a05
+
+	measure 'Payer ED Visits' =
+			COALESCE(SUM(agg_utilization_by_payer[ed_visits]), 0)
+		formatString: #,0
+		lineageTag: 99999999-aaaa-bbbb-cccc-999999999a06
