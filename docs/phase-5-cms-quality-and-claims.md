@@ -115,6 +115,7 @@ Implements CMS-HCC V28 model with:
 - **Demographic RAF coefficients** (22 age/sex bands, Community Non-Dual)
 - **Revenue-at-risk** calculation ($1,000 PMPM county benchmark)
 - **Revenue opportunity** — patients with coding gaps (≥2 HCCs but RAF < 1.5)
+- **Sparse-cohort demo marker** — when a synthetic deployment yields no qualifying opportunity rows, materialization adds one deterministic `synthetic_demo_marker` row so the revenue KPI remains demonstrable; `scenario_source` distinguishes it from derived opportunities
 
 ## Readmission Risk ML Model (Step 10)
 
@@ -134,6 +135,8 @@ Scikit-learn LogisticRegression trained on 12 clinical features:
 | Medicare/Medicaid flags | Coverage |
 
 Risk tiers: **Low** (<15%), **Medium** (15-30%), **High** (≥30%). Model performance metrics (AUC, accuracy, precision, recall) and feature coefficients are stored for transparency.
+
+Synthetic demo deployments also guarantee a minimum 10-row readmission cohort when randomized source data is too sparse. Deterministic marker encounters are labeled through `scenario_source = "synthetic_demo_marker"`; observed encounters remain labeled `observed`.
 
 > [!IMPORTANT]
 > **Data Activator Alert:** A daily email digest at 8:00 AM ET is sent to the configured `AlertEmail` address listing all patients flagged as HIGH readmission risk (≥30% probability).

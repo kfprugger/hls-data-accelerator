@@ -1,6 +1,6 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
-  "name": "kpi_5_ed_per_1k",
+  "name": "kpi_5_readmission_rate_demo",
   "position": {
     "x": 1015,
     "y": 18,
@@ -23,11 +23,11 @@
                       "Entity": "_Measures"
                     }
                   },
-                  "Property": "ED per 1K"
+                  "Property": "Readmission Rate (Demo)"
                 }
               },
-              "queryRef": "_Measures.ED per 1K",
-              "nativeQueryRef": "ED per 1K"
+              "queryRef": "_Measures.Readmission Rate (Demo)",
+              "nativeQueryRef": "Readmission Rate (Demo)"
             }
           ]
         }

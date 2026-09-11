@@ -245,6 +245,11 @@ table _Measures
 		formatString: 0.0%
 		lineageTag: 99999999-aaaa-bbbb-cccc-9999999999e3
 
+	measure 'Readmission Rate (Demo)' =
+			[Actual Readmission Rate]
+		formatString: 0.0%
+		lineageTag: 99999999-aaaa-bbbb-cccc-999999999a08
+
 	measure 'Model AUC' =
 			CALCULATE(MAX(readmission_model_performance[value]), readmission_model_performance[name] = "auc_roc")
 		formatString: 0.000

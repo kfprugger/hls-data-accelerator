@@ -51,6 +51,12 @@ table readmission_risk_scores
 		sourceColumn: readmitted_30d
 		summarizeBy: none
 
+	column scenario_source
+		dataType: string
+		lineageTag: c1000001-aaaa-bbbb-cccc-c10000000017
+		sourceColumn: scenario_source
+		summarizeBy: none
+
 	column age
 		dataType: int64
 		lineageTag: c1000001-aaaa-bbbb-cccc-c10000000009

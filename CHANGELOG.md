@@ -10,6 +10,7 @@
 
 ### CMS Quality Deployment
 - **Added** a five-page Population Health & Quality Executive Dashboard with 46 KPI, chart, table, and slicer visuals consolidated across quality, claims, payer, stars, risk, readmission, and utilization workflows.
+- **Added** deterministic, provenance-labeled sparse-cohort demo markers so revenue opportunity and readmission-rate visuals remain meaningful when randomized synthetic input contains no qualifying cases.
 - **Fixed** invalid quality semantic-model TMDL: relationship headers, indentation, Direct Lake expression nesting, and unsupported date-part relationship behavior.
 - **Fixed** the quality dashboard PBIR version metadata and Fabric long-running-operation polling so semantic model/report deployment completes reliably.
 - **Hardened** completion validation to query the new quality semantic model, verify the dashboard binding, and replace stale retry failures with a successful terminal detail.

@@ -84,6 +84,20 @@
               },
               "queryRef": "readmission_risk_scores.los_days",
               "nativeQueryRef": "los_days"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "readmission_risk_scores"
+                    }
+                  },
+                  "Property": "scenario_source"
+                }
+              },
+              "queryRef": "readmission_risk_scores.scenario_source",
+              "nativeQueryRef": "scenario_source"
             }
           ]
         }

@@ -57,6 +57,12 @@ table revenue_opportunity
 		sourceColumn: payer_category
 		summarizeBy: none
 
+	column scenario_source
+		dataType: string
+		lineageTag: b5000001-aaaa-bbbb-cccc-b5000000000b
+		sourceColumn: scenario_source
+		summarizeBy: none
+
 	column load_timestamp
 		dataType: dateTime
 		lineageTag: b5000001-aaaa-bbbb-cccc-b5000000000a
