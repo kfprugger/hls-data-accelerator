@@ -232,9 +232,9 @@ def agent_validation_question(name: str) -> str:
     if "Patient 360" in name:
         return "Count patients by gender without returning names or IDs. Include the data source."
     if "Clinical Triage" in name:
-        return "Count distinct devices and telemetry readings from the last seven days, then summarize current alert counts. Include data sources."
+        return "Count distinct devices and TelemetryRaw rows from the last seven days. Include the data source and latest event timestamp."
     if "Payer" in name:
-        return "Count claim events grouped by status. Include the data source."
+        return "Count claim events grouped by event_type. Include the data source and total count."
     if "Graph" in name:
         return "Using the ontology graph itself, count distinct patients and trace one patient-to-device relationship. Return grounded IDs and the ontology source."
     return "Count records in the primary connected dataset and identify the data source."
