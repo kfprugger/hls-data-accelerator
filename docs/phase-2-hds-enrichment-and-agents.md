@@ -128,11 +128,12 @@ Creates the DICOM OneLake shortcut and triggers HDS pipelines:
 1. **DICOM shortcut** — ADLS Gen2 `dicom-output` → Bronze Lakehouse `/Files/Ingest/Imaging/DICOM/DICOM-HDS/`
 2. **Optional SDoH/claims sidecar pipelines** — discovered from live Fabric DataPipeline items and invoked best-effort/non-blocking if deployed; sidecar pipelines may no-op or fail non-blocking when their source data is absent
 3. **Clinical pipeline** — flows FHIR clinical data into Silver tables
-4. **CMA pipeline** — if Care Management Analytics was included in the HDS deployment, invokes `healthcare1_msft_cma` as a non-blocking Silver consumer after Clinical/Silver readiness passes; it no longer waits for OMOP
-5. **Imaging pipeline** — flows DICOM metadata into Silver imaging tables after clinical completes
-6. **OMOP pipeline** — populates Gold OMOP CDM v5.4 tables from Silver data after Clinical and Imaging complete
+4. **Patient Outreach Analytics pipeline** — runs `healthcare1_msft_poa_ingestion` to completion so the deployed POA semantic model and report have populated backing tables
+5. **CMA pipeline** — if Care Management Analytics was included in the HDS deployment, invokes `healthcare1_msft_cma` as a non-blocking Silver consumer after Clinical/POA readiness passes
+6. **Imaging pipeline** — flows DICOM metadata into Silver imaging tables after clinical completes
+7. **OMOP pipeline** — populates Gold OMOP CDM v5.4 tables from Silver data after Clinical and Imaging complete
 
-> **Pipeline order matters:** the default deployment monitor order is optional SDoH/claims sidecars → Clinical → optional CMA → Imaging → OMOP. Sidecars start best-effort before the Clinical wait when matching live pipeline names are deployed. CMA starts after Clinical/Silver readiness and does not block Imaging, OMOP, or the deployment result.
+> **Pipeline order matters:** the default deployment monitor order is optional SDoH/claims sidecars → Clinical → Patient Outreach Analytics (required) → optional CMA → Imaging → OMOP. Sidecars start best-effort before the Clinical wait. POA runs to completion after Clinical so its deployed semantic model is not blank. CMA remains non-blocking relative to Imaging and OMOP.
 
 ```powershell
 # Standalone Phase 2

@@ -809,7 +809,7 @@ export function DeployWizard() {
       if (preset === "data") {
         return { ...base, reuse_patients: false, reseed_data: false, skip_base_infra: true, skip_fhir: true, skip_dicom: true, skip_synthea: true, skip_device_assoc: true, skip_phase7: true, skip_payer_rti: true, skip_payer_activator: true, skip_ops_agent: true, skip_graph_agent: true };
       }
-      return base;
+      return { ...base, skip_activator: false, skip_payer_activator: false };
     });
   };
 

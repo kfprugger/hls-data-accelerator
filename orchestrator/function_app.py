@@ -246,7 +246,7 @@ def deploy_all_orchestrator(context):
             "status": status,
             "detail": detail,
             "completedPhases": len([p for p in phases if p.get("status") == "succeeded"]),
-            "totalPhases": 11,
+            "totalPhases": 12,
             "resources": resources,
         })
 
@@ -472,7 +472,33 @@ def activity_deploy_hds_source(input_data: dict) -> dict:
 def activity_deploy_hds_pipelines(input_data: dict) -> dict:
     """Phase 3: DICOM Shortcut + HDS Pipelines."""
     from activities.deploy_hds_pipelines import run
-    return run(input_data["config"], input_data["resources"])
+    result = run(input_data["config"], input_data["resources"])
+    config = input_data.get("config", {})
+    pipeline_results = result.get("pipeline_results", {})
+    clinical_completed = (
+        pipeline_results.get("healthcare1_msft_clinical_data_foundation_ingestion") == "completed"
+        or pipeline_results.get("healthcare1_msft_clinical_ingestion") == "completed"
+    )
+    poa_completed = pipeline_results.get("healthcare1_msft_poa_ingestion") == "completed"
+    omop_completed = pipeline_results.get("healthcare1_msft_omop_analytics") == "completed"
+    imaging_completed = bool(
+        config.get("skip_imaging")
+        or pipeline_results.get("healthcare1_msft_imaging_with_clinical_foundation_ingestion") == "completed"
+    )
+    failed_required = []
+    if not clinical_completed:
+        failed_required.append("clinical_ingestion")
+    if not poa_completed:
+        failed_required.append("healthcare1_msft_poa_ingestion")
+    if not imaging_completed:
+        failed_required.append("healthcare1_msft_imaging_with_clinical_foundation_ingestion")
+    if not omop_completed:
+        failed_required.append("healthcare1_msft_omop_analytics")
+    if failed_required:
+        raise RuntimeError(
+            f"Required HDS pipeline(s) did not complete successfully: {failed_required}; results={pipeline_results}"
+        )
+    return result
 
 
 @app.activity_trigger(input_name="input_data")

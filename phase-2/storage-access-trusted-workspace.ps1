@@ -51,6 +51,7 @@ param(
     [string]$ClinicalPipelineName = "healthcare1_msft_clinical_data_foundation_ingestion",
     [string]$OmopPipelineName = "healthcare1_msft_omop_analytics",
     [string]$CmaPipelineName = "healthcare1_msft_cma",
+    [string]$PoaPipelineName = "healthcare1_msft_poa_ingestion",
     [string[]]$OptionalSidecarPipelineNames = @(),
     [string[]]$OptionalSidecarPipelineNamePatterns = @('sdoh','social.?determinant','claim','claims','cclf'),
 
@@ -1709,13 +1710,15 @@ $imagingPipeline = $pipelines | Where-Object { $_.displayName -eq $ImagingPipeli
 $imagingId = if ($imagingPipeline) { [string]$imagingPipeline.id } else { $null }
 $cmaPipeline = $pipelines | Where-Object { $_.displayName -eq $CmaPipelineName } | Select-Object -First 1
 $cmaId = if ($cmaPipeline) { [string]$cmaPipeline.id } else { $null }
+$poaPipeline = $pipelines | Where-Object { $_.displayName -eq $PoaPipelineName } | Select-Object -First 1
+$poaId = if ($poaPipeline) { [string]$poaPipeline.id } else { $null }
 if ($cmaPipeline) {
     Write-Log "  Detected optional CMA pipeline '$CmaPipelineName' (ID: $cmaId). It will be invoked after Clinical/Silver readiness, before Imaging and OMOP." 'INFO'
 } else {
     Write-Log "  Optional CMA pipeline '$CmaPipelineName' not found; no CMA follow-up action will run." 'INFO'
 }
 
-$excludedPipelineNames = @($ClinicalPipelineName, $ImagingPipelineName, $OmopPipelineName, $CmaPipelineName)
+$excludedPipelineNames = @($ClinicalPipelineName, $ImagingPipelineName, $OmopPipelineName, $CmaPipelineName, $PoaPipelineName)
 $optionalSidecarPipelines = Resolve-OptionalSidecarPipelines -Pipelines $pipelines -Names $OptionalSidecarPipelineNames -Patterns $OptionalSidecarPipelineNamePatterns -ExcludedNames $excludedPipelineNames
 $optionalSidecarResults = @()
 $serializedSidecars = @($optionalSidecarPipelines | Where-Object { [string]$_.displayName -match '(?i)claim|cclf' })
@@ -1859,6 +1862,27 @@ if ($clinInvoked) {
     }
 } else {
     $step9bTimer.Stop()
+}
+
+# Patient Outreach Analytics is deployed with HDS and its semantic model/report
+# are part of the full surface. Run it after Clinical/Silver readiness and wait
+# for completion so a successful deployment cannot leave the POA report blank.
+$poaCompleted = $false
+if (-not $poaPipeline) {
+    throw "Required POA pipeline '$PoaPipelineName' was not deployed"
+} elseif (-not $clinicalCompleted) {
+    throw "POA pipeline requires completed Clinical/Silver readiness"
+} else {
+    $poaResult = Invoke-OptionalDataPipelineSerialized `
+        -WorkspaceId $workspaceId `
+        -PipelineName $PoaPipelineName `
+        -Pipeline $poaPipeline `
+        -FabricHeaders $fabHeaders `
+        -StepName 'POA Pipeline' `
+        -MaxAttempts 3 `
+        -TimeoutMinutes 60
+    $poaCompleted = $poaResult.Status -eq 'COMPLETED'
+    if (-not $poaCompleted) { throw "POA pipeline did not complete" }
 }
 
 # ── Step 9c: Optional CMA follow-up (non-blocking) ──
@@ -2245,6 +2269,7 @@ Write-Host ""
 Write-Host "  The HDS pipeline sequence:" -ForegroundColor Cyan
 Write-Host "    1. Optional sidecars — claims/CCLF serialized with retry; disjoint pipelines non-blocking ($(if ($optionalSidecarResults.Count -gt 0) { 'RECORDED' } else { 'NONE MATCHED' }))" -ForegroundColor $(if ($optionalSidecarResults.Count -gt 0) { 'Green' } else { 'DarkGray' })
 Write-Host "    2. Clinical Foundation pipeline — $(if ($clinicalCompleted) { 'COMPLETED ✓' } else { 'IN PROGRESS / NOT COMPLETED' })" -ForegroundColor $(if ($clinicalCompleted) { 'Green' } else { 'Yellow' })
+Write-Host "    3. Patient Outreach Analytics pipeline — $(if ($poaCompleted) { 'COMPLETED ✓' } else { 'NOT COMPLETED' })" -ForegroundColor $(if ($poaCompleted) { 'Green' } else { 'Yellow' })
 if ($cmaPipeline) {
     $cmaStatus = if ($cmaCompleted) {
         'COMPLETED ✓; semantic model overwritten and report rebound'
@@ -2259,9 +2284,9 @@ if ($cmaPipeline) {
     } else {
         'NOT INVOKED (non-blocking warning)'
     }
-    Write-Host "    3. Care Management Analytics pipeline — $cmaStatus" -ForegroundColor $(if ($cmaInvoked -or $cmaAlreadyRunning) { 'Green' } else { 'Yellow' })
+    Write-Host "    4. Care Management Analytics pipeline — $cmaStatus" -ForegroundColor $(if ($cmaInvoked -or $cmaAlreadyRunning) { 'Green' } else { 'Yellow' })
 }
-Write-Host "    4. Imaging with Clinical Foundation pipeline — $(if ($imgCompleted) { 'COMPLETED ✓' } else { 'IN PROGRESS / NOT COMPLETED' })" -ForegroundColor $(if ($imgCompleted) { 'Green' } else { 'Yellow' })
+Write-Host "    5. Imaging with Clinical Foundation pipeline — $(if ($imgCompleted) { 'COMPLETED ✓' } else { 'IN PROGRESS / NOT COMPLETED' })" -ForegroundColor $(if ($imgCompleted) { 'Green' } else { 'Yellow' })
 if ($omopPipeline) {
     $omopStatus = if ((Get-Variable -Name omopCompleted -ErrorAction SilentlyContinue) -and $omopCompleted) {
         'COMPLETED ✓'
@@ -2272,7 +2297,7 @@ if ($omopPipeline) {
     } else {
         'SKIPPED (waiting for imaging)'
     }
-    Write-Host "    5. OMOP Analytics pipeline — $omopStatus" -ForegroundColor $(if ((Get-Variable -Name omopCompleted -ErrorAction SilentlyContinue) -and $omopCompleted) { 'Green' } else { 'Yellow' })
+    Write-Host "    6. OMOP Analytics pipeline — $omopStatus" -ForegroundColor $(if ((Get-Variable -Name omopCompleted -ErrorAction SilentlyContinue) -and $omopCompleted) { 'Green' } else { 'Yellow' })
 }
 Write-Host ""
 

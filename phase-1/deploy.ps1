@@ -424,21 +424,27 @@ if ($existingInfraOutputs) {
     Write-Host "  [Bypass] Infrastructure deployment 'infra' is already Succeeded. Skipping Bicep execution." -ForegroundColor Green
     $infra = $existingInfraOutputs | ConvertTo-Json -Depth 10
 } else {
-    # Check for and purge any soft-deleted Key Vaults with matching name pattern
-    $deletedVaults = az keyvault list-deleted --query "[?starts_with(name, 'masimo') || starts_with(name, '$appNamePrefix')].name" -o tsv 2>$null
+    # Purge only soft-deleted vaults that belonged to this deployment's resource
+    # group. Prefix matching can irreversibly purge unrelated deployments.
+    $deletedVaults = @()
+    $deletedVaultJson = az keyvault list-deleted -o json 2>$null
+    if ($LASTEXITCODE -eq 0 -and $deletedVaultJson) {
+        $resourceGroupPattern = "/resourceGroups/$([regex]::Escape($ResourceGroupName))/"
+        $deletedVaults = @($deletedVaultJson | ConvertFrom-Json | Where-Object {
+            $_.properties.vaultId -match $resourceGroupPattern
+        } | Select-Object -ExpandProperty name)
+    }
     foreach ($vault in $deletedVaults) {
-        if ($vault) {
-            Write-Host "Purging soft-deleted Key Vault: $vault" -ForegroundColor Yellow
-            az keyvault purge --name $vault 2>$null | Out-Null
-            for ($purgeWait = 1; $purgeWait -le 24; $purgeWait++) {
-                $stillDeleted = az keyvault list-deleted --query "[?name=='$vault'].name | [0]" -o tsv 2>$null
-                if (-not $stillDeleted) { break }
-                Write-Host "  Waiting for Key Vault purge to complete ($($purgeWait * 5)s)..." -ForegroundColor DarkGray
-                Start-Sleep -Seconds 5
-            }
+        Write-Host "Purging soft-deleted Key Vault from '$ResourceGroupName': $vault" -ForegroundColor Yellow
+        az keyvault purge --name $vault 2>$null | Out-Null
+        for ($purgeWait = 1; $purgeWait -le 24; $purgeWait++) {
             $stillDeleted = az keyvault list-deleted --query "[?name=='$vault'].name | [0]" -o tsv 2>$null
-            if ($stillDeleted) { throw "Soft-deleted Key Vault '$vault' could not be purged before infrastructure deployment" }
+            if (-not $stillDeleted) { break }
+            Write-Host "  Waiting for Key Vault purge to complete ($($purgeWait * 5)s)..." -ForegroundColor DarkGray
+            Start-Sleep -Seconds 5
         }
+        $stillDeleted = az keyvault list-deleted --query "[?name=='$vault'].name | [0]" -o tsv 2>$null
+        if ($stillDeleted) { throw "Soft-deleted Key Vault '$vault' could not be purged before infrastructure deployment" }
     }
 
     # Get admin group object ID if specified

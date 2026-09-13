@@ -2,6 +2,23 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Fresh Deployment Reliability
+- **Added** a mandatory evaluation-harness gate that starts both Masimo and Claims producers, resumes test Eventstreams from `Now`, and requires fresh generated-and-ingested events before any report, RTI, or agent checks. Stale backlog is reset once; partial pause transitions are awaited before resuming, and failures retain diagnostic JSON without evaluating downstream surfaces.
+- **Expanded** the evaluation harness with latest deployment/preflight checks, report-specific data gates, multi-visual page validation, grounded DataAgent and Graph Agent queries, authenticated OperationsAgent evidence, and fresh Edge Work - Brakekat report/OHIF evidence for surfaces APIs cannot prove.
+- **Repaired** med-0906 demo coverage with additive provenance-labeled appointments, coverage, PDC medications, SDOH indicators, and outreach events while preserving the 100 patients and ImagingStudies.
+- **Fixed** POA DirectQuery date evaluation by projecting `AppointmentCreatedDay` in Power Query, preserved marketing task timestamps in staged HDS IDM configuration, and added deterministic POA demo-event materialization.
+- **Populated** ontology companion GraphModels from REST definitions and verified 100 patient-device associations through the published Graph Agent MCP endpoint.
+- **Repaired** OperationsAgent goals, instructions, and KQL binding and verified both agents through the dedicated authenticated conversation API without invoking actions; `HealthcareOpsAgent` remains fail-closed because the Fabric preview playbook generator has not produced a playbook.
+- **Hardened** telemetry and claims Eventstream deployment to inspect runtime topology, resume paused sources/destinations from their last checkpoints, and fail if nodes do not reach `Running` within five minutes.
+- **Fixed** Microsoft HDS/DTT v1.4.0 staging so optional Azure Monitor telemetry is lazy-loaded, cached wheels are patched and validated deterministically, and offline restaging reuses verified wheel artifacts.
+- **Bounded** PowerShell REST calls to prevent network interruptions from leaving deployments alive indefinitely with only quiet-heartbeat output.
+- **Fixed** the UI Full preset to keep both clinical and payer Activators enabled, corrected local full-deployment progress to 16 steps and Durable progress to 12 steps, and prevented expected SQL metadata retries from terminating the blocking-error monitor.
+- **Automated** Data Agent staging publication through the typed Fabric API after definition updates and ontology rebinding, including corrected payer few-shot schemas.
+- **Completed** the full report surface by running Patient Outreach Analytics as a required post-Clinical pipeline and validating its terminal job state.
+- **Replaced** the invalid readmission-alert payload with a KQL-backed Reflex over the reporting Gold Delta table.
+- **Migrated** Data Agent behavioral evaluation from the retired Assistants preview API to each published agent's Fabric MCP endpoint.
+- **Scoped** soft-deleted Key Vault purges to the target resource group and moved generated graph-agent instructions out of tracked source paths.
+
 ### Canonical Synthetic Healthcare Fixture
 - **Added** a deterministic 100-patient canonical FHIR fixture, manifest, checksums, explicit Masimo device assignments, and fail-closed local validator.
 - **Hardened** cached loading into an authoritative FHIR replacement with exact bundle/checksum/count validation and fatal Device/Basic association failures.
@@ -9,6 +26,7 @@
 - **Fixed** OMOP/CMA reference gates, SDOH keys and visual names, quality semantic-model table coverage, report page visuals, clinical condition enrichment, and payer care-gap worklists.
 
 ### CMS Quality Deployment
+- **Replaced** the canonical Population Health & Quality Dashboard's ten single-card pages with the five-page, 46-visual integrated layout; removed the separate executive-artifact deployment path while preserving the canonical report identity.
 - **Added** a five-page Population Health & Quality Executive Dashboard with 46 KPI, chart, table, and slicer visuals consolidated across quality, claims, payer, stars, risk, readmission, and utilization workflows.
 - **Added** deterministic, provenance-labeled sparse-cohort demo markers so revenue opportunity and readmission-rate visuals remain meaningful when randomized synthetic input contains no qualifying cases.
 - **Fixed** invalid quality semantic-model TMDL: relationship headers, indentation, Direct Lake expression nesting, and unsupported date-part relationship behavior.

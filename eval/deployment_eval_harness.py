@@ -27,6 +27,9 @@ Usage:
 """
 from __future__ import annotations
 import argparse, json, os, ssl, subprocess, sys, time, urllib.request, urllib.error
+from surface_checks import orchestrator_checks, report_layout_checks, browser_evidence_checks
+from operations_agent_check import validate_operations_agents
+from graph_agent_check import check_graph_agent
 
 FABRIC_API = "https://api.fabric.microsoft.com/v1"
 PBI_API = "https://api.powerbi.com/v1.0/myorg"
@@ -88,21 +91,27 @@ def http(method: str, url: str, token: str, body=None, timeout=90):
             return e.code, {"_raw": raw[:400]}
 
 
-def ensure_capacity_active(az: Az, log) -> bool:
+def ensure_capacity_active(az: Az, log, *, resume: bool = True) -> bool:
     """The F64 capacity backing these workspaces auto-pauses; Direct Lake reads,
     KQL queries, and agent runs all fail when it is Paused. Resume if needed."""
     out = az.run(["az", "resource", "show", "--ids", CAPACITY_ID,
                   "--query", "properties.state", "-o", "tsv"])
     state = out.stdout.strip()
     log(f"capacity fabrjbwu2 state: {state or '(unknown)'}")
-    if state == "Active":
+    if out.returncode == 0 and state == "Active":
         return True
-    if not state:
-        log("  WARN: could not read capacity state; continuing")
-        return True
+    if out.returncode or not state:
+        log("  ERROR: could not read capacity state; aborting")
+        return False
+    if not resume:
+        log("  ERROR: capacity is not Active and automatic resume is disabled")
+        return False
     log(f"  capacity is {state}; resuming...")
-    az.run(["az", "resource", "invoke-action", "--action", "resume",
-            "--ids", CAPACITY_ID, "--no-wait"])
+    resumed = az.run(["az", "resource", "invoke-action", "--action", "resume",
+                      "--ids", CAPACITY_ID, "--no-wait"])
+    if resumed.returncode:
+        log(f"  ERROR: capacity resume failed: {resumed.stderr.strip()[:300]}")
+        return False
     for _ in range(12):
         time.sleep(20)
         s = az.run(["az", "resource", "show", "--ids", CAPACITY_ID,
@@ -144,123 +153,150 @@ def _user_tables(az: Az, model_id: str) -> list[str]:
     if err or not rows:
         return []
     names = []
-    for r in rows:
-        key = next((c for c in r if "Name" in c), None)
-        if key and r[key]:
-            names.append(r[key])
-    return [n for n in names if "Date" not in n and not n.startswith("_")]
+    for row in rows:
+        key = next((column for column in row if "Name" in column), None)
+        if key and row[key]:
+            names.append(row[key])
+    return [name for name in names if "Date" not in name and not name.startswith("_")]
+
+
+REQUIRED_REPORT_TABLES = {
+    "healthcare1_msft_cma_semantic_model": {"person", "cost", "visit_occurrence", "measurement", "social_determinant"},
+    "healthcare1_msft_poa_semantic_model": {"PatientDim", "AppointmentDim", "AppointmentTransitionFact", "JourneyDim", "MarketingEventFact"},
+    "ImagingReport": {"Patient", "ImagingStudy", "DicomFile"},
+    "Population Health & Quality Semantic Model": {"fact_claim", "agg_quality_summary", "care_gaps", "dim_payer", "agg_medication_adherence", "agg_risk_scores", "readmission_risk_scores", "agg_utilization_summary"},
+}
 
 
 def validate_reports(az: Az, ws_id: str, items: list[dict], log) -> dict:
-    """Every semantic model backing a report must be queryable AND expose rows.
-    Catches Direct Lake connection breaks (blank visuals) and empty fact tables."""
-    models = [i for i in items if i["type"] == "SemanticModel"]
-    reports = [i for i in items if i["type"] == "Report"]
-    log(f"reports: {len(reports)} | semantic models: {len(models)}")
+    models = [item for item in items if item["type"] == "SemanticModel"]
+    log(f"semantic models backing reports: {len(models)}")
     results = []
-    for m in models:
-        mid, name = m["id"], m["displayName"]
-        trivial, err = _dax(az, mid, 'EVALUATE ROW("n", 1)')
-        if err:
-            results.append({"model": name, "status": "FAIL",
-                            "reason": f"semantic model not queryable: {err[:160]}"})
-            log(f"  [FAIL] {name}: not queryable"); continue
-        tables = _user_tables(az, mid)
+    for model in models:
+        model_id, name = model["id"], model["displayName"]
+        _, error = _dax(az, model_id, 'EVALUATE ROW("n", 1)')
+        if error:
+            results.append({"model": name, "status": "FAIL", "reason": f"semantic model not queryable: {error[:160]}"})
+            continue
+        tables = _user_tables(az, model_id)
         if not tables:
-            results.append({"model": name, "status": "WARN", "reason": "no user tables enumerated"})
-            log(f"  [WARN] {name}: no user tables"); continue
-        counts, conn_fail, empty = {}, False, []
-        for t in tables:
-            rows, cerr = _dax(az, mid, f'EVALUATE ROW("n", COUNTROWS(\'{t}\'))')
-            if cerr:
-                if "connection could not be made" in cerr.lower() or "could not login" in cerr.lower():
-                    conn_fail = True
-                counts[t] = f"ERR:{cerr[:60]}"
+            results.append({"model": name, "status": "FAIL", "reason": "no user tables enumerated"})
+            continue
+        counts, errors = {}, {}
+        for table in tables:
+            rows, error = _dax(az, model_id, f'EVALUATE ROW("n", COUNTROWS(\'{table}\'))')
+            if error:
+                errors[table] = error
+                counts[table] = None
             else:
-                n = rows[0].get("[n]") if rows else None
-                counts[t] = n
-                if not n:
-                    empty.append(t)
-        if conn_fail:
-            results.append({"model": name, "status": "FAIL", "counts": counts,
-                            "reason": "Direct Lake data source connection failed — report visuals will be blank"})
-            log(f"  [FAIL] {name}: Direct Lake connection failed (visuals blank)")
-        elif len(empty) == len(tables):
-            results.append({"model": name, "status": "FAIL", "counts": counts,
-                            "reason": "all backing tables empty — visuals blank"})
-            log(f"  [FAIL] {name}: all {len(tables)} tables empty")
-        else:
-            nonempty = len(tables) - len(empty)
-            results.append({"model": name, "status": "PASS", "counts": counts,
-                            "reason": f"{nonempty}/{len(tables)} tables have rows"})
-            log(f"  [PASS] {name}: {nonempty}/{len(tables)} tables have rows")
-    passed = bool(results) and all(r["status"] == "PASS" for r in results)
-    return {"category": "reports", "passed": passed, "results": results}
+                counts[table] = rows[0].get("[n]") if rows else None
+        required = REQUIRED_REPORT_TABLES.get(name, set(tables))
+        missing = sorted(table for table in required if not counts.get(table))
+        status = "FAIL" if errors or missing else "PASS"
+        nonempty = sum(bool(value) for value in counts.values())
+        reason = f"{nonempty}/{len(tables)} tables have rows; " + ("required report facts populated" if not missing else "missing: " + ", ".join(missing))
+        results.append({"model": name, "status": status, "counts": counts, "errors": errors,
+                        "missingRequiredTables": missing, "emptyOptionalTables": sorted(table for table, count in counts.items() if not count and table not in required), "reason": reason})
+        log(f"  [{status}] {name}: {reason}")
+    return {"category": "reports", "passed": bool(results) and all(row["status"] == "PASS" for row in results), "results": results}
 
 
-def validate_agents(az: Az, ws_id: str, items: list[dict], log,
-                    question="How many patients are in the system? Answer with a number.") -> dict:
-    """Every Data Agent must answer a test query end to end via the aiskills
-    OpenAI-assistant thread API. Catches unpublished/draft agents."""
-    agents = [i for i in items if i["type"] in ("DataAgent", "OperationsAgent")]
+def mcp_jsonrpc(url: str, token: str, payload: dict, timeout: int = 300) -> dict:
+    data = json.dumps(payload).encode()
+    request = urllib.request.Request(
+        url,
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+    )
+    with urllib.request.urlopen(request, context=_CTX, timeout=timeout) as response:
+        raw = response.read().decode(errors="replace").strip()
+        if not raw:
+            return {}
+        content_type = response.headers.get("Content-Type", "")
+        if content_type.startswith("text/event-stream"):
+            events = [json.loads(line[5:].strip()) for line in raw.splitlines() if line.startswith("data:") and line[5:].strip()]
+            return events[-1] if events else {}
+        if "application/json" not in content_type:
+            return {"raw": raw}
+        return json.loads(raw)
+
+
+def agent_validation_question(name: str) -> str:
+    if "Imaging" in name:
+        return "Count imaging studies by modality from the connected imaging data. Include each count and the data source."
+    if "Patient 360" in name:
+        return "Count patients by gender without returning names or IDs. Include the data source."
+    if "Clinical Triage" in name:
+        return "Count distinct devices and telemetry readings from the last seven days, then summarize current alert counts. Include data sources."
+    if "Payer" in name:
+        return "Count claim events grouped by status. Include the data source."
+    if "Graph" in name:
+        return "Using the ontology graph itself, count distinct patients and trace one patient-to-device relationship. Return grounded IDs and the ontology source."
+    return "Count records in the primary connected dataset and identify the data source."
+
+
+def validate_agents(az: Az, ws_id: str, items: list[dict], log) -> dict:
+    agents = [item for item in items if item["type"] == "DataAgent" and item["displayName"] != "Healthcare Graph Agent"]
     log(f"data agents: {len(agents)}")
-    tok = lambda: az.token(FABRIC_RESOURCE)
-    av = f"?api-version={AGENT_API_VERSION}"
+    token = az.token(FABRIC_RESOURCE)
     results = []
-    for a in agents:
-        aid, name = a["id"], a["displayName"]
-        base = f"{FABRIC_API}/workspaces/{ws_id}/aiskills/{aid}/aiassistant/openai"
+    for agent in agents:
+        agent_id, name = agent["id"], agent["displayName"]
+        endpoint = f"{FABRIC_API}/mcp/workspaces/{ws_id}/dataagents/{agent_id}/agent"
         try:
-            st, thread = http("POST", f"{base}/threads{av}", tok())
-            if st != 200:
-                results.append({"agent": name, "status": "FAIL", "reason": f"thread create {st}: {json.dumps(thread)[:120]}"})
-                log(f"  [FAIL] {name}: thread create {st}"); continue
-            tid = thread["id"]
-            st, _ = http("POST", f"{base}/threads/{tid}/messages{av}", tok(), {"role": "user", "content": question})
-            if st != 200:
-                results.append({"agent": name, "status": "FAIL", "reason": f"message post {st}"})
-                log(f"  [FAIL] {name}: message post {st}"); continue
-            st, run = http("POST", f"{base}/threads/{tid}/runs{av}", tok(), {"assistant_id": aid})
-            if st not in (200, 201):
-                reason = run.get("message") if isinstance(run, dict) else str(run)
-                reason = reason or json.dumps(run)[:140]
-                # Known Fabric preview limitation: Data Agents must be published in the
-                # portal (draft config alone yields "Stage configuration not found").
-                if "stage configuration not found" in reason.lower() or "ai skill configuration" in reason.lower():
-                    hint = "AGENT NOT PUBLISHED — open the agent in the Fabric portal and click Publish (preview: no REST publish API)"
-                    results.append({"agent": name, "status": "FAIL", "reason": hint, "raw": reason[:140], "remediation": "manual-publish"})
-                    log(f"  [FAIL] {name}: not published (manual portal Publish required)")
-                else:
-                    results.append({"agent": name, "status": "FAIL", "reason": f"run start {st}: {reason}"})
-                    log(f"  [FAIL] {name}: run start {st} ({reason[:60]})")
-                continue
-            rid, final = run["id"], None
-            for _ in range(40):
-                time.sleep(6)
-                st, rr = http("GET", f"{base}/threads/{tid}/runs/{rid}{av}", tok())
-                if rr.get("status") in ("completed", "failed", "cancelled", "expired", "requires_action"):
-                    final = rr; break
-            if not final or final.get("status") != "completed":
-                reason = (final or {}).get("last_error") or (final or {}).get("status") or "timeout"
-                results.append({"agent": name, "status": "FAIL", "reason": f"run did not complete: {str(reason)[:140]}"})
-                log(f"  [FAIL] {name}: run {str(reason)[:60]}"); continue
-            st, msgs = http("GET", f"{base}/threads/{tid}/messages{av}", tok())
-            answer = ""
-            for m in msgs.get("data", []):
-                if m.get("role") == "assistant":
-                    for c in m.get("content", []):
-                        if c.get("type") == "text":
-                            answer += c.get("text", {}).get("value", "")
-            if answer.strip():
-                results.append({"agent": name, "status": "PASS", "reason": f"answered ({len(answer)} chars)", "answer": answer[:200]})
-                log(f"  [PASS] {name}: answered ({len(answer)} chars)")
-            else:
-                results.append({"agent": name, "status": "FAIL", "reason": "empty assistant response"})
-                log(f"  [FAIL] {name}: empty response")
-        except Exception as e:
-            results.append({"agent": name, "status": "FAIL", "reason": f"exception: {str(e)[:140]}"})
-            log(f"  [FAIL] {name}: {str(e)[:80]}")
-    passed = bool(results) and all(r["status"] == "PASS" for r in results)
+            initialized = mcp_jsonrpc(endpoint, token, {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "hls-deployment-eval", "version": "1.0"},
+                },
+            })
+            if "error" in initialized:
+                raise RuntimeError(initialized["error"])
+            mcp_jsonrpc(endpoint, token, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+            listed = mcp_jsonrpc(endpoint, token, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+            tools = ((listed.get("result") or {}).get("tools") or [])
+            if len(tools) != 1:
+                raise RuntimeError(f"expected one MCP tool, found {len(tools)}")
+            tool = tools[0]
+            properties = (tool.get("inputSchema") or {}).get("properties") or {}
+            if not properties:
+                raise RuntimeError("MCP tool input schema has no question property")
+            argument_name = next(iter(properties))
+            called = mcp_jsonrpc(endpoint, token, {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": tool["name"],
+                    "arguments": {argument_name: agent_validation_question(name)},
+                },
+            })
+            result = called.get("result") or {}
+            answer = "\n".join(
+                block.get("text", "")
+                for block in result.get("content") or []
+                if block.get("type") == "text"
+            ).strip()
+            rejected = ("not able", "cannot", "can't", "couldn't", "error", "rejected", "unavailable")
+            grounded = any(term in answer.lower() for term in ("source", "lakehouse", "eventhouse", "ontology", "table"))
+            if result.get("isError") or called.get("error") or not answer or any(term in answer.lower() for term in rejected) or not grounded:
+                raise RuntimeError(answer or called.get("error") or "empty or ungrounded MCP response")
+            results.append({"agent": name, "status": "PASS", "reason": f"Grounded MCP answer ({len(answer)} chars)",
+                            "question": agent_validation_question(name), "answer": answer})
+            log(f"  [PASS] {name}: grounded MCP answer ({len(answer)} chars)")
+        except Exception as exc:
+            results.append({"agent": name, "status": "FAIL", "reason": f"MCP validation failed: {str(exc)[:180]}"})
+            log(f"  [FAIL] {name}: MCP {str(exc)[:80]}")
+    passed = bool(results) and all(result["status"] == "PASS" for result in results)
     return {"category": "agents", "passed": passed, "results": results}
 
 
@@ -333,21 +369,175 @@ def validate_rti(az: Az, ws_id: str, items: list[dict], log) -> dict:
             "dashboards": [d["displayName"] for d in dashboards]}
 
 
+def ensure_telemetry_ready(az: Az, ws_id: str, items: list[dict], rg: str, sub: str | None, timeout_sec: int, log) -> dict:
+    """Start both producers and require running streams with current destination events."""
+    result = {"category": "telemetry_readiness", "passed": False, "results": [], "actions": []}
+    deadline = time.monotonic() + timeout_sec
+    required = {
+        "MasimoTelemetryStream": ("masimo-emulator-grp", "TelemetryRaw", "timestamp"),
+        "ClaimsRTIStream": ("claim-emulator-grp", "claims_events", "event_timestamp"),
+    }
+    started, resumed, resetting = set(), set(), set()
+
+    def remaining():
+        seconds = deadline - time.monotonic()
+        if seconds <= 0:
+            raise TimeoutError("Telemetry readiness deadline exceeded; report evaluation blocked")
+        return seconds
+
+    def container_command(action, name, *extra):
+        remaining()
+        command = ["az", "container", action, "--name", name, "--resource-group", rg, *extra]
+        if sub:
+            command += ["--subscription", sub]
+        response = az.run(command)
+        if response.returncode:
+            raise RuntimeError(f"{name} {action} failed: {response.stderr.strip()[:300]}")
+        return response.stdout
+
+    try:
+        streams = [item for item in items if item["type"] == "Eventstream"]
+        for name in required:
+            if sum(item["displayName"] == name for item in streams) != 1:
+                raise RuntimeError(f"Expected exactly one {name} Eventstream")
+
+        # Resolve the actual Eventhouse owning each destination database, not the first item.
+        databases = {}
+        for item in items:
+            if item["type"] != "Eventhouse":
+                continue
+            status, data = http("GET", f"{FABRIC_API}/workspaces/{ws_id}/eventhouses/{item['id']}",
+                                az.token(FABRIC_RESOURCE), timeout=min(90, remaining()))
+            properties = data.get("properties") or {}
+            if status != 200 or not properties.get("queryServiceUri"):
+                raise RuntimeError(f"Cannot resolve Eventhouse {item['displayName']}: HTTP {status}")
+            for database_id in properties.get("databasesItemIds", []):
+                databases[database_id] = properties["queryServiceUri"]
+
+        while True:
+            remaining()
+            observations = []
+            result["results"] = observations
+            for producer, _, _ in required.values():
+                state = json.loads(container_command(
+                    "show", producer, "--query",
+                    "{state:instanceView.state,containers:containers[].instanceView.currentState.state}", "-o", "json"))
+                if not state.get("state") or not state.get("containers"):
+                    raise RuntimeError(f"{producer}: container runtime state is unavailable")
+                running = state["state"] == "Running" and all(s == "Running" for s in state["containers"])
+                observations.append({"check": producer, "status": "PASS" if running else "WAIT", "state": state})
+                if not running and producer not in started:
+                    container_command("start", producer, "--no-wait")
+                    started.add(producer)
+                    result["actions"].append({"producer": producer, "action": "start"})
+                    log(f"  starting producer {producer}")
+
+            destinations = {}
+            for stream in streams:
+                name, stream_id = stream["displayName"], stream["id"]
+                url = f"{FABRIC_API}/workspaces/{ws_id}/eventstreams/{stream_id}"
+                status, topology = http("GET", url + "/topology", az.token(FABRIC_RESOURCE),
+                                        timeout=min(90, remaining()))
+                if status != 200:
+                    raise RuntimeError(f"{name} topology failed: HTTP {status}: {topology}")
+                groups = [topology.get(kind) or [] for kind in ("sources", "streams", "destinations")]
+                if not all(groups):
+                    raise RuntimeError(f"{name}: topology must contain sources, streams, and destinations")
+                nodes = [node for group in groups for node in group]
+                states = [{"name": node.get("name"), "status": node.get("status")} for node in nodes]
+                if any(node.get("status") in ("Error", "Failed") for node in nodes):
+                    raise RuntimeError(f"{name}: failed topology nodes: {states}")
+                running = all(node.get("status") == "Running" for node in nodes)
+                observations.append({"check": name, "id": stream_id, "status": "PASS" if running else "WAIT", "nodes": states})
+                if (any(node.get("status") in ("Paused", "Stopped") for node in nodes)
+                        and not any(node.get("status") in ("Pausing", "Resuming") for node in nodes)
+                        and stream_id not in resumed):
+                    status, body = http("POST", url + "/resume", az.token(FABRIC_RESOURCE),
+                                        {"startType": "Now"}, timeout=min(90, remaining()))
+                    if status not in (200, 202):
+                        raise RuntimeError(f"{name} resume failed: HTTP {status}: {body}")
+                    resumed.add(stream_id)
+                    result["actions"].append({"eventstream": name, "action": "resume", "startType": "Now"})
+                    log(f"  resuming {name} from Now (test policy: skip queued history)")
+                if name in required:
+                    _, table, column = required[name]
+                    matches = [node.get("properties") or {} for node in groups[2]
+                               if node.get("type") == "Eventhouse"
+                               and (node.get("properties") or {}).get("tableName") == table]
+                    if len(matches) != 1 or matches[0].get("workspaceId") != ws_id:
+                        raise RuntimeError(f"{name}: expected one {table} destination in the target workspace")
+                    destination = matches[0]
+                    query_uri = databases.get(destination.get("itemId"))
+                    if not query_uri or not destination.get("databaseName"):
+                        raise RuntimeError(f"{name}: destination database could not be resolved")
+                    destinations[table] = (query_uri, destination["databaseName"], column, name, stream_id)
+
+            if all(row["status"] == "PASS" for row in observations):
+                # Sample both streams in the same poll; never retain a stale earlier PASS.
+                for table, (query_uri, database, column, name, stream_id) in destinations.items():
+                    remaining()
+                    query = (
+                        f"{table} | where ingestion_time() > ago(5m) "
+                        f"| extend event_time=todatetime({column}) "
+                        "| summarize latest_event=max(event_time), latest_ingestion=max(ingestion_time()), "
+                        "recent_events=countif(event_time between (ago(5m) .. now())), "
+                        "backlog_events=countif(event_time < ago(5m))"
+                    )
+                    rows, error = _kql(az, query_uri, database, query, tries=1)
+                    if error:
+                        raise RuntimeError(f"{table} freshness query failed: {error}")
+                    latest, ingested, count, backlog = rows[0] if rows and len(rows[0]) == 4 else (None, None, 0, 0)
+                    observations.append({
+                        "check": f"fresh_data_{table}", "status": "PASS" if count and count > 0 else "WAIT",
+                        "query": query, "database": database, "latestEvent": latest,
+                        "latestIngestion": ingested, "recentEvents": count or 0, "backlogEvents": backlog or 0,
+                    })
+                    log(f"  {table}: {count or 0} recent events; latest event={latest}, ingestion={ingested}")
+                    if not count and backlog and stream_id not in resetting and stream_id not in resumed:
+                        # Test streams should not spend the evaluation window replaying old events.
+                        status, body = http("POST",
+                                            f"{FABRIC_API}/workspaces/{ws_id}/eventstreams/{stream_id}/pause",
+                                            az.token(FABRIC_RESOURCE), timeout=min(90, remaining()))
+                        if status not in (200, 202):
+                            raise RuntimeError(f"{name} pause for Resume from Now failed: HTTP {status}: {body}")
+                        resetting.add(stream_id)
+                        result["actions"].append({"eventstream": name, "action": "pause_for_resume_now"})
+                        log(f"  resetting stale {name} so the next resume starts from Now")
+                remaining()
+                if all(row["status"] == "PASS" for row in observations):
+                    result["passed"] = True
+                    return result
+            log("  waiting for both telemetry streams to be live-ready...")
+            time.sleep(min(15, remaining()))
+    except Exception as exc:
+        result["results"].append({"check": "telemetry_readiness", "status": "FAIL", "reason": str(exc)})
+        return result
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Post-deployment eval harness")
     ap.add_argument("--workspace", required=True, help="Fabric workspace display name (e.g. med-0719)")
+    ap.add_argument("--resource-group", default=None, help="Azure resource group (default: rg-{workspace})")
+    ap.add_argument("--operations-evidence", help="Fresh authenticated OperationsAgent API result JSON")
+    ap.add_argument("--subscription", default=None, help="Azure subscription ID for container lookups")
+    ap.add_argument("--expected-device-associations", type=int, default=100)
+    ap.add_argument("--readiness-timeout", type=int, default=600, help="timeout for telemetry readiness (seconds)")
     ap.add_argument("--azure-config-dir", default="/Users/joey/.azure-isolated/BrakeKat")
     ap.add_argument("--json-out", default=None, help="write full results JSON here")
-    ap.add_argument("--skip", action="append", default=[], choices=["reports", "agents", "rti"],
+    ap.add_argument("--orchestrator-url", default="http://127.0.0.1:7071")
+    ap.add_argument("--browser-evidence", help="Fresh Edge BrakeKat report/OHIF evaluation JSON")
+    ap.add_argument("--skip", action="append", default=[], choices=["reports", "agents", "rti", "deployment", "browser"],
                     help="skip a category (repeatable)")
     ap.add_argument("--no-capacity-resume", action="store_true", help="do not auto-resume the capacity")
     args = ap.parse_args()
+    if args.readiness_timeout <= 0:
+        ap.error("--readiness-timeout must be greater than zero")
 
     def log(m): print(m, flush=True)
     az = Az(args.azure_config_dir)
     log(f"=== deployment eval harness :: workspace={args.workspace} :: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} ===")
     try:
-        if not args.no_capacity_resume and not ensure_capacity_active(az, log):
+        if not ensure_capacity_active(az, log, resume=not args.no_capacity_resume):
             log("ABORT: capacity not Active"); return 2
         ws_id = find_workspace(az, args.workspace)
         if not ws_id:
@@ -355,16 +545,42 @@ def main() -> int:
         log(f"workspace id: {ws_id}")
         items = list_items(az, ws_id)
         log(f"items: {len(items)}")
+        
+        rg = args.resource_group or f"rg-{args.workspace}"
+        log(f"\n--- TELEMETRY READINESS ---")
+        t_ready = ensure_telemetry_ready(az, ws_id, items, rg, args.subscription, args.readiness_timeout, log)
+        if not t_ready["passed"]:
+            log("\nABORT: Telemetry readiness gate failed.")
+            overall = False
+            categories = [t_ready]
+            summary = {"workspace": args.workspace, "workspaceId": ws_id,
+                       "capturedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                       "overallPassed": overall, "categories": categories}
+            if args.json_out:
+                with open(args.json_out, "w") as f:
+                    json.dump(summary, f, indent=2)
+                log(f"  wrote {args.json_out}")
+            return 1
+        categories = [t_ready]
     except Exception as e:
         log(f"ABORT: setup failed: {e}"); return 2
 
-    categories = []
+    if "deployment" not in args.skip:
+        log("\n--- DEPLOYMENT AND PREFLIGHT ---")
+        categories.append(orchestrator_checks(args.orchestrator_url, args.workspace, rg))
     if "reports" not in args.skip:
         log("\n--- REPORTS ---"); categories.append(validate_reports(az, ws_id, items, log))
+        categories.append(report_layout_checks(az, ws_id, items, http, FABRIC_API))
     if "rti" not in args.skip:
         log("\n--- RTI DASHBOARDS ---"); categories.append(validate_rti(az, ws_id, items, log))
     if "agents" not in args.skip:
         log("\n--- DATA AGENTS ---"); categories.append(validate_agents(az, ws_id, items, log))
+        categories.append(validate_operations_agents(items, args.operations_evidence))
+        categories.append(check_graph_agent(az, ws_id, items, log, mcp_jsonrpc, args.expected_device_associations))
+    if "browser" not in args.skip:
+        log("\n--- REPORT AND OHIF RENDERING ---")
+        categories.append(browser_evidence_checks(args.browser_evidence, ws_id, items))
+
 
     overall = all(c["passed"] for c in categories)
     summary = {"workspace": args.workspace, "workspaceId": ws_id,
@@ -372,8 +588,8 @@ def main() -> int:
                "overallPassed": overall, "categories": categories}
     log("\n=== SUMMARY ===")
     for c in categories:
-        n_fail = sum(1 for r in c["results"] if r.get("status") == "FAIL")
-        log(f"  {c['category']:8} {'PASS' if c['passed'] else 'FAIL'}  ({n_fail} failing checks)")
+        not_passing = sum(1 for r in c["results"] if r.get("status") != "PASS")
+        log(f"  {c['category']:8} {'PASS' if c['passed'] else 'FAIL'}  ({not_passing} checks not passing)")
     log(f"  OVERALL: {'PASS' if overall else 'FAIL'}")
     if args.json_out:
         with open(args.json_out, "w") as f:

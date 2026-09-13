@@ -139,6 +139,9 @@ def feature_presence_checks(resources: dict[str, Any], config: dict[str, Any]) -
         model = _items(resources, "SemanticModel", "population health", "quality semantic model")
         checks.append(_check("Population health quality report", bool(report), report[0].get("name", "Missing") if report else "Missing"))
         checks.append(_check("Population health quality semantic model", bool(model), model[0].get("name", "Missing") if model else "Missing"))
+        if not config.get("skip_activator", False) and config.get("alert_email"):
+            readmission = _items(resources, "Reflex", "readmissionriskalert")
+            checks.append(_check("Readmission risk Activator", bool(readmission), readmission[0].get("name", "Missing") if readmission else "Missing"))
 
     if not config.get("skip_phase7", False):
         if not config.get("skip_payer_rti", False) and not config.get("scaffolding_only", False):
@@ -287,7 +290,7 @@ def _pipeline_checks(resources: dict[str, Any], fabric_client_factory: Callable[
         item
         for item in resources.get("fabric") or []
         if str(item.get("type") or "").lower() == "datapipeline"
-        and any(part in str(item.get("name") or "").lower() for part in ("clinical_data_foundation", "imaging_with_clinical", "omop_analytics", "msft_cma", "claims_data_ingestion", "sdoh_ingestion"))
+        and any(part in str(item.get("name") or "").lower() for part in ("clinical_data_foundation", "imaging_with_clinical", "omop_analytics", "msft_cma", "poa_ingestion", "claims_data_ingestion", "sdoh_ingestion"))
     ]
     checks: list[dict[str, str]] = []
     client = fabric_client_factory()

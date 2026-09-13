@@ -10,7 +10,7 @@
 
 ---
 
-Stage 6 implements Population Health & Quality analytics, adding **claims analytics**, **CMS quality measurement**, **Star Rating simulation**, **HCC risk adjustment**, **readmission risk prediction**, and **cost & utilization analytics** to the platform. It materializes Silver FHIR data into a Gold star schema (23 tables), and deploys a 10-page Population Health & Quality Dashboard Power BI report.
+Stage 6 implements Population Health & Quality analytics, adding **claims analytics**, **CMS quality measurement**, **Star Rating simulation**, **HCC risk adjustment**, **readmission risk prediction**, and **cost & utilization analytics** to the platform. It materializes Silver FHIR data into a Gold star schema (23 tables), and deploys the five-page Population Health & Quality Dashboard with 46 integrated KPI, chart, table, and slicer visuals.
 
 ## Architecture
 
@@ -51,7 +51,7 @@ Silver Lakehouse (FHIR R4)                      Gold Reporting Lakehouse (23 tab
                                                  ┌──────────────────────┐
                                                  │ Pop Health & Quality │
                                                  │ (Direct Lake Report) │
-                                                 │  10 pages, 58 DAX   │
+                                                 │ 5 pages, 46 visuals │
                                                  └─────────┬────────────┘
                                                            │
                                                            ▼
@@ -190,16 +190,11 @@ Additional analytics:
 
 | Page | Title | Key Visuals |
 |------|-------|-------------|
-| 1 | Quality Measures Overview | KPI cards, measure rates vs benchmarks, bar chart |
-| 2 | Measure Deep-Dive | Slicer per measure, decomposition tree, patient list |
-| 3 | Claims Analytics | Billed/paid/denial KPIs, waterfall, payer breakdown |
-| 4 | Medication Adherence | PDC gauges (3 classes), adherent vs non-adherent |
-| 5 | Care Gap Closure | Priority list, gap status by measure |
-| 6 | Payer Performance | Quality rate by payer, denial vs quality scatter |
-| 7 | Star Rating Simulator | Overall star KPI, per-measure stars, what-if slider |
-| 8 | Risk Adjustment & RAF | RAF distribution, risk tier donut, revenue-at-risk |
-| 9 | Readmission Risk | Risk tier funnel, feature importance, model AUC card |
-| 10 | Cost & Utilization | PMPM trend, IP/ED/1K KPIs, high-cost claimant table |
+| 1 | Executive Overview | Quality, population, claims, care-gap, RAF, and readmission KPIs; payer comparisons; risk distribution |
+| 2 | Quality & Care Gaps | Measure performance, adherence KPI, gap type/status breakdowns, prioritized action table, payer filter |
+| 3 | Claims & Payer Performance | Billed/paid/denial KPIs, payer and claim-type charts, status distribution, claim detail, payer filter |
+| 4 | Stars & Risk Adjustment | Star/RAF/revenue KPIs, per-measure stars, risk and gender breakdowns, measure detail, payer filter |
+| 5 | Readmission & Utilization | Risk, PMPM, inpatient, and demo readmission-rate KPIs; risk distribution; monthly PMPM; ED visits; encounter detail |
 
 ## Payer-Specific Quality Stratification
 
@@ -272,7 +267,7 @@ Ensure all of the following components are verified before finalizing your deplo
 > - [ ] **HCC Risk Adjustment:** Confirm `dbo.agg_risk_scores` contains patient-level RAF scores with risk tier assignments.
 > - [ ] **Readmission Risk Model:** Confirm `dbo.readmission_risk_scores` shows scored encounters with risk tiers and `dbo.readmission_model_performance` shows AUC > 0.5.
 > - [ ] **Cost & Utilization:** Confirm `dbo.agg_utilization_summary` shows PMPM and utilization metrics with benchmark comparisons.
-> - [ ] **Population Health Dashboard Live:** Power BI 10-page report is successfully deployed, using Direct Lake connections to Gold tables.
+> - [ ] **Population Health Dashboard Live:** The canonical five-page report renders all 46 visuals without errors, using Direct Lake connections to Gold tables. A single-card page or queryable-but-empty model does not pass.
 > - [ ] **Payer Stratification Active:** Confirm Payer performance visuals compute stratified quality metrics correctly across Commercial, Medicare, and Medicaid.
 > - [ ] **Readmission Alert Active:** Confirm Data Activator ReadmissionRiskAlert reflex sends daily email digest to configured alert email.
 > - [ ] **Extended Ontology Online:** The Fabric IQ `ClinicalDeviceOntology` is extended to 14 total entities (including Claims, Payers, and Diagnoses) with successful bindings to your Data Agents.

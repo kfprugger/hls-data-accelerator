@@ -304,9 +304,7 @@ if ($existingOntology) {
         Write-Host "    Existing ontology will be used for Data Agent binding. Pass -ReplaceExisting to rebuild the definition." -ForegroundColor DarkGray
         exit 0
     }
-    Write-Host "  Replacing existing ontology '$OntologyName' ($($existingOntology.id))..." -ForegroundColor Yellow
-    Invoke-FabricApi -Method "DELETE" -Endpoint "/workspaces/$workspaceId/items/$($existingOntology.id)" | Out-Null
-    Start-Sleep -Seconds 10
+    Write-Host "  Existing ontology '$OntologyName' ($($existingOntology.id)) will be updated in place..." -ForegroundColor Yellow
 }
 
 # ============================================================================
@@ -333,7 +331,7 @@ function EtJson([string]$id, [string]$name, [string]$keyId, [string]$dispId, [st
 # Helper: build a Lakehouse NonTimeSeries data binding JSON
 function LhBind([string]$bindings, [string]$tbl) {
     $bid = [guid]::NewGuid().ToString()
-    return @{ id = $bid; json = '{"id":"'+$bid+'","dataBindingConfiguration":{"dataBindingType":"NonTimeSeries","propertyBindings":['+$bindings+'],"sourceTableProperties":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$silverLhId+'","sourceTableName":"'+$tbl+'","sourceSchema":"dbo"}}}' }
+    return @{ id = $bid; json = '{"id":"'+$bid+'","dataBindingConfiguration":{"dataBindingType":"NonTimeSeries","propertyBindings":['+$bindings+'],"sourceTableProperties":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$silverLhId+'","sourceTableName":"'+$tbl+'"}}}' }
 }
 
 # Helper: build an Eventhouse TimeSeries data binding JSON
@@ -350,7 +348,7 @@ function RtJson([string]$id, [string]$name, [string]$src, [string]$tgt) {
 # Helper: Lakehouse contextualization JSON
 function LhCtx([string]$tbl, [string]$sc, [string]$sp, [string]$tc, [string]$tp) {
     $cid = [guid]::NewGuid().ToString()
-    return @{ id = $cid; json = '{"id":"'+$cid+'","dataBindingTable":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$silverLhId+'","sourceTableName":"'+$tbl+'","sourceSchema":"dbo"},"sourceKeyRefBindings":[{"sourceColumnName":"'+$sc+'","targetPropertyId":"'+$sp+'"}],"targetKeyRefBindings":[{"sourceColumnName":"'+$tc+'","targetPropertyId":"'+$tp+'"}]}' }
+    return @{ id = $cid; json = '{"id":"'+$cid+'","dataBindingTable":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$silverLhId+'","sourceTableName":"'+$tbl+'"},"sourceKeyRefBindings":[{"sourceColumnName":"'+$sc+'","targetPropertyId":"'+$sp+'"}],"targetKeyRefBindings":[{"sourceColumnName":"'+$tc+'","targetPropertyId":"'+$tp+'"}]}' }
 }
 
 # Helper: Eventhouse/KQL contextualization JSON
@@ -368,7 +366,7 @@ $rels = @()
 if ($IncludeFhir -or $IncludeDicom) {
     $eP = NextId; $pPid = NextId; $pPnm = NextId; $pPgn = NextId; $pPbd = NextId
     $ejP = EtJson $eP "Patient" $pPid $pPnm ((PropJson $pPid "patientId"),(PropJson $pPnm "patientName"),(PropJson $pPgn "gender"),(PropJson $pPbd "birthDate") -join ',')
-    $dbP = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pPid+'"},{"sourceColumnName":"name_text","targetPropertyId":"'+$pPnm+'"},{"sourceColumnName":"gender","targetPropertyId":"'+$pPgn+'"},{"sourceColumnName":"birthDate","targetPropertyId":"'+$pPbd+'"}') "Patient"
+    $dbP = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pPid+'"},{"sourceColumnName":"name_string","targetPropertyId":"'+$pPnm+'"},{"sourceColumnName":"gender","targetPropertyId":"'+$pPgn+'"},{"sourceColumnName":"birthDate","targetPropertyId":"'+$pPbd+'"}') "Patient"
     $ets += @{id=$eP;j=$ejP;b=$dbP}
 }
 
@@ -472,13 +470,13 @@ if ($IncludeGold -and $goldLhId) {
     # Helper: Gold Lakehouse data binding
     function GoldLhBind([string]$bindings, [string]$tbl) {
         $bid = [guid]::NewGuid().ToString()
-        return @{ id = $bid; json = '{"id":"'+$bid+'","dataBindingConfiguration":{"dataBindingType":"NonTimeSeries","propertyBindings":['+$bindings+'],"sourceTableProperties":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$goldLhId+'","sourceTableName":"'+$tbl+'","sourceSchema":"dbo"}}}' }
+        return @{ id = $bid; json = '{"id":"'+$bid+'","dataBindingConfiguration":{"dataBindingType":"NonTimeSeries","propertyBindings":['+$bindings+'],"sourceTableProperties":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$goldLhId+'","sourceTableName":"'+$tbl+'"}}}' }
     }
 
     # Helper: Gold Lakehouse contextualization
     function GoldLhCtx([string]$tbl, [string]$sc, [string]$sp, [string]$tc, [string]$tp) {
         $cid = [guid]::NewGuid().ToString()
-        return @{ id = $cid; json = '{"id":"'+$cid+'","dataBindingTable":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$goldLhId+'","sourceTableName":"'+$tbl+'","sourceSchema":"dbo"},"sourceKeyRefBindings":[{"sourceColumnName":"'+$sc+'","targetPropertyId":"'+$sp+'"}],"targetKeyRefBindings":[{"sourceColumnName":"'+$tc+'","targetPropertyId":"'+$tp+'"}]}' }
+        return @{ id = $cid; json = '{"id":"'+$cid+'","dataBindingTable":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$goldLhId+'","sourceTableName":"'+$tbl+'"},"sourceKeyRefBindings":[{"sourceColumnName":"'+$sc+'","targetPropertyId":"'+$sp+'"}],"targetKeyRefBindings":[{"sourceColumnName":"'+$tc+'","targetPropertyId":"'+$tp+'"}]}' }
     }
 
     # Claim entity (from fact_claim)
@@ -602,7 +600,12 @@ for ($attempt = 1; $attempt -le 10 -and -not $createCompleted; $attempt++) {
     try {
         $cToken = Get-FabricAccessToken
         $cHeaders = @{ "Authorization" = "Bearer $cToken"; "Content-Type" = "application/json" }
-        $cResp = Invoke-WebRequest -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies" -Headers $cHeaders -Method POST -Body $bodyJson -ErrorAction Stop
+                if ($existingOntology -and $ReplaceExisting) {
+            $updateBody = '{"definition":{"parts":['+($parts -join ',')+']}}'
+            $cResp = Invoke-WebRequest -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies/$($existingOntology.id)/updateDefinition" -Headers $cHeaders -Method POST -Body $updateBody -ErrorAction Stop
+        } else {
+            $cResp = Invoke-WebRequest -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies" -Headers $cHeaders -Method POST -Body $bodyJson -ErrorAction Stop
+        }
 
         if ([int]$cResp.StatusCode -eq 202) {
             $cOpId = $cResp.Headers["x-ms-operation-id"]; if ($cOpId -is [array]) { $cOpId = $cOpId[0] }
@@ -738,3 +741,26 @@ Write-Host ""
 Write-Host "  Next steps (Fabric portal):" -ForegroundColor Yellow
 Write-Host "    1. Open the ontology → Preview tab → 'Refresh graph model'" -ForegroundColor White
 Write-Host "    2. Connect the ontology as a datasource on your Data Agents" -ForegroundColor White
+
+
+Write-Host ""
+Write-Host "  Populating GraphModel for '$OntologyName'..." -ForegroundColor White
+$ontologyIdWithoutDashes = $ontologyId -replace '-', ''
+$items = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/items"
+$graphModel = $items.value | Where-Object { $_.type -eq "GraphModel" -and $_.displayName -match "$ontologyIdWithoutDashes$" }
+if ($graphModel) {
+    if ($graphModel -is [array]) { $graphModel = $graphModel[0] }
+    $pyScript = Join-Path $PSScriptRoot "deploy-graph-model.py"
+    if (Test-Path $pyScript) {
+        $pyProc = Start-Process python3 -ArgumentList @($pyScript, "--workspace-id", $workspaceId, "--ontology-id", $ontologyId, "--graph-id", $graphModel.id) -NoNewWindow -Wait -PassThru
+        if ($pyProc.ExitCode -ne 0) {
+            Write-Host "  ⚠ Failed to populate GraphModel. (Exit code: $($pyProc.ExitCode))" -ForegroundColor Yellow
+        } else {
+            Write-Host "  ✓ GraphModel populated and refresh triggered." -ForegroundColor Green
+        }
+    } else {
+        Write-Host "  ⚠ Cannot find deploy-graph-model.py." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  ⚠ GraphModel item not found for this ontology. Manual populate required." -ForegroundColor Yellow
+}

@@ -91,7 +91,8 @@ def blocking_messages(dep: dict[str, Any], *, include_warning_logs: bool = False
         message = str(entry.get("message") or "")
         lower = message.lower()
         is_error = level == "error"
-        has_blocking_marker = any(marker in message for marker in BLOCKING_MARKERS)
+        is_expected_retry = "not ready (attempt " in lower
+        has_blocking_marker = not is_expected_retry and any(marker in message for marker in BLOCKING_MARKERS)
         is_blocking_warning = include_warning_logs and level == "warn" and any(term in lower for term in BLOCKING_WARNING_TERMS)
         if is_error or is_blocking_warning or has_blocking_marker:
             phase = entry.get("phase") or current_phase

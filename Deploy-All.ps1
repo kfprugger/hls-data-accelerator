@@ -124,6 +124,10 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
+# Bound individual REST calls so a transient DNS/network outage cannot leave the
+# local orchestrator alive indefinitely with only quiet-heartbeat messages.
+$global:PSDefaultParameterValues["Invoke-WebRequest:TimeoutSec"] = 120
+$global:PSDefaultParameterValues["Invoke-RestMethod:TimeoutSec"] = 120
 if ($ReusePatients -and $ReseedData) {
     throw "-ReusePatients and -ReseedData are mutually exclusive."
 }
@@ -2214,6 +2218,22 @@ if (($Phase2 -or $Phase3) -and -not $SkipImaging) {
                 -FabricWorkspaceName $FabricWorkspaceName `
                 -WorkspaceId $p3WsId
             Assert-LastExternalCommandSucceeded "Phase 3 Deploy-DataAgent.ps1"
+            $cohortAgents = (Invoke-P3FabricRest `
+                -Uri "$p3Base/workspaces/$p3WsId/items?type=DataAgent" `
+                -Label 'Find imaging cohort Data Agent').value
+            $cohortAgent = $cohortAgents | Where-Object {
+                $_.displayName -eq "HDS Multi-Layer Imaging Cohort Agent"
+            } | Select-Object -First 1
+            if (-not $cohortAgent) { throw "Imaging cohort Data Agent was not created" }
+            $cohortPublishBody = @{
+                publishedDescription = "Published imaging cohort configuration for $FabricWorkspaceName"
+            } | ConvertTo-Json
+            Invoke-P3FabricRest `
+                -Uri "$p3Base/workspaces/$p3WsId/dataAgents/$($cohortAgent.id)/staging/publish" `
+                -Method Post `
+                -Body $cohortPublishBody `
+                -Label 'Publish imaging cohort Data Agent' | Out-Null
+            Write-Host "  ✓ Imaging cohort Data Agent published" -ForegroundColor Green
 
             Write-Host ""
 
@@ -2998,14 +3018,30 @@ print("Ontology projection tables materialized successfully.")
                         $p4Token = Get-FabricTokenLocal
                         $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
                         $defResp = Invoke-WebRequest -Method POST `
-                            -Uri "$p4Base/workspaces/$p4WsId/items/$($agent.id)/getDefinition" `
+                            -Uri "$p4Base/workspaces/$p4WsId/dataAgents/$($agent.id)/getDefinition" `
                             -Headers $p4Headers -UseBasicParsing -ErrorAction Stop
-                        $defOpId = $defResp.Headers["x-ms-operation-id"]
-                        if ($defOpId -is [array]) { $defOpId = $defOpId[0] }
-                        Start-Sleep 5
-                        $p4Token = Get-FabricTokenLocal
-                        $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
-                        $defResult = Invoke-RestMethod -Uri "$p4Base/operations/$defOpId/result" -Headers $p4Headers -ErrorAction Stop
+                        if ($defResp.StatusCode -eq 200) {
+                            $defResult = $defResp.Content | ConvertFrom-Json -Depth 50
+                        } elseif ($defResp.StatusCode -eq 202) {
+                            $defLocation = $defResp.Headers["Location"]
+                            if ($defLocation -is [array]) { $defLocation = $defLocation[0] }
+                            if (-not $defLocation) { throw "Data Agent getDefinition returned 202 without a Location header for '$agentName'" }
+                            $defResult = $null
+                            for ($pollAttempt = 1; $pollAttempt -le 24; $pollAttempt++) {
+                                Start-Sleep 5
+                                $p4Token = Get-FabricTokenLocal
+                                $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
+                                $defOperation = Invoke-RestMethod -Uri $defLocation -Headers $p4Headers -ErrorAction Stop
+                                if ($defOperation.status -eq "Succeeded") {
+                                    $defResult = Invoke-RestMethod -Uri "$($defLocation.TrimEnd('/'))/result" -Headers $p4Headers -ErrorAction Stop
+                                    break
+                                }
+                                if ($defOperation.status -eq "Failed") { throw "Data Agent getDefinition failed for '$agentName': $($defOperation.error.message)" }
+                            }
+                            if (-not $defResult) { throw "Data Agent getDefinition timed out for '$agentName'" }
+                        } else {
+                            throw "Data Agent getDefinition returned HTTP $($defResp.StatusCode) for '$agentName'"
+                        }
                         $existingParts = @($defResult.definition.parts)
 
                         $ontologyNamesToRemove = @($RemoveOntologyNames + $OntologyName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
@@ -3040,22 +3076,43 @@ print("Ontology projection tables materialized successfully.")
                         $updatedParts = @($existingParts) + @($ontDsPart, $ontFsPart)
                         $updateBody = @{ definition = @{ parts = $updatedParts } }
                         $updateResp = Invoke-WebRequest -Method POST `
-                            -Uri "$p4Base/workspaces/$p4WsId/items/$($agent.id)/updateDefinition" `
+                            -Uri "$p4Base/workspaces/$p4WsId/dataAgents/$($agent.id)/updateDefinition" `
                             -Headers $p4Headers `
                             -Body ($updateBody | ConvertTo-Json -Depth 20) `
                             -UseBasicParsing -ErrorAction Stop
 
-                        if ($updateResp.StatusCode -in @(200, 202)) {
-                            if ($updateResp.StatusCode -eq 202) {
-                                $upOpId = $updateResp.Headers["x-ms-operation-id"]
-                                if ($upOpId -is [array]) { $upOpId = $upOpId[0] }
-                                Start-Sleep 10
-                            }
-                            Write-Host "  ✓ $OntologyName datasource applied to '$agentName'" -ForegroundColor Green
-                            $bound = $true
-                        } else {
+                        if ($updateResp.StatusCode -notin @(200, 202)) {
                             throw "Ontology datasource update returned HTTP $($updateResp.StatusCode) for '$agentName'"
                         }
+                        if ($updateResp.StatusCode -eq 202) {
+                            $upOpId = $updateResp.Headers["x-ms-operation-id"]
+                            if ($upOpId -is [array]) { $upOpId = $upOpId[0] }
+                            if (-not $upOpId) { throw "Ontology datasource update returned 202 without an operation ID for '$agentName'" }
+                            $updateComplete = $false
+                            for ($pollAttempt = 1; $pollAttempt -le 24; $pollAttempt++) {
+                                Start-Sleep 5
+                                $p4Token = Get-FabricTokenLocal
+                                $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
+                                $upOp = Invoke-RestMethod -Uri "$p4Base/operations/$upOpId" -Headers $p4Headers -ErrorAction Stop
+                                if ($upOp.status -eq "Succeeded") { $updateComplete = $true; break }
+                                if ($upOp.status -eq "Failed") { throw "Ontology datasource update failed for '$agentName': $($upOp.error.message)" }
+                            }
+                            if (-not $updateComplete) { throw "Ontology datasource update timed out for '$agentName'" }
+                        }
+
+                        $publishBody = @{
+                            publishedDescription = "$agentName with $OntologyName"
+                        } | ConvertTo-Json
+                        $publishResp = Invoke-WebRequest -Method POST `
+                            -Uri "$p4Base/workspaces/$p4WsId/dataAgents/$($agent.id)/staging/publish" `
+                            -Headers $p4Headers `
+                            -Body $publishBody `
+                            -UseBasicParsing -ErrorAction Stop
+                        if ($publishResp.StatusCode -ne 200) {
+                            throw "Data Agent publish returned HTTP $($publishResp.StatusCode) for '$agentName'"
+                        }
+                        Write-Host "  ✓ $OntologyName datasource applied and '$agentName' published" -ForegroundColor Green
+                        $bound = $true
                     } catch {
                         $bindStatusCode = $null
                         try { $bindStatusCode = [int]$_.Exception.Response.StatusCode } catch {}
@@ -3848,8 +3905,6 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             $qualityReportName = 'Population Health & Quality Dashboard'
             $qualityModelDir = Join-Path $reportDir 'Population Health & Quality Dashboard.SemanticModel'
             $qualityReportDir = Join-Path $reportDir 'Population Health & Quality Dashboard.Report'
-            $qualityExecutiveReportName = 'Population Health & Quality Executive Dashboard'
-            $qualityExecutiveReportDir = Join-Path $reportDir 'Population Health & Quality Executive Dashboard.Report'
 
             $goldItems = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items?type=Lakehouse" -Label 'List reporting lakehouses').value
             $reportingGold = $goldItems | Where-Object { $_.displayName -eq 'healthcare1_reporting_gold' } | Select-Object -First 1
@@ -3891,22 +3946,8 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                 Wait-P5FabricOperation -Response $reportResponse -Label 'Create quality report'
                 $qualityReport = Wait-P5ItemByName -Type 'Report' -DisplayName $qualityReportName
             }
-            if (-not (Test-Path $qualityExecutiveReportDir)) { throw "Consolidated quality report directory not found: $qualityExecutiveReportDir" }
-            $qualityExecutiveReportDefinition = New-P5ItemDefinitionFromDirectory -ItemDirectory $qualityExecutiveReportDir -Format 'PBIR' -Replacements @{ '__SEMANTIC_MODEL_CONNECTION__' = $modelConnection }
-            $qualityExecutiveReports = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items?type=Report" -Label 'List consolidated quality reports').value
-            $qualityExecutiveReport = $qualityExecutiveReports | Where-Object { $_.displayName -eq $qualityExecutiveReportName } | Select-Object -First 1
-            if ($qualityExecutiveReport) {
-                $qualityExecutiveReportBody = @{ definition = $qualityExecutiveReportDefinition } | ConvertTo-Json -Depth 100 -Compress
-                $qualityExecutiveReportResponse = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items/$($qualityExecutiveReport.id)/updateDefinition" -Body $qualityExecutiveReportBody -Label 'Update consolidated quality report'
-                Wait-P5FabricOperation -Response $qualityExecutiveReportResponse -Label 'Update consolidated quality report'
-            } else {
-                $qualityExecutiveReportBody = @{ displayName = $qualityExecutiveReportName; type = 'Report'; definition = $qualityExecutiveReportDefinition } | ConvertTo-Json -Depth 100 -Compress
-                $qualityExecutiveReportResponse = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items" -Body $qualityExecutiveReportBody -Label 'Create consolidated quality report'
-                Wait-P5FabricOperation -Response $qualityExecutiveReportResponse -Label 'Create consolidated quality report'
-                $qualityExecutiveReport = Wait-P5ItemByName -Type 'Report' -DisplayName $qualityExecutiveReportName
-            }
-            Write-Host "  ✓ Quality semantic model/reports: $qualityModelName ($qualityDatasetId) / $qualityReportName / $qualityExecutiveReportName" -ForegroundColor Green
-            Write-Host "    Original 10-page report and consolidated 5-page executive dashboard deployed from PBIR artifacts" -ForegroundColor DarkGray
+            Write-Host "  ✓ Quality semantic model/report: $qualityModelName ($qualityDatasetId) / $qualityReportName" -ForegroundColor Green
+            Write-Host "    Five integrated pages with KPI, chart, table, and slicer visuals deployed from the canonical PBIR artifact" -ForegroundColor DarkGray
             # --- Programmatic SPN Credential Patching ---
             $spnSuccess = $false
             $kvName = (az keyvault list --resource-group $ResourceGroupName --query "[0].name" -o tsv 2>$null)
@@ -3999,73 +4040,105 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
         Write-Host "  --- Step 10c: Readmission Risk Alert (Data Activator) ---" -ForegroundColor Cyan
 
         if (-not $SkipActivator -and $AlertEmail) {
-            $reflexPayload = @{
-                displayName = "ReadmissionRiskAlert"
-                type = "Reflex"
-                definition = @{
-                    parts = @(@{
-                        path = "definition.json"
-                        payloadType = "InlineBase64"
-                        payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((@{
-                            triggers = @(@{
-                                name = "HighRiskReadmission"
-                                description = "Daily alert for patients with high 30-day readmission risk"
-                                source = @{
-                                    type = "DeltaTable"
-                                    table = "readmission_risk_scores"
-                                    lakehouse = "healthcare1_reporting_gold"
-                                    filter = "risk_tier = 'High'"
-                                }
-                                schedule = @{
-                                    type = "Daily"
-                                    timeOfDay = "08:00"
-                                    timezone = "Eastern Standard Time"
-                                }
-                                actions = @(@{
-                                    type = "Email"
-                                    recipients = @($AlertEmail)
-                                    subject = "[Population Health] High Readmission Risk Patients"
-                                    body = "{{count}} patients flagged as HIGH readmission risk (≥30% probability). Review in Population Health & Quality Dashboard → Readmission Risk page."
-                                })
-                            })
-                        } | ConvertTo-Json -Depth 10)))
-                    })
-                }
-            } | ConvertTo-Json -Depth 15
+            # Activator's supported programmable source is KQL. Expose the
+            # reporting-lakehouse Delta table through a KQL DB OneLake shortcut,
+            # then bind a real ReflexEntities definition to that external table.
+            $p5KqlDbs = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/kqlDatabases" -Label 'List KQL databases for readmission alerts').value
+            $p5KqlDb = $p5KqlDbs | Where-Object { $_.displayName -match 'Masimo' } | Select-Object -First 1
+            if (-not $p5KqlDb) { $p5KqlDb = $p5KqlDbs | Select-Object -First 1 }
+            if (-not $p5KqlDb) { throw 'No KQL Database found for ReadmissionRiskAlert.' }
 
-            try {
-                $reflexObj = $reflexPayload | ConvertFrom-Json
-                $existingRiskReflex = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items" -Label 'List readmission risk alerts').value |
-                    Where-Object { $_.displayName -eq "ReadmissionRiskAlert" -and $_.type -eq "Reflex" } |
-                    Select-Object -First 1
-                if ($existingRiskReflex) {
-                    $updateBody = @{ definition = $reflexObj.definition } | ConvertTo-Json -Depth 15
-                    $riskResp = Invoke-P5FabricWeb -Method POST `
-                        -Uri "$p5Base/workspaces/$p5WsId/items/$($existingRiskReflex.id)/updateDefinition" `
-                        -Body $updateBody -Label 'Update ReadmissionRiskAlert'
-                    if ($riskResp.StatusCode -notin @(200, 202)) { throw "ReadmissionRiskAlert update returned HTTP $($riskResp.StatusCode)" }
-                    $riskReflexId = $existingRiskReflex.id
-                } else {
-                    $riskResp = Invoke-P5FabricWeb -Method POST `
-                        -Uri "$p5Base/workspaces/$p5WsId/items" `
-                        -Body $reflexPayload -Label 'Create ReadmissionRiskAlert'
-                    if ($riskResp.StatusCode -notin @(200, 201, 202)) { throw "ReadmissionRiskAlert create returned HTTP $($riskResp.StatusCode)" }
-                    $riskReflexId = $null
-                    try { $riskReflexId = ($riskResp.Content | ConvertFrom-Json).id } catch {}
-                    if (-not $riskReflexId) {
-                        Start-Sleep 5
-                        $createdRiskReflex = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items" -Label 'Find ReadmissionRiskAlert').value |
-                            Where-Object { $_.displayName -eq "ReadmissionRiskAlert" -and $_.type -eq "Reflex" } |
-                            Select-Object -First 1
-                        if ($createdRiskReflex) { $riskReflexId = $createdRiskReflex.id }
-                    }
-                }
-                if (-not $riskReflexId) { throw "ReadmissionRiskAlert was not created or discovered" }
-                Write-Host "  ✓ Readmission Risk alert configured for: $AlertEmail (daily 8:00 AM ET; Reflex $riskReflexId)" -ForegroundColor Green
-            } catch {
-                Write-Host "  ⚠ Readmission Risk alert not configured: $($_.Exception.Message)" -ForegroundColor Yellow
-                Write-Host "    Continuing because claims materialization and dashboard deployment are complete." -ForegroundColor Yellow
+            $riskShortcutName = 'QualityReadmissionRiskScores'
+            $shortcutBody = @{
+                name = $riskShortcutName
+                path = '/Tables'
+                target = @{ oneLake = @{
+                    workspaceId = $p5WsId
+                    itemId = $reportingGold.id
+                    path = 'Tables/readmission_risk_scores'
+                } }
+            } | ConvertTo-Json -Depth 10
+            Invoke-P5FabricRest -Method POST `
+                -Uri "$p5Base/workspaces/$p5WsId/items/$($p5KqlDb.id)/shortcuts?shortcutConflictPolicy=CreateOrOverwrite" `
+                -Body $shortcutBody -Label 'Create readmission-risk OneLake shortcut' | Out-Null
+
+            $p5KqlDetail = Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/kqlDatabases/$($p5KqlDb.id)" -Label 'Get KQL endpoint for readmission alerts'
+            $p5KustoUri = [string]$p5KqlDetail.properties.queryServiceUri
+            if ([string]::IsNullOrWhiteSpace($p5KustoUri)) { throw 'KQL query endpoint is unavailable for ReadmissionRiskAlert.' }
+            $p5KustoToken = Get-CachedAccessToken $p5KustoUri
+            $p5KustoHeaders = @{ Authorization = "Bearer $p5KustoToken"; 'Content-Type' = 'application/json' }
+            $riskExternalUrl = "https://onelake.dfs.fabric.microsoft.com/$p5WsId/$($p5KqlDb.id)/Tables/$riskShortcutName;impersonate"
+            $riskExternalCommand = ".create-or-alter external table $riskShortcutName kind=delta (h@'$riskExternalUrl')"
+            Invoke-RestMethod -Method POST -Uri "$p5KustoUri/v1/rest/mgmt" -Headers $p5KustoHeaders `
+                -Body (@{ db = $p5KqlDb.displayName; csl = $riskExternalCommand } | ConvertTo-Json) | Out-Null
+            Invoke-RestMethod -Method POST -Uri "$p5KustoUri/v1/rest/query" -Headers $p5KustoHeaders `
+                -Body (@{ db = $p5KqlDb.displayName; csl = "external_table('$riskShortcutName') | take 1 | count" } | ConvertTo-Json) | Out-Null
+
+            $riskContainerId = [guid]::NewGuid().ToString()
+            $riskSourceId = [guid]::NewGuid().ToString()
+            $riskEventId = [guid]::NewGuid().ToString()
+            $riskObjectId = [guid]::NewGuid().ToString()
+            $riskPatientId = [guid]::NewGuid().ToString()
+
+            function New-P5BasicAttrInstance([string]$eventId, [string]$fieldName, [string]$dataType) {
+                '{"templateId":"BasicEventAttribute","templateVersion":"1.1","steps":[{"name":"EventSelectStep","id":"' + [guid]::NewGuid().ToString() + '","rows":[{"name":"EventSelector","kind":"Event","arguments":[{"kind":"EventReference","type":"complex","arguments":[{"name":"entityId","type":"string","value":"' + $eventId + '"}],"name":"event"}]},{"name":"EventFieldSelector","kind":"EventField","arguments":[{"name":"fieldName","type":"string","value":"' + $fieldName + '"}]}]},{"name":"EventComputeStep","id":"' + [guid]::NewGuid().ToString() + '","rows":[{"name":"TypeAssertion","kind":"TypeAssertion","arguments":[{"name":"op","type":"string","value":"' + $dataType + '"},{"name":"format","type":"string","value":""}]}]}]}'
             }
+            function P5FR([string]$field) { '{"arguments":[{"name":"fieldName","type":"string","value":"' + $field + '"}],"kind":"EventFieldReference","type":"complex"}' }
+            function P5NR([string]$field) { '{"arguments":[{"name":"name","type":"string","value":"' + $field + '"},{"arguments":[{"name":"fieldName","type":"string","value":"' + $field + '"}],"kind":"EventFieldReference","name":"reference","type":"complexReference"}],"kind":"NameReferencePair","type":"complex"}' }
+
+            $riskSourceEvent = '{"templateId":"SourceEvent","templateVersion":"1.1","steps":[{"name":"SourceEventStep","id":"' + [guid]::NewGuid().ToString() + '","rows":[{"name":"SourceSelector","kind":"SourceReference","arguments":[{"name":"entityId","type":"string","value":"' + $riskSourceId + '"}]}]}]}'
+            $riskIdentity = '{"templateId":"IdentityPartAttribute","templateVersion":"1.1","steps":[{"name":"IdPartStep","id":"' + [guid]::NewGuid().ToString() + '","rows":[{"name":"TypeAssertion","kind":"TypeAssertion","arguments":[{"name":"op","type":"string","value":"Text"},{"name":"format","type":"string","value":""}]}]}]}'
+            $riskQuery = "external_table('$riskShortcutName') | where risk_tier == 'High' | project patient_id, risk_tier, risk_probability, los_days, admit_date=tostring(admit_date), message=strcat('30-day readmission risk ', round(100.0*risk_probability,1), '%')"
+            $riskEntities = @(
+                @{ uniqueIdentifier=$riskContainerId; payload=@{name='Readmission Risk Alerts';type='kqlQueries'}; type='container-v1' },
+                @{ uniqueIdentifier=$riskSourceId; payload=@{name='ReadmissionRiskScores';runSettings=@{isStopped=$false;executionIntervalInSeconds=86400};query=@{queryString=$riskQuery};eventhouseItem=@{itemId=$p5KqlDb.id;workspaceId=$p5WsId;itemType='KustoDatabase'};parentContainer=@{targetUniqueIdentifier=$riskContainerId}};type='kqlSource-v1' },
+                @{ uniqueIdentifier=$riskEventId; payload=@{name='Readmission risk events';parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Event';instance=$riskSourceEvent}};type='timeSeriesView-v1' },
+                @{ uniqueIdentifier=$riskObjectId; payload=@{name='Patient';parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Object'}};type='timeSeriesView-v1' },
+                @{ uniqueIdentifier=$riskPatientId; payload=@{name='patient_id';parentObject=@{targetUniqueIdentifier=$riskObjectId};parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Attribute';instance=$riskIdentity}};type='timeSeriesView-v1' }
+            )
+            foreach ($field in @(@('risk_tier','Text'),@('risk_probability','Number'),@('los_days','Number'),@('admit_date','Text'),@('message','Text'))) {
+                $riskEntities += @{ uniqueIdentifier=[guid]::NewGuid().ToString();payload=@{name=$field[0];parentObject=@{targetUniqueIdentifier=$riskObjectId};parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Attribute';instance=(New-P5BasicAttrInstance $riskEventId $field[0] $field[1])}};type='timeSeriesView-v1' }
+            }
+            $riskEntitiesJson = ConvertTo-Json -InputObject $riskEntities -Depth 30 -Compress
+            $riskRuleInstance = '{"templateId":"EventTrigger","templateVersion":"1.2.4","steps":[' +
+                '{"id":"' + [guid]::NewGuid().ToString() + '","name":"FieldsDefaultsStep","rows":[{"arguments":[{"arguments":[{"name":"entityId","type":"string","value":"' + $riskEventId + '"}],"kind":"EventReference","name":"event","type":"complex"}],"kind":"Event","name":"EventSelector"}]},' +
+                '{"id":"' + [guid]::NewGuid().ToString() + '","name":"EventDetectStep","rows":[{"arguments":[],"kind":"OnEveryValue","name":"OnEveryValue"}]},' +
+                '{"id":"' + [guid]::NewGuid().ToString() + '","name":"ActStep","rows":[{"arguments":[' +
+                    '{"name":"messageLocale","type":"string","value":"en-us"},' +
+                    '{"name":"sentTo","type":"array","values":[{"type":"string","value":"' + $AlertEmail + '"}]},' +
+                    '{"name":"copyTo","type":"array","values":[]},{"name":"bCCTo","type":"array","values":[]},' +
+                    '{"name":"subject","type":"array","values":[{"name":"string","type":"string","value":"HIGH READMISSION RISK - "},' + (P5FR 'patient_id') + ']},' +
+                    '{"name":"headline","type":"array","values":[' + (P5FR 'risk_tier') + ',{"name":"string","type":"string","value":" risk: "},' + (P5FR 'patient_id') + ']},' +
+                    '{"name":"optionalMessage","type":"array","values":[' + (P5FR 'message') + ']},' +
+                    '{"name":"additionalInformation","type":"array","values":[' + (P5NR 'patient_id') + ',' + (P5NR 'risk_tier') + ',' + (P5NR 'risk_probability') + ',' + (P5NR 'los_days') + ',' + (P5NR 'admit_date') + ',' + (P5NR 'message') + ']}' +
+                '],"kind":"EmailMessage","name":"EmailBinding"}]}' +
+            ']}'
+            $riskRuleJson = '{"uniqueIdentifier":"' + [guid]::NewGuid().ToString() + '","payload":{"name":"High readmission risk alert","parentContainer":{"targetUniqueIdentifier":"' + $riskContainerId + '"},"definition":{"type":"Rule","instance":"' + ($riskRuleInstance -replace '"','\"') + '","settings":{"shouldRun":true,"shouldApplyRuleOnUpdate":true}}},"type":"timeSeriesView-v1"}'
+            $riskFullJson = $riskEntitiesJson.TrimEnd(']') + ',' + $riskRuleJson + ']'
+            $riskEntitiesB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($riskEntitiesJson))
+            $riskFullB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($riskFullJson))
+
+            $existingRiskReflex = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items?type=Reflex" -Label 'List readmission risk alerts').value |
+                Where-Object { $_.displayName -eq 'ReadmissionRiskAlert' } | Select-Object -First 1
+            if ($existingRiskReflex) {
+                $riskReflexId = $existingRiskReflex.id
+            } else {
+                $createPayload = @{displayName='ReadmissionRiskAlert';description='Daily high readmission-risk alerts from healthcare1_reporting_gold.';type='Reflex';definition=@{parts=@(@{path='ReflexEntities.json';payload=$riskEntitiesB64;payloadType='InlineBase64'})}} | ConvertTo-Json -Depth 15
+                $riskCreate = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items" -Body $createPayload -Label 'Create ReadmissionRiskAlert'
+                if ($riskCreate.StatusCode -notin @(200,201,202)) { throw "ReadmissionRiskAlert create returned HTTP $($riskCreate.StatusCode)" }
+                $riskReflexId = $null
+                try { $riskReflexId = ($riskCreate.Content | ConvertFrom-Json).id } catch {}
+                for ($attempt = 1; -not $riskReflexId -and $attempt -le 24; $attempt++) {
+                    Start-Sleep 5
+                    $created = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items?type=Reflex" -Label 'Find ReadmissionRiskAlert').value | Where-Object { $_.displayName -eq 'ReadmissionRiskAlert' } | Select-Object -First 1
+                    if ($created) { $riskReflexId = $created.id }
+                }
+            }
+            if (-not $riskReflexId) { throw 'ReadmissionRiskAlert was not created or discovered.' }
+            $riskUpdateBody = @{definition=@{parts=@(@{path='ReflexEntities.json';payload=$riskFullB64;payloadType='InlineBase64'})}} | ConvertTo-Json -Depth 15
+            $riskUpdate = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items/$riskReflexId/updateDefinition" -Body $riskUpdateBody -Label 'Update ReadmissionRiskAlert'
+            if ($riskUpdate.StatusCode -notin @(200,202)) { throw "ReadmissionRiskAlert update returned HTTP $($riskUpdate.StatusCode)" }
+            Write-Host "  ✓ Readmission Risk alert configured for: $AlertEmail (daily; Reflex $riskReflexId)" -ForegroundColor Green
         } else {
             Write-Host "  ⚠ Readmission Risk alert skipped (no AlertEmail or Activator disabled)" -ForegroundColor Yellow
         }
@@ -4177,7 +4250,7 @@ if ($RunEval -and -not $Teardown) {
                 Write-Host "  ✓ Deployment evaluation passed" -ForegroundColor Green
             } else {
                 Write-Host "  ⚠ Deployment evaluation reported issues (exit $LASTEXITCODE) — see $evalJson" -ForegroundColor Yellow
-                Write-Host "    Note: unpublished Data Agents and un-refreshed ontology graph models are expected Fabric-preview manual portal steps." -ForegroundColor DarkGray
+                Write-Host "    Note: Data Agents are published automatically; legacy Assistants API failures require MCP validation. Ontology graph refresh remains a manual preview step." -ForegroundColor DarkGray
             }
         } else {
             Write-Host "  ⚠ python not found; skipping evaluation" -ForegroundColor Yellow

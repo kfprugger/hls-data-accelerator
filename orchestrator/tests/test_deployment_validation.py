@@ -153,6 +153,22 @@ class DeploymentValidationTests(unittest.TestCase):
         failed_names = {check["name"] for check in checks if check["status"] == "fail"}
         self.assertIn("Population health quality report", failed_names)
         self.assertIn("Population health quality semantic model", failed_names)
+        checks_with_alert = feature_presence_checks(
+            {"workspace": {"id": "workspace-id"}, "azure": [], "fabric": []},
+            {
+                "skip_fabric": True,
+                "skip_hds_pipelines": True,
+                "skip_data_agents": True,
+                "skip_imaging": True,
+                "skip_ontology": True,
+                "skip_activator": False,
+                "alert_email": "alerts@example.test",
+                "skip_quality_measures": False,
+                "skip_phase7": True,
+            },
+        )
+        failed_with_alert = {check["name"] for check in checks_with_alert if check["status"] == "fail"}
+        self.assertIn("Readmission risk Activator", failed_with_alert)
 
     def test_quality_report_binding_targets_phase6_semantic_model(self) -> None:
         resources = {

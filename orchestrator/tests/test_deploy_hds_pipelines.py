@@ -177,7 +177,7 @@ class DeployHdsCmaTests(unittest.TestCase):
         )
 
         fake_shared_module = types.ModuleType("shared")
-        fake_shared_module.__path__ = []
+        fake_shared_module.__path__ = [str(Path(self._orchestrator_dir) / "shared")]
         fake_fabric_client_module = types.ModuleType("shared.fabric_client")
         fake_fabric_client_module.FabricClient = object
         fake_shared_module.fabric_client = fake_fabric_client_module
@@ -254,15 +254,18 @@ class DeployHdsCmaTests(unittest.TestCase):
                 self.deploy_hds.CORE_HDS_PIPELINE_NAMES, start=1
             )
         }
+        ids[self.deploy_hds.POA_PIPELINE_NAME] = "pipeline-poa"
         if include_cma:
             ids[self.deploy_hds.CMA_PIPELINE_NAME] = "pipeline-cma"
         return ids
 
     def completed_core_statuses(self) -> dict[str, str]:
-        return {
+        statuses = {
             pipeline_name: "Completed"
             for pipeline_name in self.deploy_hds.CORE_HDS_PIPELINE_NAMES
         }
+        statuses[self.deploy_hds.POA_PIPELINE_NAME] = "Completed"
+        return statuses
 
     def completed_statuses(self, include_cma: bool) -> dict[str, str]:
         statuses = self.completed_core_statuses()
@@ -347,7 +350,8 @@ class DeployHdsCmaTests(unittest.TestCase):
             {
                 pipeline_name: "completed"
                 for pipeline_name in self.deploy_hds.CORE_HDS_PIPELINE_NAMES
-            },
+            }
+            | {self.deploy_hds.POA_PIPELINE_NAME: "completed"},
         )
         self.assertEqual(
             result["non_blocking_followups"], {cma_name: "triggered_non_blocking"}
@@ -366,7 +370,7 @@ class DeployHdsCmaTests(unittest.TestCase):
         )
         self.assertEqual(
             self.posted_pipelines(fake_client),
-            [clinical_name, cma_name, imaging_name, omop_name],
+            [clinical_name, self.deploy_hds.POA_PIPELINE_NAME, cma_name, imaging_name, omop_name],
         )
 
 
@@ -479,6 +483,7 @@ class DeployHdsCmaTests(unittest.TestCase):
         self.install_fake_client(fake_client)
 
         result = self.run_activity()
+        clinical_name, imaging_name, omop_name = self.deploy_hds.CORE_HDS_PIPELINE_NAMES
 
         self.assertEqual(
             result["non_blocking_followups"],
@@ -486,7 +491,7 @@ class DeployHdsCmaTests(unittest.TestCase):
         )
         self.assertEqual(
             self.posted_pipelines(fake_client),
-            self.deploy_hds.CORE_HDS_PIPELINE_NAMES,
+            [clinical_name, self.deploy_hds.POA_PIPELINE_NAME, imaging_name, omop_name],
         )
         self.assertEqual(result["cma_finalization"], {})
         self.assertEqual(fake_client.update_definition_calls, [])
@@ -524,7 +529,7 @@ class DeployHdsCmaTests(unittest.TestCase):
         )
         self.assertEqual(
             self.posted_pipelines(fake_client),
-            [clinical_name, cma_name, imaging_name, omop_name],
+            [clinical_name, self.deploy_hds.POA_PIPELINE_NAME, cma_name, imaging_name, omop_name],
         )
 
     def test_skip_dicom_excludes_imaging_ingestion_but_runs_clinical_and_omop(
@@ -659,7 +664,8 @@ class DeployHdsCmaTests(unittest.TestCase):
             {
                 pipeline_name: "completed"
                 for pipeline_name in self.deploy_hds.CORE_HDS_PIPELINE_NAMES
-            },
+            }
+            | {self.deploy_hds.POA_PIPELINE_NAME: "completed"},
         )
         self.assertEqual(
             result["non_blocking_followups"],
@@ -667,6 +673,39 @@ class DeployHdsCmaTests(unittest.TestCase):
                 self.deploy_hds.CMA_PIPELINE_NAME: "warning: error: cma unavailable"
             },
         )
+
+    def test_activity_deploy_hds_pipelines_raises_when_poa_incomplete(self) -> None:
+        from function_app import activity_deploy_hds_pipelines
+
+        statuses = self.completed_statuses(include_cma=False)
+        statuses[self.deploy_hds.POA_PIPELINE_NAME] = "Failed"
+        fake_client = FakeFabricClient(
+            pipeline_ids_by_name=self.pipeline_ids(include_cma=False),
+            statuses_by_name=statuses,
+        )
+        self.install_fake_client(fake_client)
+
+        with self.assertRaises(RuntimeError) as ctx:
+            activity_deploy_hds_pipelines({
+                "config": {"fabric_workspace_name": "ws"},
+                "resources": {"fabric_workspace_id": WORKSPACE_ID},
+            })
+        self.assertIn("healthcare1_msft_poa_ingestion", str(ctx.exception))
+
+    def test_activity_deploy_hds_pipelines_succeeds_when_all_required_complete(self) -> None:
+        from function_app import activity_deploy_hds_pipelines
+
+        fake_client = FakeFabricClient(
+            pipeline_ids_by_name=self.pipeline_ids(include_cma=False),
+            statuses_by_name=self.completed_statuses(include_cma=False),
+        )
+        self.install_fake_client(fake_client)
+
+        result = activity_deploy_hds_pipelines({
+            "config": {"fabric_workspace_name": "ws"},
+            "resources": {"fabric_workspace_id": WORKSPACE_ID},
+        })
+        self.assertEqual(result["pipeline_results"][self.deploy_hds.POA_PIPELINE_NAME], "completed")
 
 
 if __name__ == "__main__":

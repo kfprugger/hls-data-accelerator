@@ -279,18 +279,63 @@ OUTPUT FORMAT:
 When recommending an action, include: device_id, severity (WATCH/CONCERN/ESCALATE), current SpO2 avg, baseline SpO2 avg, delta, PR trend, and recommended clinical action.
 "@
 
-# Escape the instructions for JSON embedding (newlines, quotes)
-$instrEscaped = $instructionsText -replace '\\', '\\\\' -replace '"', '\"' -replace "`r`n", '\n' -replace "`n", '\n' -replace "`t", '\t'
-$goalsEscaped = $goalsText -replace '"', '\"'
-
 # Build action IDs
 $action1Id = [guid]::NewGuid().ToString()
 $action2Id = [guid]::NewGuid().ToString()
 
-# Build the Configurations.json content
-$configJson = '{"$schema":"https://developer.microsoft.com/json-schemas/fabric/item/operationsAgents/definition/1.0.0/schema.json","configuration":{"goals":"'+$goalsEscaped+'","instructions":"'+$instrEscaped+'","dataSources":{"kqldb1":{"id":"'+$($kqlDb.id)+'","type":"KustoDatabase","workspaceId":"'+$workspaceId+'"}},"actions":{"escalate":{"id":"'+$action1Id+'","displayName":"Escalate to Care Team","description":"Send an urgent notification to the clinical care team when a patient shows sustained deterioration requiring immediate assessment.","kind":"PowerAutomateAction","parameters":[{"name":"device_id","description":"The Masimo device identifier"},{"name":"patient_name","description":"Patient name"},{"name":"severity","description":"WATCH, CONCERN, or ESCALATE"},{"name":"spo2_current","description":"Current 15-min average SpO2"},{"name":"spo2_baseline","description":"1-hour baseline SpO2"},{"name":"clinical_summary","description":"Brief description of findings"}]},"logEvent":{"id":"'+$action2Id+'","displayName":"Log Deterioration Event","description":"Record a deterioration detection event for audit trail and trend analysis. Use for WATCH-level findings.","kind":"PowerAutomateAction","parameters":[{"name":"device_id","description":"The Masimo device identifier"},{"name":"severity","description":"WATCH, CONCERN, or ESCALATE"},{"name":"details","description":"Full analysis details"}]}}},"shouldRun":false}'
+$opsConfig = @{
+    "`$schema" = "https://developer.microsoft.com/json-schemas/fabric/item/operationsAgents/definition/1.0.0/schema.json"
+    configuration = @{
+        goals = $goalsText
+        instructions = $instructionsText
+        dataSources = @{
+            kqldb1 = @{ id = $($kqlDb.id); type = "KustoDatabase"; workspaceId = $workspaceId }
+        }
+        actions = @{
+            escalate = @{
+                id = $action1Id
+                displayName = "Escalate to Care Team"
+                description = "Send an urgent notification to the clinical care team when a patient shows sustained deterioration requiring immediate assessment."
+                kind = "PowerAutomateAction"
+                parameters = @(
+                    @{ name = "device_id"; description = "The Masimo device identifier" },
+                    @{ name = "patient_name"; description = "Patient name" },
+                    @{ name = "severity"; description = "WATCH, CONCERN, or ESCALATE" },
+                    @{ name = "spo2_current"; description = "Current 15-min average SpO2" },
+                    @{ name = "spo2_baseline"; description = "1-hour baseline SpO2" },
+                    @{ name = "clinical_summary"; description = "Brief description of findings" }
+                )
+            }
+            logEvent = @{
+                id = $action2Id
+                displayName = "Log Deterioration Event"
+                description = "Record a deterioration detection event for audit trail and trend analysis. Use for WATCH-level findings."
+                kind = "PowerAutomateAction"
+                parameters = @(
+                    @{ name = "device_id"; description = "The Masimo device identifier" },
+                    @{ name = "severity"; description = "WATCH, CONCERN, or ESCALATE" },
+                    @{ name = "details"; description = "Full analysis details" }
+                )
+            }
+        }
+    }
+    shouldRun = $false
+}
+$configJson = $opsConfig | ConvertTo-Json -Depth 30
 
-$platformJson = '{"$schema":"https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json","metadata":{"type":"OperationsAgent","displayName":"'+$AgentName+'","description":"Monitors Masimo telemetry for sustained SpO2/PR deterioration trends and recommends clinical escalation."},"config":{"version":"2.0","logicalId":"00000000-0000-0000-0000-000000000000"}}'
+$opsPlatform = @{
+    "`$schema" = "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json"
+    metadata = @{
+        type = "OperationsAgent"
+        displayName = $AgentName
+        description = "Monitors Masimo telemetry for sustained SpO2/PR deterioration trends and recommends clinical escalation."
+    }
+    config = @{
+        version = "2.0"
+        logicalId = "00000000-0000-0000-0000-000000000000"
+    }
+}
+$platformJson = $opsPlatform | ConvertTo-Json -Depth 30
 
 # Build the update definition body
 $updateBody = '{"definition":{"format":"OperationsAgentV1","parts":[{"path":"Configurations.json","payload":"'+(ConvertTo-Base64 $configJson)+'","payloadType":"InlineBase64"},{"path":".platform","payload":"'+(ConvertTo-Base64 $platformJson)+'","payloadType":"InlineBase64"}]}}'

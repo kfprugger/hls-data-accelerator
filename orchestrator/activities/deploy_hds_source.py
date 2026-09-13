@@ -7,8 +7,10 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 import argparse
 import base64
+import csv
 import fnmatch
 import hashlib
+import io
 import json
 import logging
 import re
@@ -18,6 +20,7 @@ import sys
 import threading
 import time
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -25,12 +28,14 @@ import requests
 
 from shared.fabric_client import FabricClient
 from shared.onelake_client import OneLakeClient
+from shared.poa_model import project_appointment_created_day
+from shared.poa_ingestion import map_marketing_created_on
 
 logger = logging.getLogger(__name__)
 
 HDS_VERSION = "1.4.0"
 DTT_VERSION = "0.3.1.1271"
-STAGING_PATCH_VERSION = "2026-08-04.2"
+STAGING_PATCH_VERSION = "2026-09-13.2"
 COMPANY_PREFIX = "healthcare1"
 TECHNICAL_PREFIX = "msft"
 DEPLOYMENT_LAKEHOUSE = "deployment_lakehouse"
@@ -431,6 +436,66 @@ def patch_notebook(source: Path, destination: Path) -> None:
     destination.write_text(json.dumps(notebook, separators=(",", ":")), encoding="utf-8")
 
 
+def _patch_dtt_optional_telemetry_import(source_root: Path) -> None:
+    """Keep optional Azure Monitor telemetry from blocking DTT transformations."""
+    logging_path = source_root / "src" / "common" / "utils" / "logging.py"
+    source = logging_path.read_text(encoding="utf-8")
+    eager_import = "from azure.monitor.opentelemetry import configure_azure_monitor\n"
+    lazy_marker = "        if instrumentation_key and cls._app_insight_logger is None:\n"
+    if eager_import not in source or lazy_marker not in source:
+        raise ValueError("DTT logging telemetry import no longer matches the v0.3.1.1271 source contract")
+    source = source.replace(eager_import, "", 1)
+    source = source.replace(
+        lazy_marker,
+        lazy_marker + "            from azure.monitor.opentelemetry import configure_azure_monitor\n\n",
+        1,
+    )
+    logging_path.write_text(source, encoding="utf-8")
+
+
+def _patch_dtt_wheel_optional_telemetry_import(wheel_path: Path) -> None:
+    """Apply the DTT telemetry lazy-import patch to a built or cached wheel."""
+    logging_member = "common/utils/logging.py"
+    record_member = f"dtt-{DTT_VERSION}.dist-info/RECORD"
+    with zipfile.ZipFile(wheel_path, "r") as archive:
+        infos = archive.infolist()
+        entries = {info.filename: archive.read(info.filename) for info in infos}
+
+    source = entries[logging_member].decode("utf-8")
+    source_lines = source.splitlines()
+    eager_import_line = "from azure.monitor.opentelemetry import configure_azure_monitor"
+    lazy_import_line = "            from azure.monitor.opentelemetry import configure_azure_monitor"
+    lazy_marker = "        if instrumentation_key and cls._app_insight_logger is None:\n"
+    if eager_import_line in source_lines:
+        if lazy_marker not in source:
+            raise ValueError("DTT wheel logging initialization no longer matches the expected contract")
+        source = source.replace(eager_import_line + "\n", "", 1)
+        source = source.replace(lazy_marker, lazy_marker + lazy_import_line + "\n\n", 1)
+    elif lazy_import_line not in source_lines:
+        raise ValueError("DTT wheel logging telemetry import does not match the expected contract")
+    patched_source = source.encode("utf-8")
+    entries[logging_member] = patched_source
+
+    record_rows = list(csv.reader(io.StringIO(entries[record_member].decode("utf-8"))))
+    digest = base64.urlsafe_b64encode(hashlib.sha256(patched_source).digest()).decode().rstrip("=")
+    for row in record_rows:
+        if row and row[0] == logging_member:
+            row[1] = f"sha256={digest}"
+            row[2] = str(len(patched_source))
+            break
+    else:
+        raise ValueError(f"DTT wheel RECORD is missing {logging_member}")
+    record_buffer = io.StringIO(newline="")
+    csv.writer(record_buffer, lineterminator="\n").writerows(record_rows)
+    entries[record_member] = record_buffer.getvalue().encode("utf-8")
+
+    temporary_wheel = wheel_path.with_suffix(".whl.tmp")
+    with zipfile.ZipFile(temporary_wheel, "w") as archive:
+        for info in infos:
+            archive.writestr(info, entries[info.filename])
+    temporary_wheel.replace(wheel_path)
+
+
 def _build_wheel(source_root: Path, destination: Path, expected: str) -> Path:
     before = set(destination.glob("*.whl"))
     with tempfile.TemporaryDirectory(prefix="hds-wheel-") as temporary:
@@ -440,6 +505,8 @@ def _build_wheel(source_root: Path, destination: Path, expected: str) -> Path:
             build_source,
             ignore=shutil.ignore_patterns("build", "*.egg-info", "__pycache__", "*.pyc"),
         )
+        if source_root == DTT_ROOT:
+            _patch_dtt_optional_telemetry_import(build_source)
         subprocess.run(
             [sys.executable, "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(destination), str(build_source)],
             check=True,
@@ -486,6 +553,11 @@ def stage_source_payload(force: bool = False) -> Path:
         validate_staged_payload(BUILD_ROOT)
         return BUILD_ROOT
 
+    cached_wheels: dict[str, bytes] = {}
+    cached_library_root = BUILD_ROOT / ARTIFACT_ROOT_NAME / LIBRARY_RELATIVE_PATH
+    if cached_library_root.is_dir():
+        cached_wheels = {path.name: path.read_bytes() for path in cached_library_root.glob("*.whl")}
+
     if BUILD_ROOT.exists():
         shutil.rmtree(BUILD_ROOT)
     artifact_destination = BUILD_ROOT / ARTIFACT_ROOT_NAME
@@ -494,15 +566,46 @@ def stage_source_payload(force: bool = False) -> Path:
     if len(omop_pipelines) != 1:
         raise ValueError(f"Expected one OMOP pipeline definition, found {omop_pipelines}")
     _patch_omop_pipeline(omop_pipelines[0])
+    poa_model_path = artifact_destination / "healthcare-artifacts" / HDS_VERSION / "patient-outreach-analytics-advanced" / "Datasets" / "PatientOutreachAdvanced" / "model.bim"
+    poa_model = json.loads(poa_model_path.read_text(encoding="utf-8"))
+    project_appointment_created_day(poa_model)
+    poa_model_path.write_text(json.dumps(poa_model, indent=2), encoding="utf-8")
+    idm_adapter_path = artifact_destination / "healthcare-configuration" / HDS_VERSION / "_internal" / "idm" / "adapter.json"
+    idm_adapter = json.loads(idm_adapter_path.read_text(encoding="utf-8"))
+    map_marketing_created_on(idm_adapter)
+    idm_adapter_path.write_text(json.dumps(idm_adapter, indent=2), encoding="utf-8")
     library_destination = artifact_destination / LIBRARY_RELATIVE_PATH
     library_destination.mkdir(parents=True, exist_ok=True)
-    _build_wheel(HDS_ROOT, library_destination, f"hds-{HDS_VERSION}-*.whl")
-    _build_wheel(DTT_ROOT, library_destination, f"dtt-{DTT_VERSION}-*.whl")
+    wheel_specs = (
+        (HDS_ROOT, f"hds-{HDS_VERSION}-*.whl"),
+        (DTT_ROOT, f"dtt-{DTT_VERSION}-*.whl"),
+    )
+    for source_root, expected in wheel_specs:
+        cached_matches = [name for name in cached_wheels if fnmatch.fnmatch(name.lower(), expected.lower())]
+        if len(cached_matches) > 1:
+            raise ValueError(f"Expected at most one cached {expected}, found {cached_matches}")
+        if cached_matches:
+            cached_name = cached_matches[0]
+            wheel_path = library_destination / cached_name
+            wheel_path.write_bytes(cached_wheels[cached_name])
+        else:
+            wheel_path = _build_wheel(source_root, library_destination, expected)
+        if source_root == DTT_ROOT:
+            _patch_dtt_wheel_optional_telemetry_import(wheel_path)
 
     environment_yml = library_destination / "environment.yml"
     environment_text = environment_yml.read_text(encoding="utf-8")
-    if "scipy==1.11.4" not in environment_text:
-        environment_text += "      - scipy==1.11.4\n"
+    environment_dependencies = (
+        "scipy==1.11.4",
+        "opentelemetry-api==1.43.0",
+        "opentelemetry-sdk==1.43.0",
+    )
+    environment_changed = False
+    for dependency in environment_dependencies:
+        if dependency not in environment_text:
+            environment_text += f"      - {dependency}\n"
+            environment_changed = True
+    if environment_changed:
         environment_yml.write_text(environment_text, encoding="utf-8")
 
     deployment_destination = BUILD_ROOT / "bootstrap" / "deployment_notebooks"
@@ -529,9 +632,20 @@ def validate_staged_payload(build_root: Path) -> dict[str, Any]:
     dtt_wheels = list(library_root.glob(f"dtt-{DTT_VERSION}-*.whl"))
     if len(hds_wheels) != 1 or len(dtt_wheels) != 1:
         raise ValueError(f"Expected one HDS and one DTT wheel, found {hds_wheels} / {dtt_wheels}")
+    with zipfile.ZipFile(dtt_wheels[0], "r") as archive:
+        dtt_logging = archive.read("common/utils/logging.py").decode("utf-8")
+    eager_telemetry_import = "from azure.monitor.opentelemetry import configure_azure_monitor"
+    if eager_telemetry_import in dtt_logging.splitlines():
+        raise ValueError("Staged DTT wheel still imports optional Azure Monitor telemetry eagerly")
     environment = (library_root / "environment.yml").read_text(encoding="utf-8")
-    if "scipy==1.11.4" not in environment:
-        raise ValueError("Staged environment.yml is missing scipy==1.11.4")
+    required_dependencies = (
+        "scipy==1.11.4",
+        "opentelemetry-api==1.43.0",
+        "opentelemetry-sdk==1.43.0",
+    )
+    missing_dependencies = [dependency for dependency in required_dependencies if dependency not in environment]
+    if missing_dependencies:
+        raise ValueError(f"Staged environment.yml is missing dependencies: {missing_dependencies}")
 
     validator_path = artifact_root / "healthcare-artifacts-validator-config" / "build_artifacts_validator_config.json"
     validator = json.loads(validator_path.read_text(encoding="utf-8"))
@@ -723,6 +837,7 @@ def _deploy_environment(
     environment_yml = library_root / "environment.yml"
     if not environment_yml.is_file():
         raise FileNotFoundError(f"HDS environment definition not found: {environment_yml}")
+    desired_environment_yml = environment_yml.read_text(encoding="utf-8")
 
     try:
         details = fabric.call("GET", base_endpoint)
@@ -751,8 +866,10 @@ def _deploy_environment(
         staging = {}
     staged_wheels = set((staging.get("customLibraries") or {}).get("wheelFiles") or [])
     required_wheels = {path.name for path in wheel_paths}
+    staged_environment_yml = str(staging.get("environmentYml") or "")
     published_state = str((details.get("properties", {}).get("publishDetails") or {}).get("state") or "")
-    if published_state.lower() == "success" and required_wheels <= staged_wheels:
+    environment_definition_current = staged_environment_yml.strip() == desired_environment_yml.strip()
+    if published_state.lower() == "success" and required_wheels <= staged_wheels and environment_definition_current:
         _event("environment", "succeeded", f"Environment already published: {environment_id}")
         return details
 
@@ -767,7 +884,7 @@ def _deploy_environment(
     fabric.request_content(
         "POST",
         f"{base_endpoint}/staging/libraries/importExternalLibraries",
-        environment_yml.read_text(encoding="utf-8"),
+        desired_environment_yml,
         max_retries=60,
     )
     verify_deadline = time.time() + (10 * 60)

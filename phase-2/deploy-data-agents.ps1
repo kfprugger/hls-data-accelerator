@@ -398,6 +398,29 @@ $lakehouseUserDescription = if ($IncludeDicomImaging) {
 # HELPER: Create or update a Data Agent
 # ============================================================================
 
+function Update-DataAgentDefinition {
+    param([string]$WorkspaceId, [string]$DataAgentId, [object]$Definition)
+    $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
+    $body = @{ definition = $Definition } | ConvertTo-Json -Depth 30
+    $response = Invoke-WebRequest -Method POST `
+        -Uri "$FabricApiBase/workspaces/$WorkspaceId/dataAgents/$DataAgentId/updateDefinition" `
+        -Headers $headers -Body $body -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop
+    if ($response.StatusCode -eq 200) { return }
+    if ($response.StatusCode -ne 202) { throw "DataAgent definition update returned HTTP $($response.StatusCode)" }
+
+    $location = $response.Headers["Location"]
+    if ($location -is [array]) { $location = $location[0] }
+    if (-not $location) { throw "DataAgent definition update returned 202 without a Location header" }
+    for ($attempt = 1; $attempt -le 60; $attempt++) {
+        Start-Sleep 5
+        $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
+        $operation = Invoke-RestMethod -Uri $location -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
+        if ($operation.status -eq "Succeeded") { return }
+        if ($operation.status -eq "Failed") { throw "DataAgent definition update failed: $($operation.error.message)" }
+    }
+    throw "DataAgent definition update did not complete within 5 minutes"
+}
+
 function Deploy-DataAgent {
     param (
         [string]$Name,
@@ -481,10 +504,10 @@ function Deploy-DataAgent {
     # --- Apply definition ---
     Write-Host "  Applying definition (AI instructions + data sources + few-shot examples)..." -ForegroundColor White
     try {
-        $null = Invoke-FabricApi -Method POST `
-            -Endpoint "/workspaces/$workspaceId/items/$agentId/updateDefinition" `
-            -Body $definition `
-            -MaxRetries 8
+        Update-DataAgentDefinition `
+            -WorkspaceId $workspaceId `
+            -DataAgentId $agentId `
+            -Definition $definition.definition
         Write-Host "  ✓ Definition applied successfully" -ForegroundColor Green
     } catch {
         $errBody = $_.ErrorDetails.Message
@@ -493,6 +516,18 @@ function Deploy-DataAgent {
         Write-Host "    Open it in Fabric portal to add datasources." -ForegroundColor Yellow
         throw "Definition update failed for Data Agent '$Name'"
     }
+    Write-Host "  Publishing Data Agent staging configuration..." -ForegroundColor White
+    try {
+        $publishDescription = if ([string]::IsNullOrWhiteSpace($Description)) { "$Name production configuration" } else { $Description }
+        $null = Invoke-FabricApi -Method POST `
+            -Endpoint "/workspaces/$workspaceId/dataAgents/$agentId/staging/publish" `
+            -Body @{ publishedDescription = $publishDescription } `
+            -MaxRetries 8
+        Write-Host "  ✓ Data Agent published successfully" -ForegroundColor Green
+    } catch {
+        throw "Publish failed for Data Agent '$Name': $($_.Exception.Message)"
+    }
+
 
     Write-Host "  ✓ Agent URL: https://app.fabric.microsoft.com/groups/$workspaceId/aiskills/$agentId" -ForegroundColor Cyan
     Write-Host ""

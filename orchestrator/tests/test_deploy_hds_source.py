@@ -10,6 +10,7 @@ import unittest
 from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
+import zipfile
 
 from activities import deploy_hds_source as hds
 from shared.fabric_client import FabricClient
@@ -231,17 +232,59 @@ class HdsSourceTests(unittest.TestCase):
         )
 
 
+    def test_cached_dtt_wheel_moves_optional_telemetry_import(self):
+        source = (
+            "from azure.monitor.opentelemetry import configure_azure_monitor\n"
+            "class Logger:\n"
+            "    @classmethod\n"
+            "    def init_logger(cls):\n"
+            "        if instrumentation_key and cls._app_insight_logger is None:\n"
+            "            pass\n"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            wheel_path = Path(temporary) / f"dtt-{hds.DTT_VERSION}-py3-none-any.whl"
+            record_path = f"dtt-{hds.DTT_VERSION}.dist-info/RECORD"
+            with zipfile.ZipFile(wheel_path, "w") as archive:
+                archive.writestr("common/utils/logging.py", source)
+                archive.writestr(
+                    record_path,
+                    "common/utils/logging.py,,\n" + record_path + ",,\n",
+                )
+
+            hds._patch_dtt_wheel_optional_telemetry_import(wheel_path)
+            hds._patch_dtt_wheel_optional_telemetry_import(wheel_path)
+
+            with zipfile.ZipFile(wheel_path, "r") as archive:
+                patched = archive.read("common/utils/logging.py").decode("utf-8")
+                record = archive.read(record_path).decode("utf-8")
+            self.assertNotIn(
+                "from azure.monitor.opentelemetry import configure_azure_monitor\nclass Logger",
+                patched,
+            )
+            self.assertIn(
+                "        if instrumentation_key and cls._app_insight_logger is None:\n"
+                "            from azure.monitor.opentelemetry import configure_azure_monitor",
+                patched,
+            )
+            self.assertIn("common/utils/logging.py,sha256=", record)
+
     def test_hds_environment_reuses_complete_published_payload(self):
+        environment_yml = (
+            hds.BUILD_ROOT / hds.ARTIFACT_ROOT_NAME / hds.LIBRARY_RELATIVE_PATH / "environment.yml"
+        ).read_text(encoding="utf-8")
         class Fabric:
             def find_item(self, workspace_id, display_name, item_type):
                 return {"id": "environment", "displayName": display_name, "type": item_type}
 
             def call(self, method, endpoint):
                 if endpoint.endswith("/staging/libraries"):
-                    return {"customLibraries": {"wheelFiles": [
-                        "dtt-0.3.1.1271-py3-none-any.whl",
-                        "hds-1.4.0-py3-none-any.whl",
-                    ]}}
+                    return {
+                        "customLibraries": {"wheelFiles": [
+                            "dtt-0.3.1.1271-py3-none-any.whl",
+                            "hds-1.4.0-py3-none-any.whl",
+                        ]},
+                        "environmentYml": environment_yml,
+                    }
                 return {"id": "environment", "properties": {"publishDetails": {"state": "Success"}}}
 
         with patch.object(hds, "_event"):
@@ -250,6 +293,9 @@ class HdsSourceTests(unittest.TestCase):
         self.assertEqual(result["properties"]["publishDetails"]["state"], "Success")
 
     def test_hds_environment_replaces_inaccessible_existing_item(self):
+        environment_yml = (
+            hds.BUILD_ROOT / hds.ARTIFACT_ROOT_NAME / hds.LIBRARY_RELATIVE_PATH / "environment.yml"
+        ).read_text(encoding="utf-8")
         class Fabric:
             deleted = []
             created = []
@@ -262,10 +308,13 @@ class HdsSourceTests(unittest.TestCase):
                     response = SimpleNamespace(status_code=404)
                     raise hds.requests.HTTPError(response=response)
                 if endpoint.endswith("/staging/libraries"):
-                    return {"customLibraries": {"wheelFiles": [
-                        "dtt-0.3.1.1271-py3-none-any.whl",
-                        "hds-1.4.0-py3-none-any.whl",
-                    ]}}
+                    return {
+                        "customLibraries": {"wheelFiles": [
+                            "dtt-0.3.1.1271-py3-none-any.whl",
+                            "hds-1.4.0-py3-none-any.whl",
+                        ]},
+                        "environmentYml": environment_yml,
+                    }
                 return {"id": "replacement", "properties": {"publishDetails": {"state": "Success"}}}
 
             def delete_item(self, workspace_id, item_id):

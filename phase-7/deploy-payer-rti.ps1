@@ -251,6 +251,29 @@ function Invoke-KqlScriptFile {
     return @{ Success = $success; Fail = $fail }
 }
 
+function Update-DataAgentDefinition {
+    param([string]$WorkspaceId, [string]$DataAgentId, [object]$Definition)
+    $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
+    $body = @{ definition = $Definition } | ConvertTo-Json -Depth 30
+    $response = Invoke-WebRequest -Method POST `
+        -Uri "$FabricApiBase/workspaces/$WorkspaceId/dataAgents/$DataAgentId/updateDefinition" `
+        -Headers $headers -Body $body -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop
+    if ($response.StatusCode -eq 200) { return }
+    if ($response.StatusCode -ne 202) { throw "DataAgent definition update returned HTTP $($response.StatusCode)" }
+
+    $location = $response.Headers["Location"]
+    if ($location -is [array]) { $location = $location[0] }
+    if (-not $location) { throw "DataAgent definition update returned 202 without a Location header" }
+    for ($attempt = 1; $attempt -le 60; $attempt++) {
+        Start-Sleep 5
+        $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
+        $operation = Invoke-RestMethod -Uri $location -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
+        if ($operation.status -eq "Succeeded") { return }
+        if ($operation.status -eq "Failed") { throw "DataAgent definition update failed: $($operation.error.message)" }
+    }
+    throw "DataAgent definition update did not complete within 5 minutes"
+}
+
 function Deploy-DataAgent {
     param (
         [string]$Name,
@@ -294,10 +317,22 @@ function Deploy-DataAgent {
         $null = $parts.Add(@{ path = "Files/Config/draft/$($ds.FolderName)/fewshots.json"; payload = (ConvertTo-Base64 $ds.FewShotsJson); payloadType = "InlineBase64" })
     }
     try {
-        $null = Invoke-FabricApi -Method POST -Endpoint "/workspaces/$WorkspaceId/items/$agentId/updateDefinition" -Body @{ definition = @{ parts = @($parts) } }
+        Update-DataAgentDefinition `
+            -WorkspaceId $WorkspaceId `
+            -DataAgentId $agentId `
+            -Definition @{ parts = @($parts) }
         Write-Host "  ✓ DataAgent definition applied: $Name" -ForegroundColor Green
     } catch {
         throw "DataAgent definition update failed for ${Name}: $(Get-ErrorMessage $_)"
+    }
+    try {
+        $publishDescription = if ([string]::IsNullOrWhiteSpace($Description)) { "$Name production configuration" } else { $Description }
+        $null = Invoke-FabricApi -Method POST `
+            -Endpoint "/workspaces/$WorkspaceId/dataAgents/$agentId/staging/publish" `
+            -Body @{ publishedDescription = $publishDescription }
+        Write-Host "  ✓ DataAgent published: $Name" -ForegroundColor Green
+    } catch {
+        throw "DataAgent publish failed for ${Name}: $(Get-ErrorMessage $_)"
     }
     Write-Host "  ✓ Agent URL: https://app.fabric.microsoft.com/groups/$WorkspaceId/aiskills/$agentId" -ForegroundColor Cyan
     return $agentId
@@ -457,6 +492,44 @@ function Update-EventstreamDefinition {
         return $false
     }
 }
+function Ensure-EventstreamRunning {
+    param([string]$WorkspaceId, [string]$EventstreamId, [string]$EventstreamName)
+    $deadline = (Get-Date).AddMinutes(5)
+    $resumeRequested = $false
+    $lastStatus = "Topology unavailable"
+
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $topology = Invoke-FabricApi -Endpoint "/workspaces/$WorkspaceId/eventstreams/$EventstreamId/topology"
+            $runtimeNodes = @($topology.sources) + @($topology.streams) + @($topology.destinations)
+            if ($runtimeNodes.Count -gt 0) {
+                $lastStatus = ($runtimeNodes | ForEach-Object { "$($_.name)=$($_.status)" }) -join ", "
+                if (@($runtimeNodes | Where-Object { $_.status -eq "Error" }).Count -gt 0) {
+                    throw "$EventstreamName contains error nodes: $lastStatus"
+                }
+                if (@($runtimeNodes | Where-Object { $_.status -ne "Running" }).Count -eq 0) {
+                    Write-Host "  ✓ $EventstreamName topology is running: $lastStatus" -ForegroundColor Green
+                    return $true
+                }
+                if (-not $resumeRequested -and @($runtimeNodes | Where-Object { $_.status -eq "Paused" }).Count -gt 0) {
+                    Write-Host "  Resuming paused $EventstreamName nodes from their last checkpoint..." -ForegroundColor Yellow
+                    Invoke-FabricApi -Method POST -Endpoint "/workspaces/$WorkspaceId/eventstreams/$EventstreamId/resume" -Body @{
+                        startType = "WhenLastStopped"
+                    } | Out-Null
+                    $resumeRequested = $true
+                }
+                Write-Host "    Waiting for $EventstreamName topology: $lastStatus" -ForegroundColor Gray
+            }
+        } catch {
+            $lastStatus = Get-ErrorMessage $_
+            Write-Host "    $EventstreamName topology not ready: $lastStatus" -ForegroundColor Gray
+        }
+        Start-Sleep -Seconds 10
+    }
+    Write-Host "  ✗ $EventstreamName did not reach Running within 5 minutes: $lastStatus" -ForegroundColor Red
+    return $false
+}
+
 
 function New-ClaimsEventstreamDefinition {
     param([string]$ClaimConnectionId, [string]$WorkspaceId, [string]$KqlDbId, [string]$KqlDbName)
@@ -784,6 +857,9 @@ if (-not $SkipPayerRti) {
     if (-not (Update-EventstreamDefinition -WorkspaceId $workspaceId -EventstreamId $claimEs.id -EventstreamName "ClaimsRTIStream" -Definition $claimDef)) {
         throw "ClaimsRTIStream definition update failed"
     }
+    if (-not (Ensure-EventstreamRunning -WorkspaceId $workspaceId -EventstreamId $claimEs.id -EventstreamName "ClaimsRTIStream")) {
+        throw "ClaimsRTIStream topology did not become active"
+    }
     Write-Host "  ✓ ClaimsRTIStream configured: claim-stream → claims_events" -ForegroundColor Green
 } else {
     Write-Host "Payer RTI skipped because -SkipPayerRti was supplied" -ForegroundColor Yellow
@@ -809,10 +885,10 @@ $kqlElements = @(
     @{ id = [guid]::NewGuid().ToString(); display_name = "care_gap_alerts"; type = "kusto.table"; is_selected = $true }
 )
 $fewShots = @(
-    @{ user = "Which providers have the highest fraud scores right now?"; assistant = "fn_FraudRisk(60) | summarize max_score=max(fraud_score), high_claims=countif(risk_tier in ('CRITICAL','HIGH')) by provider_id | order by max_score desc" },
-    @{ user = "Show the current payer operations worklist"; assistant = "fn_PayerOpsWorklist(60) | order by priority asc, alert_time desc" },
-    @{ user = "Which patients are becoming high cost?"; assistant = "fn_HighCostTrajectory(90) | order by rolling_spend_30d desc" },
-    @{ user = "Show claim events for TEST-PROVIDER"; assistant = "claims_events | where provider_id == 'TEST-PROVIDER' | order by event_timestamp desc | take 50" }
+    @{ id = [guid]::NewGuid().ToString(); question = "Which providers have the highest fraud scores right now?"; query = "fn_FraudRisk(60) | summarize max_score=max(fraud_score), high_claims=countif(risk_tier in ('CRITICAL','HIGH')) by provider_id | order by max_score desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Show the current payer operations worklist"; query = "fn_PayerOpsWorklist(60) | order by priority asc, alert_time desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which patients are becoming high cost?"; query = "fn_HighCostTrajectory(90) | order by rolling_spend_30d desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Show claim events for TEST-PROVIDER"; query = "claims_events | where provider_id == 'TEST-PROVIDER' | order by event_timestamp desc | take 50" }
 )
 $payerKqlInstructions = "Use fn_PayerOpsWorklist(60), fn_FraudRisk(60), fn_HighCostTrajectory(90), claims_events, fraud_scores, highcost_alerts, care_gap_alerts, TelemetryRaw, and AlertHistory for payer and clinical operations triage."
 $payerDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Elements $kqlElements -FewShots $fewShots -Instructions $payerKqlInstructions))
@@ -838,9 +914,9 @@ if (-not $SkipOpsAgent) {
     $opsConfig = @{
         '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/operationsAgents/definition/1.0.0/schema.json"
         configuration = @{
-            goals = "Monitor payer RTI streaming tables for fraud alerts, care gap alerts, high-cost member trajectory alerts, and clinical alert context. Provide a unified triage worklist, detect critical issues, monitor event freshness, and recommend prioritized SIU, care management, or provider outreach actions."
-            instructions = "You are the Healthcare Operations Agent for the med-device Fabric workspace. Query KQL table claims_events for raw claim submissions, fraud_scores/highcost_alerts/care_gap_alerts for persisted scores when present, and fn_PayerOpsWorklist(60) for current prioritized alerts. Route CRITICAL fraud to SIU Investigation Queue, CRITICAL high-cost to Care Management Referral, and CRITICAL care gaps to Provider Outreach. When a patient has both clinical vitals alerts and payer alerts, rank the combined case above single-domain alerts. Always show alert_time, patient_id, provider_id when present, priority, metric_name, metric_value, and recommended next action."
-            dataSources = @{ payerRti = @{ id = $kqlDbId; type = "KustoDatabase"; workspaceId = $workspaceId } }
+            goals = "Provide evidence-backed clinical and payer triage using fresh MasimoEventhouse data. Surface stale telemetry or claims as structured findings for human review; never execute an action without explicit human approval."
+            instructions = "Monitor MasimoEventhouse every 5 minutes. Identify each device_id in TelemetryRaw whose maximum todatetime(timestamp) is older than 5 minutes, and identify when the maximum event_timestamp in claims_events is older than 5 minutes. For each stale condition, prepare a structured finding containing condition name, device_id when applicable, last event time UTC, age_minutes, source table, and WARNING severity. Present findings in the agent activity or Teams conversation for human review using the built-in reporting capability. Do not invoke custom Power Automate actions automatically. Never invent records, and do not create findings for healthy streams. Use fn_ClinicalAlerts(60) and fn_PayerOpsWorklist(60) for supporting current risk context."
+            dataSources = @{ kqldb1 = @{ id = $kqlDbId; type = "KustoDatabase"; workspaceId = $workspaceId } }
             actions = @{}
         }
         shouldRun = $true
@@ -862,7 +938,7 @@ if (-not $SkipOpsAgent) {
             $opsAgentId = $createdOps.id
             Write-Host "  ✓ HealthcareOpsAgent OperationsAgent created ($opsAgentId)" -ForegroundColor Green
         }
-        Write-Host "  ✓ OperationsAgent URL: https://app.fabric.microsoft.com/groups/$workspaceId/items/$opsAgentId" -ForegroundColor Cyan
+        Write-Host "  ✓ OperationsAgent URL: https://app.fabric.microsoft.com/groups/$workspaceId/operationalagents/$opsAgentId/config" -ForegroundColor Cyan
     } catch {
         Write-Host "  ⚠ OperationsAgent item type unavailable; deployed HealthcareOpsAgent as DataAgent fallback" -ForegroundColor Yellow
         $opsInstructions = "Monitor payer RTI streaming tables, fn_PayerOpsWorklist(60), fraud_scores, highcost_alerts, care_gap_alerts, and clinical AlertHistory. Route CRITICAL fraud to SIU Investigation Queue, CRITICAL high-cost to Care Management Referral, and CRITICAL care gaps to Provider Outreach. Always show alert_time, patient_id, provider_id when present, priority, metric_name, metric_value, and recommended next action.$goldUnavailableInstruction"
@@ -891,10 +967,12 @@ if (-not $SkipGraphAgent) {
         '2. Open `DevicePayerOntology`.',
         '3. Select Preview and run `Refresh graph model`.',
         '4. Open Data Agent `Healthcare Graph Agent`.',
-        '5. Confirm `DevicePayerOntology` is attached as a datasource and publish the agent.',
+        '5. Confirm `DevicePayerOntology` is attached and the published agent exposes its MCP server.',
         '6. Validate with: `For patient <patient_id>, trace device, diagnoses, clinical alerts, claims, payer category, RAF risk, high-cost profile, and open care gaps.`'
     ) -join [Environment]::NewLine
-    $manualPath = Join-Path $ScriptRoot "graph-agent-manual-steps.md"
+    $manualDirectory = Join-Path (Split-Path -Parent $ScriptRoot) "state-tracking"
+    New-Item -ItemType Directory -Path $manualDirectory -Force | Out-Null
+    $manualPath = Join-Path $manualDirectory ".graph-agent-manual-steps-$FabricWorkspaceName.txt"
     Set-Content -Path $manualPath -Value $manualSteps -Encoding UTF8
     Write-Host $manualSteps -ForegroundColor Yellow
     Write-Host "  ✓ Manual graph attach steps written: $manualPath" -ForegroundColor Green

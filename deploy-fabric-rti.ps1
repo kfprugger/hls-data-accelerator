@@ -2162,27 +2162,48 @@ if (-not $ehConnStr) {
 if ($eventstreamId) {
     Write-Host ""
     Write-Host "--- STEP 4b: EVENTSTREAM STATUS CHECK ---" -ForegroundColor Cyan
-    Write-Host "  Checking Eventstream status..." -ForegroundColor White
+    Write-Host "  Ensuring Eventstream sources and destinations are running..." -ForegroundColor White
 
-    try {
-        $esInfo = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/eventstreams/$eventstreamId"
-        $esStatus = $esInfo.status
-        if (-not $esStatus) { $esStatus = $esInfo.state }
-        if (-not $esStatus) { $esStatus = $esInfo.runtimeStatus }
+    $eventstreamDeadline = (Get-Date).AddMinutes(5)
+    $resumeRequested = $false
+    $eventstreamRunning = $false
+    $lastTopologyStatus = "Topology unavailable"
 
-        if ($esStatus) {
-            Write-Host "  Eventstream status: $esStatus" -ForegroundColor Gray
+    while ((Get-Date) -lt $eventstreamDeadline) {
+        try {
+            $topology = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/eventstreams/$eventstreamId/topology"
+            $runtimeNodes = @($topology.sources) + @($topology.streams) + @($topology.destinations)
+            if ($runtimeNodes.Count -gt 0) {
+                $lastTopologyStatus = ($runtimeNodes | ForEach-Object { "$($_.name)=$($_.status)" }) -join ", "
+                $errorNodes = @($runtimeNodes | Where-Object { $_.status -eq "Error" })
+                if ($errorNodes.Count -gt 0) {
+                    throw "Eventstream topology contains error nodes: $lastTopologyStatus"
+                }
+                $notRunning = @($runtimeNodes | Where-Object { $_.status -ne "Running" })
+                if ($notRunning.Count -eq 0) {
+                    $eventstreamRunning = $true
+                    Write-Host "  ✓ Eventstream topology is running: $lastTopologyStatus" -ForegroundColor Green
+                    break
+                }
+                if (-not $resumeRequested -and @($runtimeNodes | Where-Object { $_.status -eq "Paused" }).Count -gt 0) {
+                    Write-Host "  Resuming paused Eventstream nodes from their last checkpoint..." -ForegroundColor Yellow
+                    Invoke-FabricApi -Method "POST" -Endpoint "/workspaces/$workspaceId/eventstreams/$eventstreamId/resume" -Body @{
+                        startType = "WhenLastStopped"
+                    } | Out-Null
+                    $resumeRequested = $true
+                }
+                Write-Host "    Waiting for Eventstream topology: $lastTopologyStatus" -ForegroundColor Gray
+            }
+        } catch {
+            $lastTopologyStatus = $_.Exception.Message
+            Write-Host "    Eventstream topology not ready: $lastTopologyStatus" -ForegroundColor Gray
         }
+        Start-Sleep -Seconds 10
+    }
 
-        if ($esStatus -and $esStatus -in @('Active', 'Running')) {
-            Write-Host "  ✓ Eventstream is running" -ForegroundColor Green
-            $eventstreamRunning = $true
-        } else {
-            Write-Host "  Eventstream activation is managed by Fabric after updateDefinition; no public REST start endpoint is available." -ForegroundColor DarkGray
-            Write-Host "  KQL ingestion is verified after schema deployment." -ForegroundColor DarkGray
-        }
-    } catch {
-        Write-Host "  ⚠ Could not check Eventstream status: $($_.Exception.Message)" -ForegroundColor Yellow
+    if (-not $eventstreamRunning) {
+        Write-Host "  ✗ Eventstream topology did not reach Running within 5 minutes: $lastTopologyStatus" -ForegroundColor Red
+        Add-RtiFailure "Eventstream topology not running: $lastTopologyStatus"
     }
 }
 

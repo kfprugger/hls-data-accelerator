@@ -34,6 +34,7 @@ CORE_HDS_PIPELINE_NAMES = [
 ]
 IMAGING_INGESTION_PIPELINE_NAME = "healthcare1_msft_imaging_with_clinical_foundation_ingestion"
 CMA_PIPELINE_NAME = "healthcare1_msft_cma"
+POA_PIPELINE_NAME = "healthcare1_msft_poa_ingestion"
 CMA_SEMANTIC_MODEL_NAME = "healthcare1_msft_cma_semantic_model"
 CMA_REPORT_NAMES = ("healthcare1_msft_cma_report",)
 CMA_ARTIFACT_DIR = Path(__file__).resolve().parents[2] / "phase-2" / "cma-report"
@@ -474,7 +475,7 @@ def run(config: dict[str, Any], resources: dict[str, Any]) -> dict[str, Any]:
     pipelines_by_name = {
         str(pipeline.get("displayName", "")): pipeline for pipeline in pipelines
     }
-    excluded_pipeline_names = {*CORE_HDS_PIPELINE_NAMES, CMA_PIPELINE_NAME}
+    excluded_pipeline_names = {*CORE_HDS_PIPELINE_NAMES, CMA_PIPELINE_NAME, POA_PIPELINE_NAME}
     sidecar_names = _coerce_string_list(config.get("optional_sidecar_pipeline_names"))
     sidecar_patterns = _coerce_string_list(
         config.get("optional_sidecar_pipeline_name_patterns")
@@ -512,6 +513,19 @@ def run(config: dict[str, Any], resources: dict[str, Any]) -> dict[str, Any]:
         logger.info("Triggering pipeline: %s", clinical_name)
         pipeline_results[clinical_name] = _run_blocking_pipeline(
             fabric, workspace_id, clinical_pipeline, clinical_name
+        )
+
+    poa_pipeline = pipelines_by_name.get(POA_PIPELINE_NAME)
+    if pipeline_results.get(clinical_name) != "completed":
+        pipeline_results[POA_PIPELINE_NAME] = "skipped_clinical_incomplete"
+        logger.warning("Skipping POA pipeline because Clinical/Silver readiness did not complete")
+    elif not poa_pipeline:
+        pipeline_results[POA_PIPELINE_NAME] = "not_found"
+        logger.warning("Required POA pipeline not found: %s", POA_PIPELINE_NAME)
+    else:
+        logger.info("Triggering required POA pipeline: %s", POA_PIPELINE_NAME)
+        pipeline_results[POA_PIPELINE_NAME] = _run_blocking_pipeline(
+            fabric, workspace_id, poa_pipeline, POA_PIPELINE_NAME
         )
 
     cma_pipeline = pipelines_by_name.get(CMA_PIPELINE_NAME)

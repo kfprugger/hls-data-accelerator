@@ -51,7 +51,7 @@ pwsh -NoProfile -File ./hds-source/Deploy-HdsSource.ps1 `
   -ContractOnly
 ```
 
-The contract requires the published `healthcare1_environment`, expected lakehouses, all source notebooks and pipelines, semantic models and reports, required Clinical/Imaging/OMOP pipelines, and a completed `master_deployer` job.
+The contract requires the published `healthcare1_environment`, expected lakehouses, all source notebooks and pipelines, semantic models and reports, required Clinical/POA/Imaging/OMOP pipelines, and a completed `master_deployer` job.
 
 ## Expected core artifacts
 
@@ -108,7 +108,7 @@ The host validator reports every missing display name. Confirm source notebooks 
 
 ### Downstream row gates fail
 
-First run `-ContractOnly`. If the contract passes, inspect Clinical, Imaging, and OMOP job histories and the Bronze/Silver row counts emitted by `phase-2/storage-access-trusted-workspace.ps1`.
+First run `-ContractOnly`. If the contract passes, inspect Clinical, POA, Imaging, and OMOP job histories and the Bronze/Silver row counts emitted by `phase-2/storage-access-trusted-workspace.ps1`.
 
 ## Teardown
 

@@ -1834,7 +1834,7 @@ async def start_deploy(req: DeployRequest):
             "status": "running",
             "detail": "",
             "completedPhases": 0,
-            "totalPhases": 14,
+            "totalPhases": 16,
             "resources": {},
             "logs": [],
             "subStepsByPhase": {},
