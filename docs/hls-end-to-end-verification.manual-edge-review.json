@@ -2,8 +2,8 @@
   "browser": "Microsoft Edge Work - Brakekat (Profile 2)",
   "artifact": {
     "path": "/Users/joey/git/hls-data-accelerator/docs/hls-end-to-end-verification.html",
-    "sha256": "5f04c65e9cf216b73ed74d1480925e90e8cafe315aa3b24d3b56ee45328cc2c7",
-    "bytes": 811695
+    "sha256": "d03558c18e9617970a68089bca961c59cf821f66294024170c915272acf94f0a",
+    "bytes": 811715
   },
   "state": {
     "detail": "read",
@@ -18,14 +18,15 @@
     "theme": "dark"
   },
   "laneRemoved": true,
+  "graphToReportsRoute": "600,385;650,385;650,330;745,330;745,300",
   "screenshot": "hls-end-to-end-verification.manual-edge.final.webp",
   "automatedBrowserStatus": "passed",
   "automatedCoverage": "1440x900, 1600x1000, 1920x1080, and 2048x1320 light; 1440x900 and 2048x1320 dark captures",
   "visualReview": "passed",
-  "correctionRounds": 2,
+  "correctionRounds": 1,
   "observations": [
-    "Evaluation harness lane is absent; the final stage is User surfaces.",
-    "Labels, nodes, route corridors, legend, toolbar, and conclusion card are readable with no visible clipping or crossings.",
-    "The exact delivered artifact fits the inspected Edge viewport; packaged automated containment passes all required desktop viewports."
+    "Graph + Imaging now exits right, follows a separate orthogonal corridor, and enters Reports + Agents from below.",
+    "The corrected route does not merge with the KQL or DAX arrows and does not cross a node or label.",
+    "The Evaluation Harness lane remains absent; labels, legend, toolbar, and conclusion card remain readable without clipping."
   ]
 }

@@ -191,7 +191,23 @@
       "to": "surfaces",
       "label": "graph + OHIF",
       "variant": "emphasis",
-      "route": "bottom-channel"
+      "route": "auto",
+      "toSide": "bottom",
+      "fromSide": "right",
+      "via": [
+        [
+          650,
+          385
+        ],
+        [
+          650,
+          330
+        ],
+        [
+          745,
+          330
+        ]
+      ]
     }
   ],
   "cards": [
