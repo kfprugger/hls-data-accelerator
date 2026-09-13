@@ -1,23 +1,22 @@
 {
   "browser": "Microsoft Edge Work - Brakekat (Profile 2)",
-  "artifact": {
-    "path": "/Users/joey/git/hls-data-accelerator/docs/hls-end-to-end-verification.html",
-    "sha256": "d769efdb073cbb343af9138b6234f44d3e438f3c547df602e380ecc4affcc2ed",
-    "bytes": 813886
-  },
+  "artifact": {"path": "/Users/joey/git/hls-data-accelerator/docs/hls-end-to-end-verification.html", "sha256": "b4571d5e14d5e5e3b16e870f87d34385e2edcc61c14c6ef5b4c187d5c40a7f25", "bytes": 809580},
   "state": {"detail": "read", "motion": "still"},
-  "actualViewport": {"width": 1792, "height": 935, "scrollWidth": 1792, "scrollHeight": 935, "ok": true, "theme": "dark"},
-  "deploymentOrchestrator": {"present": true, "type": "frontend", "stage": "User surfaces", "label": "Deployment Orchestrator", "sublabel": "preflight · deploy · teardown"},
-  "laneRemoved": true,
+  "actualViewport": {"width": 1792, "height": 914, "scrollWidth": 1792, "scrollHeight": 914, "ok": true, "theme": "dark"},
+  "deploymentOrchestrator": {"present": true, "type": "frontend", "stage": "Control", "width": 150, "height": 66, "label": "Deployment Orchestrator", "sublabel": "preflight · deploy · run"},
+  "dependencies": [
+    {"to": "FHIR + Demo", "action": "deploy + seed", "route": "100,238;100,210;210,210;210,157;245,157"},
+    {"to": "Masimo + Claims", "action": "start", "route": "175,271;245,271"},
+    {"to": "DICOM Studies", "action": "deploy + load", "route": "100,304;100,330;210,330;210,385;245,385"}
+  ],
   "graphToReportsRoute": "600,385;650,385;650,330;745,330;745,300",
   "screenshot": "hls-end-to-end-verification.manual-edge.final.webp",
   "automatedBrowserStatus": "passed",
-  "automatedCoverage": "1440x900, 1600x1000, 1920x1080, and 2048x1320 light; 1440x900 and 2048x1320 dark captures",
   "visualReview": "passed",
-  "correctionRounds": 0,
+  "correctionRounds": 2,
   "observations": [
-    "Deployment Orchestrator is visible as a distinct frontend in User surfaces.",
-    "Its status flow from Silver + Gold is separate from DAX, KQL, and graph routes.",
-    "The corrected Graph + Imaging route and removed Evaluation Harness lane remain intact; no clipping or crossings are visible."
+    "Dependency direction now matches the system: Deployment Orchestrator initiates clinical, telemetry/claims, and imaging source workloads before governed state and user surfaces.",
+    "The orchestrator is a distinct, readable frontend in Control with separate top, center, and bottom outgoing corridors.",
+    "All arrows are orthogonal and visually distinct; no route shares a corridor, crosses a node, or masks a label."
   ]
 }

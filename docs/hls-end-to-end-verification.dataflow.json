@@ -14,10 +14,10 @@
   },
   "stages": [
     {
-      "label": "Sources"
+      "label": "Control"
     },
     {
-      "label": "Ingestion"
+      "label": "Source workloads"
     },
     {
       "label": "Governed state"
@@ -32,7 +32,7 @@
       "type": "external",
       "label": "FHIR + Demo",
       "sublabel": "100 labeled patients",
-      "stage": 0,
+      "stage": 1,
       "row": 0,
       "width": 140,
       "tag": "synthetic provenance"
@@ -42,7 +42,7 @@
       "type": "backend",
       "label": "Masimo + Claims",
       "sublabel": "current events",
-      "stage": 0,
+      "stage": 1,
       "row": 1,
       "width": 140,
       "tag": "Resume from Now"
@@ -52,40 +52,10 @@
       "type": "external",
       "label": "DICOM Studies",
       "sublabel": "100 studies",
-      "stage": 0,
+      "stage": 1,
       "row": 2,
       "width": 140,
       "tag": "model-linked"
-    },
-    {
-      "id": "hdsIngest",
-      "type": "backend",
-      "label": "FHIR Export + HDS",
-      "sublabel": "Bronze / Silver",
-      "stage": 1,
-      "row": 0,
-      "width": 140,
-      "tag": "HDS 1.4"
-    },
-    {
-      "id": "streamIngest",
-      "type": "messagebus",
-      "label": "Eventstreams",
-      "sublabel": "Masimo + Claims",
-      "stage": 1,
-      "row": 1,
-      "width": 140,
-      "tag": "all nodes Running"
-    },
-    {
-      "id": "imagingIngest",
-      "type": "backend",
-      "label": "Imaging Pipeline",
-      "sublabel": "metadata + links",
-      "stage": 1,
-      "row": 2,
-      "width": 140,
-      "tag": "study-preserving"
     },
     {
       "id": "lakehouseState",
@@ -131,53 +101,87 @@
       "id": "deploymentOrchestrator",
       "type": "frontend",
       "label": "Deployment Orchestrator",
-      "sublabel": "preflight \u00b7 deploy \u00b7 teardown",
-      "stage": 3,
-      "row": 0,
-      "width": 140,
-      "tag": "custom web UI"
+      "sublabel": "preflight \u00b7 deploy \u00b7 run",
+      "stage": 0,
+      "row": 1,
+      "width": 150,
+      "tag": "custom control UI",
+      "height": 66,
+      "yOffset": -4
     }
   ],
   "flows": [
     {
+      "from": "deploymentOrchestrator",
+      "to": "clinicalSources",
+      "label": "deploy + seed",
+      "variant": "emphasis",
+      "route": "auto",
+      "fromSide": "top",
+      "toSide": "left",
+      "via": [
+        [
+          100,
+          210
+        ],
+        [
+          210,
+          210
+        ],
+        [
+          210,
+          157
+        ]
+      ]
+    },
+    {
+      "from": "deploymentOrchestrator",
+      "to": "streamSources",
+      "label": "start",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "deploymentOrchestrator",
+      "to": "dicomSources",
+      "label": "deploy + load",
+      "variant": "emphasis",
+      "route": "auto",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "via": [
+        [
+          100,
+          330
+        ],
+        [
+          210,
+          330
+        ],
+        [
+          210,
+          385
+        ]
+      ]
+    },
+    {
       "from": "clinicalSources",
-      "to": "hdsIngest",
-      "label": "$export",
+      "to": "lakehouseState",
+      "label": "HDS",
       "variant": "emphasis",
       "route": "straight"
     },
     {
       "from": "streamSources",
-      "to": "streamIngest",
-      "label": "events",
+      "to": "eventhouseState",
+      "label": "Eventstreams",
       "variant": "emphasis",
       "route": "straight"
     },
     {
       "from": "dicomSources",
-      "to": "imagingIngest",
-      "label": "DICOM",
-      "variant": "emphasis",
-      "route": "straight"
-    },
-    {
-      "from": "hdsIngest",
-      "to": "lakehouseState",
-      "label": "facts",
-      "variant": "emphasis",
-      "route": "straight"
-    },
-    {
-      "from": "streamIngest",
-      "to": "eventhouseState",
-      "label": "ingest",
-      "variant": "emphasis",
-      "route": "straight"
-    },
-    {
-      "from": "imagingIngest",
       "to": "semanticState",
-      "label": "metadata",
+      "label": "load",
       "variant": "emphasis",
       "route": "straight"
     },
@@ -202,8 +206,8 @@
       "label": "graph + OHIF",
       "variant": "emphasis",
       "route": "auto",
-      "toSide": "bottom",
       "fromSide": "right",
+      "toSide": "bottom",
       "via": [
         [
           650,
@@ -218,13 +222,6 @@
           330
         ]
       ]
-    },
-    {
-      "from": "lakehouseState",
-      "to": "deploymentOrchestrator",
-      "label": "status",
-      "variant": "default",
-      "route": "straight"
     }
   ],
   "cards": [
@@ -232,7 +229,7 @@
       "dot": "rose",
       "title": "Verified system; one withheld gate",
       "items": [
-        "POA, SDOH, payer, adherence, graph, reports, telemetry, and OHIF contain verified data",
+        "Deployment Orchestrator starts clinical, telemetry/claims, and imaging source workloads",
         "APIs prove system state; Edge Work - Brakekat proves report and OHIF rendering",
         "HealthcareOpsAgent still has no Fabric preview playbook, so the operational PASS remains withheld"
       ]
