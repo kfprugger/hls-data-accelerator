@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "HLS Data Accelerator \u2014 BrakeKat End-to-End Verification",
+    "output": "docs/hls-end-to-end-verification.html",
+    "viewBox": [
+      1000,
+      600
+    ],
+    "animation": "none",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    {
+      "label": "Sources"
+    },
+    {
+      "label": "Ingestion"
+    },
+    {
+      "label": "Governed state"
+    },
+    {
+      "label": "User surfaces"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "clinicalSources",
+      "type": "external",
+      "label": "FHIR + Demo",
+      "sublabel": "100 labeled patients",
+      "stage": 0,
+      "row": 0,
+      "width": 140,
+      "tag": "synthetic provenance"
+    },
+    {
+      "id": "streamSources",
+      "type": "backend",
+      "label": "Masimo + Claims",
+      "sublabel": "current events",
+      "stage": 0,
+      "row": 1,
+      "width": 140,
+      "tag": "Resume from Now"
+    },
+    {
+      "id": "dicomSources",
+      "type": "external",
+      "label": "DICOM Studies",
+      "sublabel": "100 studies",
+      "stage": 0,
+      "row": 2,
+      "width": 140,
+      "tag": "model-linked"
+    },
+    {
+      "id": "hdsIngest",
+      "type": "backend",
+      "label": "FHIR Export + HDS",
+      "sublabel": "Bronze / Silver",
+      "stage": 1,
+      "row": 0,
+      "width": 140,
+      "tag": "HDS 1.4"
+    },
+    {
+      "id": "streamIngest",
+      "type": "messagebus",
+      "label": "Eventstreams",
+      "sublabel": "Masimo + Claims",
+      "stage": 1,
+      "row": 1,
+      "width": 140,
+      "tag": "all nodes Running"
+    },
+    {
+      "id": "imagingIngest",
+      "type": "backend",
+      "label": "Imaging Pipeline",
+      "sublabel": "metadata + links",
+      "stage": 1,
+      "row": 2,
+      "width": 140,
+      "tag": "study-preserving"
+    },
+    {
+      "id": "lakehouseState",
+      "type": "database",
+      "label": "Silver + Gold",
+      "sublabel": "POA \u00b7 SDOH \u00b7 quality",
+      "stage": 2,
+      "row": 0,
+      "width": 140,
+      "tag": "facts populated"
+    },
+    {
+      "id": "eventhouseState",
+      "type": "database",
+      "label": "MasimoEventhouse",
+      "sublabel": "telemetry + claims",
+      "stage": 2,
+      "row": 1,
+      "width": 140,
+      "tag": "fresh within 5 min"
+    },
+    {
+      "id": "semanticState",
+      "type": "database",
+      "label": "Graph + Imaging",
+      "sublabel": "100 links + studies",
+      "stage": 2,
+      "row": 2,
+      "width": 140,
+      "tag": "16 nodes \u00b7 14 edges"
+    },
+    {
+      "id": "surfaces",
+      "type": "frontend",
+      "label": "Reports + Agents",
+      "sublabel": "Power BI \u00b7 RTI \u00b7 OHIF",
+      "stage": 3,
+      "row": 1,
+      "width": 140,
+      "tag": "Edge for rendering"
+    }
+  ],
+  "flows": [
+    {
+      "from": "clinicalSources",
+      "to": "hdsIngest",
+      "label": "$export",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "streamSources",
+      "to": "streamIngest",
+      "label": "events",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "dicomSources",
+      "to": "imagingIngest",
+      "label": "DICOM",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "hdsIngest",
+      "to": "lakehouseState",
+      "label": "facts",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "streamIngest",
+      "to": "eventhouseState",
+      "label": "ingest",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "imagingIngest",
+      "to": "semanticState",
+      "label": "metadata",
+      "variant": "emphasis",
+      "route": "straight"
+    },
+    {
+      "from": "lakehouseState",
+      "to": "surfaces",
+      "label": "DAX",
+      "variant": "emphasis",
+      "route": "auto"
+    },
+    {
+      "from": "eventhouseState",
+      "to": "surfaces",
+      "label": "KQL",
+      "variant": "default",
+      "route": "straight",
+      "labelDy": 32
+    },
+    {
+      "from": "semanticState",
+      "to": "surfaces",
+      "label": "graph + OHIF",
+      "variant": "emphasis",
+      "route": "bottom-channel"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Verified system; one withheld gate",
+      "items": [
+        "POA, SDOH, payer, adherence, graph, reports, telemetry, and OHIF contain verified data",
+        "APIs prove system state; Edge Work - Brakekat proves report and OHIF rendering",
+        "HealthcareOpsAgent still has no Fabric preview playbook, so the operational PASS remains withheld"
+      ]
+    }
+  ]
+}
