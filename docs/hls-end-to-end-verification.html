@@ -5178,6 +5178,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <path data-edge-from="lakehouseState" data-edge-to="surfaces" data-edge-label="DAX" data-edge-key="6" data-composition-points="600,157;637.5,157;637.5,271;675,271" d="M 600 157 L 637.5 157 L 637.5 271 L 675 271" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="eventhouseState" data-edge-to="surfaces" data-edge-label="KQL" data-edge-key="7" data-composition-points="600,271;675,271" d="M 600 271 L 675 271" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="semanticState" data-edge-to="surfaces" data-edge-label="graph + OHIF" data-edge-key="8" data-composition-points="600,385;650,385;650,330;745,330;745,300" d="M 600 385 L 650 385 L 650 330 L 745 330 L 745 300" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="lakehouseState" data-edge-to="deploymentOrchestrator" data-edge-label="status" data-edge-key="9" data-composition-points="600,157;675,157" d="M 600 157 L 675 157" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
 
         <!-- Nodes -->
         <g id="node-clinicalSources" data-node-id="clinicalSources" data-node-label="FHIR + Demo" tabindex="0" role="button" aria-label="Focus FHIR + Demo, 100 labeled patients, 01 / Sources" aria-pressed="false" data-node-kind="external" data-node-sublabel="100 labeled patients" data-node-tag="synthetic provenance" data-node-context="01 / Sources">
@@ -5311,6 +5312,21 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="fine" x="745" y="289" class="t-frontend" font-size="7" text-anchor="middle">Edge for rendering</text>
         </g>
 
+        <g id="node-deploymentOrchestrator" data-node-id="deploymentOrchestrator" data-node-label="Deployment Orchestrator" tabindex="0" role="button" aria-label="Focus Deployment Orchestrator, preflight · deploy · teardown, 04 / User surfaces" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="preflight · deploy · teardown" data-node-tag="custom web UI" data-node-context="04 / User surfaces">
+          <title>Deployment Orchestrator · preflight · deploy · teardown · 04 / User surfaces · custom web UI</title>
+          <rect x="675" y="128" width="140" height="58" rx="6" class="c-mask"/>
+          <rect x="675" y="128" width="140" height="58" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(681 134) scale(0.6875)">
+            <rect x="2" y="3" width="12" height="10" rx="2"/>
+            <path d="M2 6.5h12"/>
+            <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
+            <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="745" y="149" class="t-primary" font-size="9.5" font-weight="600" text-anchor="middle">Deployment Orchestrator</text>
+          <text data-detail="context" x="745" y="165" class="t-muted" font-size="7" text-anchor="middle">preflight · deploy · teardown</text>
+        <text data-detail="fine" x="745" y="175" class="t-frontend" font-size="7" text-anchor="middle">custom web UI</text>
+        </g>
+
         <!-- Flow labels -->
         <g data-detail="context" data-edge-from="clinicalSources" data-edge-to="hdsIngest" data-edge-label="$export" data-edge-key="0">
           <rect x="184.35" y="136" width="46.3" height="16" rx="4" class="c-mask"/>
@@ -5347,6 +5363,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <g data-detail="context" data-edge-from="semanticState" data-edge-to="surfaces" data-edge-label="graph + OHIF" data-edge-key="8">
           <rect x="614.6" y="336.5" width="70.8" height="16" rx="4" class="c-mask"/>
           <text x="650" y="347.5" class="t-backend" font-size="8" text-anchor="middle">graph + OHIF</text>
+        </g>
+        <g data-detail="context" data-edge-from="lakehouseState" data-edge-to="deploymentOrchestrator" data-edge-label="status" data-edge-key="9">
+          <rect x="616.8" y="136" width="41.4" height="16" rx="4" class="c-mask"/>
+          <text x="637.5" y="147" class="t-muted" font-size="8" text-anchor="middle">status</text>
         </g>
 
         <!-- Legend -->

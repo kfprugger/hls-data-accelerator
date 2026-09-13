@@ -2,31 +2,22 @@
   "browser": "Microsoft Edge Work - Brakekat (Profile 2)",
   "artifact": {
     "path": "/Users/joey/git/hls-data-accelerator/docs/hls-end-to-end-verification.html",
-    "sha256": "d03558c18e9617970a68089bca961c59cf821f66294024170c915272acf94f0a",
-    "bytes": 811715
+    "sha256": "d769efdb073cbb343af9138b6234f44d3e438f3c547df602e380ecc4affcc2ed",
+    "bytes": 813886
   },
-  "state": {
-    "detail": "read",
-    "motion": "still"
-  },
-  "actualViewport": {
-    "width": 1792,
-    "height": 935,
-    "scrollWidth": 1792,
-    "scrollHeight": 935,
-    "ok": true,
-    "theme": "dark"
-  },
+  "state": {"detail": "read", "motion": "still"},
+  "actualViewport": {"width": 1792, "height": 935, "scrollWidth": 1792, "scrollHeight": 935, "ok": true, "theme": "dark"},
+  "deploymentOrchestrator": {"present": true, "type": "frontend", "stage": "User surfaces", "label": "Deployment Orchestrator", "sublabel": "preflight · deploy · teardown"},
   "laneRemoved": true,
   "graphToReportsRoute": "600,385;650,385;650,330;745,330;745,300",
   "screenshot": "hls-end-to-end-verification.manual-edge.final.webp",
   "automatedBrowserStatus": "passed",
   "automatedCoverage": "1440x900, 1600x1000, 1920x1080, and 2048x1320 light; 1440x900 and 2048x1320 dark captures",
   "visualReview": "passed",
-  "correctionRounds": 1,
+  "correctionRounds": 0,
   "observations": [
-    "Graph + Imaging now exits right, follows a separate orthogonal corridor, and enters Reports + Agents from below.",
-    "The corrected route does not merge with the KQL or DAX arrows and does not cross a node or label.",
-    "The Evaluation Harness lane remains absent; labels, legend, toolbar, and conclusion card remain readable without clipping."
+    "Deployment Orchestrator is visible as a distinct frontend in User surfaces.",
+    "Its status flow from Silver + Gold is separate from DAX, KQL, and graph routes.",
+    "The corrected Graph + Imaging route and removed Evaluation Harness lane remain intact; no clipping or crossings are visible."
   ]
 }

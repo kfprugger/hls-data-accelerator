@@ -126,6 +126,16 @@
       "row": 1,
       "width": 140,
       "tag": "Edge for rendering"
+    },
+    {
+      "id": "deploymentOrchestrator",
+      "type": "frontend",
+      "label": "Deployment Orchestrator",
+      "sublabel": "preflight \u00b7 deploy \u00b7 teardown",
+      "stage": 3,
+      "row": 0,
+      "width": 140,
+      "tag": "custom web UI"
     }
   ],
   "flows": [
@@ -208,6 +218,13 @@
           330
         ]
       ]
+    },
+    {
+      "from": "lakehouseState",
+      "to": "deploymentOrchestrator",
+      "label": "status",
+      "variant": "default",
+      "route": "straight"
     }
   ],
   "cards": [
