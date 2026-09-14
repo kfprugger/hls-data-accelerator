@@ -1,22 +1,22 @@
 {
   "browser": "Microsoft Edge Work - Brakekat (Profile 2)",
-  "artifact": {"path": "/Users/joey/git/hls-data-accelerator/docs/hls-end-to-end-verification.html", "sha256": "b4571d5e14d5e5e3b16e870f87d34385e2edcc61c14c6ef5b4c187d5c40a7f25", "bytes": 809580},
+  "artifact": {"path": "/Users/joey/git/hls-data-accelerator/docs/hls-end-to-end-verification.html", "sha256": "b3ca31c02e606bf3c0ba526e10e73a281a3db37554a8ede3e79fc4dbea8b1c97", "bytes": 809556},
+  "title": "HLS Data Accelerator on the Microsoft Data Estate",
   "state": {"detail": "read", "motion": "still"},
-  "actualViewport": {"width": 1792, "height": 914, "scrollWidth": 1792, "scrollHeight": 914, "ok": true, "theme": "dark"},
-  "deploymentOrchestrator": {"present": true, "type": "frontend", "stage": "Control", "width": 150, "height": 66, "label": "Deployment Orchestrator", "sublabel": "preflight · deploy · run"},
+  "actualViewport": {"width": 1792, "height": 935, "scrollWidth": 1792, "scrollHeight": 935, "ok": true, "theme": "dark"},
+  "deploymentOrchestrator": {"present": true, "type": "frontend", "stage": "Control", "width": 150, "height": 66},
   "dependencies": [
     {"to": "FHIR + Demo", "action": "deploy + seed", "route": "100,238;100,210;210,210;210,157;245,157"},
     {"to": "Masimo + Claims", "action": "start", "route": "175,271;245,271"},
     {"to": "DICOM Studies", "action": "deploy + load", "route": "100,304;100,330;210,330;210,385;245,385"}
   ],
-  "graphToReportsRoute": "600,385;650,385;650,330;745,330;745,300",
   "screenshot": "hls-end-to-end-verification.manual-edge.final.webp",
   "automatedBrowserStatus": "passed",
   "visualReview": "passed",
-  "correctionRounds": 2,
+  "correctionRounds": 0,
   "observations": [
-    "Dependency direction now matches the system: Deployment Orchestrator initiates clinical, telemetry/claims, and imaging source workloads before governed state and user surfaces.",
-    "The orchestrator is a distinct, readable frontend in Control with separate top, center, and bottom outgoing corridors.",
-    "All arrows are orthogonal and visually distinct; no route shares a corridor, crosses a node, or masks a label."
+    "Revision 17 displays the complete title HLS Data Accelerator on the Microsoft Data Estate.",
+    "Deployment Orchestrator remains the frontend control plane with three correct forward source dependencies.",
+    "All nodes, orthogonal routes, labels, legend, toolbar, and conclusion card fit without overflow or crossings."
   ]
 }
