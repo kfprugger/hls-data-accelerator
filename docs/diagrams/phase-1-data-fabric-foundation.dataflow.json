@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Phase 1 — Data Fabric Foundation",
+    "viewBox": [1000, 620],
+    "animation": "none",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    { "label": "Build + generate" },
+    { "label": "Load + simulate" },
+    { "label": "Azure foundation" },
+    { "label": "Fabric control boundary" }
+  ],
+  "nodes": [
+    { "id": "synthea", "type": "external", "label": "Synthea", "sublabel": "synthetic FHIR bundles", "stage": 0, "row": 0, "width": 140, "tag": "configurable cohort" },
+    { "id": "tcia", "type": "external", "label": "TCIA", "sublabel": "public DICOM studies", "stage": 0, "row": 1, "width": 140, "tag": "pixel data preserved" },
+    { "id": "containerRegistry", "type": "cloud", "label": "Container Registry", "sublabel": "workload images", "stage": 0, "row": 2, "width": 146, "tag": "ACR" },
+    { "id": "fhirLoader", "type": "backend", "label": "FHIR Loader", "sublabel": "bundle split + retries", "stage": 1, "row": 0, "width": 140, "tag": "ACI job" },
+    { "id": "dicomLoader", "type": "backend", "label": "DICOM Loader", "sublabel": "download · re-tag · link", "stage": 1, "row": 1, "width": 140, "tag": "ACI job" },
+    { "id": "masimoEmulator", "type": "backend", "label": "Masimo Emulator", "sublabel": "synthetic device vitals", "stage": 1, "row": 2, "width": 140, "tag": "managed identity" },
+    { "id": "fhirService", "type": "cloud", "label": "Azure FHIR Service", "sublabel": "FHIR R4 clinical data", "stage": 2, "row": 0, "width": 146, "tag": "AHDS" },
+    { "id": "adls", "type": "database", "label": "ADLS Gen2", "sublabel": "fhir-export + dicom-output", "stage": 2, "row": 1, "width": 146, "tag": "source landing" },
+    { "id": "telemetryHub", "type": "messagebus", "label": "telemetry-stream", "sublabel": "Azure Event Hub", "stage": 2, "row": 2, "width": 146, "tag": "live ingress" },
+    { "id": "fabricWorkspace", "type": "cloud", "label": "Fabric Workspace", "sublabel": "capacity + managed identity", "stage": 3, "row": 1, "width": 146, "tag": "control boundary" }
+  ],
+  "flows": [
+    { "from": "synthea", "to": "fhirLoader", "label": "FHIR bundles", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "tcia", "to": "dicomLoader", "label": "DICOM studies", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "containerRegistry", "to": "masimoEmulator", "label": "container image", "variant": "default", "route": "straight", "labelDy": 53 },
+    { "from": "fhirLoader", "to": "fhirService", "label": "FHIR API", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "dicomLoader", "to": "adls", "label": "re-tagged DICOM", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "masimoEmulator", "to": "telemetryHub", "label": "device events", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "fhirService", "to": "adls", "label": "FHIR $export", "variant": "default", "route": "auto", "labelAt": [578, 200] },
+    { "from": "adls", "to": "fabricWorkspace", "label": "source paths ready", "variant": "dashed", "route": "straight", "labelDy": 53 }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Phase exit contract", "items": ["FHIR R4 data and ImagingStudy links exist in Azure Health Data Services", "FHIR export and re-tagged DICOM files are available in ADLS Gen2", "The Fabric workspace identity and telemetry Event Hub are ready for downstream phases"] }
+  ]
+}

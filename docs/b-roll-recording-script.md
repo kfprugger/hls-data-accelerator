@@ -83,12 +83,12 @@
 **Actions:**
 
 1. Show `fabric-rti/HDS-SETUP-GUIDE.md` and the two-phase flow.
-2. Scroll to the point where automation stops for portal work.
-3. Show `docs/phase-1-infrastructure-and-ingestion.md`, Step 4.
-4. Pause on the manual environment/package configuration.
-5. End on the instruction to return to the scripts for the next phase.
+2. Scroll to the HDS source deployment and validation contract.
+3. Show `docs/phase-3-hds-bridge-and-row-gates.md`, HDS source deployment.
+4. Pause on source staging, environment publication, and validation.
+5. End on the OneLake bridge and ordered-pipeline handoff.
 
-**Correlates with:** Automate, stop, configure HDS manually, then restart automation.
+**Correlates with:** Stage, publish, validate HDS, then continue through the ordered data pipelines.
 
 ---
 
@@ -261,7 +261,7 @@
 **Target length:** 30–35 seconds  
 **Filename:** `BR20-claims-materialization-gold.mov`
 
-**Open:** `docs/phase-5-cms-quality-and-claims.md`, `phase-5/materialize_claims_quality.py`, then the reporting Gold lakehouse in Fabric.
+**Open:** `docs/phase-6-population-health-and-quality.md`, `phase-5/materialize_claims_quality.py`, then the reporting Gold lakehouse in Fabric.
 
 **Actions:**
 
@@ -358,7 +358,7 @@
 **Target length:** 35–45 seconds  
 **Filename:** `BR21-payer-scoring-worklist-agents.mov`
 
-**Open:** `docs/phase-7-payer-rti-ops.md`, `phase-7/deploy-payer-rti.ps1`, the claim emulator, then Fabric/Eventhouse and payer-agent surfaces.
+**Open:** `docs/phase-7-payer-rti-and-ops.md`, `phase-7/deploy-payer-rti.ps1`, the claim emulator, then Fabric/Eventhouse and payer-agent surfaces.
 
 **Actions:**
 
@@ -392,7 +392,7 @@
    - `phase-1/` and the FHIR/DICOM/Synthea loaders
    - `deploy-fabric-rti.ps1` and `fabric-rti/`
    - `phase-2/`
-   - `docs/phase-3-imaging-and-cohorting.md`
+   - `docs/phase-4-semantic-intelligence-and-ux.md`
    - `phase-4/`, `phase-5/`, and `phase-7/`
    - `state-tracking/`, `Teardown-All.ps1`, and `cleanup/`
 3. Do not open every file. The goal is an architectural map, not a directory recital.

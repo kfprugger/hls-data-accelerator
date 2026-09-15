@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "HLS Data Accelerator — System Overview",
+    "viewBox": [1000, 620],
+    "animation": "none",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    { "label": "Healthcare sources" },
+    { "label": "Azure ingress" },
+    { "label": "Fabric data estate" },
+    { "label": "Intelligence + action" }
+  ],
+  "nodes": [
+    { "id": "syntheticFhir", "type": "external", "label": "Synthea FHIR", "sublabel": "synthetic clinical records", "stage": 0, "row": 0, "width": 140, "tag": "FHIR R4" },
+    { "id": "dicomStudies", "type": "external", "label": "TCIA DICOM", "sublabel": "public imaging studies", "stage": 0, "row": 1, "width": 140, "tag": "re-tagged" },
+    { "id": "deviceTelemetry", "type": "backend", "label": "Telemetry + Claims", "sublabel": "Masimo + payer emulators", "stage": 0, "row": 2, "width": 140, "tag": "two event hubs" },
+    { "id": "fhirService", "type": "cloud", "label": "Azure FHIR Service", "sublabel": "clinical system of record", "stage": 1, "row": 0, "width": 146, "tag": "managed identity" },
+    { "id": "dataLake", "type": "database", "label": "ADLS Gen2", "sublabel": "FHIR export + DICOM", "stage": 1, "row": 1, "width": 146, "tag": "source landing" },
+    { "id": "eventHubs", "type": "messagebus", "label": "Azure Event Hubs", "sublabel": "telemetry + claims", "stage": 1, "row": 2, "width": 146, "tag": "two hubs" },
+    { "id": "lakehouses", "type": "database", "label": "HDS Lakehouses", "sublabel": "Bronze · Silver · Gold", "stage": 2, "row": 1, "width": 150, "tag": "OneLake" },
+    { "id": "eventhouse", "type": "database", "label": "Fabric Eventhouse", "sublabel": "telemetry + payer RTI", "stage": 2, "row": 2, "width": 150, "tag": "KQL" },
+    { "id": "analyticsSurfaces", "type": "frontend", "label": "Reports + OHIF", "sublabel": "Power BI · RTI · imaging", "stage": 3, "row": 1, "width": 150, "tag": "decision surfaces" },
+    { "id": "intelligentAction", "type": "backend", "label": "Agents + Activators", "sublabel": "ontology · triage · alerts", "stage": 3, "row": 2, "width": 150, "tag": "action layer" }
+  ],
+  "flows": [
+    { "from": "syntheticFhir", "to": "fhirService", "label": "load FHIR", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "fhirService", "to": "dataLake", "label": "$export", "variant": "default", "route": "auto", "labelAt": [363, 200] },
+    { "from": "dicomStudies", "to": "dataLake", "label": "re-tag + upload", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "deviceTelemetry", "to": "eventHubs", "label": "stream current events", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "dataLake", "to": "lakehouses", "label": "OneLake shortcuts", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "eventHubs", "to": "eventhouse", "label": "Eventstreams", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "lakehouses", "to": "analyticsSurfaces", "label": "Direct Lake + SQL", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "eventhouse", "to": "intelligentAction", "label": "KQL + Reflex", "variant": "emphasis", "route": "straight", "labelDy": 53 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "One deployable healthcare data estate", "items": ["The orchestrator provisions, seeds, runs, and validates every selected workload", "Fabric combines governed lakehouse facts with live Eventhouse signals", "Reports, imaging, ontologies, agents, and Activators use the same connected estate"] }
+  ]
+}

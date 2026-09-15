@@ -93,16 +93,16 @@ This is the performable visual script. The companion outline remains in `docs/b-
 **Save as:** `BR04-old-portal-workflow.mov`  
 **Record length:** 28 seconds  
 **Open before recording:** Legacy `med-device-fabric-emulator` repository.  
-**A-roll cue:** Automate, stop, configure HDS manually, then restart automation.  
+**A-roll cue:** Stage, publish, validate HDS, then continue through the ordered data pipelines.
 **Spoken track:** None.
 
 | Time | Perform exactly this action |
 |---|---|
 | 00:00–00:03 | Hold the opening composition. Cursor parked. No movement. |
 | 00:03–00:07 | Show `fabric-rti/HDS-SETUP-GUIDE.md` and the two-phase flow. |
-| 00:07–00:12 | Scroll to the point where automation stops for portal work. |
-| 00:12–00:16 | Show `docs/phase-1-infrastructure-and-ingestion.md`, Step 4. |
-| 00:16–00:21 | Pause on the manual environment/package configuration. |
+| 00:07–00:12 | Scroll to the HDS source deployment and validation contract. |
+| 00:12–00:16 | Show `docs/phase-3-hds-bridge-and-row-gates.md`, HDS source deployment. |
+| 00:16–00:21 | Pause on source staging, environment publication, and validation. |
 | 00:21–00:25 | End on the instruction to return to the scripts for the next phase. |
 | 00:25–00:28 | Hold the final composition. Cursor parked. No movement. |
 
@@ -302,8 +302,8 @@ This is the performable visual script. The companion outline remains in `docs/b-
 
 **Save as:** `BR20-claims-materialization-gold.mov`  
 **Record length:** 32 seconds  
-**Open before recording:** `docs/phase-5-cms-quality-and-claims.md`, `phase-5/materialize_claims_quality.py`, then the reporting Gold lakehouse in Fabric.  
-**A-roll cue:** The accelerator materializes a 23-table reporting model before Power BI turns it into ten analytical pages.  
+**Open before recording:** `docs/phase-6-population-health-and-quality.md`, `phase-5/materialize_claims_quality.py`, then the reporting Gold lakehouse in Fabric.
+**A-roll cue:** The accelerator materializes a 23-table reporting model before Power BI turns it into five integrated analytical pages.
 **Spoken track:** None.
 
 | Time | Perform exactly this action |
@@ -416,7 +416,7 @@ This is the performable visual script. The companion outline remains in `docs/b-
 
 **Save as:** `BR21-payer-scoring-worklist-agents.mov`  
 **Record length:** 40 seconds  
-**Open before recording:** `docs/phase-7-payer-rti-ops.md`, `phase-7/deploy-payer-rti.ps1`, the claim emulator, then Fabric/Eventhouse and payer-agent surfaces.  
+**Open before recording:** `docs/phase-7-payer-rti-and-ops.md`, `phase-7/deploy-payer-rti.ps1`, the claim emulator, then Fabric/Eventhouse and payer-agent surfaces.
 **A-roll cue:** Real-time claim events become explainable, prioritized operational work across fraud, cost, and quality.  
 **Spoken track:** None.
 
@@ -447,7 +447,7 @@ This is the performable visual script. The companion outline remains in `docs/b-
 |---|---|
 | 00:00–00:03 | Hold the opening composition. Cursor parked. No movement. |
 | 00:03–00:20 | Begin with the root collapsed enough to be readable. |
-| 00:20–00:37 | Reveal, in order: `vendor/microsoft-hds/1.4.0/`; `hds-source/`; `Deploy-All.ps1`; `orchestrator/` and `orchestrator-ui/`; `phase-1/` and the FHIR/DICOM/Synthea loaders; `deploy-fabric-rti.ps1` and `fabric-rti/`; `phase-2/`; `docs/phase-3-imaging-and-cohorting.md`; `phase-4/`, `phase-5/`, and `phase-7/`; `state-tracking/`, `Teardown-All.ps1`, and `cleanup/`; |
+| 00:20–00:37 | Reveal, in order: `vendor/microsoft-hds/1.4.0/`; `hds-source/`; `Deploy-All.ps1`; `orchestrator/` and `orchestrator-ui/`; `phase-1/` and the FHIR/DICOM/Synthea loaders; `deploy-fabric-rti.ps1` and `fabric-rti/`; `phase-2/`; `docs/phase-4-semantic-intelligence-and-ux.md`; `phase-4/`, `phase-5/`, and `phase-7/`; `state-tracking/`, `Teardown-All.ps1`, and `cleanup/`; |
 | 00:37–00:40 | Hold the final composition. Cursor parked. No movement. |
 
 **Take notes:**

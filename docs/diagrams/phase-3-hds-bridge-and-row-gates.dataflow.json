@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Phase 3 — HDS Bridge + Row Gates",
+    "viewBox": [1080, 680],
+    "animation": "none",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    { "label": "Source contract" },
+    { "label": "Bronze bridge" },
+    { "label": "Gated pipelines" },
+    { "label": "Validated state" },
+    { "label": "Downstream-ready Gold" }
+  ],
+  "nodes": [
+    { "id": "hdsSource", "type": "backend", "label": "HDS/DTT v1.4.0", "sublabel": "source deployment", "stage": 0, "row": 0, "width": 146, "tag": "validated artifacts" },
+    { "id": "fhirExport", "type": "database", "label": "FHIR Export", "sublabel": "ADLS Gen2 NDJSON", "stage": 0, "row": 1, "width": 140, "tag": "clinical source" },
+    { "id": "dicomOutput", "type": "database", "label": "DICOM Output", "sublabel": "ADLS Gen2 .dcm", "stage": 0, "row": 2, "width": 140, "tag": "imaging source" },
+    { "id": "bronzeLakehouse", "type": "database", "label": "HDS Bronze", "sublabel": "FHIR-HDS + DICOM-HDS", "stage": 1, "row": 1, "width": 150, "tag": "OneLake shortcuts" },
+    { "id": "sidecarsCma", "type": "backend", "label": "Sidecars + CMA", "sublabel": "claims serial · CMA non-blocking", "stage": 2, "row": 0, "width": 150, "tag": "optional" },
+    { "id": "clinicalPoa", "type": "backend", "label": "Clinical + POA", "sublabel": "blocking Silver readiness", "stage": 2, "row": 1, "width": 150, "tag": "ordered first" },
+    { "id": "imagingPipeline", "type": "backend", "label": "Imaging Pipeline", "sublabel": "after clinical readiness", "stage": 2, "row": 2, "width": 150, "tag": "retry bounded" },
+    { "id": "optionalGold", "type": "database", "label": "Optional Domain Gold", "sublabel": "CMA + sidecar outputs", "stage": 3, "row": 0, "width": 150, "tag": "when deployed" },
+    { "id": "silverLakehouse", "type": "database", "label": "HDS Silver", "sublabel": "FHIR + imaging tables", "stage": 3, "row": 1, "width": 150, "tag": "reference gates" },
+    { "id": "omopGold", "type": "database", "label": "Gold OMOP", "sublabel": "CDM after core gates", "stage": 4, "row": 1, "width": 150, "tag": "downstream ready" }
+  ],
+  "flows": [
+    { "from": "hdsSource", "to": "bronzeLakehouse", "label": "deploy HDS estate", "variant": "dashed", "route": "auto", "labelDy": 22 },
+    { "from": "fhirExport", "to": "bronzeLakehouse", "label": "FHIR-HDS", "variant": "emphasis", "route": "straight", "labelAt": [265, 320] },
+    { "from": "dicomOutput", "to": "bronzeLakehouse", "label": "DICOM-HDS", "variant": "emphasis", "route": "auto", "labelDy": 53 },
+    { "from": "bronzeLakehouse", "to": "sidecarsCma", "label": "optional domains", "variant": "default", "route": "auto", "labelDy": 22 },
+    { "from": "bronzeLakehouse", "to": "clinicalPoa", "label": "clinical rows", "variant": "emphasis", "route": "straight", "labelAt": [500, 322] },
+    { "from": "bronzeLakehouse", "to": "imagingPipeline", "label": "DICOM metadata", "variant": "emphasis", "route": "auto", "labelAt": [423, 428] },
+    { "from": "sidecarsCma", "to": "optionalGold", "label": "domain outputs", "variant": "dashed", "route": "straight", "labelDy": 53 },
+    { "from": "clinicalPoa", "to": "silverLakehouse", "label": "validated FHIR", "variant": "emphasis", "route": "straight", "labelAt": [715, 322] },
+    { "from": "imagingPipeline", "to": "silverLakehouse", "label": "validated imaging", "variant": "emphasis", "route": "auto", "labelAt": [638, 428] },
+    { "from": "silverLakehouse", "to": "omopGold", "label": "OMOP analytics", "variant": "emphasis", "route": "straight", "labelDy": 53 }
+  ],
+  "cards": [
+    { "dot": "violet", "title": "Fail-closed ordering", "items": ["Clinical and required POA readiness complete before dependent processing", "Imaging waits for clinical; OMOP waits for every selected core pipeline", "Optional sidecars and CMA cannot mask a failed Bronze, Silver, or Gold row gate"] }
+  ]
+}

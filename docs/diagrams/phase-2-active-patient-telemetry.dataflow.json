@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Phase 2 — Active Patient Telemetry",
+    "viewBox": [1080, 620],
+    "animation": "none",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    { "label": "Live + clinical sources" },
+    { "label": "Azure transit" },
+    { "label": "Fabric stream" },
+    { "label": "Real-time state" },
+    { "label": "Clinical insight" }
+  ],
+  "nodes": [
+    { "id": "masimoEmulator", "type": "backend", "label": "Masimo Emulator", "sublabel": "SpO₂ · pulse · perfusion", "stage": 0, "row": 0, "width": 146, "tag": "managed identity" },
+    { "id": "silverClinical", "type": "database", "label": "HDS Silver", "sublabel": "patient + condition + device", "stage": 0, "row": 2, "width": 146, "tag": "clinical context" },
+    { "id": "eventHub", "type": "messagebus", "label": "telemetry-stream", "sublabel": "Azure Event Hub", "stage": 1, "row": 0, "width": 146, "tag": "device events" },
+    { "id": "eventstream", "type": "messagebus", "label": "MasimoTelemetryStream", "sublabel": "Fabric Eventstream", "stage": 2, "row": 0, "width": 150, "tag": "running topology" },
+    { "id": "eventhouse", "type": "database", "label": "MasimoEventhouse", "sublabel": "TelemetryRaw + AlertHistory", "stage": 3, "row": 0, "width": 150, "tag": "KQL state" },
+    { "id": "silverShortcuts", "type": "database", "label": "Silver KQL Shortcuts", "sublabel": "OneLake-backed context", "stage": 3, "row": 2, "width": 150, "tag": "clinical tables" },
+    { "id": "clinicalInsight", "type": "frontend", "label": "Clinical RTI Insight", "sublabel": "enriched functions + dashboards", "stage": 4, "row": 1, "width": 150, "tag": "alert tiers + maps" }
+  ],
+  "flows": [
+    { "from": "masimoEmulator", "to": "eventHub", "label": "device telemetry", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "eventHub", "to": "eventstream", "label": "Event Hubs source", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "eventstream", "to": "eventhouse", "label": "route to TelemetryRaw", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "silverClinical", "to": "silverShortcuts", "label": "OneLake shortcuts", "variant": "default", "route": "straight", "labelDy": 53 },
+    { "from": "eventhouse", "to": "clinicalInsight", "label": "live vitals + history", "variant": "emphasis", "route": "auto", "labelDy": 22 },
+    { "from": "silverShortcuts", "to": "clinicalInsight", "label": "clinical context", "variant": "default", "route": "auto", "labelAt": [853, 428] }
+  ],
+  "cards": [
+    { "dot": "orange", "title": "Phase exit contract", "items": ["The telemetry Eventstream source and destination nodes are running", "TelemetryRaw receives current events and AlertHistory retains alert state", "Enriched KQL functions and both real-time dashboards resolve clinical context"] }
+  ]
+}

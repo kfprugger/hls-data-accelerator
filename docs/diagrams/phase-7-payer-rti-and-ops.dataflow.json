@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Phase 7 — Payer RTI + Operations",
+    "viewBox": [1080, 650],
+    "animation": "none",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    { "label": "Payer sources" },
+    { "label": "Azure transit" },
+    { "label": "Fabric stream" },
+    { "label": "Scoring + context" },
+    { "label": "Operational action" }
+  ],
+  "nodes": [
+    { "id": "claimEmulator", "type": "backend", "label": "Claim Emulator", "sublabel": "professional · facility · Rx", "stage": 0, "row": 0, "width": 146, "tag": "synthetic events" },
+    { "id": "qualityGold", "type": "database", "label": "Quality Gold", "sublabel": "care gaps + risk + cost", "stage": 0, "row": 2, "width": 146, "tag": "historical context" },
+    { "id": "claimHub", "type": "messagebus", "label": "claim-stream", "sublabel": "Azure Event Hub", "stage": 1, "row": 0, "width": 146, "tag": "managed identity" },
+    { "id": "claimsEventstream", "type": "messagebus", "label": "ClaimsRTIStream", "sublabel": "Fabric Eventstream", "stage": 2, "row": 0, "width": 150, "tag": "separate topology" },
+    { "id": "payerKql", "type": "database", "label": "Payer KQL State", "sublabel": "claims · scores · worklist", "stage": 3, "row": 0, "width": 150, "tag": "Eventhouse" },
+    { "id": "payerOntology", "type": "database", "label": "DevicePayerOntology", "sublabel": "clinical + payer graph", "stage": 3, "row": 2, "width": 150, "tag": "Gold bindings" },
+    { "id": "payerOps", "type": "frontend", "label": "Payer Operations", "sublabel": "Activator + Ops agents", "stage": 4, "row": 0, "width": 150, "tag": "prioritized action" },
+    { "id": "graphAgent", "type": "backend", "label": "Healthcare Graph Agent", "sublabel": "cross-domain traversal", "stage": 4, "row": 2, "width": 150, "tag": "ontology-backed" }
+  ],
+  "flows": [
+    { "from": "claimEmulator", "to": "claimHub", "label": "payer events", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "claimHub", "to": "claimsEventstream", "label": "Event Hubs source", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "claimsEventstream", "to": "payerKql", "label": "route to claims_events", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "qualityGold", "to": "payerOntology", "label": "Gold entity bindings", "variant": "default", "route": "straight", "labelDy": 53 },
+    { "from": "payerKql", "to": "payerOps", "label": "scored worklist", "variant": "security", "route": "straight", "labelAt": [915, 214] },
+    { "from": "payerOntology", "to": "graphAgent", "label": "ontology datasource", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "payerKql", "to": "graphAgent", "label": "current payer signals", "variant": "default", "route": "auto", "labelDy": -23 }
+  ],
+  "cards": [
+    { "dot": "amber", "title": "Independent payer stream", "items": ["Claims use ClaimsRTIStream; telemetry keeps its own Eventstream and DefaultStream", "KQL scores fraud, high-cost trajectory, care gaps, and the unified worklist", "Activator and agent publication are separate gates from successful Eventstream ingestion"] }
+  ]
+}

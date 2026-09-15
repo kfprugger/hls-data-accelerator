@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Phase 6 — Population Health + Quality",
+    "viewBox": [1080, 650],
+    "animation": "none",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    { "label": "Clinical + claims facts" },
+    { "label": "Gold materialization" },
+    { "label": "Governed analytics" },
+    { "label": "Serving models" },
+    { "label": "Population action" }
+  ],
+  "nodes": [
+    { "id": "silverFhir", "type": "database", "label": "HDS Silver", "sublabel": "FHIR clinical + claims tables", "stage": 0, "row": 1, "width": 146, "tag": "source facts" },
+    { "id": "qualityNotebook", "type": "backend", "label": "Claims + Quality Notebook", "sublabel": "measures · risk · utilization", "stage": 1, "row": 1, "width": 150, "tag": "Spark" },
+    { "id": "reportingGold", "type": "database", "label": "Reporting Gold", "sublabel": "23 analytical tables", "stage": 2, "row": 1, "width": 150, "tag": "validated row gates" },
+    { "id": "semanticModel", "type": "database", "label": "Quality Semantic Model", "sublabel": "Direct Lake measures", "stage": 3, "row": 0, "width": 150, "tag": "governed model" },
+    { "id": "riskShortcut", "type": "database", "label": "Readmission Risk Scores", "sublabel": "KQL shortcut", "stage": 3, "row": 2, "width": 150, "tag": "high-risk rows" },
+    { "id": "qualityDashboard", "type": "frontend", "label": "Population Health", "sublabel": "Dashboard · 5 pages · 46 visuals", "stage": 4, "row": 0, "width": 150, "tag": "Power BI" },
+    { "id": "readmissionAlert", "type": "frontend", "label": "ReadmissionRiskAlert", "sublabel": "high-risk daily digest", "stage": 4, "row": 2, "width": 150, "tag": "Fabric Activator" }
+  ],
+  "flows": [
+    { "from": "silverFhir", "to": "qualityNotebook", "label": "FHIR + payer facts", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "qualityNotebook", "to": "reportingGold", "label": "materialize schema", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "reportingGold", "to": "semanticModel", "label": "Direct Lake", "variant": "default", "route": "auto", "labelDy": -23 },
+    { "from": "reportingGold", "to": "riskShortcut", "label": "risk score shortcut", "variant": "security", "route": "auto", "labelAt": [638, 435] },
+    { "from": "semanticModel", "to": "qualityDashboard", "label": "DAX measures", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "riskShortcut", "to": "readmissionAlert", "label": "qualified risks", "variant": "security", "route": "straight", "labelDy": 53 }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Analytical contract", "items": ["Quality, care-gap, adherence, Star, HCC, readmission, and utilization outputs materialize together", "The dashboard renders the canonical five-page, 46-visual experience against populated facts", "Readmission alerting is optional and requires a configured notification address"] }
+  ]
+}

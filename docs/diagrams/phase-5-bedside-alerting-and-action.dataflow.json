@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Phase 5 — Bedside Alerting + Action",
+    "viewBox": [1080, 620],
+    "animation": "none",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    { "label": "Clinical signal" },
+    { "label": "Decision" },
+    { "label": "Fabric Activator" },
+    { "label": "Notification rule" },
+    { "label": "Care-team action" }
+  ],
+  "nodes": [
+    { "id": "liveVitals", "type": "database", "label": "TelemetryRaw", "sublabel": "current device vitals", "stage": 0, "row": 0, "width": 140, "tag": "Eventhouse" },
+    { "id": "patientContext", "type": "database", "label": "Clinical Context", "sublabel": "patient + conditions", "stage": 0, "row": 2, "width": 140, "tag": "Silver shortcuts" },
+    { "id": "clinicalAlerts", "type": "backend", "label": "fn_ClinicalAlerts", "sublabel": "WARNING · URGENT · CRITICAL", "stage": 1, "row": 1, "width": 150, "tag": "KQL" },
+    { "id": "reflex", "type": "frontend", "label": "ClinicalAlertActivator", "sublabel": "Reflex item", "stage": 2, "row": 1, "width": 150, "tag": "Fabric Activator" },
+    { "id": "alertRule", "type": "security", "label": "Alert Rule", "sublabel": "tier threshold + cooldown", "stage": 3, "row": 1, "width": 146, "tag": "per device" },
+    { "id": "careTeam", "type": "external", "label": "Care-team Inbox", "sublabel": "formatted clinical alert", "stage": 4, "row": 1, "width": 146, "tag": "configured recipient" }
+  ],
+  "flows": [
+    { "from": "liveVitals", "to": "clinicalAlerts", "label": "vital observations", "variant": "emphasis", "route": "auto", "labelDy": 22 },
+    { "from": "patientContext", "to": "clinicalAlerts", "label": "risk modifiers", "variant": "default", "route": "auto", "labelAt": [205, 435] },
+    { "from": "clinicalAlerts", "to": "reflex", "label": "qualified alerts", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "reflex", "to": "alertRule", "label": "device events", "variant": "default", "route": "straight", "labelDy": 53 },
+    { "from": "alertRule", "to": "careTeam", "label": "email action", "variant": "security", "route": "straight", "labelDy": 53 }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Alert contract", "items": ["No recipient means the Activator step is intentionally skipped", "Threshold and per-device cooldown control which events create notifications", "A deployed Reflex is not sufficient: the KQL source must return current qualified rows"] }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Phase 4 — Semantic Intelligence + UX",
+    "viewBox": [1000, 620],
+    "animation": "none",
+    "quality_profile": "showcase",
+    "locale": "en"
+  },
+  "stages": [
+    { "label": "Governed inputs" },
+    { "label": "Projection + materialization" },
+    { "label": "Semantic assets" },
+    { "label": "Clinical experiences" }
+  ],
+  "nodes": [
+    { "id": "silverGold", "type": "database", "label": "Silver + Gold", "sublabel": "FHIR · imaging · OMOP", "stage": 0, "row": 0, "width": 146, "tag": "Phase 3 gates passed" },
+    { "id": "eventhouse", "type": "database", "label": "MasimoEventhouse", "sublabel": "telemetry + alert history", "stage": 0, "row": 2, "width": 146, "tag": "KQL" },
+    { "id": "reportingMaterializer", "type": "backend", "label": "Reporting Materializer", "sublabel": "clinical + imaging join", "stage": 1, "row": 0, "width": 150, "tag": "Spark notebook" },
+    { "id": "ontologyProjections", "type": "backend", "label": "Ontology Projections", "sublabel": "typed keys + relationships", "stage": 1, "row": 2, "width": 150, "tag": "managed tables" },
+    { "id": "reportingGold", "type": "database", "label": "Reporting Gold", "sublabel": "study + patient + viewer URL", "stage": 2, "row": 0, "width": 150, "tag": "Direct Lake" },
+    { "id": "clinicalOntology", "type": "database", "label": "ClinicalDeviceOntology", "sublabel": "patient · device · telemetry", "stage": 2, "row": 2, "width": 150, "tag": "Fabric IQ" },
+    { "id": "imagingExperience", "type": "frontend", "label": "Imaging + Cohorting", "sublabel": "Power BI · OHIF · agent", "stage": 3, "row": 0, "width": 150, "tag": "DICOMweb" },
+    { "id": "clinicalAgents", "type": "backend", "label": "Patient 360 + Triage", "sublabel": "KQL + SQL + ontology", "stage": 3, "row": 2, "width": 150, "tag": "published agents" }
+  ],
+  "flows": [
+    { "from": "silverGold", "to": "reportingMaterializer", "label": "clinical + imaging", "variant": "emphasis", "route": "straight", "labelAt": [270, 214] },
+    { "from": "eventhouse", "to": "ontologyProjections", "label": "telemetry binding", "variant": "default", "route": "straight", "labelDy": 53 },
+    { "from": "silverGold", "to": "ontologyProjections", "label": "entity projections", "variant": "default", "route": "auto", "labelDy": -23 },
+    { "from": "reportingMaterializer", "to": "reportingGold", "label": "materialize", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "ontologyProjections", "to": "clinicalOntology", "label": "clinical graph", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "reportingGold", "to": "imagingExperience", "label": "Direct Lake + links", "variant": "emphasis", "route": "straight", "labelDy": 53 },
+    { "from": "clinicalOntology", "to": "clinicalAgents", "label": "ontology datasource", "variant": "emphasis", "route": "straight", "labelDy": 53 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Phase exit contract", "items": ["Imaging report links open studies through the deployed OHIF and DICOMweb path", "Clinical ontologies bind governed Lakehouse and Eventhouse entities", "Cohorting, Patient 360, and Clinical Triage agents use real published data sources"] }
+  ]
+}
