@@ -1,296 +1,462 @@
-# Agents, Ops Agents, and the Command Center — Talk Track
+# Healthcare Operations Agents, the Health Command Center, and Databricks — Detailed Talk Track
 
-Subject: Fabric Data Agents, Operations Agents, and the Rayfin Health Command Center in
-`med-0906`, plus a closing segment on the Azure Databricks destination.
+Subject: `HealthcareOpsAgent`, `Payer Ops Triage`, `Healthcare Graph Agent`, the Rayfin Health
+Command Center and its database, followed by a detailed "just one more thing" Azure Databricks
+walkthrough.
 
 ## Title options
 
-1. *Five Agents, One Gold Layer, and the Part That Still Needs a Human*
-2. *We Asked Five Fabric Agents the Same Question. Two Lied Politely.*
-3. *Agents, Alerts, and an App — What Actually Answers in Fabric*
+1. *Three Healthcare Agents, One Command Center, and a Databricks Surprise*
+2. *What These Healthcare Agents Actually Know — and Where the Numbers Live*
+3. *From Claim Event to Agent to App, Then the Same Platform on Databricks*
 
 ## Viewing outcome
 
-After watching, you can tell the difference between a Fabric agent that is deployed and a
-Fabric agent that actually answers, and you know which three checks separate them.
+After watching, viewers can explain the job of each new agent, trace every Rayfin figure from Gold
+through the app database, and describe which parts of the accelerator move to Databricks versus
+which parts must be rebuilt.
 
 ## Runtime
 
-Target 9:15. Narration is 1,295 words, which lands at roughly 143 words per minute.
+Target 17:08. Narration is 2,434 words at roughly 142 words per minute.
 
 ---
 
-## 0:00–0:25 — Cold open
+## 0:00–0:30 — Cold open: three jobs that sound like one
 
 **On screen**
-- Split view: the MCP response from Payer Ops Triage showing `CLAIM_SUBMITTED: 228,081`,
-  next to the same agent's earlier answer reading "No data was returned."
+- Workspace item list with `HealthcareOpsAgent`, `Payer Ops Triage`, `Healthcare Graph Agent`, and
+  `rayfin-health-command-center` visible.
+- Quick cuts: agent worklist response, graph relationship response, Rayfin Payer lens.
 
 **Say**
 
-> Same agent. Same question. Same data underneath. One of these answers is right, and the
-> other one is the reason people quietly stop trusting agents.
+> There are three new agents in this workspace, and they are not three versions of the same chatbot.
 >
-> Both of those came out of this workspace today. In the next nine minutes I'll show you
-> the three checks that tell you which one you've actually deployed.
+> One watches the platform. One helps an analyst investigate payer work. One traverses the healthcare
+> graph. Then the Rayfin app turns the same Gold layer into a command center for payer, provider, and
+> medtech teams.
+>
+> I am going to show you what each one knows, where the answer comes from, what is still broken, and
+> why the last screen in this demo is Azure Databricks.
 
 **Evidence**
-- Live MCP probe of Payer Ops Triage, before and after the instruction repair.
+- Fabric workspace inventory; published item definitions.
 
 ---
 
-## 0:25–1:05 — Context and boundary
+## 0:30–1:15 — Boundary: what this demo can prove
 
 **On screen**
-- The `med-0906` workspace list, filtered to agents and the app.
+- `med-0906` workspace overview, then the Gold and Eventhouse items.
 
 **Say**
+
+> This is the HLS Data Accelerator reference environment. The patients are synthetic. The device
+> feed is emulated. The claims are generated. No production PHI is involved, and this is not a
+> medical device or clinical decision-support product.
 >
-> This is the HLS Data Accelerator reference workspace. Everything in it is synthetic —
-> Synthea patients, an emulated Masimo device feed, generated claims. No real patient data
-> touches this, and nothing here is a medical device or clinical decision support.
+> The architecture gives the agents two kinds of evidence. Eventhouse holds current telemetry,
+> alerts, and payer events. Gold holds claims, quality, utilization, risk, care gaps, and imaging
+> products. The ontologies connect those domains when a flat table is not enough.
 >
-> Standing it up creates billable Azure and Fabric resources, so treat it as a lab, not a
-> landing zone.
->
-> There are five Data Agents, two Operations Agents, and one app. They all read the same
-> Gold layer. That shared foundation is the whole point.
+> That split matters because an agent is only as good as the published sources it can actually see.
 
 **Evidence**
-- `README.md` boundaries section; workspace item inventory.
+- `README.md`; `Project_Architecture_Blueprint.md`; published Data Agent definitions.
 
 ---
 
-## 1:05–2:20 — Chapter 1: what a Data Agent is actually bound to
+## 1:15–3:25 — Agent 1: HealthcareOpsAgent
 
 **On screen**
-- `getDefinition` output for Clinical Triage, with the published `datasource.json` tree
-  expanded to show selected tables and functions.
+- Open `HealthcareOpsAgent`.
+- Show `state: Inactive` in the item properties.
+- Open the `OpsAgentKQL` database and preview `agent_ops_stream_health`.
+- Show the columns: `stream_name`, `source_table`, `age_minutes`, `events_5m`, `severity`,
+  `last_event_time_utc`.
 
 **Say**
 
-> A Fabric Data Agent is a published question-answering surface over sources you pick. The
-> word doing the work there is *pick*.
+> First is HealthcareOpsAgent. This one is not for asking, "How many claims did we process?" It is
+> for asking, "Is the platform still doing its job?"
 >
-> Clinical Triage is bound to two Eventhouse tables, five KQL helper functions, eleven
-> curated Silver tables, and the clinical ontology. Not the whole lakehouse. Eleven tables.
+> Its knowledge source is a small operational KQL database. The table on screen has one current row
+> per monitored stream: the Masimo telemetry stream, the claims stream, and the clinical-alert
+> pipeline. Each row tells the agent what the stream writes to, how old the newest event is, how many
+> events arrived in the last five minutes, and whether the condition is healthy, warning, urgent, or
+> critical.
 >
-> Patient 360 used to be bound to a hundred and eighty-nine. It still answered, but every
-> question dragged the entire FHIR catalog into scope. We cut it to the same eleven.
+> We materialize that table on purpose. The Operations Agent playbook generator needs physical
+> columns it can discover. Telling it in prose that age_minutes matters was not enough. A table with
+> an integer `age_minutes` column is something the service can build a rule around.
 >
-> Here's the first check: open the published definition, not the draft, and count what's
-> actually selected. Draft and published drift, and the portal shows you the draft.
+> The intended workflow is straightforward. When a stream stops moving, HealthcareOpsAgent explains
+> which stream is stale, how stale it is, which source table is affected, and which Eventstream
+> topology the operator should inspect. It is explicitly instructed not to invent a missing stream
+> and not to run an action without human approval.
+>
+> Now the uncomfortable part: this agent is `Inactive`.
+>
+> The definition is valid. It has exactly one Kusto database source. The grounding table exists. But
+> playbook generation and Start are portal operations with no public API. Until an operator opens the
+> agent, generates the playbook, reviews it, and starts it, this is configured monitoring, not active
+> monitoring.
+>
+> That distinction is the first operating rule for agents: item existence is not runtime state.
 
 **Evidence**
-- Data agent `getDefinition` parts under `Files/Config/published/`.
+- `phase-7/deploy-payer-rti.ps1` HealthcareOpsAgent instructions.
+- `phase-7/agent-grounding-backfills.ps1` materialized-table definitions.
+- Operations Agent item properties and `OpsAgentKQL` schema.
 
 **Fallback**
-- If `getDefinition` is slow, show the saved definition JSON captured before recording.
+- If the portal editor fails, show the API item properties and the pre-captured KQL table preview.
+- Say: "The definition and source are here; I am not claiming the playbook is running."
 
 ---
 
-## 2:20–3:20 — Chapter 2: ask all five the same way
+## 3:25–5:35 — Agent 2: Payer Ops Triage
 
 **On screen**
-- Five MCP responses side by side: imaging modality counts, patients by gender, current
-  device and alert counts, claim events by type, distinct patients in the ontology.
+- Open the published `Payer Ops Triage` Data Agent.
+- Ask: "Count claim events by event type and give me the total."
+- Then ask for the highest-priority current claim and the payer operations worklist.
+- Show its three sources: MasimoEventhouse, Reporting Gold, and `DevicePayerOntology`.
 
 **Say**
 
-> Every published agent exposes an MCP endpoint, so you can ask all five from a script
-> instead of clicking through five chat panes.
+> Payer Ops Triage has a different job. This is an analyst-facing Data Agent. It answers when someone
+> asks a question, and it combines three source families.
 >
-> Imaging comes back with CT fifty, DX forty-two, CR eight, and it names the aggregate it
-> used. Patient 360 gives fifty-nine female, forty-one male. Clinical Triage reports a
-> hundred devices reporting right now. Payer counts two hundred twenty-eight thousand claim
-> events. The graph agent counts a hundred distinct patients in the ontology.
+> Current payer events live in Eventhouse: claim submissions, fraud scores, high-cost alerts, and
+> care-gap alerts. Reporting Gold adds the historical and analytical context: the claim fact, payer
+> dimensions, care gaps, readmission risk, and high-cost claimant aggregates. The payer ontology
+> gives the agent the governed vocabulary connecting patients, claims, diagnoses, devices, risk, and
+> care gaps.
 >
-> Three of those five were wrong this morning.
+> For the first question, the agent must use the raw `claims_events` table. The instruction is
+> deliberately strict: execute one count grouped by `event_type`; do not join it to another function,
+> do not add a time window, and do not print the query instead of running it.
 >
-> Payer refused a claim-count question while two hundred thousand claim rows sat in the
-> table it was already bound to. Its instructions were a wall of "always call this function,
-> never call that one," so it never reached for the raw table. The graph agent reported one
-> patient, because it counted the rows a sample query returned instead of running a count.
+> That wording exists because we hit all three failure modes. The agent first said there was no data
+> while hundreds of thousands of claim events sat in the table. Then it invented a join that failed
+> on incompatible types. Then it helpfully printed the correct KQL without executing it. Fun times.
 >
-> Second check: ask the question a human would ask, then verify the number against the
-> source yourself. Groundedness is not the same as correctness.
+> With the priority rule in place, it returns the current `CLAIM_SUBMITTED` count, the total, and the
+> name of the table it used. The number will move while the producer runs. The important part is that
+> the source and query shape remain deterministic.
+>
+> The second question uses a different contract. The highest-priority claim comes from
+> `agent_HighestPriorityClaim()`. The broader queue comes from `fn_PayerOpsWorklist(60)`. Fraud routes
+> to SIU review, high-cost signals to care management, and care gaps to provider outreach. Those are
+> recommendations in the answer, not permission to trigger a downstream action.
+>
+> What makes this useful is the separation between current operational facts and Gold history. The
+> agent can tell you what needs attention now without losing the quality, utilization, and cost
+> context that explains why it matters.
 
 **Evidence**
-- MCP JSON-RPC probes against each published agent; KQL and DAX counts run independently.
+- Published Data Agent `stage_config.json` and datasource selections.
+- `phase-7/deploy-payer-rti.ps1` raw-claim priority rule and routing instructions.
+- Live MCP question and independent KQL count.
 
 **Fallback**
-- If an agent times out, show the captured transcript and say the endpoint was slow, not
-  that the answer was wrong.
+- If the MCP call is slow, show the captured successful response and run the one-line KQL count
+  directly. Do not substitute an older hard-coded total.
 
 ---
 
-## 3:20–4:40 — Chapter 3: Operations Agents, and what "Inactive" means
+## 5:35–7:55 — Agent 3: Healthcare Graph Agent
 
 **On screen**
-- Both Operations Agents in the item list showing `state: Inactive`, then the OpsAgentKQL
-  database with `agent_ops_stream_health` and `agent_deterioration_findings`.
+- Open `DevicePayerOntology` and its graph view.
+- Show Patient and Device node counts.
+- Trace one Patient → Device relationship.
+- Ask Healthcare Graph Agent for the total patient count and one example relationship.
 
 **Say**
 
-> Operations Agents are the other half. A Data Agent answers when you ask. An Operations
-> Agent is supposed to watch and tell you.
+> Healthcare Graph Agent handles the questions that stop being sensible as one SQL group-by.
 >
-> We have two. Healthcare Ops watches ingestion health. Clinical Deterioration watches the
-> device feed for sustained SpO2 drops.
+> The payer ontology contains the clinical entities: Patient, Encounter, Condition, Observation,
+> Medication Request, Imaging Study, Device, and Device Association. It adds Claim, Payer,
+> Diagnosis, adherence, care gaps, patient risk, and high-cost claimant.
 >
-> Both return a clean definition over the API. Both have exactly one knowledge source. Both
-> are sitting at Inactive, and I'm not going to dress that up.
+> Today the graph reports one hundred Patient nodes and one hundred Device nodes. Patient-to-device,
+> patient-to-claim, patient-to-diagnosis, care-gap, risk, adherence, and high-cost edges all carry
+> rows.
 >
-> Playbook generation and Start have no public API right now. An operator opens the agent in
-> the portal, generates the playbook, and starts it. Until someone does, these two are
-> configured, not running.
+> Getting there exposed two Fabric Graph behaviors worth knowing.
 >
-> What we could fix is the part underneath. The generator needs physical alert columns, not
-> prose, so there are now two materialized tables feeding it — stream health across three
-> streams, and a hundred deterioration findings with forty-five sitting at concern or
-> escalate.
+> First, the graph loader returned zero Patient and Device nodes from the HDS-managed Silver tables.
+> Those Delta tables use change data feed. Plain projection tables loaded correctly, so the ontology
+> now binds `PatientOntology` and `DeviceOntology` instead.
 >
-> And the alerting path that does work is the Activator next to it. One of ours was an empty
-> shell — no source, no rule, no recipient. It now runs a KQL query every fifteen minutes
-> and emails a monitored alias when devices cross the line.
+> Second, a Patient node in one lakehouse could not resolve an edge stored in another lakehouse. The
+> edge type disappeared from the queryable graph. DevicePayerOntology now keeps its lakehouse-backed
+> nodes and relationship tables together in Reporting Gold. The clinical ontology remains together in
+> Silver.
 >
-> Third check: state, not existence. An agent item in a workspace tells you someone deployed
-> something. It doesn't tell you anything is watching.
+> The agent also learned not to count a sampled traversal. Before that instruction, it returned one
+> distinct patient because its example query returned one row. Counts now require an aggregate with no
+> sample and no limit; the example relationship is a separate query.
+>
+> There is still one honest zero. `coveredBy`, the Claim-to-Payer edge, has no usable key in the Gold
+> claim rows. The source carries an empty coverage ID and a contained-resource reference that does not
+> match the payer dimension. We leave the edge at zero rather than manufacture a relationship.
+>
+> Use the Graph Agent for cross-domain context. Use Payer Ops Triage for the queue in front of you.
+> Different jobs, different source contracts.
 
 **Evidence**
-- `GET /operationsAgents/{id}` properties; OpsAgentKQL table counts; Reflex definition.
+- Graph GQL counts and edge inventory.
+- `phase-4/deploy-ontology.ps1` projection and single-lakehouse bindings.
+- `phase-7/deploy-payer-rti.ps1` aggregate-count rule.
 
 **Fallback**
-- If the ops database is slow, show the captured row counts and say they were read earlier.
+- If the graph visualization does not load, show the GQL result table for Patient, Device,
+  `linkedToDevice`, `hasClaim`, and `hasDiagnosis`.
 
 ---
 
-## 4:40–6:30 — Chapter 4: the app, and why it has its own database
+## 7:55–8:30 — Reset: agents answer, monitor, or connect
 
 **On screen**
-- The Health Command Center in the workspace, cycling Payer, Provider, MedTech lenses.
-  Then the four entity files in `rayfin/data/`.
+- Three-column slide: HealthcareOpsAgent / Payer Ops Triage / Healthcare Graph Agent.
 
 **Say**
 
-> Agents answer questions people know how to ask. An app has to answer the ones they don't.
+> Here is the clean mental model.
 >
-> This is a Rayfin app in the same workspace. Three lenses over one Gold layer. Payer gets
-> paid against billed, collection rate, PMPM, revenue at risk. Provider gets open care gaps,
-> Stars, readmission risk. MedTech gets study volume, modality mix, DICOM instance counts.
+> HealthcareOpsAgent watches platform health, but it remains inactive until the playbook is reviewed
+> and started. Payer Ops Triage answers operational payer questions from KQL plus Gold. Healthcare
+> Graph Agent handles cross-domain relationships from the ontology.
 >
-> The first version queried the semantic models on every render. It looked fine and it was
-> wrong in a way that's easy to miss — nothing to inspect, no capture time, no record of
-> where a number came from.
+> Monitoring, investigation, and traversal. If one agent tries to do all three, the grounding gets
+> muddy fast.
+
+---
+
+## 8:30–10:30 — Rayfin app: the three business lenses
+
+**On screen**
+- Open `rayfin-health-command-center`.
+- Cycle through Payer, Provider, and MedTech.
+- Pause on the source/provenance footer.
+
+**Say**
+
+> Agents work when a user knows what to ask. The command center covers the questions people need in
+> front of them before they know what to type.
 >
-> So it has its own database now. Four tables: the KPI snapshot, the series behind each
-> chart, the worklist rows, and a sync record. A single module reads the Direct Lake models,
-> masks member IDs and patient names, replaces the snapshot, and writes down what it did.
-> The dashboard only ever reads those tables.
+> The Payer lens shows paid versus billed, collection rate, PMPM, revenue at risk, line-of-business
+> performance, and the highest-cost members. Member identifiers are masked before they are stored.
 >
-> That buys three things. Every figure has a timestamp. The database never holds a raw
-> identifier. And when a number looks wrong, you query the table instead of re-deriving it.
+> The Provider lens shows open care gaps, quality rate, average RAF, readmission risk, a CMS Stars
+> gauge, and the weakest measures. It turns the same quality Gold tables the agent uses into an
+> operational page a quality team can scan.
 >
-> One honest note: the tables are empty until someone opens the app inside the workspace.
-> Writes need a Fabric sign-in, so it fills itself on first load. I have not watched that
-> run, and I'm not going to tell you I did.
+> The MedTech lens shifts to the Gold imaging model: study count, DICOM instance volume, studies per
+> patient, modality mix, and the heaviest acquisitions. Names are reduced to initials before they
+> enter the app database.
+>
+> These are not three apps. They are three lenses over the same governed platform. That cuts
+> duplicated engineering. More important, a payer signal, provider workflow, and device or imaging
+> event can describe the same member journey.
+>
+> The line-of-business chart also carries a small lesson. Grouping the claim fact by the payer
+> dimension returned the same grand total for Medicare, Medicaid, and Commercial because that model
+> relationship is not usable. The app uses the dedicated per-segment measures instead. A shiny chart
+> can be perfectly wrong.
 
 **Evidence**
-- `rayfin/data/*.ts`; applied DAB config; `src/lib/sync-gold.ts`; live data-plane 401.
+- `rayfin-health-command-center/src/App.tsx`.
+- Live DAX validation for the ten sync queries.
+- `rayfin-health-command-center/src/lib/queries.ts`.
 
 **Fallback**
-- If the app is empty, show the banner explaining why and the `SyncRun` table definition.
-  Do not claim a sync succeeded.
+- If the database has not synced, show the empty-state banner and move to the entity definitions.
+  Do not narrate blank figures as zero.
 
 ---
 
-## 6:30–7:10 — Mid-video reset and limitations
+## 10:30–12:45 — How Rayfin hooks to its database
 
 **On screen**
-- The graph query returning 100 Patient nodes, with the `coveredBy` edge at zero.
+- `rayfin/data/schema.ts`, then the four entity files.
+- `src/lib/sync-gold.ts` flow highlighted in order.
+- `src/hooks/use-snapshot.ts` reading `client.data.*`.
+- The applied DAB configuration showing authenticated permissions.
 
 **Say**
 
-> Back to the opening question. Three checks: what's actually selected in the published
-> definition, whether the answer survives verification against the source, and whether the
-> thing is in a running state.
+> The first app version queried the semantic models on every render. It had numbers, but it did not
+> have a database. There was no captured snapshot, no sync history, and nothing an operator could
+> inspect when a number looked odd.
 >
-> Where this environment still falls short. Both Operations Agents need a human in the
-> portal. The app database is empty until first sign-in. The claims-to-payer edge in the
-> ontology reads zero, because the Gold claim rows carry no usable payer key — I could have
-> invented one and made the graph look complete. I'd rather you see the gap.
+> Rayfin now owns a Fabric-hosted MSSQL data layer with four entities.
 >
-> And all of it is synthetic. A hundred patients. Good enough to prove plumbing, not good
-> enough to prove clinical anything.
+> `KpiSnapshot` stores the headline figures for each lens: metric key, value, unit, caption, source
+> model, and capture time. `SeriesPoint` stores the ranked chart data. `WorklistRow` holds the masked
+> payer and imaging worklists. `SyncRun` records when a sync started, whether it succeeded, how many
+> rows it wrote, which models it read, and the failure text when it does not.
+>
+> Every entity is authenticated-only. The anonymous GraphQL probe receives a 401. That is intentional;
+> a publishable key identifies the app, but it does not grant anonymous access to healthcare data.
+>
+> The data path is one-way and explicit.
+>
+> First, Fabric SSO gives the embedded app an authenticated Rayfin session. Second, `sync-gold.ts`
+> runs the ten DAX queries against the Population Health and Imaging Direct Lake models. Third, it
+> masks member IDs and patient names before constructing a worklist row. Fourth, it replaces the
+> snapshot tables and marks the `SyncRun` as succeeded. If anything fails, the run is marked failed
+> with the error text.
+>
+> The dashboard itself never calls a semantic model. `useSnapshot` reads `KpiSnapshot`,
+> `SeriesPoint`, `WorklistRow`, and the latest `SyncRun` through the typed Rayfin client. That keeps
+> render cheap and makes the database the inspectable serving contract.
+>
+> On a fresh database, the app attempts the Gold sync once automatically. The Sync from Gold button
+> reruns it on demand. The footer shows when the last successful snapshot was captured and how many
+> rows were written.
+>
+> The database schema is deployed. The data plane is live and protected. What I have not observed is
+> a successful first sync, because the write path requires the in-portal Fabric SSO handoff. If the
+> app is empty during the demo, that is the exact point to show: schema deployed, data source ready,
+> first authenticated sync still pending.
 
 **Evidence**
-- GQL edge counts; `fact_claim` coverage columns.
-
----
-
-## 7:10–7:50 — Verdict
-
-**On screen**
-- Workspace list with the agents, ops agents, and app visible together.
-
-**Say**
-
-> If you're evaluating Fabric agents, this is a good pattern to copy and a bad one to trust
-> blindly. Bind agents to curated projections, not whole lakehouses. Verify answers against
-> the source before anyone demos them. Give the app its own store so figures have a time and
-> a lineage.
->
-> If you're looking for something you can point at production PHI next quarter, this isn't
-> it, and it doesn't claim to be.
->
-> Try it yourself this way: pick one agent, ask it a counting question, then run the count
-> in KQL. If the two disagree, you've learned more in five minutes than a demo will teach
-> you in an hour.
-
----
-
-## 7:50–9:15 — Just one more thing: Azure Databricks
-
-**On screen**
-- The `azure-databricks/` directory, then the Unity Catalog schemas, then the validator
-  output showing 17 passed.
-
-**Say**
-
-> One more thing.
->
-> Everything you just saw lands in Fabric. A fair question is whether the accelerator is
-> really about Fabric, or about the healthcare data estate underneath it.
->
-> So we built the same destination on Azure Databricks. Same Azure Health Data Services,
-> same ADLS, same Event Hubs, same DICOM source. Different destination: Premium workspace,
-> Unity Catalog, Lakeflow pipelines, Delta medallion, Databricks SQL.
->
-> It's deployed. Bronze, Silver, stream freshness, and Gold gates all passed, and the live
-> validator came back seventeen for seventeen against a hundred patients, eight hundred
-> eighty-three encounters, and a hundred thirty-eight thousand deduplicated telemetry
-> events.
->
-> Two details worth stealing. The access connector gets read on the source account and write
-> only on its own managed container, and the Event Hubs policy is listen-only — no send
-> rights to the emulator feed. And the clinical alert ships paused, with a named recipient,
-> because an alert that emails on first deploy is how you teach people to ignore alerts.
->
-> What I won't claim: the Microsoft HDS deployment artifacts are Fabric-specific. They do
-> not port. We reimplemented that layer against the observable contract, and the Databricks
-> side carries its own gates.
->
-> So the honest version is this. The domain model travels. The destination is a choice. If
-> you're already on Databricks, you don't have to give up the healthcare plumbing to keep
-> your lakehouse.
-
-**Evidence**
-- `azure-databricks/` package and `CHANGELOG.md` deployment entry; `07-validate-deployment.py`
-  results recorded at deployment time.
+- `rayfin/data/KpiSnapshot.ts`, `SeriesPoint.ts`, `WorklistRow.ts`, `SyncRun.ts`.
+- `src/lib/sync-gold.ts`; `src/hooks/use-snapshot.ts`.
+- Applied DAB config version 2; anonymous `/graphql` 401.
 
 **Fallback**
-- If the Databricks workspace is stopped, present this as the recorded deployment result and
-  say so. Do not imply a live run during the recording.
+- Show `SyncRun` and the banner. Say: "The database is deployed; I have not observed the authenticated
+  write, so I am not presenting an empty table as a successful sync."
+
+---
+
+## 12:45–13:15 — What is done, and what is not
+
+**On screen**
+- Checklist with three green checks and two amber items.
+
+**Say**
+
+> The Payer Ops and Graph Agent paths are published and behavior-tested. HealthcareOpsAgent has a valid definition and grounding table, but remains inactive. The graph is hydrated. The Rayfin
+> schema is deployed and every Gold query returns rows.
+>
+> The amber items are just as important. HealthcareOpsAgent is inactive until a person starts the
+> reviewed playbook. Rayfin has not produced an observed successful SyncRun yet. Those are operating
+> steps, not footnotes.
+
+---
+
+## 13:15–16:35 — Just one more thing: Azure Databricks
+
+**On screen**
+- Start on the Fabric workspace.
+- Cut to `azure-databricks/diagrams/system-architecture.html`.
+- Show the numbered implementation scripts, Bicep, Unity Catalog bootstrap, bundle resources, then
+  the final validator result.
+
+**Say**
+
+> Just one more thing.
+>
+> Everything so far lands in Fabric. But the healthcare accelerator should not depend on one
+> destination to prove the domain architecture. We deployed the same source estate into Azure
+> Databricks.
+>
+> "Same source estate" is precise here. Azure Health Data Services stays. The ADLS FHIR export and
+> DICOM locations stay. Event Hubs stays. Key Vault, the emulators, and the OHIF viewer stay. We add a
+> Premium Databricks workspace and an Access Connector, then rebuild the destination contract.
+>
+> The deployment starts in Azure. Bicep creates the workspace, the Access Connector, and a separate
+> managed storage container. The connector gets read access to the source account, contributor only
+> on the managed container, and Data Receiver on Event Hubs. It does not get Data Sender. The stream
+> consumer cannot impersonate the emulator.
+>
+> Unity Catalog is the next boundary. A regional metastore is assigned to the workspace. That account-
+> level assignment is intentionally outside the workspace bundle because it needs a different
+> privilege. A managed-identity storage credential wraps the Access Connector. Read-only external
+> locations point at the FHIR export and DICOM inventory. Derived Delta tables land under the managed
+> catalog path.
+>
+> There is a bootstrap detail here that cost us time: the serverless SQL warehouse has to exist before
+> we create some of the catalog objects. On a fresh workspace, the warehouse is not merely a serving
+> endpoint; it is part of the governance bootstrap.
+>
+> The catalog is `hls_dev`, with Bronze, Silver, Gold, Ops, and Meta schemas. Bronze preserves raw
+> FHIR records, DICOM manifest inventory, Kafka offsets, source timestamps, and rescue data. Silver
+> normalizes healthcare references and deduplicates streaming events. Gold produces the claims,
+> clinical, and imaging products that user experiences can query.
+>
+> The DICOM point is worth slowing down for. This source does not contain copied pixel payloads. It
+> contains study and series manifests. The Databricks Bronze path therefore ingests manifest
+> inventory and keeps the image bytes in ADLS. The Gold join uses the FHIR ImagingStudy identifier,
+> not a hopeful filename match.
+>
+> Five serverless Lakeflow pipelines divide the work by schema and lifecycle. File ingestion is
+> triggered. Stream ingestion also runs as bounded triggered work rather than pretending that
+> continuous compute is free. The ordered job moves Bronze files to Silver, runs Silver gates, builds
+> Gold, then runs Gold gates. If Silver fails, Gold is upstream-failed instead of quietly publishing
+> stale products.
+>
+> The stream-to-Gold job runs every five minutes with one concurrent run. Event Hubs uses dedicated
+> Databricks consumer groups and a listen-only policy stored through the secret boundary. At-least-
+> once events are deduplicated with deterministic event keys, watermarks, and `dropDuplicates`.
+>
+> The first live deployment found real problems: Unity Catalog external locations cannot validate a
+> read-only source by writing a temporary file, Auto Loader cannot keep schema state on a read-only
+> external location, the telemetry payload was nested differently than the first parser expected,
+> and the claim amount and event timestamp lived under the actual event schema, not the imagined
+> one. Every one of those became a code change and a validator check.
+>
+> The recorded deployment result finished with seventeen passed checks. At that point the catalog
+> held a hundred patients, eight hundred eighty-three encounters, a hundred thirty-eight thousand
+> deduplicated telemetry events, and thirteen hundred ninety-five claim events. The scheduled
+> stream-to-Gold job was unpaused. The clinical SQL alert stayed paused with a reviewed recipient,
+> because deployment is not consent to start sending alerts.
+>
+> What does not port is equally clear. Microsoft HDS and DTT deployment artifacts are Fabric-specific.
+> Fabric IQ Ontology has no one-to-one Databricks object. Data Agents become Genie grounded in Unity
+> Catalog. Eventstream becomes Lakeflow plus Kafka. Activator becomes a SQL alert or a job action.
+> We preserve the observable healthcare contract, not the Fabric item IDs.
+>
+> That is the "one more thing." The accelerator is not trapped in one analytics destination. The
+> source boundaries, medallion contracts, safety gates, and operational questions travel. The
+> implementation has to earn parity on the destination it chooses.
+
+**Evidence**
+- `azure-databricks/README.md`, `DEPLOYMENT-GUIDE.md`, `COMPONENT-MAP.md`.
+- `azure-databricks/implementation/` deployment artifacts.
+- `CHANGELOG.md` recorded live-deployment entry and final validator result.
+
+**Fallback**
+- If the Databricks workspace is stopped, show the recorded validator output and repository artifacts.
+  Say: "This is the recorded deployment result, not a live run during this recording."
+
+---
+
+## 16:35–17:05 — Close
+
+**On screen**
+- Final four-panel view: HealthcareOpsAgent, Payer Ops Triage, Healthcare Graph Agent, Rayfin app.
+- Databricks architecture faded behind them.
+
+**Say**
+
+> The agent story is not "we added AI." It is that three different operational questions now have
+> three governed paths: monitor the platform, investigate the payer queue, and traverse the healthcare
+> graph.
+>
+> Rayfin turns the shared Gold layer into a persistent, inspectable command center. Databricks proves
+> the domain architecture can survive a destination change.
+>
+> Before you trust any of it, run three checks: inspect the published sources, verify an answer against
+> the data, and confirm the runtime state. Those checks take minutes. They save a very awkward demo.
 
 ---
 
@@ -298,32 +464,34 @@ Target 9:15. Narration is 1,295 words, which lands at roughly 143 words per minu
 
 | Claim | Class | Source |
 |---|---|---|
-| Five Data Agents, bound sources and selections | Verified current | `getDefinition` published parts |
-| MCP answers and their numbers | Verified current | Live MCP JSON-RPC probes |
-| Counter-checks for those numbers | Verified current | KQL and DAX run independently |
-| Ops agents at Inactive, one knowledge source | Verified current | `GET /operationsAgents/{id}` |
-| Playbook generation and Start are portal-only | Limitation | No public Fabric API |
-| OpsAgentKQL tables and row counts | Verified current | KQL queries |
-| Activator source, rule, recipient | Verified current | Reflex `getDefinition` |
-| App entities, permissions, anonymous 401 | Verified current | DAB config and data-plane probe |
-| App database empty until first in-portal sync | Limitation | No CLI write path |
-| Ontology graph node and edge counts | Verified current | GQL queries |
-| `coveredBy` zero for lack of payer key | Limitation | `fact_claim` columns |
-| Databricks deployment and 17/17 validation | Configured, recorded | `CHANGELOG.md`, validator output |
-| HDS artifacts do not port to Databricks | Design intent | `azure-databricks/` docs |
+| HealthcareOpsAgent source, schema, and Inactive state | Verified current | Operations Agent API + `agent_ops_stream_health` |
+| Playbook generation and Start require portal action | Limitation | No public API for either action |
+| Payer Ops Triage source families and strict claim-count rule | Verified current | Published Data Agent definition + `deploy-payer-rti.ps1` |
+| Healthcare Graph Agent counts and traversals | Verified current | Published MCP + direct GQL counts |
+| `coveredBy` at zero for missing payer key | Limitation | Gold claim and coverage columns |
+| Rayfin four-entity database schema | Verified current | Applied DAB config version 2 |
+| Rayfin reads database; sync alone reads semantic models | Verified current | `App.tsx`, `use-snapshot.ts`, `sync-gold.ts` |
+| Rayfin database contains snapshot rows | **Not verified** | First authenticated in-portal sync not observed |
+| Ten Gold sync queries return rows | Verified current | Power BI REST queries against both models |
+| Databricks destination deployment | Recorded deployment result | `CHANGELOG.md`, implementation validator |
+| Databricks HDS/DTT parity is reimplementation, not artifact portability | Design boundary | `azure-databricks/README.md`, `COMPONENT-MAP.md` |
 
 ## Recording gates
 
-1. Capacity active; both Eventstreams showing sources and destinations at Running.
-2. Fresh telemetry within the last five minutes before claiming the feed is live.
-3. Agent MCP probes run once before recording; keep transcripts for fallback.
-4. Edge on the Work — BrakeKat profile, 2560×1440, 100% zoom.
-5. No GUIDs, subscription identifiers, or recipient addresses on screen.
+1. Capacity Active; both Eventstreams showing Running sources and destinations.
+2. Fresh timestamps before describing telemetry or claims as live.
+3. Pre-validate the Payer Ops and Graph Agent prompts; keep captured responses ready.
+4. HealthcareOpsAgent shown as Inactive unless the playbook has genuinely been generated and started.
+5. Rayfin database checked for a succeeded `SyncRun`; if none exists, use the fallback language.
+6. Work — BrakeKat Edge profile, 2560×1440, 100% zoom.
+7. No GUIDs, subscription IDs, recipient addresses, raw member IDs, or patient names on screen.
 
 ## Read-aloud checklist
 
-- First twenty-five seconds name the tension and promise a judgment.
-- Every chapter returns to the same throughline: deployed is not the same as answering.
-- Limitations appear inside the story, not stacked at the end.
-- No claim of a live run that was not performed during recording.
-- The close gives one concrete test the viewer can run.
+- Name the three agent jobs before opening any agent pane.
+- Keep HealthcareOpsAgent in configured-versus-running language.
+- Let live Payer Ops counts move; never narrate a stale hard-coded total.
+- Explain the graph repair only far enough to make the operating lesson clear.
+- Show the database path in order: Fabric SSO → DAX sync → masking → snapshot tables → dashboard.
+- Call the Databricks section a recorded deployment result unless it is actively running during capture.
+- End on the three checks viewers can repeat themselves.
