@@ -1318,7 +1318,10 @@ Reporting:
         $opsFallbackInstructions = "Monitor payer RTI streaming tables, fn_PayerOpsWorklist(60), fraud_scores, highcost_alerts, care_gap_alerts, and clinical AlertHistory. Route CRITICAL fraud to SIU Investigation Queue, CRITICAL high-cost to Care Management Referral, and CRITICAL care gaps to Provider Outreach. Always show alert_time, patient_id, provider_id when present, priority, metric_name, metric_value, and recommended next action.$goldUnavailableInstruction"
         $null = Deploy-DataAgent -Name "HealthcareOpsAgent" -AiInstructions $opsFallbackInstructions -DataSources $payerDataSources -WorkspaceId $workspaceId -Description "Fallback DataAgent for payer RTI, claims worklists, fraud/high-cost/care-gap routing, and clinical-alert context."
     }
-    $triagePrefix = "PRIORITY RULE - raw claim volume. If the question asks how many claim events exist, for a breakdown by event_type, or for a total claim count, run claims_events | summarize n=count() by event_type against the Kusto source and answer from that result. This rule outranks every function-first rule below. Never answer `"no data`" for a claim-volume question without running that exact query first.`n`n"
+    # The function-first rules below otherwise steer the agent away from the raw claims table: it
+    # answered "no data" for claim-volume questions, and a looser wording made it join claims_events
+    # to a function (join type mismatch) or print the statement instead of running it.
+    $triagePrefix = "PRIORITY RULE - raw claim volume. If the question asks how many claim events exist, for a breakdown by event_type, or for a total claim count, execute exactly this Kusto statement against the Kusto source and report the rows it returns: claims_events | summarize n=count() by event_type. Execute it - never print the statement instead of running it. Do not join it to any other table or function, do not add a time filter, and do not wrap it in another query. Report each event_type with its count plus the overall total and name claims_events as the data source. This rule outranks every function-first rule below, and you must never answer `"no data`" for a claim-volume question without running it first.`n`n"
     $triageInstructions = if ($SkipSnapshotMaterialization) {
         $triagePrefix + "You are Payer Ops Triage in definition-only mode. Use payer RTI KQL sources for current claims and alerts. Ontology and Gold history bindings are intentionally deferred.$goldUnavailableInstruction"
     } else {
@@ -1331,16 +1334,19 @@ Reporting:
 
 if (-not $SkipGraphAgent) {
     Write-Host ""; Write-Host "--- Healthcare Graph Agent shell ---" -ForegroundColor Cyan
+    # Without the counting rule the agent reports the row count of a sampled traversal as the total:
+    # it answered "1 distinct patient" against a graph holding 100.
+    $graphCountRule = "Ontology graph counts must come from an aggregate count query over the ontology with no sampling and no LIMIT - phrase the tool request as an aggregate count of the entity (for example, the total number of Patient entities without sampling or LIMIT). Never report the number of rows an example or traversal query happened to return as if it were the total. When you show an example relationship, present it separately from the count and name the ontology item (DevicePayerOntology), not the internal data-source alias.`n`n"
     $graphInstructions = if ($SkipSnapshotMaterialization) {
-        "You are Healthcare Graph Agent in definition-only mode. Use payer RTI KQL sources for claims and alert questions. Ontology and Gold bindings are intentionally deferred.$goldUnavailableInstruction"
+        $graphCountRule + "You are Healthcare Graph Agent in definition-only mode. Use payer RTI KQL sources for claims and alert questions. Ontology and Gold bindings are intentionally deferred.$goldUnavailableInstruction"
     } else {
-        "You are Healthcare Graph Agent. For cross-domain validation use agent_cross_domain_context and the agent_CrossDomainContext(), agent_CareGapAbnormalTelemetry(), and agent_CommonDiagnosesWithRepeatedAlerts() functions. Do not generate ontology traversals or ad-hoc joins for the validated cross-domain questions. Always return scenario_source and label synthetic_demo_marker rows as demo validation data.$goldUnavailableInstruction"
+        $graphCountRule + "You are Healthcare Graph Agent. For cross-domain validation use agent_cross_domain_context and the agent_CrossDomainContext(), agent_CareGapAbnormalTelemetry(), and agent_CommonDiagnosesWithRepeatedAlerts() functions. Do not generate ontology traversals or ad-hoc joins for the validated cross-domain questions. Always return scenario_source and label synthetic_demo_marker rows as demo validation data.$goldUnavailableInstruction"
     }
     $null = Deploy-DataAgent -Name "Healthcare Graph Agent" -AiInstructions $graphInstructions -DataSources $payerDataSources -WorkspaceId $workspaceId -Description "Cross-domain graph agent for DevicePayerOntology traversal across patient, device, diagnoses, claims, payer, risk, care gaps, and clinical alerts."
     $manualSteps = @(
         ("1. Open Fabric workspace {0}." -f $FabricWorkspaceName),
         '2. Open `DevicePayerOntology`.',
-        '3. Select Preview and run `Refresh graph model`.',
+        '3. Graph hydration runs automatically via jobType=RefreshGraph on the GraphModel item; use Preview > Refresh graph model only to re-check interactively.',
         '4. Open Data Agent `Healthcare Graph Agent`.',
         '5. Confirm `DevicePayerOntology` is attached and the published agent exposes its MCP server.',
         '6. Validate with: `For patient <patient_id>, trace device, diagnoses, clinical alerts, claims, payer category, RAF risk, high-cost profile, and open care gaps.`'
