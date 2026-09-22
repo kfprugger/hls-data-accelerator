@@ -606,7 +606,7 @@ function New-KqlDatasource {
 }
 
 function New-LakehouseDatasource {
-    param([string]$DisplayName, [string]$LakehouseId, [string]$WorkspaceId, [array]$Tables, [string]$Instructions)
+    param([string]$DisplayName, [string]$LakehouseId, [string]$WorkspaceId, [array]$Tables, [string]$Instructions, [array]$FewShots = @())
     $elements = @(
         @{ display_name = 'dbo'; type = 'lakehouse_tables.schema'; is_selected = $true; children = @($Tables | ForEach-Object { @{ display_name = $_; type = 'lakehouse_tables.table'; is_selected = $true } }) }
     )
@@ -620,7 +620,7 @@ function New-LakehouseDatasource {
         dataSourceInstructions = $Instructions
         elements = $elements
     } | ConvertTo-Json -Depth 30)
-    $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = @() } | ConvertTo-Json -Depth 10)
+    $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
     return @{ FolderName = "lakehouse_tables-$DisplayName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectionKind = 'lakehouse'; SelectedTables = @($Tables) }
 }
 
@@ -629,12 +629,17 @@ function New-OntologyDatasourceIfAvailable {
         [Parameter(Mandatory)][string]$OntologyName,
         [Parameter(Mandatory)][string]$WorkspaceId,
         [Parameter(Mandatory)][string]$UserDescription,
-        [Parameter(Mandatory)][string]$Instructions
+        [Parameter(Mandatory)][string]$Instructions,
+        [Parameter(Mandatory)][string[]]$EntityTypes,
+        [array]$FewShots = @()
     )
     try {
         $ontologies = (Invoke-FabricApi -Endpoint "/workspaces/$WorkspaceId/ontologies").value
         $ontology = $ontologies | Where-Object { $_.displayName -eq $OntologyName } | Select-Object -First 1
         if (-not $ontology) { return $null }
+        $elements = @($EntityTypes | ForEach-Object {
+            @{ id = $_; is_selected = $true; display_name = $_; type = 'ontology.entity'; description = $null; children = @() }
+        })
         $datasourceJson = (@{
             '$schema'              = "1.0.0"
             artifactId             = $ontology.id
@@ -643,8 +648,9 @@ function New-OntologyDatasourceIfAvailable {
             type                   = "ontology"
             userDescription        = $UserDescription
             dataSourceInstructions = $Instructions
-        } | ConvertTo-Json -Depth 10)
-        $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = @() } | ConvertTo-Json -Depth 5)
+            elements               = $elements
+        } | ConvertTo-Json -Depth 20)
+        $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
         return @{ FolderName = "ontology-$OntologyName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson }
     } catch {
         Write-Host "  ⚠ Could not attach ontology datasource '$OntologyName': $(Get-ErrorMessage $_)" -ForegroundColor Yellow
@@ -1165,7 +1171,7 @@ $kqlElements = @(
     @{ id = [guid]::NewGuid().ToString(); display_name = "agent_high_cost_members"; type = "kusto.table"; is_selected = $true },
     @{ id = [guid]::NewGuid().ToString(); display_name = "agent_provider_fraud_claims"; type = "kusto.table"; is_selected = $true }
 )
-$fewShots = @(
+$payerKqlFewShots = @(
     @{ id = [guid]::NewGuid().ToString(); question = "Which providers have the highest active fraud risk, and what evidence supports the score?"; query = "fn_FraudRisk(60) | summarize arg_max(score_timestamp, fraud_score, risk_tier, fraud_flags, claim_id, patient_id) by provider_id | project provider_id, fraud_score, risk_tier, fraud_flags, claim_id, patient_id, score_timestamp | top 10 by fraud_score desc" },
     @{ id = [guid]::NewGuid().ToString(); question = "Show the current payer operations worklist"; query = "fn_PayerOpsWorklist(60) | order by priority asc, alert_time desc" },
     @{ id = [guid]::NewGuid().ToString(); question = "Which members are trending toward high-cost status?"; query = "agent_high_cost_members | project patient_id, risk_tier, cost_trend, rolling_spend_30d, rolling_spend_90d, projected_cost_band, high_cost_score, ed_visits_30d, readmission_flag, refreshed_at | order by high_cost_score desc" },
@@ -1186,7 +1192,27 @@ $fewShots = @(
     @{ id = [guid]::NewGuid().ToString(); question = "Choose one patient with verified cross-domain links and show their connected clinical and payer context."; query = "agent_CrossDomainContext() | top 1 by alert_time desc" },
     @{ id = [guid]::NewGuid().ToString(); question = "Identify patients whose device telemetry, diagnoses, and utilization history suggest worsening risk."; query = "agent_CrossDomainContext() | where risk_tier == 'HIGH' and repeated_alert_count >= 2 | summarize arg_max(alert_time, *) by patient_id" }
 )
-$payerKqlInstructions = "Use the selected KQL functions and materialized agent_* tables for deterministic payer and cross-domain answers. Current worklist: fn_PayerOpsWorklist(60). Provider fraud: fn_FraudRisk(60) with positional arg_max. High-cost members: agent_high_cost_members. Provider claims: agent_provider_fraud_claims. Care-gap routing: agent_CriticalCareGaps(). Domain/action summaries: agent_payer_priority_summary. Claim request: agent_HighestPriorityClaim(). Cross-domain graph validation: agent_cross_domain_context and agent_CrossDomainContext(). Always disclose scenario_source for synthetic_demo_marker rows."
+$graphKqlFewShots = @(
+    @{ id = [guid]::NewGuid().ToString(); question = "Show the current payer operations worklist from real-time data."; query = "fn_PayerOpsWorklist(60) | order by priority asc, alert_time desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which providers have the highest current fraud risk?"; query = "fn_FraudRisk(60) | summarize arg_max(score_timestamp, fraud_score, risk_tier, fraud_flags, claim_id, patient_id) by provider_id | top 10 by fraud_score desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which devices have current urgent clinical alerts?"; query = "fn_ClinicalAlerts(15) | where alert_tier in ('CRITICAL','URGENT') | project device_id, patient_id, alert_tier, alert_time" }
+)
+$goldFewShots = @(
+    @{ id = [guid]::NewGuid().ToString(); question = "Summarize historical claim count and total paid by payer category from Reporting Gold."; query = "SELECT payer_category, COUNT(*) AS claim_count, SUM(paid_amount) AS total_paid FROM dbo.fact_claim GROUP BY payer_category ORDER BY total_paid DESC" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which members have the highest historical paid amounts and claim counts?"; query = "SELECT TOP 10 patient_id, payer_category, total_paid, claim_count, denied_claims, is_stop_loss FROM dbo.agg_high_cost_claimants ORDER BY total_paid DESC" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Summarize open care gaps by measure from Reporting Gold."; query = "SELECT gap_type, COUNT(*) AS open_gap_count, MAX(days_overdue) AS max_days_overdue FROM dbo.care_gaps WHERE gap_status = 'OPEN' GROUP BY gap_type ORDER BY open_gap_count DESC" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Show the highest readmission-risk encounters from Reporting Gold."; query = "SELECT TOP 10 patient_id, encounter_id, risk_probability, risk_tier, los_days FROM dbo.readmission_risk_scores ORDER BY risk_probability DESC" }
+)
+$ontologyFewShots = @(
+    @{ id = [guid]::NewGuid().ToString(); question = "How many Patient entities exist in DevicePayerOntology? Use an aggregate with no sample or LIMIT."; query = "MATCH (p:Patient) RETURN count(p) AS patient_count" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Show one patient-to-device relationship from the ontology."; query = "MATCH (p:Patient)-[:linkedToDevice]->(d:Device) RETURN p.patientId AS patient_id, d.deviceId AS device_id LIMIT 5" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Trace one patient to claims and care gaps in the ontology."; query = "MATCH (p:Patient)-[:hasClaim]->(c:Claim) OPTIONAL MATCH (p)-[:hasCareGap]->(g:CareGap) RETURN p.patientId AS patient_id, c.claimId AS claim_id, g.gapType AS care_gap LIMIT 10" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Count patient-to-claim relationships in the ontology."; query = "MATCH (:Patient)-[r:hasClaim]->(:Claim) RETURN count(r) AS claim_edges" }
+)
+$ontologyEntityTypes = @('Patient','Encounter','Condition','MedRequest','Observation','ImagingStudy','Device','DeviceAssoc','DeviceTelemetry','Claim','Payer','Diagnosis','PatientDiagnosis','MedAdherence','CareGap','PatientRisk','HighCostClaimant')
+
+$payerKqlInstructions = "Use MasimoEventhouse only for current/live payer operations: claim events, active fraud/high-cost/care-gap alerts, current telemetry, and the current worklist. Do not use KQL as a substitute for Reporting Gold history or DevicePayerOntology relationships."
+$graphKqlInstructions = "Use MasimoEventhouse only to enrich ontology entities with current/live telemetry, alerts, claim events, fraud scores, or the current worklist. Never answer graph, relationship, path, trace, or traversal questions from KQL."
 $requiredKqlFunctions = @(
     'fn_AlertHistoryTransform', 'fn_VitalsTrend', 'fn_DeviceStatus', 'fn_LatestReadings', 'fn_TelemetryByDevice',
     'fn_SpO2Alerts', 'fn_PulseRateAlerts', 'fn_ClinicalAlerts', 'fn_AlertLocationMap', 'fn_FraudRisk',
@@ -1196,21 +1222,23 @@ $requiredKqlFunctions = @(
     'agent_CrossDomainContext', 'agent_CommonDiagnosesWithRepeatedAlerts', 'agent_CareGapAbnormalTelemetry',
     'agent_PayerPrioritySummary', 'agent_CriticalCareGaps', 'agent_HighUtilizationCareGaps', 'agent_HighestPriorityClaim'
 )
-$payerDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Elements $kqlElements -FewShots $fewShots -Instructions $payerKqlInstructions -Functions $requiredKqlFunctions))
+$payerDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Elements $kqlElements -FewShots $payerKqlFewShots -Instructions $payerKqlInstructions -Functions $requiredKqlFunctions))
+$graphDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Elements $kqlElements -FewShots $graphKqlFewShots -Instructions $graphKqlInstructions -Functions $requiredKqlFunctions))
 $goldUnavailableInstruction = ""
 if ($goldLh) {
-    $payerDataSources += (New-LakehouseDatasource -DisplayName $goldLh.displayName -LakehouseId $goldLh.id -WorkspaceId $workspaceId -Tables @('fact_claim','dim_payer','care_gaps','agg_high_cost_claimants','readmission_risk_scores') -Instructions "Use Gold Lakehouse tables for claims history, payer dimensions, care gaps, and high-cost cohorts when current RTI tables need history.")
+    $goldTables = @('fact_claim','dim_payer','care_gaps','agg_high_cost_claimants','readmission_risk_scores')
+    $payerDataSources += (New-LakehouseDatasource -DisplayName $goldLh.displayName -LakehouseId $goldLh.id -WorkspaceId $workspaceId -Tables $goldTables -FewShots $goldFewShots -Instructions "PRIMARY source for historical and analytical facts: claims, paid/billed amounts, payer categories, care gaps, high-cost cohorts, and readmission risk. For mixed questions query Gold and KQL separately and label each result.")
+    $graphDataSources += (New-LakehouseDatasource -DisplayName $goldLh.displayName -LakehouseId $goldLh.id -WorkspaceId $workspaceId -Tables $goldTables -FewShots $goldFewShots -Instructions "Use Reporting Gold only to enrich ontology entities with historical claims, paid amounts, payer category, care gaps, high-cost cohort, and readmission risk. Do not infer graph relationships from table co-occurrence.")
 } else {
-    $goldUnavailableInstruction = " Gold Lakehouse was not available at deployment time; answer with KQL RTI data only and say care-gap/history enrichment is unavailable."
+    $goldUnavailableInstruction = " Gold Lakehouse was not available at deployment time; say history enrichment is unavailable."
 }
 $devicePayerOntologyDs = $null
+$graphOntologyDs = $null
 if (-not $SkipSnapshotMaterialization) {
-    $devicePayerOntologyDs = New-OntologyDatasourceIfAvailable `
-        -OntologyName "DevicePayerOntology" `
-        -WorkspaceId $workspaceId `
-        -UserDescription "Payer-oriented device ontology linking patients, devices, diagnoses, claims, payer categories, care gaps, risk, high-cost cohorts, alerts, and telemetry." `
-        -Instructions "Use this ontology for claims, payer operations, care gaps, high-cost claimant, RAF/risk, payer-category, and device-to-payer questions. Clinical-only triage should use ClinicalDeviceOntology instead."
+    $devicePayerOntologyDs = New-OntologyDatasourceIfAvailable -OntologyName "DevicePayerOntology" -WorkspaceId $workspaceId -UserDescription "Payer-oriented device ontology linking patients, devices, diagnoses, claims, payer categories, care gaps, risk, high-cost cohorts, alerts, and telemetry." -Instructions "Use DevicePayerOntology for every relationship, graph, path, connected-context, trace, and traversal question. For mixed questions obtain ontology identifiers first, then enrich from KQL or Reporting Gold." -EntityTypes $ontologyEntityTypes -FewShots $ontologyFewShots
+    $graphOntologyDs = New-OntologyDatasourceIfAvailable -OntologyName "DevicePayerOntology" -WorkspaceId $workspaceId -UserDescription "Primary graph source linking clinical, payer, risk, cost, care-gap, device, and telemetry entities." -Instructions "PRIMARY SOURCE for this agent. Query DevicePayerOntology first for every entity count, relationship, connected path, graph, trace, or traversal question. Never substitute a KQL snapshot for ontology semantics." -EntityTypes $ontologyEntityTypes -FewShots $ontologyFewShots
     if ($devicePayerOntologyDs) { $payerDataSources += $devicePayerOntologyDs }
+    if ($graphOntologyDs) { $graphDataSources += $graphOntologyDs }
 }
 
 
@@ -1321,11 +1349,19 @@ Reporting:
     # The function-first rules below otherwise steer the agent away from the raw claims table: it
     # answered "no data" for claim-volume questions, and a looser wording made it join claims_events
     # to a function (join type mismatch) or print the statement instead of running it.
-    $triagePrefix = "PRIORITY RULE - raw claim volume. If the question asks how many claim events exist, for a breakdown by event_type, or for a total claim count, execute exactly this Kusto statement against the Kusto source and report the rows it returns: claims_events | summarize n=count() by event_type. Execute it - never print the statement instead of running it. Do not join it to any other table or function, do not add a time filter, and do not wrap it in another query. Report each event_type with its count plus the overall total and name claims_events as the data source. This rule outranks every function-first rule below, and you must never answer `"no data`" for a claim-volume question without running it first.`n`n"
+    $sourceRouter = @"
+SOURCE ROUTER — HIGHEST PRIORITY:
+- Use MasimoEventhouse only for current/live operational facts: claim events, active fraud, current high-cost/care-gap alerts, current telemetry, and the current worklist.
+- Use healthcare1_reporting_gold for historical or analytical facts: claim history, paid/billed amounts, payer categories, historical care gaps, high-cost cohorts, and readmission risk.
+- Use DevicePayerOntology for entity counts, relationships, paths, connected context, and every question containing graph, ontology, relationship, connected, trace, or traverse.
+- For a mixed question, query every applicable source separately and synthesize the results. Label each fact with its source. Never substitute a KQL snapshot for Gold history or ontology traversal. Do not join across engines; combine the evidence at the answer layer.
+
+"@
+    $triagePrefix = $sourceRouter + "PRIORITY RULE - raw claim volume. If the question asks how many claim events exist, for a breakdown by event_type, or for a total claim count, execute exactly this Kusto statement against the Kusto source and report the rows it returns: claims_events | summarize n=count() by event_type. Execute it - never print the statement instead of running it. Do not join it to any other table or function, do not add a time filter, and do not wrap it in another query. Report each event_type with its count plus the overall total and name claims_events as the data source. This rule outranks every function-first rule below, and you must never answer `"no data`" for a claim-volume question without running it first.`n`n"
     $triageInstructions = if ($SkipSnapshotMaterialization) {
-        $triagePrefix + "You are Payer Ops Triage in definition-only mode. Use payer RTI KQL sources for current claims and alerts. Ontology and Gold history bindings are intentionally deferred.$goldUnavailableInstruction"
+        "You are Payer Ops Triage in definition-only mode. Use payer RTI KQL sources for current claims and alerts. Ontology and Gold history bindings are intentionally deferred.$goldUnavailableInstruction"
     } else {
-        $triagePrefix + "You are Payer Ops Triage. Use current KQL operational sources first. Worklist: fn_PayerOpsWorklist(60). Fraud: fn_FraudRisk(60). High-cost members: agent_high_cost_members. Provider claims: agent_provider_fraud_claims. Care gaps: agent_CriticalCareGaps(). Routing and priority summaries: agent_payer_priority_summary. High-utilization care-gap overlap: agent_cross_domain_context filtered to AT_RISK and OPEN. Highest-priority claim: agent_HighestPriorityClaim(). Route FRAUD to SIU, HIGH_COST to care management, and CARE_GAP to provider outreach. Never invent routing fields or use patient-level rows to satisfy claim requests.$goldUnavailableInstruction"
+        $triagePrefix + "You are Payer Ops Triage. Route each intent to the source contract above. Current worklist: fn_PayerOpsWorklist(60). Fraud: fn_FraudRisk(60). Highest-priority claim: agent_HighestPriorityClaim(). Route FRAUD to SIU, HIGH_COST to care management, and CARE_GAP to provider outreach. Never invent routing fields or collapse current and historical grains.$goldUnavailableInstruction"
     }
     $null = Deploy-DataAgent -Name "Payer Ops Triage" -AiInstructions $triageInstructions -DataSources $payerDataSources -WorkspaceId $workspaceId -Description "Payer operations agent for claims RTI, fraud/high-cost/care-gap signals, DevicePayerOntology, and worklist prioritization."
 } else {
@@ -1336,13 +1372,21 @@ if (-not $SkipGraphAgent) {
     Write-Host ""; Write-Host "--- Healthcare Graph Agent shell ---" -ForegroundColor Cyan
     # Without the counting rule the agent reports the row count of a sampled traversal as the total:
     # it answered "1 distinct patient" against a graph holding 100.
-    $graphCountRule = "Ontology graph counts must come from an aggregate count query over the ontology with no sampling and no LIMIT - phrase the tool request as an aggregate count of the entity (for example, the total number of Patient entities without sampling or LIMIT). Never report the number of rows an example or traversal query happened to return as if it were the total. When you show an example relationship, present it separately from the count and name the ontology item (DevicePayerOntology), not the internal data-source alias.`n`n"
+    $graphCountRule = "Ontology graph counts must come from an aggregate count query over the ontology with no sampling and no LIMIT. Never report the number of rows an example query returns as the total. Present examples separately from counts.`n`n"
+    $graphOntologyRouter = @"
+ONTOLOGY-FIRST ROUTING — HIGHEST PRIORITY:
+- DevicePayerOntology is the primary source for every entity, relationship, path, graph, connected-context, trace, traverse, and cross-domain question. You MUST call the ontology runtime for those questions. Never substitute agent_cross_domain_context or another KQL snapshot for a requested ontology traversal.
+- Use MasimoEventhouse only to enrich ontology entities with current/live telemetry, alerts, claim events, fraud scores, or the current worklist.
+- Use healthcare1_reporting_gold only to enrich ontology entities with historical claim amounts, payer categories, care gaps, high-cost cohorts, and readmission risk.
+- For mixed questions, first obtain identifiers and relationships from DevicePayerOntology, then query KQL and/or Gold separately with those identifiers. State which source produced each part of the answer.
+
+"@
     $graphInstructions = if ($SkipSnapshotMaterialization) {
-        $graphCountRule + "You are Healthcare Graph Agent in definition-only mode. Use payer RTI KQL sources for claims and alert questions. Ontology and Gold bindings are intentionally deferred.$goldUnavailableInstruction"
+        "You are Healthcare Graph Agent in definition-only mode. Use payer RTI KQL sources for current claims and alerts. Ontology and Gold bindings are intentionally deferred.$goldUnavailableInstruction"
     } else {
-        $graphCountRule + "You are Healthcare Graph Agent. For cross-domain validation use agent_cross_domain_context and the agent_CrossDomainContext(), agent_CareGapAbnormalTelemetry(), and agent_CommonDiagnosesWithRepeatedAlerts() functions. Do not generate ontology traversals or ad-hoc joins for the validated cross-domain questions. Always return scenario_source and label synthetic_demo_marker rows as demo validation data.$goldUnavailableInstruction"
+        $graphOntologyRouter + $graphCountRule + "You are Healthcare Graph Agent. Use the ontology for semantics and use KQL or Reporting Gold only as separately labeled evidence enrichments.$goldUnavailableInstruction"
     }
-    $null = Deploy-DataAgent -Name "Healthcare Graph Agent" -AiInstructions $graphInstructions -DataSources $payerDataSources -WorkspaceId $workspaceId -Description "Cross-domain graph agent for DevicePayerOntology traversal across patient, device, diagnoses, claims, payer, risk, care gaps, and clinical alerts."
+    $null = Deploy-DataAgent -Name "Healthcare Graph Agent" -AiInstructions $graphInstructions -DataSources $graphDataSources -WorkspaceId $workspaceId -Description "Cross-domain graph agent for DevicePayerOntology traversal across patient, device, diagnoses, claims, payer, risk, care gaps, and clinical alerts."
     $manualSteps = @(
         ("1. Open Fabric workspace {0}." -f $FabricWorkspaceName),
         '2. Open `DevicePayerOntology`.',

@@ -34,8 +34,9 @@ def check_graph_agent(az, ws_id, items, log, mcp_jsonrpc, expected_association_c
         if not argument:
             raise RuntimeError("Graph tool question argument is ambiguous")
         questions = [
-            "Using only the ontology, count all DeviceAssoc entities. Return the integer count and identify the ontology source.",
-            "Using only the ontology, return one actual DeviceAssoc entity's assocPatientId and deviceRef. Do not invent IDs.",
+            "Using only DevicePayerOntology, count all DeviceAssoc entities. Return the integer count and identify the ontology source.",
+            "Using only DevicePayerOntology, return one actual DeviceAssoc entity's assocPatientId and deviceRef. Do not invent IDs.",
+            "Use DevicePayerOntology to count Patient entities and linkedToDevice relationships. Then separately call agent_CurrentDeviceSummary() in MasimoEventhouse and report currently_reporting_devices. Name the source for every result.",
         ]
         answers = []
         for index, question in enumerate(questions, 3):
@@ -53,11 +54,18 @@ def check_graph_agent(az, ws_id, items, log, mcp_jsonrpc, expected_association_c
         association_count = int(count_match.group(1)) if count_match else None
         id_match = re.search(r"assocPatientId\s*[:` ]+([0-9a-f-]{36})", answers[1]["answer"], re.I)
         device_match = re.search(r"deviceRef\s*[:` ]+(MASIMO-[A-Z0-9-]+)", answers[1]["answer"], re.I)
-        passed = association_count == expected_association_count and bool(id_match and device_match)
+        mixed_answer = answers[2]["answer"].lower()
+        mixed_counts = [int(v) for v in re.findall(r"\b\d+\b", mixed_answer)]
+        mixed_grounded = (
+            "devicepayerontology" in mixed_answer
+            and "masimoeventhouse" in mixed_answer
+            and mixed_counts.count(expected_association_count) >= 2
+        )
+        passed = association_count == expected_association_count and bool(id_match and device_match) and mixed_grounded
         results.append({"agent": agent["displayName"], "status": "PASS" if passed else "FAIL",
                         "expectedAssociationCount": expected_association_count, "associationCount": association_count,
                         "patientId": id_match.group(1) if id_match else None, "deviceId": device_match.group(1) if device_match else None,
-                        "queries": answers})
+                        "mixedSourceGrounded": mixed_grounded, "queries": answers})
     except Exception as exc:
         results.append({"status": "FAIL", "reason": str(exc)})
     return {"category": "graph_agent", "passed": bool(results) and all(r["status"] == "PASS" for r in results), "results": results}

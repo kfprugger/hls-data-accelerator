@@ -45,6 +45,7 @@
 - **Fixed** ontology entity mappings by binding Patient and Device to their Silver projection tables (which do not use change data feed) and pointing all DevicePayerOntology entities at the Gold reporting lakehouse, repairing cross-lakehouse graph-edge hydration failures.
 - **Updated** Data Agent bindings to use the dynamically resolved ClinicalDeviceOntology ID and explicitly select its 9 entity types, preventing empty graph queries.
 - **Hardened** the Clinical Triage and Payer Ops Triage agents with instructions to correctly interpret zero-count windows and a strict priority rule enforcing raw claim volume queries.
+- **Restored** multi-source reasoning in Payer Ops Triage and Healthcare Graph Agent. Gold and `DevicePayerOntology` previously had zero few-shots while both agents shared a KQL-heavy bundle, and the Graph Agent was explicitly told not to call the ontology runtime. Each source now has its own intent boundary and examples: Eventhouse for current signals, Reporting Gold for historical analytics, and ontology-first GQL for relationships and traversal. Mixed questions query sources independently, label each fact, and synthesize only at the answer layer.
 - **Triggered** synchronous ontology graph hydration via `RefreshGraph` during deployment instead of requiring manual preview action.
 
 ### Canonical Synthetic Healthcare Fixture

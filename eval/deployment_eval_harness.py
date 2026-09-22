@@ -234,10 +234,19 @@ def agent_validation_question(name: str) -> str:
     if "Clinical Triage" in name:
         return "Count distinct devices and TelemetryRaw rows from the last seven days. Include the data source and latest event timestamp."
     if "Payer" in name:
-        return "Count claim events grouped by event_type. Include the data source and total count."
+        return ("Compare the current claim event count by event_type from MasimoEventhouse with the historical "
+                "total claim count and total paid amount from healthcare1_reporting_gold. Query each source "
+                "separately, keep the grains separate, and name the source for every number.")
     if "Graph" in name:
         return "Using the ontology graph itself, count distinct patients and trace one patient-to-device relationship. Return grounded IDs and the ontology source."
     return "Count records in the primary connected dataset and identify the data source."
+
+
+def agent_required_terms(name: str) -> tuple[str, ...]:
+    """Terms that prove a prompt reached every required source family."""
+    if "Payer" in name:
+        return ("claims_events", "healthcare1_reporting_gold")
+    return ()
 
 
 def validate_agents(az: Az, ws_id: str, items: list[dict], log) -> dict:
@@ -288,7 +297,11 @@ def validate_agents(az: Az, ws_id: str, items: list[dict], log) -> dict:
             ).strip()
             rejected = ("not able", "cannot", "can't", "couldn't", "error", "rejected", "unavailable")
             grounded = any(term in answer.lower() for term in ("source", "lakehouse", "eventhouse", "ontology", "table"))
-            if result.get("isError") or called.get("error") or not answer or any(term in answer.lower() for term in rejected) or not grounded:
+            missing_sources = [term for term in agent_required_terms(name) if term not in answer.lower()]
+            if (result.get("isError") or called.get("error") or not answer
+                    or any(term in answer.lower() for term in rejected) or not grounded or missing_sources):
+                if missing_sources:
+                    raise RuntimeError(f"missing required sources: {', '.join(missing_sources)}; answer={answer[:300]}")
                 raise RuntimeError(answer or called.get("error") or "empty or ungrounded MCP response")
             results.append({"agent": name, "status": "PASS", "reason": f"Grounded MCP answer ({len(answer)} chars)",
                             "question": agent_validation_question(name), "answer": answer})
