@@ -1,0 +1,23 @@
+id: rayfin-health-command-center
+name: rayfin-health-command-center
+version: 1.0.0
+services:
+  auth:
+    enabled: true
+    fabric:
+      enabled: true
+    allowedRedirectUris:
+      - http://localhost:5173
+      - https://oaken-cove-7a1eb21ad7-westus2.webapp.fabricapps.net
+  data:
+    enabled: false
+  storage:
+    enabled: false
+  staticHosting:
+    enabled: true
+    folder: dist
+    buildCommand: npm run build:fabric
+    indexDocument: index.html
+  functions:
+    enabled: false
+publishable_key: pk-bq8EbZqob-CgQ-0g-St5

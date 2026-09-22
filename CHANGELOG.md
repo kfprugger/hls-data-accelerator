@@ -2,6 +2,13 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Health Command Center Fabric App
+- **Added** [`rayfin-health-command-center/`](rayfin-health-command-center/), a Rayfin Fabric App that serves payer, provider, and medtech operations from one surface. Every figure is a DAX query issued at render time against the Direct Lake semantic models over `healthcare1_reporting_gold` — no extracts, no copied rows — with the Gold lakehouse also declared as a connection for lineage.
+- **Added** three lenses over the shared Gold layer: payer claims economics with collection/denial rates, PMPM, revenue at risk and the highest-cost members; provider quality with open care gaps, RAF, readmission risk tiers and a CMS Stars gauge; and medtech imaging throughput with modality mix and DICOM instance volume.
+- **Fixed** the line-of-business split to use the per-segment measures instead of grouping by `dim_payer[payer_category]`, which returns the grand total for every category because the claim-to-payer relationship is unusable in that model and would have shown identical numbers per segment.
+- **Added** an explicit disconnected state: semantic-model queries only resolve through the Fabric host, so opened standalone the app names the reason and blanks every figure rather than rendering zeroes that read as real business results.
+- **Deployed** to workspace `med-0906` as AppBackend `db1f3f55-4e7e-4b35-9c28-16a79410b64a`, live at `https://oaken-cove-7a1eb21ad7-westus2.webapp.fabricapps.net`, with all eleven shipped DAX queries verified against the live models before release.
+
 ### Azure Databricks Destination Blueprint
 - **Added** a dedicated [`azure-databricks/`](azure-databricks/) architecture and deployment package that preserves the Azure FHIR, ADLS, Event Hubs, ACR, ACI, Key Vault, managed-identity, and OHIF source estate while replacing Fabric as the governed destination.
 - **Documented** the clean replacement boundary for Unity Catalog, Lakeflow, Delta medallion tables, Databricks SQL, AI/BI dashboards, Genie Agents, SQL alerts, validation, recovery, cost control, and teardown; explicitly marked Microsoft HDS/DTT deployment artifacts as Fabric-specific rather than falsely portable.
