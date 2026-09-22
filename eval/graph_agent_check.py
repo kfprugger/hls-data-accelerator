@@ -36,7 +36,7 @@ def check_graph_agent(az, ws_id, items, log, mcp_jsonrpc, expected_association_c
         questions = [
             "Using only DevicePayerOntology, count all DeviceAssoc entities. Return the integer count and identify the ontology source.",
             "Using only DevicePayerOntology, return one actual DeviceAssoc entity's assocPatientId and deviceRef. Do not invent IDs.",
-            "Use DevicePayerOntology to count Patient entities and linkedToDevice relationships. Then separately call agent_CurrentDeviceSummary() in MasimoEventhouse and report currently_reporting_devices. Name the source for every result.",
+            "Use DevicePayerOntology to count Patient entities and linkedToDevice relationships. Then separately query TelemetryRaw in MasimoEventhouse for the last five minutes using EventEnqueuedUtcTime, and report the distinct currently reporting devices. Name the source for every result.",
         ]
         answers = []
         for index, question in enumerate(questions, 3):

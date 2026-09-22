@@ -1195,6 +1195,7 @@ $payerKqlFewShots = @(
 $graphKqlFewShots = @(
     @{ id = [guid]::NewGuid().ToString(); question = "Show the current payer operations worklist from real-time data."; query = "fn_PayerOpsWorklist(60) | order by priority asc, alert_time desc" },
     @{ id = [guid]::NewGuid().ToString(); question = "Which providers have the highest current fraud risk?"; query = "fn_FraudRisk(60) | summarize arg_max(score_timestamp, fraud_score, risk_tier, fraud_flags, claim_id, patient_id) by provider_id | top 10 by fraud_score desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "How many devices are currently reporting, and what is the latest event time?"; query = "TelemetryRaw | where EventEnqueuedUtcTime > ago(5m) | summarize currently_reporting_devices=dcount(device_id), latest_event_time_utc=max(EventEnqueuedUtcTime)" },
     @{ id = [guid]::NewGuid().ToString(); question = "Which devices have current urgent clinical alerts?"; query = "fn_ClinicalAlerts(15) | where alert_tier in ('CRITICAL','URGENT') | project device_id, patient_id, alert_tier, alert_time" }
 )
 $goldFewShots = @(
