@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Activity, Database, HeartPulse, RefreshCw, ScanLine, Wallet } from "lucide-react";
 
+import { useAuth } from "@/hooks/auth.context";
 import { formatStored, useSnapshot, type SeriesRecord, type WorklistRecord } from "@/hooks/use-snapshot";
 import { syncFromGold } from "@/lib/sync-gold";
 import { ACCENT, type Accent } from "@/components/accent";
@@ -33,13 +34,18 @@ export default function App() {
     const [syncing, setSyncing] = useState(false);
     const [syncError, setSyncError] = useState<string | undefined>();
     const autoSyncTried = useRef(false);
-
-    const { snapshot, isLoading, error, reload } = useSnapshot();
+    const { isAuthenticated, isLoading: authLoading, error: authError } = useAuth();
+    const { snapshot, isLoading: snapshotLoading, error, reload } = useSnapshot(isAuthenticated);
     const { kpis, series, worklist, lastRun } = snapshot;
 
-    const empty = !isLoading && kpis.length === 0;
+    const isLoading = authLoading || snapshotLoading;
+    const empty = isAuthenticated && !snapshotLoading && kpis.length === 0;
 
     const runSync = useCallback(async () => {
+        if (!isAuthenticated) {
+            setSyncError("Fabric sign-in has not completed. Open the app from the med-0906 workspace.");
+            return;
+        }
         setSyncing(true);
         setSyncError(undefined);
         try {
@@ -50,16 +56,16 @@ export default function App() {
         } finally {
             setSyncing(false);
         }
-    }, [reload]);
+    }, [isAuthenticated, reload]);
 
     // First run against a fresh database: fill it from Gold without making an
     // operator find the button. Only attempted once per session, and only when
     // the database read itself succeeded.
     useEffect(() => {
-        if (autoSyncTried.current || isLoading || error || !empty || syncing) return;
+        if (autoSyncTried.current || authLoading || !isAuthenticated || snapshotLoading || error || !empty || syncing) return;
         autoSyncTried.current = true;
         void runSync();
-    }, [isLoading, error, empty, syncing, runSync]);
+    }, [authLoading, isAuthenticated, snapshotLoading, error, empty, syncing, runSync]);
 
     const kpisFor = useCallback(
         (which: Accent) => kpis.filter((k) => k.lens === which).sort((a, b) => a.rank - b.rank),
@@ -159,7 +165,7 @@ export default function App() {
                         </span>
                         <button
                             onClick={runSync}
-                            disabled={syncing}
+                            disabled={syncing || authLoading || !isAuthenticated}
                             className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 transition-colors hover:border-white/25 hover:text-white/80 disabled:opacity-50"
                         >
                             <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
@@ -170,7 +176,7 @@ export default function App() {
 
                 <p className="mt-3 text-sm text-white/40">{LENSES.find((l) => l.id === lens)?.blurb}</p>
 
-                {(error || syncError || empty) && (
+                {!authLoading && (authError || !isAuthenticated || error || syncError || empty) && (
                     <motion.div
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -178,11 +184,15 @@ export default function App() {
                     >
                         <Activity className="mt-0.5 h-4 w-4 shrink-0" />
                         <span>
-                            {error
-                                ? `The app database could not be read (${error.message}). Open this app from the med-0906 workspace so Fabric can sign you in.`
-                                : syncError
-                                    ? `Sync failed: ${syncError}`
-                                    : "The app database has no snapshot yet. Run Sync from Gold inside the workspace to load the Direct Lake models into it."}
+                            {authError
+                                ? `Fabric sign-in failed: ${authError.message}`
+                                : !isAuthenticated
+                                    ? "Open this app from the med-0906 workspace so Fabric can sign you in and connect the database."
+                                    : error
+                                        ? `The app database could not be read (${error.message}).`
+                                        : syncError
+                                            ? `Sync failed: ${syncError}`
+                                            : "The app database has no snapshot yet. Syncing from Gold will load the Direct Lake models into it."}
                         </span>
                     </motion.div>
                 )}

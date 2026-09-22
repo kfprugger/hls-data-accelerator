@@ -77,13 +77,18 @@ export interface SnapshotState {
 
 const EMPTY: Snapshot = { kpis: [], series: [], worklist: [] };
 
-/** Loads the whole snapshot once and exposes a reload for post-sync refresh. */
-export function useSnapshot(): SnapshotState {
+/**
+ * Loads the app-database snapshot after Fabric SSO completes. Before that
+ * handoff the DAB endpoint sees an anonymous request and returns 401; the old
+ * hook cached that failure forever because authentication never retriggered it.
+ */
+export function useSnapshot(enabled: boolean): SnapshotState {
     const [snapshot, setSnapshot] = useState<Snapshot>(EMPTY);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<Error | undefined>();
 
     const reload = useCallback(async () => {
+        if (!enabled) return;
         setIsLoading(true);
         setError(undefined);
         try {
@@ -114,9 +119,17 @@ export function useSnapshot(): SnapshotState {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [enabled]);
 
-    useEffect(() => { void reload(); }, [reload]);
+    useEffect(() => {
+        if (enabled) {
+            void reload();
+        } else {
+            setIsLoading(false);
+            setError(undefined);
+            setSnapshot(EMPTY);
+        }
+    }, [enabled, reload]);
 
     return { snapshot, isLoading, error, reload };
 }
