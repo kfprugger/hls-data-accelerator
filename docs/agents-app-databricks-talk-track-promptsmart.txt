@@ -1,0 +1,79 @@
+Same agent. Same question. Same data underneath. One of these answers is right, and the other one is the reason people quietly stop trusting agents.
+
+Both of those came out of this workspace today. In the next nine minutes I'll show you the three checks that tell you which one you've actually deployed.
+
+This is the HLS Data Accelerator reference workspace. Everything in it is synthetic — Synthea patients, an emulated Masimo device feed, generated claims. No real patient data touches this, and nothing here is a medical device or clinical decision support.
+
+Standing it up creates billable Azure and Fabric resources, so treat it as a lab, not a landing zone.
+
+There are five Data Agents, two Operations Agents, and one app. They all read the same Gold layer. That shared foundation is the whole point.
+
+A Fabric Data Agent is a published question-answering surface over sources you pick. The word doing the work there is *pick*.
+
+Clinical Triage is bound to two Eventhouse tables, five KQL helper functions, eleven curated Silver tables, and the clinical ontology. Not the whole lakehouse. Eleven tables.
+
+Patient 360 used to be bound to a hundred and eighty-nine. It still answered, but every question dragged the entire FHIR catalog into scope. We cut it to the same eleven.
+
+Here's the first check: open the published definition, not the draft, and count what's actually selected. Draft and published drift, and the portal shows you the draft.
+
+Every published agent exposes an MCP endpoint, so you can ask all five from a script instead of clicking through five chat panes.
+
+Imaging comes back with CT fifty, DX forty-two, CR eight, and it names the aggregate it used. Patient 360 gives fifty-nine female, forty-one male. Clinical Triage reports a hundred devices reporting right now. Payer counts two hundred twenty-eight thousand claim events. The graph agent counts a hundred distinct patients in the ontology.
+
+Three of those five were wrong this morning.
+
+Payer refused a claim-count question while two hundred thousand claim rows sat in the table it was already bound to. Its instructions were a wall of "always call this function, never call that one," so it never reached for the raw table. The graph agent reported one patient, because it counted the rows a sample query returned instead of running a count.
+
+Second check: ask the question a human would ask, then verify the number against the source yourself. Groundedness is not the same as correctness.
+
+Operations Agents are the other half. A Data Agent answers when you ask. An Operations Agent is supposed to watch and tell you.
+
+We have two. Healthcare Ops watches ingestion health. Clinical Deterioration watches the device feed for sustained SpO2 drops.
+
+Both return a clean definition over the API. Both have exactly one knowledge source. Both are sitting at Inactive, and I'm not going to dress that up.
+
+Playbook generation and Start have no public API right now. An operator opens the agent in the portal, generates the playbook, and starts it. Until someone does, these two are configured, not running.
+
+What we could fix is the part underneath. The generator needs physical alert columns, not prose, so there are now two materialized tables feeding it — stream health across three streams, and a hundred deterioration findings with forty-five sitting at concern or escalate.
+
+And the alerting path that does work is the Activator next to it. One of ours was an empty shell — no source, no rule, no recipient. It now runs a KQL query every fifteen minutes and emails a monitored alias when devices cross the line.
+
+Third check: state, not existence. An agent item in a workspace tells you someone deployed something. It doesn't tell you anything is watching.
+
+Agents answer questions people know how to ask. An app has to answer the ones they don't.
+
+This is a Rayfin app in the same workspace. Three lenses over one Gold layer. Payer gets paid against billed, collection rate, PMPM, revenue at risk. Provider gets open care gaps, Stars, readmission risk. MedTech gets study volume, modality mix, DICOM instance counts.
+
+The first version queried the semantic models on every render. It looked fine and it was wrong in a way that's easy to miss — nothing to inspect, no capture time, no record of where a number came from.
+
+So it has its own database now. Four tables: the KPI snapshot, the series behind each chart, the worklist rows, and a sync record. A single module reads the Direct Lake models, masks member IDs and patient names, replaces the snapshot, and writes down what it did. The dashboard only ever reads those tables.
+
+That buys three things. Every figure has a timestamp. The database never holds a raw identifier. And when a number looks wrong, you query the table instead of re-deriving it.
+
+One honest note: the tables are empty until someone opens the app inside the workspace. Writes need a Fabric sign-in, so it fills itself on first load. I have not watched that run, and I'm not going to tell you I did.
+
+Back to the opening question. Three checks: what's actually selected in the published definition, whether the answer survives verification against the source, and whether the thing is in a running state.
+
+Where this environment still falls short. Both Operations Agents need a human in the portal. The app database is empty until first sign-in. The claims-to-payer edge in the ontology reads zero, because the Gold claim rows carry no usable payer key — I could have invented one and made the graph look complete. I'd rather you see the gap.
+
+And all of it is synthetic. A hundred patients. Good enough to prove plumbing, not good enough to prove clinical anything.
+
+If you're evaluating Fabric agents, this is a good pattern to copy and a bad one to trust blindly. Bind agents to curated projections, not whole lakehouses. Verify answers against the source before anyone demos them. Give the app its own store so figures have a time and a lineage.
+
+If you're looking for something you can point at production PHI next quarter, this isn't it, and it doesn't claim to be.
+
+Try it yourself this way: pick one agent, ask it a counting question, then run the count in KQL. If the two disagree, you've learned more in five minutes than a demo will teach you in an hour.
+
+One more thing.
+
+Everything you just saw lands in Fabric. A fair question is whether the accelerator is really about Fabric, or about the healthcare data estate underneath it.
+
+So we built the same destination on Azure Databricks. Same Azure Health Data Services, same ADLS, same Event Hubs, same DICOM source. Different destination: Premium workspace, Unity Catalog, Lakeflow pipelines, Delta medallion, Databricks SQL.
+
+It's deployed. Bronze, Silver, stream freshness, and Gold gates all passed, and the live validator came back seventeen for seventeen against a hundred patients, eight hundred eighty-three encounters, and a hundred thirty-eight thousand deduplicated telemetry events.
+
+Two details worth stealing. The access connector gets read on the source account and write only on its own managed container, and the Event Hubs policy is listen-only — no send rights to the emulator feed. And the clinical alert ships paused, with a named recipient, because an alert that emails on first deploy is how you teach people to ignore alerts.
+
+What I won't claim: the Microsoft HDS deployment artifacts are Fabric-specific. They do not port. We reimplemented that layer against the observable contract, and the Databricks side carries its own gates.
+
+So the honest version is this. The domain model travels. The destination is a choice. If you're already on Databricks, you don't have to give up the healthcare plumbing to keep your lakehouse.
