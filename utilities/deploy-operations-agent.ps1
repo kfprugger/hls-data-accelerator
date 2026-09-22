@@ -28,6 +28,7 @@
 param (
     [string]$FabricWorkspaceName = "med-device-rti-hds",
     [string]$AgentName           = "ClinicalDeteriorationMonitor",
+    [string]$MessageRecipient    = "",
     [string]$FabricApiBase       = "https://api.fabric.microsoft.com/v1"
 )
 
@@ -89,10 +90,18 @@ if ($eventhouse -is [array]) { $eventhouse = $eventhouse[0] }
 Write-Host "  ✓ Eventhouse: $($eventhouse.displayName) ($($eventhouse.id))" -ForegroundColor Green
 
 # --- KQL Database ---
+# The data source must be the KQLDatabase item. Binding the Eventhouse item id
+# stores a definition the service cannot read back (getDefinition returns 500).
 $kqlDbs = (Invoke-RestMethod -Uri "$FabricApiBase/workspaces/$workspaceId/kqlDatabases" -Headers $headers).value
 $kqlDb = $kqlDbs | Where-Object { $_.displayName -eq "MasimoKQLDB" -or $_.displayName -eq $eventhouse.displayName }
 if (-not $kqlDb) { $kqlDb = $kqlDbs | Select-Object -First 1 }
 if ($kqlDb -is [array]) { $kqlDb = $kqlDb[0] }
+if (-not $kqlDb -or [string]::IsNullOrWhiteSpace($kqlDb.id)) {
+    throw "No KQL database found in workspace '$FabricWorkspaceName'. Create the Eventhouse KQL database before deploying the operations agent."
+}
+if ($kqlDb.id -eq $eventhouse.id) {
+    throw "Resolved KQL database id matches the Eventhouse item id. The operations agent data source must reference the KQLDatabase item."
+}
 Write-Host "  ✓ KQL Database: $($kqlDb.displayName) ($($kqlDb.id))" -ForegroundColor Green
 
 # --- Check existing ---
@@ -241,104 +250,63 @@ if ($existingReflex) {
 # ============================================================================
 
 Write-Host ""
-Write-Host "  Pushing configuration (goals, instructions, data source, actions)..." -ForegroundColor White
+Write-Host "  Pushing configuration (instructions, knowledge source, message destination)..." -ForegroundColor White
 
-$goalsText = "Detect sustained clinical deterioration in remotely monitored patients by identifying downward SpO2 trends and abnormal pulse rate patterns over sliding time windows. Notify the care team before patients cross critical alert thresholds, enabling proactive intervention rather than reactive alerting."
+$instructionsText = @'
+Monitor Masimo Radius-7 pulse oximeter telemetry in the MasimoEventhouse KQL database and detect sustained clinical deterioration before a patient crosses a critical alert threshold.
 
-$instructionsText = @"
-You are a clinical deterioration detection agent monitoring 100 Masimo Radius-7 pulse oximeters streaming real-time telemetry to the MasimoKQLDB Eventhouse.
+Monitored property source: the materialized table agent_deterioration_findings. It is refreshed from agent_DeteriorationTrend(15) and holds exactly one current row per monitored device. Use this table directly; do not recompute trends from raw telemetry, and do not re-filter on signal quality because the source function already discards unreliable readings.
 
-DATA SOURCES:
-- TelemetryRaw: Real-time vital signs (device_id, timestamp, telemetry.spo2, telemetry.pr, telemetry.pi, telemetry.pvi, telemetry.sphb, telemetry.signal_iq)
-- AlertHistory: Historical triggered alerts (alert_id, alert_time, device_id, patient_id, patient_name, alert_tier, alert_type, metric_name, metric_value)
+Columns and meaning:
+- device_id: Masimo device identifier, pattern MASIMO-RADIUS7-NNNN
+- severity: STABLE, WATCH, CONCERN, or ESCALATE
+- current_spo2: mean SpO2 over the recent 15-minute window
+- baseline_spo2: mean SpO2 over the preceding 60-minute baseline
+- spo2_drop: baseline_spo2 minus current_spo2, in percentage points
+- current_pr, baseline_pr, pr_rise: recent, baseline, and delta pulse rate in bpm
+- pr_stddev: pulse-rate standard deviation over the recent window, in bpm
+- multi_metric: 1 when SpO2 is falling and pulse rate is rising together, otherwise 0
+- readings: qualifying readings behind the row
+- last_reading_utc: UTC timestamp of the newest qualifying reading
+- refreshed_at: UTC time the row was materialized
 
-DETERIORATION DETECTION RULES:
-1. SpO2 TREND: Flag when a device's average SpO2 drops by >2% over a 15-minute sliding window compared to its 1-hour baseline (e.g., baseline 97% -> current 15min avg 94.5%)
-2. PR INSTABILITY: Flag when pulse rate standard deviation exceeds 15 bpm over a 10-minute window (indicates hemodynamic instability)
-3. MULTI-METRIC: Flag when BOTH SpO2 is trending down AND PR is trending up simultaneously over 10 minutes (classic deterioration pattern)
-4. SIGNAL QUALITY: Ignore readings where signal_iq < 70 (unreliable data from poor sensor placement)
+Rules, evaluated per device_id:
+- Raise a WATCH finding when spo2_drop is above 1 or pr_stddev is above 10.
+- Raise a CONCERN finding when spo2_drop is above 2 or pr_stddev is above 15.
+- Raise an ESCALATE finding when spo2_drop is above 4, or pr_stddev is above 25, or multi_metric is 1.
+- Do not raise a finding while severity is STABLE.
 
-SEVERITY CLASSIFICATION:
-- WATCH: SpO2 drop 1-2% from baseline, OR PR stddev 10-15 bpm
-- CONCERN: SpO2 drop 2-4% from baseline, OR PR stddev 15-25 bpm
-- ESCALATE: SpO2 drop >4% from baseline, OR PR stddev >25 bpm, OR multi-metric pattern detected
+Reporting:
+- Report only rows present in agent_deterioration_findings; never invent a device, patient, or value.
+- Always state device_id, severity, current_spo2, baseline_spo2, spo2_drop, pr_stddev, and last_reading_utc as UTC.
+- Recommend clinical review for CONCERN and immediate bedside assessment for ESCALATE.
+- Never run an action without explicit human approval.
+'@
 
-IMPORTANT CONTEXT:
-- The timestamp column in TelemetryRaw is STRING type. Always wrap with todatetime(timestamp).
-- Device IDs follow the pattern MASIMO-RADIUS7-NNNN (e.g., MASIMO-RADIUS7-0001).
-- High-risk conditions (COPD SNOMED 13645005, CHF 84114007) should lower the ESCALATE threshold by 1% for SpO2.
-- If AlertHistory shows recent CRITICAL/URGENT alerts for a device, prioritize that device's trend analysis.
-
-KQL PATTERNS:
-- 15-min window: | where todatetime(timestamp) > ago(15m)
-- Baseline (1h): | where todatetime(timestamp) between(ago(1h) .. ago(15m))
-- SpO2 trend: | summarize avg_spo2=avg(todouble(telemetry.spo2)) by device_id, bin(todatetime(timestamp), 5m)
-- PR variability: | summarize pr_stddev=stdev(todouble(telemetry.pr)) by device_id
-
-OUTPUT FORMAT:
-When recommending an action, include: device_id, severity (WATCH/CONCERN/ESCALATE), current SpO2 avg, baseline SpO2 avg, delta, PR trend, and recommended clinical action.
-"@
-
-# Build action IDs
-$action1Id = [guid]::NewGuid().ToString()
-$action2Id = [guid]::NewGuid().ToString()
-
-$opsConfig = @{
-    "`$schema" = "https://developer.microsoft.com/json-schemas/fabric/item/operationsAgents/definition/1.0.0/schema.json"
-    configuration = @{
-        goals = $goalsText
-        instructions = $instructionsText
-        dataSources = @{
-            kqldb1 = @{ id = $($kqlDb.id); type = "KustoDatabase"; workspaceId = $workspaceId }
-        }
-        actions = @{
-            escalate = @{
-                id = $action1Id
-                displayName = "Escalate to Care Team"
-                description = "Send an urgent notification to the clinical care team when a patient shows sustained deterioration requiring immediate assessment."
-                kind = "PowerAutomateAction"
-                parameters = @(
-                    @{ name = "device_id"; description = "The Masimo device identifier" },
-                    @{ name = "patient_name"; description = "Patient name" },
-                    @{ name = "severity"; description = "WATCH, CONCERN, or ESCALATE" },
-                    @{ name = "spo2_current"; description = "Current 15-min average SpO2" },
-                    @{ name = "spo2_baseline"; description = "1-hour baseline SpO2" },
-                    @{ name = "clinical_summary"; description = "Brief description of findings" }
-                )
-            }
-            logEvent = @{
-                id = $action2Id
-                displayName = "Log Deterioration Event"
-                description = "Record a deterioration detection event for audit trail and trend analysis. Use for WATCH-level findings."
-                kind = "PowerAutomateAction"
-                parameters = @(
-                    @{ name = "device_id"; description = "The Masimo device identifier" },
-                    @{ name = "severity"; description = "WATCH, CONCERN, or ESCALATE" },
-                    @{ name = "details"; description = "Full analysis details" }
-                )
-            }
-        }
-    }
-    shouldRun = $false
+# GA Operations Agent schema contract, verified against the live service:
+#   * `goals` was removed in June 2026 — goals belong in `instructions`.
+#   * An empty `playbook` object is rejected with
+#     "No rule definitions available in the playbook."; omit the key entirely.
+#   * Exactly one knowledge source is accepted.
+#   * Only `Configurations.json` is required; a `.platform` part carrying an
+#     all-zero logicalId is not needed and is not written here.
+$configuration = [ordered]@{
+    instructions = $instructionsText
+    dataSources  = @{ masimoKqlDb = @{ id = $kqlDb.id; type = "KustoDatabase"; workspaceId = $workspaceId } }
+    actions      = @{}
+}
+if (-not [string]::IsNullOrWhiteSpace($MessageRecipient)) {
+    $configuration['messageDestination'] = @{ kind = "Recipient"; recipient = $MessageRecipient }
+}
+$opsConfig = [ordered]@{
+    "`$schema"    = "https://developer.microsoft.com/json-schemas/fabric/item/operationsAgents/definition/1.0.0/schema.json"
+    configuration = $configuration
+    shouldRun     = $false
 }
 $configJson = $opsConfig | ConvertTo-Json -Depth 30
 
-$opsPlatform = @{
-    "`$schema" = "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json"
-    metadata = @{
-        type = "OperationsAgent"
-        displayName = $AgentName
-        description = "Monitors Masimo telemetry for sustained SpO2/PR deterioration trends and recommends clinical escalation."
-    }
-    config = @{
-        version = "2.0"
-        logicalId = "00000000-0000-0000-0000-000000000000"
-    }
-}
-$platformJson = $opsPlatform | ConvertTo-Json -Depth 30
-
 # Build the update definition body
-$updateBody = '{"definition":{"format":"OperationsAgentV1","parts":[{"path":"Configurations.json","payload":"'+(ConvertTo-Base64 $configJson)+'","payloadType":"InlineBase64"},{"path":".platform","payload":"'+(ConvertTo-Base64 $platformJson)+'","payloadType":"InlineBase64"}]}}'
+$updateBody = '{"definition":{"format":"OperationsAgentV1","parts":[{"path":"Configurations.json","payload":"'+(ConvertTo-Base64 $configJson)+'","payloadType":"InlineBase64"}]}}'
 
 $updateToken = Get-FabricAccessToken
 $updateHeaders = @{ "Authorization" = "Bearer $updateToken"; "Content-Type" = "application/json" }
@@ -366,8 +334,7 @@ try {
     }
     Write-Host "  ✓ Configuration pushed successfully" -ForegroundColor Green
 } catch {
-    Write-Host "  ✗ Failed to push configuration: $_" -ForegroundColor Red
-    Write-Host "    You can configure manually in the Fabric portal." -ForegroundColor Yellow
+    throw "Failed to push the operations agent configuration: $_"
 }
 
 # ============================================================================
@@ -383,16 +350,14 @@ Write-Host "  Agent: $AgentName" -ForegroundColor White
 Write-Host "  ID:    $agentId" -ForegroundColor White
 Write-Host ""
 Write-Host "  Configuration:" -ForegroundColor Cyan
-Write-Host "    Goals:        Clinical deterioration detection" -ForegroundColor White
-Write-Host "    Data source:  $($kqlDb.displayName) (KQL Database)" -ForegroundColor White
-Write-Host "    Actions:      Escalate to Care Team, Log Deterioration Event" -ForegroundColor White
+Write-Host "    Instructions: Deterioration monitoring over agent_deterioration_findings" -ForegroundColor White
+Write-Host "    Data source:  $($kqlDb.displayName) (KQL Database $($kqlDb.id))" -ForegroundColor White
+Write-Host "    Destination:  $(if ([string]::IsNullOrWhiteSpace($MessageRecipient)) { 'Teams default (no recipient supplied)' } else { $MessageRecipient })" -ForegroundColor White
 Write-Host "    Status:       Inactive (start manually when ready)" -ForegroundColor White
 Write-Host ""
 Write-Host "  Next steps:" -ForegroundColor Yellow
 Write-Host "    1. Open the agent in the Fabric portal" -ForegroundColor White
-Write-Host "    2. Review the generated playbook (entities, rules, properties)" -ForegroundColor White
-Write-Host "    3. Connect actions to the '$reflexName' Reflex:" -ForegroundColor White
-Write-Host "       Click each action → Select '$reflexName' as Activator" -ForegroundColor Gray
-Write-Host "       → Copy connection string → Open flow builder → Paste → Save" -ForegroundColor Gray
-Write-Host "    4. Click START to activate the agent" -ForegroundColor White
-Write-Host "    5. Install 'Fabric Operations Agent' Teams app to receive messages" -ForegroundColor White
+Write-Host "    2. Select Generate Playbook and review the properties and rules" -ForegroundColor White
+Write-Host "    3. Click START to activate the agent" -ForegroundColor White
+Write-Host "    4. Install 'Fabric Operations Agent' Teams app to receive messages" -ForegroundColor White
+Write-Host "    Optional: attach the '$reflexName' Reflex only if you add a custom action" -ForegroundColor Gray

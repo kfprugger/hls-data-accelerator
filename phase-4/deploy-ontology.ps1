@@ -328,10 +328,14 @@ function EtJson([string]$id, [string]$name, [string]$keyId, [string]$dispId, [st
     return '{"id":"'+$id+'","namespace":"usertypes","baseEntityTypeId":null,"name":"'+$name+'","entityIdParts":["'+$keyId+'"],"displayNamePropertyId":"'+$dispId+'","namespaceType":"Custom","visibility":"Visible","properties":['+$propsJson+'],"timeseriesProperties":['+$tsJson+']}'
 }
 
+
+# Determine target lakehouse based on ontology (cross-lakehouse edges load zero graph nodes)
+$targetLhId = if ($OntologyName -eq "DevicePayerOntology") { $goldLhId } else { $silverLhId }
+
 # Helper: build a Lakehouse NonTimeSeries data binding JSON
 function LhBind([string]$bindings, [string]$tbl) {
     $bid = [guid]::NewGuid().ToString()
-    return @{ id = $bid; json = '{"id":"'+$bid+'","dataBindingConfiguration":{"dataBindingType":"NonTimeSeries","propertyBindings":['+$bindings+'],"sourceTableProperties":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$silverLhId+'","sourceTableName":"'+$tbl+'"}}}' }
+    return @{ id = $bid; json = '{"id":"'+$bid+'","dataBindingConfiguration":{"dataBindingType":"NonTimeSeries","propertyBindings":['+$bindings+'],"sourceTableProperties":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$targetLhId+'","sourceTableName":"'+$tbl+'"}}}' }
 }
 
 # Helper: build an Eventhouse TimeSeries data binding JSON
@@ -348,7 +352,7 @@ function RtJson([string]$id, [string]$name, [string]$src, [string]$tgt) {
 # Helper: Lakehouse contextualization JSON
 function LhCtx([string]$tbl, [string]$sc, [string]$sp, [string]$tc, [string]$tp) {
     $cid = [guid]::NewGuid().ToString()
-    return @{ id = $cid; json = '{"id":"'+$cid+'","dataBindingTable":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$silverLhId+'","sourceTableName":"'+$tbl+'"},"sourceKeyRefBindings":[{"sourceColumnName":"'+$sc+'","targetPropertyId":"'+$sp+'"}],"targetKeyRefBindings":[{"sourceColumnName":"'+$tc+'","targetPropertyId":"'+$tp+'"}]}' }
+    return @{ id = $cid; json = '{"id":"'+$cid+'","dataBindingTable":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$targetLhId+'","sourceTableName":"'+$tbl+'"},"sourceKeyRefBindings":[{"sourceColumnName":"'+$sc+'","targetPropertyId":"'+$sp+'"}],"targetKeyRefBindings":[{"sourceColumnName":"'+$tc+'","targetPropertyId":"'+$tp+'"}]}' }
 }
 
 # Helper: Eventhouse/KQL contextualization JSON
@@ -366,7 +370,8 @@ $rels = @()
 if ($IncludeFhir -or $IncludeDicom) {
     $eP = NextId; $pPid = NextId; $pPnm = NextId; $pPgn = NextId; $pPbd = NextId
     $ejP = EtJson $eP "Patient" $pPid $pPnm ((PropJson $pPid "patientId"),(PropJson $pPnm "patientName"),(PropJson $pPgn "gender"),(PropJson $pPbd "birthDate") -join ',')
-    $dbP = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pPid+'"},{"sourceColumnName":"name_string","targetPropertyId":"'+$pPnm+'"},{"sourceColumnName":"gender","targetPropertyId":"'+$pPgn+'"},{"sourceColumnName":"birthDate","targetPropertyId":"'+$pPbd+'"}') "Patient"
+    # CDF-enabled HDS managed tables load zero graph nodes, so we bind to the non-CDF projection tables
+    $dbP = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pPid+'"},{"sourceColumnName":"name_string","targetPropertyId":"'+$pPnm+'"},{"sourceColumnName":"gender","targetPropertyId":"'+$pPgn+'"},{"sourceColumnName":"birthDate","targetPropertyId":"'+$pPbd+'"}') "PatientOntology"
     $ets += @{id=$eP;j=$ejP;b=$dbP}
 }
 
@@ -426,7 +431,8 @@ if ($IncludeTelemetry) {
     # Device
     $eD = NextId; $pDid = NextId; $pDty = NextId; $pDst = NextId
     $ejD = EtJson $eD "Device" $pDid $pDid ((PropJson $pDid "deviceId"),(PropJson $pDty "deviceType"),(PropJson $pDst "deviceStatus") -join ',')
-    $dbD = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pDid+'"},{"sourceColumnName":"type_string","targetPropertyId":"'+$pDty+'"},{"sourceColumnName":"status","targetPropertyId":"'+$pDst+'"}') "Device"
+    # CDF-enabled HDS managed tables load zero graph nodes, so we bind to the non-CDF projection tables
+    $dbD = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pDid+'"},{"sourceColumnName":"type_string","targetPropertyId":"'+$pDty+'"},{"sourceColumnName":"status","targetPropertyId":"'+$pDst+'"}') "DeviceOntology"
     $ets += @{id=$eD;j=$ejD;b=$dbD}
 
     # DeviceAssociation
@@ -505,7 +511,7 @@ if ($IncludeGold -and $goldLhId) {
     $ePD = NextId; $pPDid = NextId; $pPDdid = NextId; $pPDic = NextId; $pPDds = NextId; $pPDtp = NextId; $pPDpr = NextId; $pPDdate = NextId
     $ejPD = EtJson $ePD "PatientDiagnosis" $pPDid $pPDds `
         ((PropJson $pPDid "factDiagnosisKey" "BigInt"),(PropJson $pPDdid "diagnosisId"),(PropJson $pPDic "diagIcdCode"),(PropJson $pPDds "diagDescription"),(PropJson $pPDtp "diagnosisType"),(PropJson $pPDpr "diagPatientRef"),(PropJson $pPDdate "diagnosisDate") -join ',')
-    $dbPD = GoldLhBind ('{"sourceColumnName":"fact_diagnosis_key","targetPropertyId":"'+$pPDid+'"},{"sourceColumnName":"diagnosis_id","targetPropertyId":"'+$pPDdid+'"},{"sourceColumnName":"icd_code","targetPropertyId":"'+$pPDic+'"},{"sourceColumnName":"diagnosis_description","targetPropertyId":"'+$pPDds+'"},{"sourceColumnName":"diagnosis_type","targetPropertyId":"'+$pPDtp+'"},{"sourceColumnName":"patient_ref","targetPropertyId":"'+$pPDpr+'"},{"sourceColumnName":"diagnosis_date","targetPropertyId":"'+$pPDdate+'"}') "fact_diagnosis"
+    $dbPD = GoldLhBind ('{"sourceColumnName":"fact_diagnosis_key","targetPropertyId":"'+$pPDid+'"},{"sourceColumnName":"diagnosis_id","targetPropertyId":"'+$pPDdid+'"},{"sourceColumnName":"icd_code","targetPropertyId":"'+$pPDic+'"},{"sourceColumnName":"diagnosis_description","targetPropertyId":"'+$pPDds+'"},{"sourceColumnName":"diagnosis_type","targetPropertyId":"'+$pPDtp+'"},{"sourceColumnName":"patient_ref","targetPropertyId":"'+$pPDpr+'"},{"sourceColumnName":"diagnosis_date","targetPropertyId":"'+$pPDdate+'"}') "FactDiagnosisOntology"
     $claimEntities += @{id=$ePD;j=$ejPD;b=$dbPD}
 
     # MedicationAdherence (from agg_medication_adherence)
@@ -544,8 +550,8 @@ if ($IncludeGold -and $goldLhId) {
         $claimRels = @(
             @{id=(NextId);n="hasClaim";s=$eP;t=$eCl;ctx=(GoldLhCtx "fact_claim" "patient_id" $pPid "claim_key" $pClid)},
             @{id=(NextId);n="coveredBy";s=$eCl;t=$ePy;ctx=(GoldLhCtx "fact_claim" "claim_key" $pClid "coverage_id" $pPyid)},
-            @{id=(NextId);n="hasDiagnosis";s=$eP;t=$ePD;ctx=(GoldLhCtx "fact_diagnosis" "patient_ref" $pPid "fact_diagnosis_key" $pPDid)},
-            @{id=(NextId);n="diagnosisClassifiedAs";s=$ePD;t=$eDx;ctx=(GoldLhCtx "fact_diagnosis" "fact_diagnosis_key" $pPDid "icd_code" $pDxcd)},
+            @{id=(NextId);n="hasDiagnosis";s=$eP;t=$ePD;ctx=(GoldLhCtx "FactDiagnosisOntology" "patient_id" $pPid "fact_diagnosis_key" $pPDid)},
+            @{id=(NextId);n="diagnosisClassifiedAs";s=$ePD;t=$eDx;ctx=(GoldLhCtx "FactDiagnosisOntology" "fact_diagnosis_key" $pPDid "icd_code" $pDxcd)},
             @{id=(NextId);n="hasAdherence";s=$eP;t=$eMA;ctx=(GoldLhCtx "agg_medication_adherence" "patient_id" $pPid "patient_id" $pMApi)},
             @{id=(NextId);n="hasCareGap";s=$eP;t=$eCg;ctx=(GoldLhCtx "care_gaps" "patient_id" $pPid "patient_id" $pCgp)},
             @{id=(NextId);n="hasRiskScore";s=$eP;t=$eRs;ctx=(GoldLhCtx "agg_risk_scores" "patient_id" $pPid "patient_id" $pRsp)},
@@ -680,7 +686,61 @@ if ($ontologyId -eq "unknown") {
 
 # ============================================================================
 # VERIFY
-# ============================================================================
+if ($ontologyId -eq "unknown") {
+    Write-Host "  ✗ Ontology '$OntologyName' was not discoverable after create/update." -ForegroundColor Red
+    exit 1
+}
+
+# Graph hydration runs on the auto-generated GraphModel companion item, not on the Ontology item:
+# posting jobType=RefreshGraph to the Ontology id returns 400 InvalidJobType.
+Write-Host "  Resolving graph model for '$OntologyName'..." -ForegroundColor White
+$graphModels = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/items?type=GraphModel"
+$graphModel = $graphModels.value | Where-Object { $_.displayName -like "$OntologyName`_graph_*" } | Select-Object -First 1
+if (-not $graphModel) {
+    throw "Graph model for ontology '$OntologyName' was not found; the ontology cannot be hydrated"
+}
+$graphModelId = $graphModel.id
+Write-Host "  ✓ Graph model: $($graphModel.displayName) ($graphModelId)" -ForegroundColor Green
+
+Write-Host "  Triggering graph hydration for '$OntologyName'..." -ForegroundColor White
+$jobBody = '{"jobType":"RefreshGraph"}'
+Invoke-WebRequest -Method POST `
+    -Uri "$FabricApiBase/workspaces/$workspaceId/items/$graphModelId/jobs/instances?jobType=RefreshGraph" `
+    -Headers @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" } `
+    -Body $jobBody -UseBasicParsing -ErrorAction Stop | Out-Null
+Write-Host "  ✓ Graph refresh invoked" -ForegroundColor Green
+
+$daStart = Get-Date
+$refreshCompleted = $false
+while ((New-TimeSpan -Start $daStart).TotalMinutes -lt 15) {
+    Start-Sleep 15
+    try {
+        $daJobs = (Invoke-RestMethod -Uri "$FabricApiBase/workspaces/$workspaceId/items/$graphModelId/jobs/instances?limit=1" -Headers @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" } -ErrorAction Stop).value
+    } catch {
+        $jobStatusCode = $null
+        try { $jobStatusCode = [int]$_.Exception.Response.StatusCode } catch {}
+        $jobErrBody = $_.ErrorDetails.Message
+        if ($jobStatusCode -in @(429, 500, 502, 503, 504) -or ($jobStatusCode -eq 403 -and $jobErrBody -match "RequestDeniedByInboundPolicy")) {
+            Write-Host "    Graph refresh status transient HTTP $jobStatusCode — retrying..." -ForegroundColor Yellow
+            continue
+        }
+        throw $_
+    }
+    if ($daJobs -and $daJobs[0].status -eq 'Completed') {
+        Write-Host "  ✓ Graph hydration completed successfully" -ForegroundColor Green
+        $refreshCompleted = $true
+        break
+    } elseif ($daJobs -and $daJobs[0].status -eq 'Failed') {
+        $errJson = $daJobs[0] | ConvertTo-Json -Depth 10
+        throw "Graph hydration failed: $errJson"
+    } else {
+        $statusStr = if ($daJobs) { $daJobs[0].status } else { "Unknown" }
+        Write-Host "    Status: $statusStr..." -ForegroundColor DarkGray
+    }
+}
+if (-not $refreshCompleted) {
+    throw "Graph hydration did not complete within 15 minutes"
+}
 
 Write-Host ""
 Write-Host "  Verifying..." -ForegroundColor White

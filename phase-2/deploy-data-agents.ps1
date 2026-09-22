@@ -193,12 +193,19 @@ if ($silverLh) {
 Write-Host ""
 
 # ============================================================================
-# KQL ELEMENTS: ONLY native tables (no functions, no external tables)
+# KQL ELEMENTS: native tables plus deterministic aggregate helper functions
 # ============================================================================
 
 $kqlElements = @(
     @{ id = [guid]::NewGuid().ToString(); display_name = "TelemetryRaw";  type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "AlertHistory";  type = "kusto.table"; is_selected = $true }
+    @{ id = [guid]::NewGuid().ToString(); display_name = "AlertHistory";  type = "kusto.table"; is_selected = $true },
+    @{ id = [guid]::NewGuid().ToString(); display_name = "Functions"; type = "kusto.functions"; is_selected = $true; children = @(
+        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_CurrentAlertSeverity"; type = "kusto.function"; is_selected = $true },
+        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_LowOxygen"; type = "kusto.function"; is_selected = $true },
+        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_TelemetrySevenDaySummary"; type = "kusto.function"; is_selected = $true },
+        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_CurrentDeviceSummary"; type = "kusto.function"; is_selected = $true },
+        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_ClinicalAggregateSummary"; type = "kusto.function"; is_selected = $true }
+    ) }
 )
 
 # ============================================================================
@@ -726,6 +733,11 @@ include the timestamp of when those vitals were last collected from the Masimo d
 - Format as: "Last collected: <timestamp> EST" or include a "Last Reading (EST)" column.
 - In KQL queries, project the timestamp and convert: last_reading_est = datetime_add('hour', -5, todatetime(timestamp))
 - NEVER present vital sign values without their collection timestamp in EST.
+
+CURRENT DEVICE AGGREGATES (MANDATORY):
+- For current reporting-device counts and global latest event time, call agent_CurrentDeviceSummary().
+- Return latest_event_time_utc as UTC. Never convert it again or label a Z/UTC value as EST.
+
 - NEVER summarize vitals as just "SpO2=94%, PR=72" — ALWAYS add when it was measured.
 - This applies to ALL responses: latest readings, alerts, trends, triage boards, and
   cross-datasource patient summaries that mention any Masimo metric.
@@ -740,6 +752,8 @@ timestamp is STRING — ALWAYS wrap with todatetime(timestamp).
 Telemetry values are in a dynamic bag: todouble(telemetry.spo2), toint(telemetry.pr), etc.
 ALWAYS query this datasource when the user asks about: SpO2, oxygen, pulse rate, heart rate, vitals, readings, telemetry, device status, alerts, trends.
 If the question ALSO mentions patients/conditions/diagnoses, query this datasource FIRST for the vitals data, THEN query the Lakehouse for patient context. NEVER skip this datasource for vitals questions.
+
+CURRENT DEVICE AGGREGATES: call agent_CurrentDeviceSummary() directly for the current five-minute reporting-device count and global latest event time. Return latest_event_time_utc as UTC; never convert it again.
 
 TIMESTAMP RULE: EVERY query you write against this datasource MUST project the collection timestamp.
 Always include: last_reading_est = datetime_add('hour', -5, todatetime(timestamp)) to convert to Eastern Standard Time.
@@ -833,6 +847,16 @@ TelemetryRaw
          minutes_since_last = round(datetime_diff('second', now(), last_reading) / 60.0, 1)
 | order by device_id asc
 "@
+        },
+        @{
+            id = "a1b2c3d4-6666-4000-a000-000000000006"
+            question = "Count currently reporting devices and give the latest event timestamp without returning patient identifiers."
+            query = "agent_CurrentDeviceSummary()"
+        },
+        @{
+            id = "a1b2c3d4-7777-4000-a000-000000000007"
+            question = "Give the latest telemetry event time in UTC and the reporting-device count."
+            query = "agent_CurrentDeviceSummary()"
         }
     )
 
@@ -1011,16 +1035,21 @@ include the timestamp of when those vitals were last collected from the Masimo d
   cross-datasource patient summaries that mention any Masimo metric.
 - If the query already returns a timestamp/last_time/last_reading column, display it.
   If not, re-query to get it.
+
+DETERMINISTIC AGGREGATE QUERIES (MANDATORY):
+- Seven-day device/event count: call agent_TelemetrySevenDaySummary().
+- Current severity counts: call agent_CurrentAlertSeverity(15); never rebuild severity tiers from TelemetryRaw.
+- Low-oxygen device count: call agent_LowOxygen(30) and label latest_event_time_utc as UTC.
+- Combined current severity, reporting-device, and low-oxygen counts: call agent_ClinicalAggregateSummary() directly.
+- Never convert an already-UTC timestamp a second time.
+
+Current-window aggregates can legitimately return zero. A zero row is data, not an absence of data. When a windowed function returns zeros, report the zero counts together with the latest event timestamp the function exposes, and state the window length. Only say that a source returned no rows when the query genuinely returns an empty result set.
+
 "@
     if (-not $IncludeDicomImaging) { $triageInstructions = Remove-DicomAgentText $triageInstructions }
 
     $triageKqlDsInstructions = @"
-This KQL database has real-time Masimo pulse oximeter data in TelemetryRaw and historical alerts in AlertHistory. The timestamp column is STRING — always wrap with todatetime(timestamp). Telemetry values are in a dynamic bag: todouble(telemetry.spo2), toint(telemetry.pr), etc. Write inline KQL queries against TelemetryRaw for alerts, triage, and device status — do not call functions.
-
-TIMESTAMP RULE: EVERY query you write against this datasource MUST project the collection timestamp.
-Always include: last_reading_est = datetime_add('hour', -5, todatetime(timestamp)) to convert to Eastern Standard Time.
-When presenting results to the user, ALWAYS show this timestamp as "Last Reading (EST)" — never omit it.
-Example: | project device_id, spo2, pr, last_reading_est = datetime_add('hour', -5, todatetime(timestamp))
+Use the deterministic agent_CurrentAlertSeverity, agent_LowOxygen, agent_TelemetrySevenDaySummary, and agent_ClinicalAggregateSummary functions for aggregate triage questions. For combined severity, device, and low-oxygen counts, call agent_ClinicalAggregateSummary() directly. TelemetryRaw remains the source for detailed device readings; AlertHistory is authoritative for persisted alert tiers. The timestamp column in TelemetryRaw is STRING and must be wrapped with todatetime(timestamp). Return UTC timestamps for aggregate questions and never infer tiers when an authoritative helper exists.
 "@
 
     $triageFewShots = @(
@@ -1123,6 +1152,31 @@ TelemetryRaw
 | project device_id, alert_tier, alert_type, min_pr, max_pr, avg_pr, readings, last_reading_est
 | order by alert_tier asc
 "@
+        },
+        @{
+            id = "b1b2c3d4-7777-4000-b000-000000000007"
+            question = "Count distinct devices and telemetry events from the last seven days. Include the data source and latest event timestamp."
+            query = "agent_TelemetrySevenDaySummary()"
+        },
+        @{
+            id = "b1b2c3d4-8888-4000-b000-000000000008"
+            question = "How many current alerts are there by severity? Return aggregate counts only."
+            query = "agent_CurrentAlertSeverity(15) | project severity, alert_count, window_minutes, as_of_utc"
+        },
+        @{
+            id = "b1b2c3d4-9999-4000-b000-000000000009"
+            question = "How many devices currently have low oxygen saturation, and what is the latest qualifying event time? Return aggregate results only."
+            query = "agent_LowOxygen(30) | project device_count, latest_event_time_utc, window_minutes, threshold"
+        },
+        @{
+            id = "b1b2c3d4-aaaa-4000-b000-000000000010"
+            question = "Return the latest telemetry UTC timestamp and source without patient identifiers."
+            query = "agent_TelemetrySevenDaySummary() | project latest_event_time_utc, data_source"
+        },
+        @{
+            id = "b1b2c3d4-bbbb-4000-b000-000000000011"
+            question = "Provide only aggregate current severity, device, and low-oxygen counts; no patient or device identifiers."
+            query = "agent_ClinicalAggregateSummary()"
         }
     )
 

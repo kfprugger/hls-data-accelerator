@@ -2,6 +2,14 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Azure Databricks Destination Blueprint
+- **Added** a dedicated [`azure-databricks/`](azure-databricks/) architecture and deployment package that preserves the Azure FHIR, ADLS, Event Hubs, ACR, ACI, Key Vault, managed-identity, and OHIF source estate while replacing Fabric as the governed destination.
+- **Documented** the clean replacement boundary for Unity Catalog, Lakeflow, Delta medallion tables, Databricks SQL, AI/BI dashboards, Genie Agents, SQL alerts, validation, recovery, cost control, and teardown; explicitly marked Microsoft HDS/DTT deployment artifacts as Fabric-specific rather than falsely portable.
+- **Added** three interactive Archify diagrams for the target system architecture, source-to-action data flow, and fail-closed deployment workflow, including showcase validation and browser evidence in light and dark themes.
+- **Fixed** the Azure Databricks architecture, data-flow, and deployment-workflow diagrams so every relationship has a distinct source, target, arrowhead, and non-overlapping route.
+- **Added** `azure-databricks/implementation/` migration artifacts: a Bicep foundation for the workspace, Access Connector, managed container, and least-privilege RBAC; API-assisted Unity Catalog bootstrap replacing OneLake shortcuts; a bootstrap serverless SQL warehouse; a Declarative Automation Bundle with five schema-scoped Lakeflow pipelines, ordered batch and scheduled stream-to-Gold jobs, and a cooldown-aware clinical alert; fail-closed Silver, Gold, and stream-freshness gate notebooks; and numbered preflight, deploy, run, validate, and ownership-aware teardown scripts.
+- **Deployed** the package into the Brakekat `Azure-brakekat` subscription in West US 2 against the live `rg-med-0906` FHIR, ADLS, DICOM manifest, and Event Hubs sources. The live serverless workflow passed Bronze, Silver, stream freshness, Gold, and all 17 post-deployment checks after repairing fresh-workspace warehouse bootstrapping, Unity Catalog read-only location creation, managed Auto Loader state, DICOM-manifest joins, live telemetry/claims schemas, development-name validation, and the stream-before-Gold DAG.
+
 ### Fresh Deployment Reliability
 - **Added** a mandatory evaluation-harness gate that starts both Masimo and Claims producers, resumes test Eventstreams from `Now`, and requires fresh generated-and-ingested events before any report, RTI, or agent checks. Stale backlog is reset once; partial pause transitions are awaited before resuming, and failures retain diagnostic JSON without evaluating downstream surfaces.
 - **Expanded** the evaluation harness with latest deployment/preflight checks, report-specific data gates, multi-visual page validation, grounded DataAgent and Graph Agent queries, authenticated OperationsAgent evidence, and fresh Edge Work - Brakekat report/OHIF evidence for surfaces APIs cannot prove.
@@ -9,15 +17,25 @@
 - **Fixed** POA DirectQuery date evaluation by projecting `AppointmentCreatedDay` in Power Query, preserved marketing task timestamps in staged HDS IDM configuration, and added deterministic POA demo-event materialization.
 - **Populated** ontology companion GraphModels from REST definitions and verified 100 patient-device associations through the published Graph Agent MCP endpoint.
 - **Repaired** OperationsAgent goals, instructions, and KQL binding and verified both agents through the dedicated authenticated conversation API without invoking actions; `HealthcareOpsAgent` remains fail-closed because the Fabric preview playbook generator has not produced a playbook.
+- **Fixed** both Operations Agents against the GA schema: removed the deprecated `goals` property and the empty `playbook` object the service rejects with "No rule definitions available in the playbook.", bound exactly one `KustoDatabase` knowledge source using the KQL database item id instead of the Eventhouse item id that left `ClinicalDeteriorationMonitor` returning HTTP 500 on `getDefinition`, added a `Recipient` message destination, and replaced the silent DataAgent fallback with a definition read-back that fails closed.
+- **Added** the materialized `agent_ops_stream_health` and `agent_deterioration_findings` tables plus their `agent_OperationsStreamHealth()` and `agent_DeteriorationTrend()` functions so the Operations Agent playbook generator can discover physical alert columns instead of inferring them from prose.
+- **Populated** the `DeteriorationEscalation` Data Activator via the REST API during deployment, providing its required `agent_deterioration_findings` KQL data source, EventTrigger rule, and email `ActStep` instead of deploying an empty shell requiring manual portal configuration.
 - **Hardened** telemetry and claims Eventstream deployment to inspect runtime topology, resume paused sources/destinations from their last checkpoints, and fail if nodes do not reach `Running` within five minutes.
 - **Fixed** Microsoft HDS/DTT v1.4.0 staging so optional Azure Monitor telemetry is lazy-loaded, cached wheels are patched and validated deterministically, and offline restaging reuses verified wheel artifacts.
 - **Bounded** PowerShell REST calls to prevent network interruptions from leaving deployments alive indefinitely with only quiet-heartbeat output.
 - **Fixed** the UI Full preset to keep both clinical and payer Activators enabled, corrected local full-deployment progress to 16 steps and Durable progress to 12 steps, and prevented expected SQL metadata retries from terminating the blocking-error monitor.
 - **Automated** Data Agent staging publication through the typed Fabric API after definition updates and ontology rebinding, including corrected payer few-shot schemas.
+- **Fixed** Payer Ops Triage and Healthcare Graph Agent table selections by reconciling Fabric-hydrated datasource IDs for both MasimoEventhouse and Reporting Gold, selecting generated ancestors plus six KQL and five Lakehouse tables, republishing, and failing closed unless draft and published definitions agree.
+- **Hardened** all five published Data Agents with deterministic KQL grounding for payer claims/high-cost cohorts, current device and clinical aggregates, and imaging modality/status/total counts; removed obsolete payer and stale clinical source bindings and added broad published-MCP regression coverage.
+- **Fixed** empty Customer Insights deployments by provisioning the ADLS `main` shortcut, running `healthcare1_msft_customer_insights` serially after core HDS writers, patching the HDS v1.4 Goal mappings to fields present in Silver, and registering populated Delta outputs as Lakehouse tables without blocking the core deployment.
 - **Completed** the full report surface by running Patient Outreach Analytics as a required post-Clinical pipeline and validating its terminal job state.
 - **Replaced** the invalid readmission-alert payload with a KQL-backed Reflex over the reporting Gold Delta table.
 - **Migrated** Data Agent behavioral evaluation from the retired Assistants preview API to each published agent's Fabric MCP endpoint.
 - **Scoped** soft-deleted Key Vault purges to the target resource group and moved generated graph-agent instructions out of tracked source paths.
+- **Fixed** ontology entity mappings by binding Patient and Device to their Silver projection tables (which do not use change data feed) and pointing all DevicePayerOntology entities at the Gold reporting lakehouse, repairing cross-lakehouse graph-edge hydration failures.
+- **Updated** Data Agent bindings to use the dynamically resolved ClinicalDeviceOntology ID and explicitly select its 9 entity types, preventing empty graph queries.
+- **Hardened** the Clinical Triage and Payer Ops Triage agents with instructions to correctly interpret zero-count windows and a strict priority rule enforcing raw claim volume queries.
+- **Triggered** synchronous ontology graph hydration via `RefreshGraph` during deployment instead of requiring manual preview action.
 
 ### Canonical Synthetic Healthcare Fixture
 - **Added** a deterministic 100-patient canonical FHIR fixture, manifest, checksums, explicit Masimo device assignments, and fail-closed local validator.
@@ -46,7 +64,8 @@
 - **Fixed** scaffolding infrastructure probes leaking Azure CLI's expected “container not found” exit code, eliminating a false failure and unnecessary redeployment after successful ARM provisioning.
 
 ### Orchestrator UI, Startup, and HDS Pipeline Visibility
-- **Updated** HDS pipeline monitoring/docs to show the default order: optional SDoH/claims sidecars → Clinical → optional non-blocking CMA → Imaging → OMOP.
+- **Updated** HDS pipeline monitoring/docs to show the default order: optional SDoH/claims sidecars → Clinical → required POA → optional non-blocking CMA → Imaging → OMOP → optional Customer Insights.
+- **Fixed** empty Customer Insights deployments by provisioning the `customer-insights` ADLS container, a workspace-identity connection, and the required `Files/main` shortcut before the optional serialized pipeline, then registering every populated `all_entities` Delta output through a bounded repair notebook; Customer Insights failure remains a warning and cannot invalidate completed Clinical, Imaging, or OMOP paths.
 - **Added** cheap `/api/live` and default `/api/health` liveness checks, with `/api/health?deep=1` reserved for auth/capacity readiness.
 - **Hardened** `Start-WebUI.ps1` startup with `-SelfTest`, session-scoped backend logs, fatal backend/frontend/proxy probes, and BrakeKat Edge/Profile 2 verification guidance.
 - **Fixed** successful sidecar summary parsing so continuation runs skip already completed HDS pipelines, and extended Silver imaging SQL synchronization waits to tolerate Fabric endpoint warm-up.

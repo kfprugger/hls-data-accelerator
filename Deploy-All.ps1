@@ -2574,157 +2574,39 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
             $p4SilverLhId = $p4SilverLh.id
             Write-Host "  ✓ Silver Lakehouse: $($p4SilverLh.displayName) ($p4SilverLhId)" -ForegroundColor Green
 
+            # Gold reporting lakehouse: DevicePayerOntology binds every entity and contextualization
+            # here, so the projection notebook mirrors the Silver projections into it.
+            $p4GoldLh = $p4Lakehouses | Where-Object { $_.displayName -match 'reporting_gold' } | Select-Object -First 1
+            if (-not $p4GoldLh) { $p4GoldLh = $p4Lakehouses | Where-Object { $_.displayName -match '[Gg]old' } | Select-Object -First 1 }
+            $p4GoldLhId = if ($p4GoldLh) { $p4GoldLh.id } else { "" }
+            if ($p4GoldLhId) {
+                Write-Host "  ✓ Gold Lakehouse: $($p4GoldLh.displayName) ($p4GoldLhId)" -ForegroundColor Green
+            } else {
+                Write-Host "  ! Gold Lakehouse not found — payer ontology projections will not be mirrored" -ForegroundColor Yellow
+            }
+
             # Read the notebook content
             $daNotebookPath = Join-Path $ScriptDir "fabric-rti\sql\create-device-association-table.ipynb"
             if (Test-Path $daNotebookPath) {
-                # Build ipynb using PySpark logic that resolves by name first and falls back to absolute OneLake paths
-                $pysparkCode = @'
-from pyspark.sql import functions as F
-from pyspark.sql.functions import get_json_object
-import sys
-
-WORKSPACE_ID = "WORKSPACE_ID_PLACEHOLDER"
-LAKEHOUSE_ID = "LAKEHOUSE_ID_PLACEHOLDER"
-INCLUDE_FHIR = INCLUDE_FHIR_PLACEHOLDER
-INCLUDE_DICOM = INCLUDE_DICOM_PLACEHOLDER
-
-def read_delta_table(name):
-    print(f"Attempting to load table {name} by name...")
-    try:
-        df = spark.read.table(name)
-        print(f"Successfully loaded {name} table by name.")
-        return df
-    except Exception as e:
-        print(f"Failed to load {name} table by name: {e}")
-        print("Falling back to absolute OneLake ABFSS path...")
-        path = f"abfss://{WORKSPACE_ID}@onelake.dfs.fabric.microsoft.com/{LAKEHOUSE_ID}/Tables/{name}"
-        return spark.read.format("delta").load(path)
-
-def save_delta_table(df, name):
-    print(f"Attempting to save table {name} by name...")
-    try:
-        df.write.mode("overwrite").format("delta").option("overwriteSchema", "true").saveAsTable(name)
-        print(f"Successfully saved {name} table by name.")
-    except Exception as e:
-        print(f"Failed to save {name} table by name: {e}")
-        print("Falling back to absolute OneLake ABFSS path...")
-        path = f"abfss://{WORKSPACE_ID}@onelake.dfs.fabric.microsoft.com/{LAKEHOUSE_ID}/Tables/{name}"
-        df.write.mode("overwrite").format("delta").option("overwriteSchema", "true").save(path)
-        print(f"{name} table materialized successfully via abfss fallback.")
-
-def present(df, name):
-    return name in df.columns
-
-def maybe_col(df, name, data_type="string"):
-    return F.col(name) if present(df, name) else F.lit(None).cast(data_type)
-
-def select_col(df, name, data_type="string"):
-    return maybe_col(df, name, data_type).alias(name)
-
-def json_col(df, name, path):
-    return get_json_object(F.col(name), path) if present(df, name) else F.lit(None).cast("string")
-
-def non_empty(expr):
-    return F.when(expr.isNotNull() & (F.length(F.trim(expr.cast("string"))) > 0), expr.cast("string"))
-
-def patient_id_expr(df, column_name, imaging=False):
-    # HDS 1.3.x clears FHIR Reference.reference and preserves the original
-    # resource link under msftSourceReference, with idOrig as the normalized UUID.
-    # ImagingStudy also receives identifier.value and should prefer it first.
-    identifier = non_empty(json_col(df, column_name, "$.identifier.value"))
-    msft = non_empty(F.regexp_replace(json_col(df, column_name, "$.msftSourceReference"), "^Patient/", ""))
-    id_orig = non_empty(json_col(df, column_name, "$.idOrig"))
-    if imaging:
-        return F.coalesce(identifier, msft, id_orig)
-    return F.coalesce(msft, identifier, id_orig)
-
-
-basic_df = read_delta_table("Basic")
-device_df = basic_df.filter(get_json_object(F.col("code_string"), "$.coding[0].code") == "device-assoc")
-device_association_df = device_df.select(
-    select_col(device_df, "id"),
-    select_col(device_df, "idOrig"),
-    F.regexp_replace(json_col(device_df, "extension", "$[0].valueReference.reference"), "^Device/", "").alias("device_ref"),
-    json_col(device_df, "subject_string", "$.display").alias("patient_name"),
-    patient_id_expr(device_df, "subject_string").alias("patient_id"),
-    json_col(device_df, "code_string", "$.coding[0].code").alias("assoc_code"),
-    json_col(device_df, "code_string", "$.coding[0].display").alias("assoc_display")
-)
-save_delta_table(device_association_df, "DeviceAssociation")
-
-if INCLUDE_FHIR:
-    encounter_df = read_delta_table("Encounter")
-    save_delta_table(encounter_df.select(
-        select_col(encounter_df, "idOrig"),
-        select_col(encounter_df, "class_string"),
-        select_col(encounter_df, "status"),
-        F.coalesce(non_empty(maybe_col(encounter_df, "period_start")), non_empty(json_col(encounter_df, "period_string", "$.start"))).alias("period_start"),
-        patient_id_expr(encounter_df, "subject_string").alias("patient_id")
-    ), "EncounterOntology")
-
-    condition_df = read_delta_table("Condition")
-    save_delta_table(condition_df.select(
-        select_col(condition_df, "idOrig"),
-        select_col(condition_df, "code_string"),
-        select_col(condition_df, "clinicalStatus_string"),
-        patient_id_expr(condition_df, "subject_string").alias("patient_id")
-    ), "ConditionOntology")
-
-    med_df = read_delta_table("MedicationRequest")
-    save_delta_table(med_df.select(
-        select_col(med_df, "idOrig"),
-        select_col(med_df, "medicationCodeableConcept_string"),
-        select_col(med_df, "status"),
-        select_col(med_df, "authoredOn"),
-        patient_id_expr(med_df, "subject_string").alias("patient_id")
-    ), "MedicationRequestOntology")
-
-    obs_df = read_delta_table("Observation")
-    save_delta_table(obs_df.select(
-        select_col(obs_df, "idOrig"),
-        select_col(obs_df, "code_string"),
-        select_col(obs_df, "valueQuantity_value", "double"),
-        select_col(obs_df, "valueQuantity_unit"),
-        select_col(obs_df, "effectiveDateTime"),
-        patient_id_expr(obs_df, "subject_string").alias("patient_id")
-    ), "ObservationOntology")
-else:
-    print("Skipping FHIR ontology projection tables because INCLUDE_FHIR is false.")
-
-if INCLUDE_DICOM:
-    img_df = read_delta_table("ImagingStudy")
-    save_delta_table(img_df.select(
-        select_col(img_df, "idOrig"),
-        select_col(img_df, "description"),
-        patient_id_expr(img_df, "subject_string", imaging=True).alias("patient_id"),
-        select_col(img_df, "numberOfSeries", "long"),
-        select_col(img_df, "numberOfInstances", "long")
-    ), "ImagingStudyOntology")
-else:
-    print("Skipping ImagingStudyOntology because INCLUDE_DICOM is false.")
-
-print("Ontology projection tables materialized successfully.")
-'@
-
-                # Interpolate workspace and lakehouse IDs into the PySpark template
+                # Load the projection notebook from the repository so the deployed notebook and the
+                # checked-in notebook can never drift. The notebook ships with empty placeholders.
+                $daIpynbJson = Get-Content -Path $daNotebookPath -Raw
                 $pyIncludeFhir = if ($SkipFhir -and -not $Phase4) { "False" } else { "True" }
                 $pyIncludeDicom = if ($SkipDicom -and -not $Phase4) { "False" } else { "True" }
-                $pysparkCode = $pysparkCode.Replace("WORKSPACE_ID_PLACEHOLDER", $p4WsId).Replace("LAKEHOUSE_ID_PLACEHOLDER", $p4SilverLhId).Replace("INCLUDE_FHIR_PLACEHOLDER", $pyIncludeFhir).Replace("INCLUDE_DICOM_PLACEHOLDER", $pyIncludeDicom)
 
-                $daIpynb = @{
-                    nbformat = 4
-                    nbformat_minor = 5
-                    metadata = @{
-                        kernel_info = @{ name = "synapse_pyspark" }
-                        kernelspec = @{ name = "synapse_pyspark"; display_name = "Synapse PySpark" }
-                        language_info = @{ name = "python" }
-                    }
-                    cells = @(
-                        @{ cell_type = "code"; source = ($pysparkCode -split '\r?\n') | ForEach-Object { "$_`n" }; metadata = @{}; outputs = @() }
-                    )
+                # Placeholders live inside JSON string literals, so their quotes are backslash-escaped.
+                $daIpynbJson = $daIpynbJson.Replace('WORKSPACE_ID = \"\"', "WORKSPACE_ID = \`"$p4WsId\`"")
+                $daIpynbJson = $daIpynbJson.Replace('LAKEHOUSE_ID = \"\"', "LAKEHOUSE_ID = \`"$p4SilverLhId\`"")
+                $daIpynbJson = $daIpynbJson.Replace('MIRROR_LAKEHOUSE_ID = \"\"', "MIRROR_LAKEHOUSE_ID = \`"$p4GoldLhId\`"")
+                $daIpynbJson = $daIpynbJson.Replace('INCLUDE_FHIR = True', "INCLUDE_FHIR = $pyIncludeFhir")
+                $daIpynbJson = $daIpynbJson.Replace('INCLUDE_DICOM = True', "INCLUDE_DICOM = $pyIncludeDicom")
+
+                # The graph-model loader reads zero rows from the change-data-feed enabled HDS Silver
+                # Patient/Device tables and cannot resolve an edge whose source node table lives in a
+                # different lakehouse from the edge table, so these projections are load-bearing.
+                if ($daIpynbJson -notmatch 'PatientOntology' -or $daIpynbJson -notmatch 'FactDiagnosisOntology') {
+                    throw "Projection notebook is missing the PatientOntology/FactDiagnosisOntology projections required by the ontology graph bindings"
                 }
-
-                $daIpynbJson = $daIpynb | ConvertTo-Json -Depth 10 -Compress
                 $daIpynbBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($daIpynbJson))
 
                 # Check for existing notebook and delete
@@ -2966,6 +2848,7 @@ print("Ontology projection tables materialized successfully.")
                 [Parameter(Mandatory)][string]$UserDescription,
                 [Parameter(Mandatory)][string]$DataSourceInstructions,
                 [string[]]$RemoveOntologyNames = @(),
+                [Parameter(Mandatory)][string[]]$EntityTypes,
                 [switch]$OptionalAgents
             )
 
@@ -3050,6 +2933,19 @@ print("Ontology projection tables materialized successfully.")
                             $existingParts = @($existingParts | Where-Object { $_.path -notmatch $safeRemoveName })
                         }
 
+                        # An ontology datasource with an empty element list contributes nothing to the
+                        # agent: every entity type must be present and selected.
+                        $ontElements = @($EntityTypes | ForEach-Object {
+                            [ordered]@{
+                                id           = $_
+                                is_selected  = $true
+                                display_name = $_
+                                type         = "ontology.entity"
+                                description  = $null
+                                children     = @()
+                            }
+                        })
+
                         $ontDatasourceJson = @{
                             '$schema'              = "1.0.0"
                             artifactId             = $ontologyId
@@ -3058,6 +2954,7 @@ print("Ontology projection tables materialized successfully.")
                             type                   = "ontology"
                             userDescription        = $UserDescription
                             dataSourceInstructions = $DataSourceInstructions
+                            elements               = $ontElements
                         } | ConvertTo-Json -Depth 10
 
                         $ontFewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = @() } | ConvertTo-Json -Depth 5)
@@ -3142,7 +3039,8 @@ print("Ontology projection tables materialized successfully.")
             -AgentNames $clinicalAgentNames `
             -UserDescription "Clinical device semantic layer for Patient, Device, Encounter, Condition, MedicationRequest, Observation, ImagingStudy, DeviceAssociation, and real-time DeviceTelemetry." `
             -DataSourceInstructions "Use this ontology for clinical device vocabulary and relationship grounding only. It maps Patient↔Device, Patient→Encounter, Patient→Condition, Patient→Observation, Patient→MedicationRequest, Patient→ImagingStudy, and Device→DeviceTelemetry across Lakehouse and Eventhouse sources. Clinical alerts remain available through the KQL/Data Activator path (fn_ClinicalAlerts / ClinicalAlertActivator) rather than this ontology until Fabric exposes actionable AlertHistory ontology import diagnostics. The actual patient-device assignment rows and patient home/location demographics must still be queried from the Lakehouse dbo.Basic and dbo.Patient tables. Do not use it for payer/claims reasoning." `
-            -RemoveOntologyNames @("DevicePayerOntology")
+            -RemoveOntologyNames @("DevicePayerOntology") `
+            -EntityTypes @("Patient", "Encounter", "Condition", "MedRequest", "Observation", "ImagingStudy", "Device", "DeviceAssoc", "DeviceTelemetry")
 
         if (-not $SkipQualityMeasures) {
             Add-OntologyDatasourceToAgents `
@@ -3151,6 +3049,7 @@ print("Ontology projection tables materialized successfully.")
                 -UserDescription "Payer-oriented device ontology linking Patient, Device, Diagnosis, Claim, Payer, CareGap, PatientRisk, HighCostClaimant, clinical alerts, and telemetry." `
                 -DataSourceInstructions "Use this ontology for claims, payer operations, care gaps, high-cost claimant, RAF/risk, payer-category, and device-to-payer questions. It keeps payer semantics out of the clinical-device ontology while preserving patient/device/diagnosis/claim relationships." `
                 -RemoveOntologyNames @("ClinicalDeviceOntology") `
+                -EntityTypes @("Patient", "Encounter", "Condition", "MedRequest", "Observation", "ImagingStudy", "Device", "DeviceAssoc", "DeviceTelemetry", "Claim", "Payer", "Diagnosis", "PatientDiagnosis", "MedAdherence", "CareGap", "PatientRisk", "HighCostClaimant") `
                 -OptionalAgents
         }
 

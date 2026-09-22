@@ -274,6 +274,224 @@ function Update-DataAgentDefinition {
     throw "DataAgent definition update did not complete within 5 minutes"
 }
 
+function Publish-DataAgentDefinition {
+    param([string]$WorkspaceId, [string]$DataAgentId, [string]$Description)
+    $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
+    $body = @{ publishedDescription = $Description } | ConvertTo-Json -Depth 5
+    $response = Invoke-WebRequest -Method POST `
+        -Uri "$FabricApiBase/workspaces/$WorkspaceId/dataAgents/$DataAgentId/staging/publish" `
+        -Headers $headers -Body $body -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop
+    if ($response.StatusCode -eq 200) { return }
+    if ($response.StatusCode -ne 202) { throw "DataAgent publish returned HTTP $($response.StatusCode)" }
+
+    $location = $response.Headers["Location"]
+    if ($location -is [array]) { $location = $location[0] }
+    if (-not $location) { throw "DataAgent publish returned 202 without a Location header" }
+    for ($attempt = 1; $attempt -le 60; $attempt++) {
+        Start-Sleep 5
+        $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
+        $operation = Invoke-RestMethod -Uri $location -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
+        if ($operation.status -eq "Succeeded") { return }
+        if ($operation.status -eq "Failed") { throw "DataAgent publish failed: $($operation.error.message)" }
+    }
+    throw "DataAgent publish did not complete within 5 minutes"
+}
+
+function Get-DataAgentDefinition {
+    param([string]$WorkspaceId, [string]$DataAgentId)
+    $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
+    $response = Invoke-WebRequest -Method POST `
+        -Uri "$FabricApiBase/workspaces/$WorkspaceId/items/$DataAgentId/getDefinition" `
+        -Headers $headers -Body '{}' -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop
+    if ($response.StatusCode -eq 200) {
+        return $response.Content | ConvertFrom-Json -Depth 100
+    }
+    if ($response.StatusCode -ne 202) { throw "DataAgent getDefinition returned HTTP $($response.StatusCode)" }
+
+    $location = $response.Headers["Location"]
+    if ($location -is [array]) { $location = $location[0] }
+    if (-not $location) { throw "DataAgent getDefinition returned 202 without a Location header" }
+    for ($attempt = 1; $attempt -le 60; $attempt++) {
+        Start-Sleep 2
+        $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
+        $operation = Invoke-RestMethod -Uri $location -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
+        if ($operation.status -eq "Succeeded") {
+            return Invoke-RestMethod -Uri "$location/result" -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
+        }
+        if ($operation.status -eq "Failed") { throw "DataAgent getDefinition failed: $($operation.error.message)" }
+    }
+    throw "DataAgent getDefinition did not complete within 2 minutes"
+}
+
+function Set-DataAgentSelectionValue {
+    param([Parameter(Mandatory)][object]$Node, [Parameter(Mandatory)][bool]$Selected)
+    if ($Node.PSObject.Properties['is_selected']) {
+        $Node.is_selected = $Selected
+    } else {
+        $Node | Add-Member -NotePropertyName is_selected -NotePropertyValue $Selected
+    }
+}
+
+function Update-DataAgentLakehouseElementSelection {
+    param(
+        [Parameter(Mandatory)][object]$Node,
+        [Parameter(Mandatory)][string[]]$TargetTables,
+        [object]$ParentTableSelected = $null
+    )
+    $nodeType = [string]$Node.type
+    if ($nodeType -eq 'lakehouse_tables.table') {
+        $selected = $TargetTables -contains [string]$Node.display_name
+        Set-DataAgentSelectionValue -Node $Node -Selected $selected
+        foreach ($child in @($Node.children)) {
+            $null = Update-DataAgentLakehouseElementSelection -Node $child -TargetTables $TargetTables -ParentTableSelected $selected
+        }
+        return $selected
+    }
+    if ($nodeType -eq 'lakehouse_tables.column') {
+        $selected = $null -ne $ParentTableSelected -and [bool]$ParentTableSelected
+        Set-DataAgentSelectionValue -Node $Node -Selected $selected
+        return $selected
+    }
+    $childSelected = $false
+    foreach ($child in @($Node.children)) {
+        if (Update-DataAgentLakehouseElementSelection -Node $child -TargetTables $TargetTables -ParentTableSelected $ParentTableSelected) { $childSelected = $true }
+    }
+    if ($nodeType -in @('schema_grouping', 'lakehouse_tables.schema', 'table_grouping')) {
+        Set-DataAgentSelectionValue -Node $Node -Selected $childSelected
+    }
+    return $childSelected
+}
+
+function Update-DataAgentKustoElementSelection {
+    param(
+        [Parameter(Mandatory)][object]$Node,
+        [Parameter(Mandatory)][string[]]$TargetTables,
+        [string[]]$TargetFunctions = @(),
+        [object]$ParentTableSelected = $null
+    )
+    $nodeType = [string]$Node.type
+    if ($nodeType -eq 'kusto.table') {
+        $selected = $TargetTables -contains [string]$Node.display_name
+        Set-DataAgentSelectionValue -Node $Node -Selected $selected
+        foreach ($child in @($Node.children)) {
+            $null = Update-DataAgentKustoElementSelection -Node $child -TargetTables $TargetTables -TargetFunctions $TargetFunctions -ParentTableSelected $selected
+        }
+        return $selected
+    }
+    if ($nodeType -eq 'kusto.column') {
+        $selected = $null -ne $ParentTableSelected -and [bool]$ParentTableSelected
+        Set-DataAgentSelectionValue -Node $Node -Selected $selected
+        return $selected
+    }
+    if ($nodeType -in @('kusto.function', 'function')) {
+        $selected = $TargetFunctions -contains [string]$Node.display_name
+        Set-DataAgentSelectionValue -Node $Node -Selected $selected
+        return $selected
+    }
+    $childSelected = $false
+    foreach ($child in @($Node.children)) {
+        if (Update-DataAgentKustoElementSelection -Node $child -TargetTables $TargetTables -TargetFunctions $TargetFunctions -ParentTableSelected $ParentTableSelected) { $childSelected = $true }
+    }
+    if ($nodeType -in @('schema_grouping', 'table_grouping', 'function_grouping', 'kusto.functions')) {
+        $groupSelected = $childSelected -or ($nodeType -in @('function_grouping', 'kusto.functions') -and $TargetFunctions.Count -gt 0 -and @($Node.children).Count -eq 0)
+        Set-DataAgentSelectionValue -Node $Node -Selected $groupSelected
+        return $groupSelected
+    }
+    return $childSelected
+}
+
+function Get-SelectedDataAgentTables {
+    param(
+        [Parameter(Mandatory)][object[]]$Elements,
+        [Parameter(Mandatory)][ValidateSet('lakehouse', 'kusto')][string]$SelectionKind
+    )
+    $tableType = if ($SelectionKind -eq 'lakehouse') { 'lakehouse_tables.table' } else { 'kusto.table' }
+    $selected = [System.Collections.Generic.List[string]]::new()
+    function Visit-DataAgentElement {
+        param([object]$Node)
+        if ([string]$Node.type -eq $tableType -and [bool]$Node.is_selected) { $selected.Add([string]$Node.display_name) }
+        foreach ($child in @($Node.children)) { Visit-DataAgentElement -Node $child }
+    }
+    foreach ($element in $Elements) { Visit-DataAgentElement -Node $element }
+    return @($selected | Sort-Object -Unique)
+}
+function Get-SelectedDataAgentFunctions {
+    param([Parameter(Mandatory)][object[]]$Elements)
+    $selected = [System.Collections.Generic.List[string]]::new()
+    function Visit-DataAgentFunction {
+        param([object]$Node)
+        if ([string]$Node.type -in @('kusto.function', 'function') -and [bool]$Node.is_selected) {
+            $selected.Add([string]$Node.display_name)
+        }
+        foreach ($child in @($Node.children)) { Visit-DataAgentFunction -Node $child }
+    }
+    foreach ($element in $Elements) { Visit-DataAgentFunction -Node $element }
+    return @($selected | Sort-Object -Unique)
+}
+
+
+function Repair-DataAgentTableSelection {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$DataAgentId,
+        [Parameter(Mandatory)][string]$DatasourceFolderName,
+        [Parameter(Mandatory)][string[]]$Tables,
+        [string[]]$Functions = @(),
+        [Parameter(Mandatory)][ValidateSet('lakehouse', 'kusto')][string]$SelectionKind
+    )
+    $definition = Get-DataAgentDefinition -WorkspaceId $WorkspaceId -DataAgentId $DataAgentId
+    $targetPath = "Files/Config/draft/$DatasourceFolderName/datasource.json"
+    $parts = @($definition.definition.parts)
+    $targetPart = $parts | Where-Object { $_.path -eq $targetPath } | Select-Object -First 1
+    if (-not $targetPart) { throw "Hydrated DataAgent datasource '$targetPath' was not found" }
+    $datasource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$targetPart.payload)) | ConvertFrom-Json -Depth 100
+    foreach ($element in @($datasource.elements)) {
+        if ($SelectionKind -eq 'lakehouse') {
+            $null = Update-DataAgentLakehouseElementSelection -Node $element -TargetTables $Tables
+        } else {
+            $null = Update-DataAgentKustoElementSelection -Node $element -TargetTables $Tables -TargetFunctions $Functions
+        }
+    }
+    $selected = @(Get-SelectedDataAgentTables -Elements @($datasource.elements) -SelectionKind $SelectionKind)
+    $selectedFunctions = if ($SelectionKind -eq 'kusto') { @(Get-SelectedDataAgentFunctions -Elements @($datasource.elements)) } else { @() }
+    $missing = @($Tables | Where-Object { $_ -notin $selected })
+    $unexpected = @($selected | Where-Object { $_ -notin $Tables })
+    $missingFunctions = @($Functions | Where-Object { $_ -notin $selectedFunctions })
+    $unexpectedFunctions = @($selectedFunctions | Where-Object { $_ -notin $Functions })
+    if ($missing.Count -gt 0 -or $unexpected.Count -gt 0 -or $missingFunctions.Count -gt 0 -or $unexpectedFunctions.Count -gt 0) {
+        throw "Hydrated $SelectionKind selection mismatch. Missing=$($missing -join ','); Unexpected=$($unexpected -join ','); MissingFunctions=$($missingFunctions -join ','); UnexpectedFunctions=$($unexpectedFunctions -join ',')"
+    }
+    $targetPart.payload = ConvertTo-Base64 ($datasource | ConvertTo-Json -Depth 100)
+    $targetPart.payloadType = 'InlineBase64'
+    $writableParts = @($parts | Where-Object { $_.path -eq 'Files/Config/data_agent.json' -or $_.path.StartsWith('Files/Config/draft/') })
+    Update-DataAgentDefinition -WorkspaceId $WorkspaceId -DataAgentId $DataAgentId -Definition @{ parts = $writableParts }
+    Write-Host "  ✓ Hydrated $SelectionKind selections applied: tables=$($selected -join ', '); functions=$($selectedFunctions -join ', ')" -ForegroundColor Green
+}
+
+function Assert-DataAgentTableSelection {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$DataAgentId,
+        [Parameter(Mandatory)][string]$DatasourceFolderName,
+        [Parameter(Mandatory)][string[]]$Tables,
+        [string[]]$Functions = @(),
+        [Parameter(Mandatory)][ValidateSet('lakehouse', 'kusto')][string]$SelectionKind
+    )
+    $definition = Get-DataAgentDefinition -WorkspaceId $WorkspaceId -DataAgentId $DataAgentId
+    foreach ($scope in @('draft', 'published')) {
+        $path = "Files/Config/$scope/$DatasourceFolderName/datasource.json"
+        $part = @($definition.definition.parts) | Where-Object { $_.path -eq $path } | Select-Object -First 1
+        if (-not $part) { throw "DataAgent datasource '$path' was not found" }
+        $datasource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$part.payload)) | ConvertFrom-Json -Depth 100
+        $selected = @(Get-SelectedDataAgentTables -Elements @($datasource.elements) -SelectionKind $SelectionKind)
+        $selectedFunctions = if ($SelectionKind -eq 'kusto') { @(Get-SelectedDataAgentFunctions -Elements @($datasource.elements)) } else { @() }
+        if (@($Tables | Where-Object { $_ -notin $selected }).Count -gt 0 -or @($selected | Where-Object { $_ -notin $Tables }).Count -gt 0 -or @($Functions | Where-Object { $_ -notin $selectedFunctions }).Count -gt 0 -or @($selectedFunctions | Where-Object { $_ -notin $Functions }).Count -gt 0) {
+            throw "$scope $SelectionKind selections do not match the requested contract: tables=$($selected -join ', '); functions=$($selectedFunctions -join ', ')"
+        }
+    }
+    Write-Host "  ✓ Draft and published $SelectionKind table/function selections verified" -ForegroundColor Green
+}
+
 function Deploy-DataAgent {
     param (
         [string]$Name,
@@ -316,6 +534,10 @@ function Deploy-DataAgent {
         $null = $parts.Add(@{ path = "Files/Config/draft/$($ds.FolderName)/datasource.json"; payload = (ConvertTo-Base64 $ds.DatasourceJson); payloadType = "InlineBase64" })
         $null = $parts.Add(@{ path = "Files/Config/draft/$($ds.FolderName)/fewshots.json"; payload = (ConvertTo-Base64 $ds.FewShotsJson); payloadType = "InlineBase64" })
     }
+    $selectableDataSources = @($DataSources | Where-Object {
+        $_ -is [hashtable] -and $_.ContainsKey('SelectionKind') -and
+        ((@($_.SelectedTables).Count -gt 0) -or (@($_.SelectedFunctions).Count -gt 0))
+    })
     try {
         Update-DataAgentDefinition `
             -WorkspaceId $WorkspaceId `
@@ -326,20 +548,48 @@ function Deploy-DataAgent {
         throw "DataAgent definition update failed for ${Name}: $(Get-ErrorMessage $_)"
     }
     try {
+        foreach ($ds in $selectableDataSources) {
+            Repair-DataAgentTableSelection `
+                -WorkspaceId $WorkspaceId `
+                -DataAgentId $agentId `
+                -DatasourceFolderName ([string]$ds.FolderName) `
+                -Tables @($ds.SelectedTables) `
+                -Functions @($ds.SelectedFunctions) `
+                -SelectionKind ([string]$ds.SelectionKind)
+        }
+    } catch {
+        throw "DataAgent hydrated table selection repair failed for ${Name}: $(Get-ErrorMessage $_)"
+    }
+    try {
         $publishDescription = if ([string]::IsNullOrWhiteSpace($Description)) { "$Name production configuration" } else { $Description }
-        $null = Invoke-FabricApi -Method POST `
-            -Endpoint "/workspaces/$WorkspaceId/dataAgents/$agentId/staging/publish" `
-            -Body @{ publishedDescription = $publishDescription }
+        Publish-DataAgentDefinition -WorkspaceId $WorkspaceId -DataAgentId $agentId -Description $publishDescription
         Write-Host "  ✓ DataAgent published: $Name" -ForegroundColor Green
     } catch {
         throw "DataAgent publish failed for ${Name}: $(Get-ErrorMessage $_)"
+    }
+    try {
+        foreach ($ds in $selectableDataSources) {
+            Assert-DataAgentTableSelection `
+                -WorkspaceId $WorkspaceId `
+                -DataAgentId $agentId `
+                -DatasourceFolderName ([string]$ds.FolderName) `
+                -Tables @($ds.SelectedTables) `
+                -Functions @($ds.SelectedFunctions) `
+                -SelectionKind ([string]$ds.SelectionKind)
+        }
+    } catch {
+        throw "DataAgent published table selection verification failed for ${Name}: $(Get-ErrorMessage $_)"
     }
     Write-Host "  ✓ Agent URL: https://app.fabric.microsoft.com/groups/$WorkspaceId/aiskills/$agentId" -ForegroundColor Cyan
     return $agentId
 }
 
 function New-KqlDatasource {
-    param([string]$DisplayName, [string]$KqlDbId, [string]$WorkspaceId, [array]$Elements, [array]$FewShots, [string]$Instructions)
+    param([string]$DisplayName, [string]$KqlDbId, [string]$WorkspaceId, [array]$Elements, [array]$FewShots, [string]$Instructions, [string[]]$Functions = @())
+    $datasourceElements = @($Elements)
+    if ($Functions.Count -gt 0) {
+        $datasourceElements += @{ id = [guid]::NewGuid().ToString(); display_name = 'Functions'; type = 'kusto.functions'; is_selected = $true; children = @() }
+    }
     $datasourceJson = (@{
         '$schema' = "1.0.0"
         artifactId = $KqlDbId
@@ -348,10 +598,11 @@ function New-KqlDatasource {
         type = "kusto"
         userDescription = "KQL database with clinical telemetry, payer RTI claim streams, fraud/high-cost/care-gap scoring tables, and operations worklist functions"
         dataSourceInstructions = $Instructions
-        elements = $Elements
+        elements = $datasourceElements
     } | ConvertTo-Json -Depth 20)
     $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
-    return @{ FolderName = "kusto-$DisplayName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson }
+    $selectedTables = @($Elements | Where-Object { [string]$_.type -eq 'kusto.table' } | ForEach-Object { [string]$_.display_name })
+    return @{ FolderName = "kusto-$DisplayName"; DatasourceId = $KqlDbId; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectionKind = 'kusto'; SelectedTables = $selectedTables; SelectedFunctions = @($Functions) }
 }
 
 function New-LakehouseDatasource {
@@ -370,7 +621,7 @@ function New-LakehouseDatasource {
         elements = $elements
     } | ConvertTo-Json -Depth 30)
     $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = @() } | ConvertTo-Json -Depth 10)
-    return @{ FolderName = "lakehouse_tables-$DisplayName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson }
+    return @{ FolderName = "lakehouse_tables-$DisplayName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectionKind = 'lakehouse'; SelectedTables = @($Tables) }
 }
 
 function New-OntologyDatasourceIfAvailable {
@@ -824,6 +1075,31 @@ if (-not $SkipPayerRti) {
 }
 '@
     if (-not (Invoke-KustoMgmt -Command $payerOpsWorklist -Label "fn_PayerOpsWorklist after care-gap setup" @kqlParams)) { throw "fn_PayerOpsWorklist deployment failed" }
+    $operationsFreshness = @'
+.create-or-alter function with (
+    skipvalidation = "true",
+    docstring = "Operations Agent freshness findings for telemetry and claims streams",
+    folder = "OperationsAgent"
+) fn_OperationsFreshness(staleMinutes: int = 5) {
+    let telemetry = TelemetryRaw
+        | summarize last_event_time=max(todatetime(timestamp)) by device_id
+        | extend age_minutes=datetime_diff("minute", now(), last_event_time)
+        | where age_minutes > staleMinutes
+        | project condition_name="STALE_TELEMETRY", device_id, last_event_time,
+                  age_minutes=tolong(age_minutes), source_table="TelemetryRaw", severity="WARNING";
+    let claims = claims_events
+        | summarize last_event_time=max(event_timestamp)
+        | extend age_minutes=datetime_diff("minute", now(), last_event_time)
+        | where age_minutes > staleMinutes
+        | project condition_name="STALE_CLAIMS", device_id="", last_event_time,
+                  age_minutes=tolong(age_minutes), source_table="claims_events", severity="WARNING";
+    telemetry | union claims | order by age_minutes desc
+}
+'@
+    if (-not (Invoke-KustoMgmt -Command $operationsFreshness -Label "fn_OperationsFreshness" @kqlParams)) { throw "fn_OperationsFreshness deployment failed" }
+    . (Join-Path $PSScriptRoot 'agent-grounding-backfills.ps1')
+    Invoke-AgentGroundingBackfills @kqlParams
+
 
     if ($SkipSnapshotMaterialization) {
         Write-Host "  Payer snapshot materialization omitted; schemas and functions remain deployed." -ForegroundColor DarkGray
@@ -882,16 +1158,45 @@ $kqlElements = @(
     @{ id = [guid]::NewGuid().ToString(); display_name = "claims_events"; type = "kusto.table"; is_selected = $true },
     @{ id = [guid]::NewGuid().ToString(); display_name = "fraud_scores"; type = "kusto.table"; is_selected = $true },
     @{ id = [guid]::NewGuid().ToString(); display_name = "highcost_alerts"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "care_gap_alerts"; type = "kusto.table"; is_selected = $true }
+    @{ id = [guid]::NewGuid().ToString(); display_name = "care_gap_alerts"; type = "kusto.table"; is_selected = $true },
+    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_cross_domain_context"; type = "kusto.table"; is_selected = $true },
+    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_imaging_summary"; type = "kusto.table"; is_selected = $true },
+    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_payer_priority_summary"; type = "kusto.table"; is_selected = $true },
+    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_high_cost_members"; type = "kusto.table"; is_selected = $true },
+    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_provider_fraud_claims"; type = "kusto.table"; is_selected = $true }
 )
 $fewShots = @(
-    @{ id = [guid]::NewGuid().ToString(); question = "Which providers have the highest fraud scores right now?"; query = "fn_FraudRisk(60) | summarize max_score=max(fraud_score), high_claims=countif(risk_tier in ('CRITICAL','HIGH')) by provider_id | order by max_score desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which providers have the highest active fraud risk, and what evidence supports the score?"; query = "fn_FraudRisk(60) | summarize arg_max(score_timestamp, fraud_score, risk_tier, fraud_flags, claim_id, patient_id) by provider_id | project provider_id, fraud_score, risk_tier, fraud_flags, claim_id, patient_id, score_timestamp | top 10 by fraud_score desc" },
     @{ id = [guid]::NewGuid().ToString(); question = "Show the current payer operations worklist"; query = "fn_PayerOpsWorklist(60) | order by priority asc, alert_time desc" },
-    @{ id = [guid]::NewGuid().ToString(); question = "Which patients are becoming high cost?"; query = "fn_HighCostTrajectory(90) | order by rolling_spend_30d desc" },
-    @{ id = [guid]::NewGuid().ToString(); question = "Show claim events for TEST-PROVIDER"; query = "claims_events | where provider_id == 'TEST-PROVIDER' | order by event_timestamp desc | take 50" }
+    @{ id = [guid]::NewGuid().ToString(); question = "Which members are trending toward high-cost status?"; query = "agent_high_cost_members | project patient_id, risk_tier, cost_trend, rolling_spend_30d, rolling_spend_90d, projected_cost_band, high_cost_score, ed_visits_30d, readmission_flag, refreshed_at | order by high_cost_score desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Show critical care gaps that should be routed for provider outreach."; query = "agent_CriticalCareGaps() | project alert_id, patient_id, measure_name, gap_days_overdue, alert_priority, alert_text, recommended_action | order by gap_days_overdue desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which alerts require immediate SIU, care-management, or provider-outreach review?"; query = "agent_payer_priority_summary | project alert_domain, priority, provider_id, alert_count, affected_members, affected_providers, max_metric, latest_alert, recommended_action | order by priority asc, alert_domain asc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Summarize the highest-priority issues by alert domain, severity, provider, and recommended action."; query = "agent_payer_priority_summary | project alert_domain, priority, provider_id, alert_count, affected_members, affected_providers, max_metric, latest_alert, recommended_action | order by priority asc, alert_count desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Choose the provider with the highest current fraud score, show their recent claims, and identify unusual patterns."; query = "agent_provider_fraud_claims | project provider_id, current_fraud_score, current_risk_tier, fraud_flags, claim_id, patient_id, claim_type, claim_amount, diagnosis_code, event_timestamp, injected_fraud_flags | order by event_timestamp desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which members have both high utilization and unresolved care gaps?"; query = "agent_cross_domain_context | where high_cost_status == 'AT_RISK' and care_gap_status == 'OPEN' | summarize arg_max(alert_time, *) by patient_id | project patient_id, patient_name, rolling_spend_30d, high_cost_status, care_gap_measure, care_gap_status, risk_tier, scenario_source" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Choose the highest-priority current claim, explain why it was prioritized, and recommend the next human-reviewed action."; query = "agent_HighestPriorityClaim()" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Return the single highest-priority current claim with provider and fraud score."; query = "agent_HighestPriorityClaim()" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Give me an executive summary of current fraud, high-cost, and care-gap exposure."; query = "agent_payer_priority_summary | project alert_domain, priority, provider_id, alert_count, affected_members, affected_providers, max_metric, latest_alert, recommended_action" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Show the relationship between a high-risk patient, their assigned device, active diagnoses, recent alerts, and payer."; query = "agent_CrossDomainContext() | top 1 by alert_time desc | project patient_id, patient_name, device_id, diagnosis_name, clinical_status, alert_time, alert_tier, payer_name, payer_category, risk_tier, risk_probability, scenario_source" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which patients have both a current care gap and recent abnormal device telemetry?"; query = "agent_CareGapAbnormalTelemetry()" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Trace a patient from device assignment through diagnosis, claim history, payer, and current risk classification."; query = "agent_CrossDomainContext() | top 1 by alert_time desc | project patient_id, patient_name, device_id, diagnosis_code, diagnosis_name, claim_id, claim_amount, payer_name, payer_category, risk_tier, risk_probability, scenario_source" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which devices are associated with patients who have elevated readmission risk?"; query = "agent_CrossDomainContext() | where risk_tier == 'HIGH' or risk_probability >= 0.7 | distinct patient_id, patient_name, device_id, risk_tier, risk_probability, scenario_source" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Find patients with recent critical clinical alerts and show their related claims, care gaps, and high-cost status."; query = "agent_CrossDomainContext() | where alert_tier == 'CRITICAL' | summarize arg_max(alert_time, *) by patient_id | project patient_id, patient_name, alert_time, alert_tier, claim_id, care_gap_measure, care_gap_status, high_cost_status, rolling_spend_30d, scenario_source" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Which diagnoses are most common among patients with repeated device alerts?"; query = "agent_CommonDiagnosesWithRepeatedAlerts()" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Choose one patient with verified cross-domain links and show their connected clinical and payer context."; query = "agent_CrossDomainContext() | top 1 by alert_time desc" },
+    @{ id = [guid]::NewGuid().ToString(); question = "Identify patients whose device telemetry, diagnoses, and utilization history suggest worsening risk."; query = "agent_CrossDomainContext() | where risk_tier == 'HIGH' and repeated_alert_count >= 2 | summarize arg_max(alert_time, *) by patient_id" }
 )
-$payerKqlInstructions = "Use fn_PayerOpsWorklist(60), fn_FraudRisk(60), fn_HighCostTrajectory(90), claims_events, fraud_scores, highcost_alerts, care_gap_alerts, TelemetryRaw, and AlertHistory for payer and clinical operations triage."
-$payerDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Elements $kqlElements -FewShots $fewShots -Instructions $payerKqlInstructions))
+$payerKqlInstructions = "Use the selected KQL functions and materialized agent_* tables for deterministic payer and cross-domain answers. Current worklist: fn_PayerOpsWorklist(60). Provider fraud: fn_FraudRisk(60) with positional arg_max. High-cost members: agent_high_cost_members. Provider claims: agent_provider_fraud_claims. Care-gap routing: agent_CriticalCareGaps(). Domain/action summaries: agent_payer_priority_summary. Claim request: agent_HighestPriorityClaim(). Cross-domain graph validation: agent_cross_domain_context and agent_CrossDomainContext(). Always disclose scenario_source for synthetic_demo_marker rows."
+$requiredKqlFunctions = @(
+    'fn_AlertHistoryTransform', 'fn_VitalsTrend', 'fn_DeviceStatus', 'fn_LatestReadings', 'fn_TelemetryByDevice',
+    'fn_SpO2Alerts', 'fn_PulseRateAlerts', 'fn_ClinicalAlerts', 'fn_AlertLocationMap', 'fn_FraudRisk',
+    'fn_HighCostTrajectory', 'fn_CareGapOnAlert', 'fn_PayerOpsWorklist', 'agent_FraudRisk',
+    'agent_HighCostTrajectory', 'agent_PayerOpsWorklist', 'fn_OperationsFreshness', 'agent_ImagingSummary',
+    'agent_CurrentAlertSeverity', 'agent_LowOxygen', 'agent_TelemetrySevenDaySummary', 'agent_CurrentDeviceSummary',
+    'agent_CrossDomainContext', 'agent_CommonDiagnosesWithRepeatedAlerts', 'agent_CareGapAbnormalTelemetry',
+    'agent_PayerPrioritySummary', 'agent_CriticalCareGaps', 'agent_HighUtilizationCareGaps', 'agent_HighestPriorityClaim'
+)
+$payerDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Elements $kqlElements -FewShots $fewShots -Instructions $payerKqlInstructions -Functions $requiredKqlFunctions))
 $goldUnavailableInstruction = ""
 if ($goldLh) {
     $payerDataSources += (New-LakehouseDatasource -DisplayName $goldLh.displayName -LakehouseId $goldLh.id -WorkspaceId $workspaceId -Tables @('fact_claim','dim_payer','care_gaps','agg_high_cost_claimants','readmission_risk_scores') -Instructions "Use Gold Lakehouse tables for claims history, payer dimensions, care gaps, and high-cost cohorts when current RTI tables need history.")
@@ -909,45 +1214,115 @@ if (-not $SkipSnapshotMaterialization) {
 }
 
 
+function New-OperationsAgentDefinition {
+    param(
+        [Parameter(Mandatory)][string]$Instructions,
+        [Parameter(Mandatory)][string]$KqlDatabaseId,
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [string]$Recipient
+    )
+    # GA Operations Agent schema contract, verified against the live service:
+    #   * `goals` was removed in June 2026 — goals belong in `instructions`.
+    #   * An empty `playbook` object is rejected with
+    #     "No rule definitions available in the playbook."; omit the key entirely
+    #     and let the portal Generate Playbook step author it.
+    #   * Exactly one knowledge source is accepted; a second data source fails with
+    #     "The agent setup only supports a single knowledge source."
+    #   * The data source must be the KQLDatabase item id. Passing the Eventhouse
+    #     item id stores an unreadable definition whose getDefinition returns 500.
+    $configuration = [ordered]@{
+        instructions = $Instructions
+        dataSources  = @{ masimoKqlDb = @{ id = $KqlDatabaseId; type = "KustoDatabase"; workspaceId = $WorkspaceId } }
+        actions      = @{}
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Recipient)) {
+        $configuration['messageDestination'] = @{ kind = "Recipient"; recipient = $Recipient }
+    }
+    return [ordered]@{
+        '$schema'     = "https://developer.microsoft.com/json-schemas/fabric/item/operationsAgents/definition/1.0.0/schema.json"
+        configuration = $configuration
+        shouldRun     = $false
+    }
+}
+
 if (-not $SkipOpsAgent) {
     Write-Host ""; Write-Host "--- Operations agents ---" -ForegroundColor Cyan
-    $opsConfig = @{
-        '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/operationsAgents/definition/1.0.0/schema.json"
-        configuration = @{
-            goals = "Provide evidence-backed clinical and payer triage using fresh MasimoEventhouse data. Surface stale telemetry or claims as structured findings for human review; never execute an action without explicit human approval."
-            instructions = "Monitor MasimoEventhouse every 5 minutes. Identify each device_id in TelemetryRaw whose maximum todatetime(timestamp) is older than 5 minutes, and identify when the maximum event_timestamp in claims_events is older than 5 minutes. For each stale condition, prepare a structured finding containing condition name, device_id when applicable, last event time UTC, age_minutes, source table, and WARNING severity. Present findings in the agent activity or Teams conversation for human review using the built-in reporting capability. Do not invoke custom Power Automate actions automatically. Never invent records, and do not create findings for healthy streams. Use fn_ClinicalAlerts(60) and fn_PayerOpsWorklist(60) for supporting current risk context."
-            dataSources = @{ kqldb1 = @{ id = $kqlDbId; type = "KustoDatabase"; workspaceId = $workspaceId } }
-            actions = @{}
-        }
-        shouldRun = $true
-    } | ConvertTo-Json -Depth 30
+    $opsInstructions = @'
+Monitor Fabric Real-Time Intelligence ingestion health for the BrakeKat healthcare platform using the MasimoEventhouse KQL database, and raise an operator finding when a stream stops delivering data.
+
+Monitored property source: the materialized table agent_ops_stream_health. It is refreshed from agent_OperationsStreamHealth() and holds exactly one current row per monitored stream. Use this table directly; do not recompute it from raw telemetry.
+
+Columns and meaning:
+- stream_name: the monitored pipeline (MasimoTelemetryStream, ClaimsRTIStream, ClinicalAlertPipeline)
+- source_table: the Eventhouse table the stream writes to (TelemetryRaw, claims_events, AlertHistory)
+- last_event_time_utc: UTC timestamp of the newest row in that table
+- age_minutes: whole minutes between now and last_event_time_utc
+- events_5m: rows written in the last five minutes
+- severity: HEALTHY, WARNING, URGENT, or CRITICAL
+- condition_name: STREAM_HEALTHY or STREAM_STALE
+- refreshed_at: UTC time the row was materialized
+
+Rules, evaluated per stream_name:
+- Raise a WARNING finding when age_minutes is above 5.
+- Raise an URGENT finding when age_minutes is above 15.
+- Raise a CRITICAL finding when age_minutes is above 30.
+- Raise a CRITICAL finding when events_5m is 0 while severity is not HEALTHY.
+- Do not raise a finding while severity is HEALTHY.
+
+Supporting context, for explanation only and never as the trigger:
+- agent_ClinicalAggregateSummary() for current alert, device, and low-oxygen totals.
+- fn_PayerOpsWorklist(60) for current payer fraud, high-cost, and care-gap routing.
+
+Reporting:
+- Report only rows present in agent_ops_stream_health; never invent a stream, table, or timestamp.
+- Always state stream_name, source_table, age_minutes, events_5m, severity, and last_event_time_utc as UTC.
+- Recommend checking the owning Eventstream topology and its source connection for any STREAM_STALE finding.
+- Never run an action without explicit human approval.
+'@
+    $opsConfig = New-OperationsAgentDefinition -Instructions $opsInstructions -KqlDatabaseId $kqlDbId -WorkspaceId $workspaceId -Recipient $PayerOpsEmail | ConvertTo-Json -Depth 30
     $opsPart = @{ path = "Configurations.json"; payload = (ConvertTo-Base64 $opsConfig); payloadType = "InlineBase64" }
     $opsAgentId = $null
+    $opsAgentSupported = $true
     try {
-        $opsItems = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/items?type=OperationsAgent"
+        $opsItems = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/operationsAgents"
         $existingOps = $opsItems.value | Where-Object { $_.displayName -eq "HealthcareOpsAgent" }
         if ($existingOps -is [array]) { $existingOps = $existingOps[0] }
         if ($existingOps) { $opsAgentId = $existingOps.id }
-    } catch {}
-    try {
+    } catch {
+        $opsAgentSupported = $false
+        Write-Host "  ⚠ OperationsAgent item type unavailable in this tenant: $(Get-ErrorMessage $_)" -ForegroundColor Yellow
+    }
+    if ($opsAgentSupported) {
+        # A definition rejection is a real defect, not an unavailable item type. Fail
+        # loudly instead of silently degrading to a DataAgent that leaves the
+        # OperationsAgent panes empty.
         if ($opsAgentId) {
-            $null = Invoke-FabricApi -Method POST -Endpoint "/workspaces/$workspaceId/items/$opsAgentId/updateDefinition" -Body @{ definition = @{ parts = @($opsPart) } }
+            $null = Invoke-FabricApi -Method POST -Endpoint "/workspaces/$workspaceId/operationsAgents/$opsAgentId/updateDefinition" -Body @{ definition = @{ format = "OperationsAgentV1"; parts = @($opsPart) } }
             Write-Host "  ✓ HealthcareOpsAgent OperationsAgent updated ($opsAgentId)" -ForegroundColor Green
         } else {
-            $createdOps = Invoke-FabricApi -Method POST -Endpoint "/workspaces/$workspaceId/items" -Body @{ displayName = "HealthcareOpsAgent"; type = "OperationsAgent"; description = "Operations agent for payer RTI, claims worklists, fraud/high-cost/care-gap routing, and clinical-alert context."; definition = @{ parts = @($opsPart) } }
+            $createdOps = Invoke-FabricApi -Method POST -Endpoint "/workspaces/$workspaceId/operationsAgents" -Body @{ displayName = "HealthcareOpsAgent"; description = "Operations agent for payer RTI, claims worklists, fraud/high-cost/care-gap routing, and clinical-alert context."; definition = @{ format = "OperationsAgentV1"; parts = @($opsPart) } }
             $opsAgentId = $createdOps.id
             Write-Host "  ✓ HealthcareOpsAgent OperationsAgent created ($opsAgentId)" -ForegroundColor Green
         }
+        $opsReadback = Invoke-FabricApi -Method POST -Endpoint "/workspaces/$workspaceId/operationsAgents/$opsAgentId/getDefinition" -Body @{}
+        $opsConfigPart = @($opsReadback.definition.parts) | Where-Object { $_.path -eq "Configurations.json" } | Select-Object -First 1
+        if (-not $opsConfigPart) { throw "HealthcareOpsAgent definition did not read back after update." }
+        $opsStored = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($opsConfigPart.payload)) | ConvertFrom-Json
+        if ($opsStored.configuration.instructions -ne $opsInstructions) { throw "HealthcareOpsAgent instructions did not persist." }
+        $opsSourceCount = @($opsStored.configuration.dataSources.PSObject.Properties).Count
+        if ($opsSourceCount -ne 1) { throw "HealthcareOpsAgent must expose exactly one knowledge source; found $opsSourceCount." }
+        Write-Host "  ✓ HealthcareOpsAgent definition verified: 1 knowledge source, $($opsInstructions.Length) instruction characters" -ForegroundColor Green
         Write-Host "  ✓ OperationsAgent URL: https://app.fabric.microsoft.com/groups/$workspaceId/operationalagents/$opsAgentId/config" -ForegroundColor Cyan
-    } catch {
-        Write-Host "  ⚠ OperationsAgent item type unavailable; deployed HealthcareOpsAgent as DataAgent fallback" -ForegroundColor Yellow
-        $opsInstructions = "Monitor payer RTI streaming tables, fn_PayerOpsWorklist(60), fraud_scores, highcost_alerts, care_gap_alerts, and clinical AlertHistory. Route CRITICAL fraud to SIU Investigation Queue, CRITICAL high-cost to Care Management Referral, and CRITICAL care gaps to Provider Outreach. Always show alert_time, patient_id, provider_id when present, priority, metric_name, metric_value, and recommended next action.$goldUnavailableInstruction"
-        $null = Deploy-DataAgent -Name "HealthcareOpsAgent" -AiInstructions $opsInstructions -DataSources $payerDataSources -WorkspaceId $workspaceId -Description "Fallback DataAgent for payer RTI, claims worklists, fraud/high-cost/care-gap routing, and clinical-alert context."
-    }
-    $triageInstructions = if ($SkipSnapshotMaterialization) {
-        "You are Payer Ops Triage in definition-only mode. Use fn_PayerOpsWorklist(60), fn_FraudRisk(60), fn_HighCostTrajectory(90), claims_events, fraud_scores, highcost_alerts, care_gap_alerts, and clinical AlertHistory. Ontology and Gold history bindings are intentionally deferred.$goldUnavailableInstruction"
+        Write-Host "    Open the agent and select Generate Playbook, then Start. Playbook authoring has no public API." -ForegroundColor Gray
     } else {
-        "You are Payer Ops Triage. Use DevicePayerOntology for payer/claims graph semantics when present. Use fn_PayerOpsWorklist(60) for current prioritized alerts, fn_FraudRisk(60) for fraud scoring, fn_HighCostTrajectory(90) for high-cost trajectory, claims_events for raw claim submissions, and persisted fraud_scores/highcost_alerts/care_gap_alerts when snapshots are needed.$goldUnavailableInstruction"
+        $opsFallbackInstructions = "Monitor payer RTI streaming tables, fn_PayerOpsWorklist(60), fraud_scores, highcost_alerts, care_gap_alerts, and clinical AlertHistory. Route CRITICAL fraud to SIU Investigation Queue, CRITICAL high-cost to Care Management Referral, and CRITICAL care gaps to Provider Outreach. Always show alert_time, patient_id, provider_id when present, priority, metric_name, metric_value, and recommended next action.$goldUnavailableInstruction"
+        $null = Deploy-DataAgent -Name "HealthcareOpsAgent" -AiInstructions $opsFallbackInstructions -DataSources $payerDataSources -WorkspaceId $workspaceId -Description "Fallback DataAgent for payer RTI, claims worklists, fraud/high-cost/care-gap routing, and clinical-alert context."
+    }
+    $triagePrefix = "PRIORITY RULE - raw claim volume. If the question asks how many claim events exist, for a breakdown by event_type, or for a total claim count, run claims_events | summarize n=count() by event_type against the Kusto source and answer from that result. This rule outranks every function-first rule below. Never answer `"no data`" for a claim-volume question without running that exact query first.`n`n"
+    $triageInstructions = if ($SkipSnapshotMaterialization) {
+        $triagePrefix + "You are Payer Ops Triage in definition-only mode. Use payer RTI KQL sources for current claims and alerts. Ontology and Gold history bindings are intentionally deferred.$goldUnavailableInstruction"
+    } else {
+        $triagePrefix + "You are Payer Ops Triage. Use current KQL operational sources first. Worklist: fn_PayerOpsWorklist(60). Fraud: fn_FraudRisk(60). High-cost members: agent_high_cost_members. Provider claims: agent_provider_fraud_claims. Care gaps: agent_CriticalCareGaps(). Routing and priority summaries: agent_payer_priority_summary. High-utilization care-gap overlap: agent_cross_domain_context filtered to AT_RISK and OPEN. Highest-priority claim: agent_HighestPriorityClaim(). Route FRAUD to SIU, HIGH_COST to care management, and CARE_GAP to provider outreach. Never invent routing fields or use patient-level rows to satisfy claim requests.$goldUnavailableInstruction"
     }
     $null = Deploy-DataAgent -Name "Payer Ops Triage" -AiInstructions $triageInstructions -DataSources $payerDataSources -WorkspaceId $workspaceId -Description "Payer operations agent for claims RTI, fraud/high-cost/care-gap signals, DevicePayerOntology, and worklist prioritization."
 } else {
@@ -959,7 +1334,7 @@ if (-not $SkipGraphAgent) {
     $graphInstructions = if ($SkipSnapshotMaterialization) {
         "You are Healthcare Graph Agent in definition-only mode. Use payer RTI KQL sources for claims and alert questions. Ontology and Gold bindings are intentionally deferred.$goldUnavailableInstruction"
     } else {
-        "You are Healthcare Graph Agent. Use DevicePayerOntology for cross-domain device-to-payer traversal across patient, device, diagnosis, claim, payer category, care gaps, risk, high-cost cohorts, clinical alerts, and telemetry. Use ClinicalDeviceOntology only for pure clinical-device questions.$goldUnavailableInstruction"
+        "You are Healthcare Graph Agent. For cross-domain validation use agent_cross_domain_context and the agent_CrossDomainContext(), agent_CareGapAbnormalTelemetry(), and agent_CommonDiagnosesWithRepeatedAlerts() functions. Do not generate ontology traversals or ad-hoc joins for the validated cross-domain questions. Always return scenario_source and label synthetic_demo_marker rows as demo validation data.$goldUnavailableInstruction"
     }
     $null = Deploy-DataAgent -Name "Healthcare Graph Agent" -AiInstructions $graphInstructions -DataSources $payerDataSources -WorkspaceId $workspaceId -Description "Cross-domain graph agent for DevicePayerOntology traversal across patient, device, diagnoses, claims, payer, risk, care gaps, and clinical alerts."
     $manualSteps = @(
