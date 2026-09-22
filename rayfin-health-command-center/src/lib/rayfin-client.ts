@@ -1,35 +1,37 @@
 //-----------------------------------------------------------------------
-// <copyright company="Microsoft Corporation">
-//        Copyright (c) Microsoft Corporation.  All rights reserved.
-//        Licensed under the MIT license. See LICENSE file in the project root for full license information.
-// </copyright>
+// Typed Rayfin data/auth client for the app database.
 //-----------------------------------------------------------------------
 
 import RayfinClient from "@microsoft/rayfin-client";
 
-let _client: RayfinClient | undefined;
+import type { AppSchema } from "../../rayfin/data/schema";
+
+/** The app's Rayfin client, typed against the entities in rayfin/data. */
+export type AppRayfinClient = RayfinClient<AppSchema>;
+
+let _client: AppRayfinClient | undefined;
 
 /**
- * Returns the singleton RayfinClient.
+ * Returns the singleton RayfinClient bound to AppSchema.
  *
- * Lazily constructs the client from `VITE_RAYFIN_BASE_URL` and
- * `VITE_RAYFIN_PUBLISHABLE_KEY`. Throws if either is missing — callers
- * (e.g. the AuthProvider) should catch and surface as a user-visible
- * error rather than crashing during render.
+ * `rayfin env` projects rayfin/.env into VITE_RAYFIN_API_URL; the older
+ * VITE_RAYFIN_BASE_URL name is still accepted so a hand-written .env.local
+ * keeps working. Throws when neither is present — callers surface that as a
+ * user-visible error rather than crashing during render.
  */
-export function getRayfinClient(): RayfinClient {
+export function getRayfinClient(): AppRayfinClient {
     if (_client) return _client;
 
-    const baseUrl = import.meta.env.VITE_RAYFIN_BASE_URL;
+    const baseUrl = import.meta.env.VITE_RAYFIN_API_URL ?? import.meta.env.VITE_RAYFIN_BASE_URL;
     const publishableKey = import.meta.env.VITE_RAYFIN_PUBLISHABLE_KEY;
 
     if (!baseUrl || !publishableKey) {
         throw new Error(
-            "RayfinClient requires VITE_RAYFIN_BASE_URL and VITE_RAYFIN_PUBLISHABLE_KEY to be set.",
+            "RayfinClient requires VITE_RAYFIN_API_URL (or VITE_RAYFIN_BASE_URL) and VITE_RAYFIN_PUBLISHABLE_KEY to be set.",
         );
     }
 
-    _client = new RayfinClient({
+    _client = new RayfinClient<AppSchema>({
         baseUrl,
         publishableKey,
         authStorage: true,

@@ -11,9 +11,30 @@ Hosting URL: https://oaken-cove-7a1eb21ad7-westus2.webapp.fabricapps.net
 
 The Gold lakehouse already carries claims economics, quality measures and
 imaging inventory for the same 100-patient cohort. Three audiences normally get
-three disconnected reports. This app proves one Gold layer can serve all three
-without copying a single row: every figure is a DAX query issued at render time
-against Direct Lake semantic models.
+three disconnected reports. This app proves one Gold layer can serve all three:
+a scheduled-on-demand sync pulls the Direct Lake models into the app's own
+database, and all three lenses render from that single snapshot.
+
+## How the numbers get there
+
+The dashboard reads the app's **own database**, not live DAX. Four entities in
+`rayfin/data/` back it:
+
+| Entity | Table | Holds |
+|---|---|---|
+| `KpiSnapshot` | `KpiSnapshots` | headline figures per lens, with unit and caption |
+| `SeriesPoint` | `SeriesPoints` | ranked bars: payer segments, care gaps, risk tiers, Stars measures, modality mix |
+| `WorklistRow` | `WorklistRows` | high-cost members and heavy imaging acquisitions, already masked |
+| `SyncRun` | `SyncRuns` | provenance: when the last sync ran, what it wrote, why it failed |
+
+Every entity is `@authenticated('*')`, so the data plane rejects anonymous
+callers — `POST /graphql` without a session returns
+`Anonymous access to this app is not enabled`.
+
+`src/lib/sync-gold.ts` is the only module that touches a semantic model. It
+executes the ten shipped DAX queries, masks identifiers, replaces the snapshot
+tables and records a `SyncRun`. The app runs it automatically the first time it
+finds an empty database, and the **Sync from Gold** button re-runs it on demand.
 
 ## Data dependency
 
@@ -49,16 +70,20 @@ numbers per segment.
 
 ```bash
 npm install
-npm run dev          # standalone shell; data requires the Fabric host
-npm run build        # regenerates fabric.generated.ts, typechecks, builds
-npm test             # template unit tests
-npx rayfin up --workspace-id <ws> --tenant <tenant> --yes
+npm run dev          # standalone shell; the data plane requires a Fabric session
+npm run build        # rayfin env + fabric-app-data generate + typecheck + build
+npm test             # unit tests
+npx rayfin up --workspace-id <ws> --tenant <tenant> --yes   # deploy app
+npx tsc -p rayfin/tsconfig.json && npx rayfin up db apply --yes   # apply schema
 npx rayfin up status
 ```
 
-Semantic model queries travel over the Fabric host's postMessage proxy, so they
-only resolve inside the workspace. Opened standalone, the app says so and blanks
-every figure instead of rendering zeroes that read like real business results.
+`rayfin up db apply` compiles `rayfin/data/*.ts` first; run `tsc -p
+rayfin/tsconfig.json` beforehand if the CLI reports no compiled entities.
+
+Both the app database and the semantic models require a Fabric session, so a
+standalone browser sees an empty dashboard and a banner that names the reason
+rather than zeroes that read like real business results.
 
 ## Privacy
 

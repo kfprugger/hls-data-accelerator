@@ -10,7 +10,8 @@ services:
       - http://localhost:5173
       - https://oaken-cove-7a1eb21ad7-westus2.webapp.fabricapps.net
   data:
-    enabled: false
+    enabled: true
+    dialect: mssql
   storage:
     enabled: false
   staticHosting:

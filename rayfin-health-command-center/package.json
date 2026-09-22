@@ -9,8 +9,8 @@
   "scripts": {
     "dev": "vite",
     "dev:fabric": "vite --mode fabric",
-    "build": "npx fabric-app-data generate -o src/fabric.generated.ts && tsc -b --noCheck && vite build",
-    "build:fabric": "npx fabric-app-data generate -o src/fabric.generated.ts && tsc -b --noCheck && vite build --mode fabric",
+    "build": "npx rayfin env && npx fabric-app-data generate -o src/fabric.generated.ts && tsc -b --noCheck && vite build",
+    "build:fabric": "npx rayfin env && npx fabric-app-data generate -o src/fabric.generated.ts && tsc -b --noCheck && vite build --mode fabric",
     "lint": "eslint .",
     "preview": "vite preview",
     "rayfin:dev": "rayfin dev",

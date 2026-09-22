@@ -6,6 +6,8 @@
         "declaration": true,
         "composite": true,
         "noEmit": false,
+        // The app tsconfig turns this on for Vite; emitting declarations here forbids it.
+        "allowImportingTsExtensions": false,
         "module": "nodenext",
         "moduleResolution": "nodenext"
     },
