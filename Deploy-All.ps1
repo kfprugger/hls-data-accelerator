@@ -2734,13 +2734,26 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
                                 $p4Token = Get-FabricTokenLocal
                                 $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
                                 try {
-                                    $daJobs = (Invoke-RestMethod -Uri "$p4Base/workspaces/$p4WsId/items/$($daNb.id)/jobs/instances?limit=1" -Headers $p4Headers -ErrorAction Stop).value
+                                    $remainingPollSeconds = [Math]::Max(1, [Math]::Ceiling(600 - (New-TimeSpan -Start $daStart).TotalSeconds))
+                                    $daJobs = (Invoke-RestMethod -Uri "$p4Base/workspaces/$p4WsId/items/$($daNb.id)/jobs/instances?limit=1" -Headers $p4Headers -TimeoutSec ([Math]::Min(30, $remainingPollSeconds)) -ErrorAction Stop).value
                                 } catch {
                                     $jobStatusCode = $null
                                     try { $jobStatusCode = [int]$_.Exception.Response.StatusCode } catch {}
                                     $jobBody = $_.ErrorDetails.Message
                                     if ($jobStatusCode -in @(429, 500, 502, 503, 504) -or ($jobStatusCode -eq 403 -and $jobBody -match "RequestDeniedByInboundPolicy")) {
                                         Write-Host "    DeviceAssociation job status transient HTTP $jobStatusCode — retrying..." -ForegroundColor Yellow
+                                        continue
+                                    }
+                                    $networkException = $_.Exception
+                                    $recoverableTransport = $false
+                                    $tlsFailure = $false
+                                    while ($networkException) {
+                                        if ($networkException -is [System.Security.Authentication.AuthenticationException]) { $tlsFailure = $true }
+                                        if ($networkException -is [System.IO.IOException] -or $networkException -is [System.Net.Sockets.SocketException] -or $networkException -is [System.TimeoutException] -or $networkException -is [System.OperationCanceledException]) { $recoverableTransport = $true }
+                                        $networkException = $networkException.InnerException
+                                    }
+                                    if (-not $jobStatusCode -and $recoverableTransport -and -not $tlsFailure) {
+                                        Write-Host "    DeviceAssociation job status transient transport error — retrying within deadline..." -ForegroundColor Yellow
                                         continue
                                     }
                                     throw $_

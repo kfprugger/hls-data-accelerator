@@ -18,6 +18,44 @@ logger = logging.getLogger(__name__)
 FABRIC_RESOURCE = "https://api.fabric.microsoft.com"
 FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
 
+_READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+_TRANSIENT_NETWORK_ERRORS = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.ChunkedEncodingError,
+    requests.exceptions.Timeout,
+)
+
+
+def _retry_network_error(
+    method: str,
+    endpoint: str,
+    error: requests.exceptions.RequestException,
+    attempt: int,
+    max_retries: int,
+    deadline: float | None = None,
+) -> bool:
+    # ConnectTimeout means the request was not sent. Other transport failures
+    # can lose a response after a mutation committed, so only retry reads.
+    retryable = not isinstance(error, requests.exceptions.SSLError) and (
+        method.upper() in _READ_ONLY_METHODS
+        or isinstance(error, requests.exceptions.ConnectTimeout)
+    )
+    if not retryable or attempt >= max_retries:
+        logger.warning(
+            "Network failure on %s %s (%s, attempt %d/%d); not replaying request.",
+            method, endpoint, type(error).__name__, attempt, max_retries,
+        )
+        return False
+    delay = min(20, 5 * attempt)
+    if deadline is not None:
+        delay = min(delay, max(0, deadline - time.monotonic()))
+    logger.warning(
+        "Network failure on %s %s (%s, attempt %d/%d); retrying in %.1fs.",
+        method, endpoint, type(error).__name__, attempt, max_retries, delay,
+    )
+    time.sleep(delay)
+    return True
+
 
 class FabricClient:
     """Wrapper for Fabric REST API calls with retry and LRO support."""
@@ -45,6 +83,7 @@ class FabricClient:
         return {
             "Authorization": f"Bearer {self._get_token()}",
             "Content-Type": "application/json",
+            "x-ms-fabric-skill": "e2e-medallion-architecture",
         }
 
     # ── Core API call ──────────────────────────────────────────────────
@@ -78,45 +117,49 @@ class FabricClient:
                     json=body if body and method != "GET" else None,
                     timeout=120,
                 )
+            except _TRANSIENT_NETWORK_ERRORS as exc:
+                if not _retry_network_error(method, endpoint, exc, attempt, max_retries):
+                    raise
+                continue
 
-                # Success
-                if resp.status_code in (200, 201):
-                    return resp.json() if resp.content else None
-                if resp.status_code == 204:
-                    return None
+            # Success
+            if resp.status_code in (200, 201):
+                return resp.json() if resp.content else None
+            if resp.status_code == 204:
+                return None
 
-                # 202 — Long-running operation
-                if resp.status_code == 202:
-                    return self._poll_lro(resp)
+            # Keep polling outside the request retry handler: an accepted POST
+            # must never be submitted again because its status poll failed.
+            if resp.status_code == 202:
+                return self._poll_lro(resp)
 
-                retryable_inbound_policy = (
-                    resp.status_code == 403
-                    and "RequestDeniedByInboundPolicy" in resp.text
+            retryable_inbound_policy = (
+                resp.status_code == 403
+                and "RequestDeniedByInboundPolicy" in resp.text
+            )
+            retryable_status = (
+                resp.status_code == 429
+                or (resp.status_code >= 500 and method.upper() in _READ_ONLY_METHODS)
+                or retryable_inbound_policy
+            )
+            if retryable_status and attempt < max_retries:
+                retry_after = int(resp.headers.get("Retry-After", "0") or "0")
+                if retry_after <= 0:
+                    retry_after = min(20, 5 * attempt)
+                logger.warning(
+                    "HTTP %s on %s. Waiting %ds (attempt %d/%d): %s",
+                    resp.status_code,
+                    endpoint,
+                    retry_after,
+                    attempt,
+                    max_retries,
+                    resp.text[:500],
                 )
-                retryable_status = resp.status_code == 429 or resp.status_code >= 500 or retryable_inbound_policy
-                if retryable_status and attempt < max_retries:
-                    retry_after = int(resp.headers.get("Retry-After", "0") or "0")
-                    if retry_after <= 0:
-                        retry_after = min(20, 5 * attempt)
-                    logger.warning(
-                        "HTTP %s on %s. Waiting %ds (attempt %d/%d): %s",
-                        resp.status_code,
-                        endpoint,
-                        retry_after,
-                        attempt,
-                        max_retries,
-                        resp.text[:500],
-                    )
-                    time.sleep(retry_after)
-                    continue
+                time.sleep(retry_after)
+                continue
 
-                # Other errors
-                resp.raise_for_status()
-
-            except requests.exceptions.HTTPError:
-                # Deterministic 4xx responses have already bypassed the retry branch
-                # above. Retrying them hides configuration and permission failures.
-                raise
+            # Deterministic HTTP failures are not transport errors.
+            resp.raise_for_status()
 
         return None
 
@@ -132,13 +175,29 @@ class FabricClient:
             return initial_response.json() if initial_response.content else None
 
         poll_url = location or f"{self.api_base}/operations/{operation_id}"
-        deadline = time.time() + timeout_seconds
+        deadline = time.monotonic() + timeout_seconds
 
-        while time.time() < deadline:
-            time.sleep(retry_after)
-            resp = requests.get(
-                poll_url, headers=self._headers(), timeout=60
-            )
+        while time.monotonic() < deadline:
+            time.sleep(min(max(0, retry_after), max(0, deadline - time.monotonic())))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                resp = requests.get(
+                    poll_url, headers=self._headers(), timeout=min(60, remaining)
+                )
+            except _TRANSIENT_NETWORK_ERRORS as exc:
+                if isinstance(exc, requests.exceptions.SSLError):
+                    raise
+                logger.warning(
+                    "Network failure polling LRO %s (%s); retrying within deadline.",
+                    poll_url, type(exc).__name__,
+                )
+                retry_after = max(1, retry_after)
+                continue
+
+            if time.monotonic() >= deadline:
+                break
 
             if resp.status_code == 200:
                 data = resp.json() if resp.content else {}
@@ -163,20 +222,33 @@ class FabricClient:
         endpoint: str,
         body: dict[str, Any] | None = None,
         max_retries: int = 3,
+        *,
+        timeout_seconds: float | None = None,
     ) -> requests.Response:
-        """Issue a Fabric request while preserving response headers and body."""
+        """Preserve the response, optionally bounding all attempts by one budget."""
         url = endpoint if endpoint.startswith("http") else f"{self.api_base}{endpoint}"
+        deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
         for attempt in range(1, max_retries + 1):
-            response = requests.request(
-                method,
-                url,
-                headers=self._headers(),
-                json=body if body is not None else None,
-                timeout=120,
-            )
+            remaining = 120 if deadline is None else deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"Fabric request timed out: {method} {endpoint}")
+            try:
+                response = requests.request(
+                    method,
+                    url,
+                    headers=self._headers(),
+                    json=body if body is not None else None,
+                    timeout=min(120, remaining),
+                )
+            except _TRANSIENT_NETWORK_ERRORS as exc:
+                if not _retry_network_error(method, endpoint, exc, attempt, max_retries, deadline):
+                    raise
+                continue
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError(f"Fabric request timed out: {method} {endpoint}")
             retryable = (
                 response.status_code == 429
-                or response.status_code >= 500
+                or (response.status_code >= 500 and method.upper() in _READ_ONLY_METHODS)
                 or (
                     response.status_code == 403
                     and "RequestDeniedByInboundPolicy" in response.text
@@ -184,7 +256,10 @@ class FabricClient:
             )
             if retryable and attempt < max_retries:
                 delay = int(response.headers.get("Retry-After", "0") or "0")
-                time.sleep(delay if delay > 0 else min(20, 5 * attempt))
+                delay = delay if delay > 0 else min(20, 5 * attempt)
+                if deadline is not None:
+                    delay = min(delay, max(0, deadline - time.monotonic()))
+                time.sleep(delay)
                 continue
             response.raise_for_status()
             return response
@@ -203,16 +278,21 @@ class FabricClient:
         for attempt in range(1, max_retries + 1):
             headers = self._headers()
             headers["Content-Type"] = content_type
-            response = requests.request(
-                method,
-                url,
-                headers=headers,
-                data=content,
-                timeout=120,
-            )
+            try:
+                response = requests.request(
+                    method,
+                    url,
+                    headers=headers,
+                    data=content,
+                    timeout=120,
+                )
+            except _TRANSIENT_NETWORK_ERRORS as exc:
+                if not _retry_network_error(method, endpoint, exc, attempt, max_retries):
+                    raise
+                continue
             retryable = (
                 response.status_code in {404, 429}
-                or response.status_code >= 500
+                or (response.status_code >= 500 and method.upper() in _READ_ONLY_METHODS)
                 or (
                     response.status_code == 403
                     and "RequestDeniedByInboundPolicy" in response.text
@@ -274,12 +354,14 @@ class FabricClient:
         progress_callback: Callable[[dict[str, Any], int], None] | None = None,
     ) -> dict[str, Any]:
         """Wait for a Fabric item job and raise on failure or timeout."""
-        started_at = time.time()
+        started_at = time.monotonic()
         deadline = started_at + timeout_seconds
-        while time.time() < deadline:
-            response = self.request_raw("GET", job_url)
+        while time.monotonic() < deadline:
+            response = self.request_raw(
+                "GET", job_url, timeout_seconds=max(0, deadline - time.monotonic())
+            )
             payload = response.json() if response.content else {}
-            elapsed_seconds = int(time.time() - started_at)
+            elapsed_seconds = int(time.monotonic() - started_at)
             if progress_callback:
                 progress_callback(payload, elapsed_seconds)
             status = str(payload.get("status", "")).lower()
@@ -288,7 +370,8 @@ class FabricClient:
             if status in {"failed", "cancelled", "canceled", "deduped"}:
                 raise RuntimeError(f"Fabric item job failed: {payload}")
             delay = int(response.headers.get("Retry-After", "0") or "0")
-            time.sleep(delay if delay > 0 else poll_seconds)
+            delay = delay if delay > 0 else poll_seconds
+            time.sleep(min(delay, max(0, deadline - time.monotonic())))
         raise TimeoutError(f"Fabric item job timed out after {timeout_seconds}s: {job_url}")
 
     # ── Workspace Operations ───────────────────────────────────────────

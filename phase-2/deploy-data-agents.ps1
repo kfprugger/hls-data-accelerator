@@ -62,43 +62,35 @@ function Invoke-FabricApi {
         [int]$MaxRetries   = 3
     )
     $token   = Get-FabricAccessToken
-    $headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" }
+    $headers = @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "e2e-medallion-architecture" }
     $uri     = "$FabricApiBase$Endpoint"
     $bodyJson = if ($Body) { $Body | ConvertTo-Json -Depth 20 -Compress } else { $null }
 
     for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
         try {
-            $params = @{ Method = $Method; Uri = $uri; Headers = $headers }
+            $params = @{ Method = $Method; Uri = $uri; Headers = $headers; TimeoutSec = 120 }
             if ($bodyJson -and $Method -ne "GET") { $params["Body"] = $bodyJson }
             return (Invoke-RestMethod @params)
         }
         catch {
             $statusCode = $null
             try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
-            $errBody = ""
-            try { $errBody = $_.ErrorDetails.Message } catch {}
-            if (($statusCode -eq 429 -or $statusCode -ge 500 -or ($statusCode -eq 403 -and $errBody -match "RequestDeniedByInboundPolicy")) -and $attempt -lt $MaxRetries) {
+            $readOnly = $Method.ToUpperInvariant() -in @('GET','HEAD','OPTIONS')
+            $exception = $_.Exception
+            $transport = $false
+            $tlsFailure = $false
+            while ($exception) {
+                if ($exception -is [System.Security.Authentication.AuthenticationException]) { $tlsFailure = $true }
+                if ($exception -is [System.IO.IOException] -or $exception -is [System.Net.Sockets.SocketException] -or $exception -is [System.TimeoutException] -or $exception -is [System.OperationCanceledException]) { $transport = $true }
+                $exception = $exception.InnerException
+            }
+            if (($statusCode -eq 429 -or ($readOnly -and ($statusCode -ge 500 -or (-not $statusCode -and $transport -and -not $tlsFailure)))) -and $attempt -lt $MaxRetries) {
                 $retryAfter = [Math]::Min(120, 10 * [Math]::Pow(2, $attempt - 1))
                 if ($statusCode -eq 429) {
                     try { $retryAfter = [int]$_.Exception.Response.Headers["Retry-After"] } catch {}
                 }
                 Write-Host "  Fabric API transient HTTP ${statusCode}. Waiting ${retryAfter}s... (attempt $attempt/$MaxRetries)" -ForegroundColor Yellow
                 Start-Sleep -Seconds $retryAfter
-                continue
-            }
-            # 202 long-running operation - poll for completion
-            if ($statusCode -eq 202 -and $attempt -lt $MaxRetries) {
-                $location = $null
-                try { $location = $_.Exception.Response.Headers.Location.ToString() } catch {}
-                if (-not $location) {
-                    try { $location = $_.Exception.Response.Headers["Location"] } catch {}
-                }
-                if ($location) {
-                    Write-Host "  Long-running operation, polling..." -ForegroundColor Gray
-                    Start-Sleep -Seconds 5
-                    try { return (Invoke-RestMethod -Uri $location -Headers $headers -Method GET) } catch {}
-                }
-                Start-Sleep -Seconds 5
                 continue
             }
             throw $_
@@ -124,7 +116,7 @@ function New-OntologyDatasourceIfAvailable {
         if (-not $ontology) { return $null }
 
         $datasourceJson = (@{
-            '$schema'              = "1.0.0"
+            '$schema'              = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
             artifactId             = $ontology.id
             workspaceId            = $workspaceId
             displayName            = $OntologyName
@@ -132,7 +124,7 @@ function New-OntologyDatasourceIfAvailable {
             userDescription        = $UserDescription
             dataSourceInstructions = $Instructions
         } | ConvertTo-Json -Depth 10)
-        $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = @() } | ConvertTo-Json -Depth 5)
+        $fewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = @() } | ConvertTo-Json -Depth 5)
         return @{ FolderName = "ontology-$OntologyName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson }
     } catch {
         Write-Host "  ⚠ Could not attach ontology datasource '$OntologyName': $($_.Exception.Message)" -ForegroundColor Yellow
@@ -407,25 +399,44 @@ $lakehouseUserDescription = if ($IncludeDicomImaging) {
 
 function Update-DataAgentDefinition {
     param([string]$WorkspaceId, [string]$DataAgentId, [object]$Definition)
-    $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
+    $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "e2e-medallion-architecture" }
     $body = @{ definition = $Definition } | ConvertTo-Json -Depth 30
+    # Issue the mutation once; a lost response is not verified success.
     $response = Invoke-WebRequest -Method POST `
         -Uri "$FabricApiBase/workspaces/$WorkspaceId/dataAgents/$DataAgentId/updateDefinition" `
         -Headers $headers -Body $body -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop
     if ($response.StatusCode -eq 200) { return }
     if ($response.StatusCode -ne 202) { throw "DataAgent definition update returned HTTP $($response.StatusCode)" }
-
-    $location = $response.Headers["Location"]
+    $location = $response.Headers['Location']
     if ($location -is [array]) { $location = $location[0] }
-    if (-not $location) { throw "DataAgent definition update returned 202 without a Location header" }
-    for ($attempt = 1; $attempt -le 60; $attempt++) {
-        Start-Sleep 5
+    if (-not $location) { throw 'DataAgent definition update returned 202 without a Location header' }
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($watch.Elapsed.TotalSeconds -lt 300) {
+        Start-Sleep -Milliseconds ([int]([Math]::Min(5, 300 - $watch.Elapsed.TotalSeconds) * 1000))
+        $remaining = 300 - $watch.Elapsed.TotalSeconds
+        if ($remaining -lt 1) { break }
         $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
-        $operation = Invoke-RestMethod -Uri $location -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
-        if ($operation.status -eq "Succeeded") { return }
-        if ($operation.status -eq "Failed") { throw "DataAgent definition update failed: $($operation.error.message)" }
+        try {
+            $operation = Invoke-RestMethod -Uri $location -Headers $headers -Method GET -TimeoutSec ([int][Math]::Floor([Math]::Min(30, $remaining))) -ErrorAction Stop
+        } catch {
+            $statusCode = $null
+            try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+            $exception = $_.Exception
+            $transport = $false
+            $tlsFailure = $false
+            while ($exception) {
+                if ($exception -is [System.Security.Authentication.AuthenticationException]) { $tlsFailure = $true }
+                if ($exception -is [System.IO.IOException] -or $exception -is [System.Net.Sockets.SocketException] -or $exception -is [System.TimeoutException] -or $exception -is [System.OperationCanceledException]) { $transport = $true }
+                $exception = $exception.InnerException
+            }
+            if ($statusCode -in @(408,429,500,502,503,504) -or (-not $statusCode -and $transport -and -not $tlsFailure)) { continue }
+            throw
+        }
+        if ($watch.Elapsed.TotalSeconds -ge 300) { break }
+        if ($operation.status -eq 'Succeeded') { return }
+        if ($operation.status -in @('Failed','Cancelled','Canceled','Deduped')) { throw "DataAgent definition update did not succeed: $($operation | ConvertTo-Json -Depth 5)" }
     }
-    throw "DataAgent definition update did not complete within 5 minutes"
+    throw 'DataAgent definition update did not complete within 5 minutes'
 }
 
 function Deploy-DataAgent {
@@ -862,7 +873,7 @@ TelemetryRaw
 
     # --- Build data sources ---
     $kqlDatasourceJson = (@{
-        '$schema'              = "1.0.0"
+        '$schema'              = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
         artifactId             = $kqlDbId
         workspaceId            = $workspaceId
         displayName            = $kqlDbDisplayName
@@ -873,12 +884,12 @@ TelemetryRaw
     } | ConvertTo-Json -Depth 10)
 
     $kqlFewShotsJson = (@{
-        '$schema' = "1.0.0"
+        '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"
         fewShots  = $p360FewShots
     } | ConvertTo-Json -Depth 10)
 
     $lhDatasourceJson = (@{
-        '$schema'              = "1.0.0"
+        '$schema'              = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
         artifactId             = $silverLhId
         workspaceId            = $workspaceId
         displayName            = $silverLhName
@@ -888,7 +899,7 @@ TelemetryRaw
         elements               = $lakehouseElements
     } | ConvertTo-Json -Depth 20)
 
-    $lhFewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $lhFewShots } | ConvertTo-Json -Depth 10)
+    $lhFewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = $lhFewShots } | ConvertTo-Json -Depth 10)
 
     $p360DataSources = @(
         @{ FolderName = "kusto-$kqlDbDisplayName";          DatasourceJson = $kqlDatasourceJson; FewShotsJson = $kqlFewShotsJson },
@@ -1182,7 +1193,7 @@ TelemetryRaw
 
     # --- Build data sources ---
     $kqlDatasourceJson = (@{
-        '$schema'              = "1.0.0"
+        '$schema'              = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
         artifactId             = $kqlDbId
         workspaceId            = $workspaceId
         displayName            = $kqlDbDisplayName
@@ -1193,12 +1204,12 @@ TelemetryRaw
     } | ConvertTo-Json -Depth 10)
 
     $kqlFewShotsJson = (@{
-        '$schema' = "1.0.0"
+        '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"
         fewShots  = $triageFewShots
     } | ConvertTo-Json -Depth 10)
 
     $lhDatasourceJson = (@{
-        '$schema'              = "1.0.0"
+        '$schema'              = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
         artifactId             = $silverLhId
         workspaceId            = $workspaceId
         displayName            = $silverLhName
@@ -1208,7 +1219,7 @@ TelemetryRaw
         elements               = $lakehouseElements
     } | ConvertTo-Json -Depth 20)
 
-    $lhFewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $lhFewShots } | ConvertTo-Json -Depth 10)
+    $lhFewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = $lhFewShots } | ConvertTo-Json -Depth 10)
 
     $triageDataSources = @(
         @{ FolderName = "kusto-$kqlDbDisplayName";          DatasourceJson = $kqlDatasourceJson; FewShotsJson = $kqlFewShotsJson },

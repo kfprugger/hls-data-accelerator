@@ -247,6 +247,8 @@ A created resource is not automatically a working surface. The deployment and ev
 
 See the [evaluation harness guide](eval/README.md) and the [interactive end-to-end verification map](docs/hls-end-to-end-verification.html).
 
+If an existing Data Agent shows stale or inaccessible schema selections, use the [Data Agent schema refresh runbook](docs/DATA-AGENT-SCHEMA-REFRESH.md). The utility is read-only by default; apply requires backups and verifies both draft and published selections.
+
 ## Teardown
 
 > [!CAUTION]

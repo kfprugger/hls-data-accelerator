@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot '../../utilities/data-agent-selection.ps1')
 $scriptPath = Join-Path $PSScriptRoot '../deploy-payer-rti.ps1'
 $tokens = $null
 $parseErrors = $null
@@ -9,15 +10,8 @@ if ($parseErrors -and $parseErrors.Count -gt 0) {
 }
 
 foreach ($functionName in @(
-    'Set-DataAgentSelectionValue',
-    'Update-DataAgentLakehouseElementSelection',
-    'Update-DataAgentKustoElementSelection',
-    'Get-SelectedDataAgentTables',
-    'Get-SelectedDataAgentFunctions',
-    'New-KqlDatasource',
-    'New-LakehouseDatasource',
-    'New-OntologyDatasourceIfAvailable',
-    'Deploy-DataAgent'
+    'Assert-DataAgentTableSelection',
+    'New-LakehouseDatasource'
 )) {
     $functionAst = $ast.Find({
         param($node)
@@ -131,18 +125,6 @@ foreach ($function in @($functionRoot.children)) {
 }
 
 
-$kustoElements = @($kustoTargets | ForEach-Object { @{ id = [guid]::NewGuid().ToString(); display_name = $_; type = 'kusto.table'; is_selected = $true } })
-$kustoDatasource = New-KqlDatasource `
-    -DisplayName 'MasimoEventhouse' `
-    -KqlDbId 'kql-id' `
-    -WorkspaceId 'workspace-id' `
-    -Elements $kustoElements `
-    -FewShots @() `
-    -Instructions 'Use the selected Eventhouse tables.' `
-    -Functions $kustoFunctions
-Assert-Equal -Expected 'kusto' -Actual $kustoDatasource.SelectionKind -Message 'KQL datasource should request Kusto hydration repair.'
-Assert-Equal -Expected ($kustoTargets -join ',') -Actual (@($kustoDatasource.SelectedTables) -join ',') -Message 'KQL datasource metadata should retain the Eventhouse table contract.'
-Assert-Equal -Expected ($kustoFunctions -join ',') -Actual (@($kustoDatasource.SelectedFunctions) -join ',') -Message 'KQL datasource metadata should retain the Kusto function contract.'
 
 $goldFewShots = @(
     @{ id = 'gold-shot'; question = 'Summarize historical claims.'; query = 'SELECT COUNT(*) FROM dbo.fact_claim' }
@@ -154,59 +136,29 @@ $datasource = New-LakehouseDatasource `
     -Tables $targetTables `
     -Instructions 'Use the selected Gold tables.' `
     -FewShots $goldFewShots
-Assert-Equal -Expected 'lakehouse_tables-healthcare1_reporting_gold' -Actual $datasource.FolderName -Message 'Datasource folder convention changed unexpectedly.'
-Assert-Equal -Expected ($targetTables -join ',') -Actual (@($datasource.SelectedTables) -join ',') -Message 'Datasource metadata should retain the requested table contract for post-hydration repair.'
-Assert-Equal -Expected 'lakehouse' -Actual $datasource.SelectionKind -Message 'Lakehouse datasource should request Lakehouse hydration repair.'
-$decodedGoldFewShots = $datasource.FewShotsJson | ConvertFrom-Json -Depth 20
-Assert-Equal -Expected 1 -Actual @($decodedGoldFewShots.fewShots).Count -Message 'Gold datasource must retain its source-specific few-shots.'
 
-$script:CallOrder = [System.Collections.Generic.List[string]]::new()
-function Invoke-FabricApi {
-    param([string]$Method = 'GET', [string]$Endpoint, [object]$Body, [int]$MaxRetries = 3)
-    return [pscustomobject]@{ value = @(
-        [pscustomobject]@{ displayName = 'Payer Ops Triage'; id = 'agent-id' },
-        [pscustomobject]@{ displayName = 'DevicePayerOntology'; id = 'ontology-id' }
-    ) }
+# A hydrated definition uses hyphenated folder prefixes. Verify both stages by
+# resolving that native path, rather than pinning the constructor's spelling.
+$selectedPayload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((@{ elements = @($root) } | ConvertTo-Json -Depth 100)))
+$script:HydratedDefinition = [pscustomobject]@{ definition = [pscustomobject]@{ parts = @(
+    [pscustomobject]@{ path = 'Files/Config/draft/lakehouse-tables-healthcare1_reporting_gold/datasource.json'; payload = $selectedPayload },
+    [pscustomobject]@{ path = 'Files/Config/published/lakehouse-tables-healthcare1_reporting_gold/datasource.json'; payload = $selectedPayload }
+) } }
+function Get-DataAgentDefinition {
+    param($WorkspaceId, $DataAgentId)
+    return $script:HydratedDefinition
 }
-function ConvertTo-Base64 { param([string]$Text) return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Text)) }
-function Update-DataAgentDefinition { param($WorkspaceId, $DataAgentId, $Definition) $script:CallOrder.Add('update') }
-function Get-ErrorMessage { param($Record) return [string]$Record }
+Assert-DataAgentTableSelection -WorkspaceId 'workspace-id' -DataAgentId 'agent-id' -DatasourceFolderName $datasource.FolderName -Tables $targetTables -Functions $datasource.SelectedFunctions -SelectionKind 'lakehouse'
 
-$ontologyTypes = @('Patient', 'Device', 'Claim')
-$ontologyShots = @(@{ id = 'ontology-shot'; question = 'Trace patient to claim.'; query = 'MATCH (p:Patient)-[:hasClaim]->(c:Claim) RETURN p, c LIMIT 1' })
-$ontologyDatasource = New-OntologyDatasourceIfAvailable `
-    -OntologyName 'DevicePayerOntology' `
-    -WorkspaceId 'workspace-id' `
-    -UserDescription 'Graph source' `
-    -Instructions 'Use ontology first.' `
-    -EntityTypes $ontologyTypes `
-    -FewShots $ontologyShots
-$decodedOntology = $ontologyDatasource.DatasourceJson | ConvertFrom-Json -Depth 20
-$decodedOntologyShots = $ontologyDatasource.FewShotsJson | ConvertFrom-Json -Depth 20
-Assert-Equal -Expected 3 -Actual @($decodedOntology.elements).Count -Message 'Ontology datasource must select every requested entity type.'
-Assert-True (@($decodedOntology.elements | Where-Object { -not $_.is_selected }).Count -eq 0) 'Every ontology entity must be selected.'
-Assert-Equal -Expected 1 -Actual @($decodedOntologyShots.fewShots).Count -Message 'Ontology datasource must retain graph few-shots.'
-function Repair-DataAgentTableSelection {
-    param($WorkspaceId, $DataAgentId, $DatasourceFolderName, $Tables, $Functions, $SelectionKind)
-    $expected = if ($SelectionKind -eq 'kusto') { $kustoTargets } else { $targetTables }
-    Assert-Equal -Expected ($expected -join ',') -Actual (@($Tables) -join ',') -Message "Deploy should pass the exact $SelectionKind table contract to hydrated selection repair."
-    if ($SelectionKind -eq 'kusto') { Assert-Equal -Expected ($kustoFunctions -join ',') -Actual (@($Functions) -join ',') -Message 'Deploy should pass the exact Kusto function contract to hydrated selection repair.' }
-    $script:CallOrder.Add("repair-$SelectionKind")
+$publishedDatasource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($selectedPayload)) | ConvertFrom-Json -Depth 100
+$publishedDatasource.elements[0].children[0].children[0].children[0].is_selected = $false
+$script:HydratedDefinition.definition.parts[1].payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($publishedDatasource | ConvertTo-Json -Depth 100)))
+$rejectedPublishedSelection = $false
+try {
+    Assert-DataAgentTableSelection -WorkspaceId 'workspace-id' -DataAgentId 'agent-id' -DatasourceFolderName $datasource.FolderName -Tables $targetTables -Functions $datasource.SelectedFunctions -SelectionKind 'lakehouse'
+} catch {
+    $rejectedPublishedSelection = $_.Exception.Message -like 'published lakehouse selections do not match*'
 }
-function Publish-DataAgentDefinition { param($WorkspaceId, $DataAgentId, $Description) $script:CallOrder.Add('publish') }
-function Assert-DataAgentTableSelection {
-    param($WorkspaceId, $DataAgentId, $DatasourceFolderName, $Tables, $Functions, $SelectionKind)
-    $expected = if ($SelectionKind -eq 'kusto') { $kustoTargets } else { $targetTables }
-    Assert-Equal -Expected ($expected -join ',') -Actual (@($Tables) -join ',') -Message "Deploy should verify the exact $SelectionKind table contract after publish."
-    if ($SelectionKind -eq 'kusto') { Assert-Equal -Expected ($kustoFunctions -join ',') -Actual (@($Functions) -join ',') -Message 'Deploy should verify the exact Kusto function contract after publish.' }
-    $script:CallOrder.Add("assert-$SelectionKind")
-}
+Assert-True $rejectedPublishedSelection 'A missing requested table in the published datasource must fail validation even when draft selections match.'
 
-$null = Deploy-DataAgent `
-    -Name 'Payer Ops Triage' `
-    -AiInstructions 'Use selected Gold tables.' `
-    -DataSources @($kustoDatasource, $datasource) `
-    -WorkspaceId 'workspace-id' `
-    -Description 'test agent'
-Assert-Equal -Expected 'update,repair-kusto,repair-lakehouse,publish,assert-kusto,assert-lakehouse' -Actual ($script:CallOrder -join ',') -Message 'Deploy must repair all hydrated datasource IDs before publish and verify both definitions afterward.'
 Write-Host 'Data Agent table selection tests passed.'

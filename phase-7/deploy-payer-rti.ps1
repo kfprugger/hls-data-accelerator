@@ -21,6 +21,9 @@ param (
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Keep Azure CLI output Unicode-safe on Windows, including build failures.
+$env:PYTHONUTF8 = '1'
+
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptRoot
 $script:AccessTokenCache = @{}
@@ -114,57 +117,33 @@ function Get-AcrImageMetadata {
         [Parameter(Mandatory)][string]$Tag
     )
 
-    $raw = az acr manifest list-metadata --registry $Registry --name $Repository --query "[?tags[?contains(@, '$Tag')]][0].{digest:digest, createdTime:createdTime, lastUpdateTime:lastUpdateTime}" -o json 2>$null
+    $raw = az acr repository show --name $Registry --image "${Repository}:${Tag}" --query "{digest:digest, createdTime:createdTime, lastUpdateTime:lastUpdateTime}" -o json 2>$null
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw) -or $raw -eq "null") { return $null }
     return $raw | ConvertFrom-Json
 }
 
-function Test-AcrImageUpdated {
-    param(
-        [object]$Metadata,
-        [string]$PreviousDigest,
-        [datetime]$StartedUtc
-    )
-
-    if (-not $Metadata) { return $false }
-    if (-not $PreviousDigest) { return $true }
-    if ($Metadata.digest -and $Metadata.digest -ne $PreviousDigest) { return $true }
-
-    $lastUpdate = $null
-    if ($Metadata.lastUpdateTime) {
-        try { $lastUpdate = [datetime]::Parse($Metadata.lastUpdateTime).ToUniversalTime() } catch { $lastUpdate = $null }
-    }
-    return ($lastUpdate -and $lastUpdate -ge $StartedUtc.AddMinutes(-1))
-}
 
 function Invoke-AcrBuildWithTagVerification {
     param(
         [Parameter(Mandatory)][string]$Registry,
         [Parameter(Mandatory)][string]$Repository,
         [Parameter(Mandatory)][string]$Tag,
-        [Parameter(Mandatory)][string]$ContextPath,
-        [int]$RemoteCompletionWaitSeconds = 300
+        [Parameter(Mandatory)][string]$ContextPath
     )
 
-    $before = Get-AcrImageMetadata -Registry $Registry -Repository $Repository -Tag $Tag
-    $previousDigest = if ($before) { $before.digest } else { $null }
-    $startedUtc = (Get-Date).ToUniversalTime()
-    az acr build --registry $Registry --image "${Repository}:${Tag}" $ContextPath
+    # --no-logs still waits for completion; do not infer success from a changed tag
+    # after a CLI failure, which does not establish a successful build.
+    $buildStatus = az acr build --registry $Registry --image "${Repository}:${Tag}" --no-logs --query status -o tsv $ContextPath
     $buildExitCode = $LASTEXITCODE
-    if ($buildExitCode -eq 0) { return }
-
-    Write-Host "  ⚠ ACR build command returned non-zero exit code ($buildExitCode); polling for remote completion..." -ForegroundColor Yellow
-    $deadline = (Get-Date).AddSeconds($RemoteCompletionWaitSeconds)
-    while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Seconds 15
-        $metadata = Get-AcrImageMetadata -Registry $Registry -Repository $Repository -Tag $Tag
-        if (Test-AcrImageUpdated -Metadata $metadata -PreviousDigest $previousDigest -StartedUtc $startedUtc) {
-            Write-Host "  ✓ Image ${Repository}:${Tag} is present/updated in ACR after command disconnect — continuing" -ForegroundColor Yellow
-            return
-        }
+    if ($buildExitCode -ne 0 -or "$buildStatus".Trim() -ne 'Succeeded') {
+        throw "ACR build did not report successful completion for ${Repository}:${Tag}. Exit code: $buildExitCode; status: $buildStatus"
     }
 
-    throw "ACR build failed and ${Repository}:${Tag} was not published. Exit code: $buildExitCode"
+    $metadata = Get-AcrImageMetadata -Registry $Registry -Repository $Repository -Tag $Tag
+    if (-not $metadata -or [string]$metadata.digest -notmatch '^sha256:[0-9a-fA-F]{64}$') {
+        throw "Successful ACR build did not publish a verifiable digest for ${Repository}:${Tag}"
+    }
+    return [string]$metadata.digest
 }
 function Wait-FabricItem {
     param (
@@ -323,111 +302,7 @@ function Get-DataAgentDefinition {
     throw "DataAgent getDefinition did not complete within 2 minutes"
 }
 
-function Set-DataAgentSelectionValue {
-    param([Parameter(Mandatory)][object]$Node, [Parameter(Mandatory)][bool]$Selected)
-    if ($Node.PSObject.Properties['is_selected']) {
-        $Node.is_selected = $Selected
-    } else {
-        $Node | Add-Member -NotePropertyName is_selected -NotePropertyValue $Selected
-    }
-}
-
-function Update-DataAgentLakehouseElementSelection {
-    param(
-        [Parameter(Mandatory)][object]$Node,
-        [Parameter(Mandatory)][string[]]$TargetTables,
-        [object]$ParentTableSelected = $null
-    )
-    $nodeType = [string]$Node.type
-    if ($nodeType -eq 'lakehouse_tables.table') {
-        $selected = $TargetTables -contains [string]$Node.display_name
-        Set-DataAgentSelectionValue -Node $Node -Selected $selected
-        foreach ($child in @($Node.children)) {
-            $null = Update-DataAgentLakehouseElementSelection -Node $child -TargetTables $TargetTables -ParentTableSelected $selected
-        }
-        return $selected
-    }
-    if ($nodeType -eq 'lakehouse_tables.column') {
-        $selected = $null -ne $ParentTableSelected -and [bool]$ParentTableSelected
-        Set-DataAgentSelectionValue -Node $Node -Selected $selected
-        return $selected
-    }
-    $childSelected = $false
-    foreach ($child in @($Node.children)) {
-        if (Update-DataAgentLakehouseElementSelection -Node $child -TargetTables $TargetTables -ParentTableSelected $ParentTableSelected) { $childSelected = $true }
-    }
-    if ($nodeType -in @('schema_grouping', 'lakehouse_tables.schema', 'table_grouping')) {
-        Set-DataAgentSelectionValue -Node $Node -Selected $childSelected
-    }
-    return $childSelected
-}
-
-function Update-DataAgentKustoElementSelection {
-    param(
-        [Parameter(Mandatory)][object]$Node,
-        [Parameter(Mandatory)][string[]]$TargetTables,
-        [string[]]$TargetFunctions = @(),
-        [object]$ParentTableSelected = $null
-    )
-    $nodeType = [string]$Node.type
-    if ($nodeType -eq 'kusto.table') {
-        $selected = $TargetTables -contains [string]$Node.display_name
-        Set-DataAgentSelectionValue -Node $Node -Selected $selected
-        foreach ($child in @($Node.children)) {
-            $null = Update-DataAgentKustoElementSelection -Node $child -TargetTables $TargetTables -TargetFunctions $TargetFunctions -ParentTableSelected $selected
-        }
-        return $selected
-    }
-    if ($nodeType -eq 'kusto.column') {
-        $selected = $null -ne $ParentTableSelected -and [bool]$ParentTableSelected
-        Set-DataAgentSelectionValue -Node $Node -Selected $selected
-        return $selected
-    }
-    if ($nodeType -in @('kusto.function', 'function')) {
-        $selected = $TargetFunctions -contains [string]$Node.display_name
-        Set-DataAgentSelectionValue -Node $Node -Selected $selected
-        return $selected
-    }
-    $childSelected = $false
-    foreach ($child in @($Node.children)) {
-        if (Update-DataAgentKustoElementSelection -Node $child -TargetTables $TargetTables -TargetFunctions $TargetFunctions -ParentTableSelected $ParentTableSelected) { $childSelected = $true }
-    }
-    if ($nodeType -in @('schema_grouping', 'table_grouping', 'function_grouping', 'kusto.functions')) {
-        $groupSelected = $childSelected -or ($nodeType -in @('function_grouping', 'kusto.functions') -and $TargetFunctions.Count -gt 0 -and @($Node.children).Count -eq 0)
-        Set-DataAgentSelectionValue -Node $Node -Selected $groupSelected
-        return $groupSelected
-    }
-    return $childSelected
-}
-
-function Get-SelectedDataAgentTables {
-    param(
-        [Parameter(Mandatory)][object[]]$Elements,
-        [Parameter(Mandatory)][ValidateSet('lakehouse', 'kusto')][string]$SelectionKind
-    )
-    $tableType = if ($SelectionKind -eq 'lakehouse') { 'lakehouse_tables.table' } else { 'kusto.table' }
-    $selected = [System.Collections.Generic.List[string]]::new()
-    function Visit-DataAgentElement {
-        param([object]$Node)
-        if ([string]$Node.type -eq $tableType -and [bool]$Node.is_selected) { $selected.Add([string]$Node.display_name) }
-        foreach ($child in @($Node.children)) { Visit-DataAgentElement -Node $child }
-    }
-    foreach ($element in $Elements) { Visit-DataAgentElement -Node $element }
-    return @($selected | Sort-Object -Unique)
-}
-function Get-SelectedDataAgentFunctions {
-    param([Parameter(Mandatory)][object[]]$Elements)
-    $selected = [System.Collections.Generic.List[string]]::new()
-    function Visit-DataAgentFunction {
-        param([object]$Node)
-        if ([string]$Node.type -in @('kusto.function', 'function') -and [bool]$Node.is_selected) {
-            $selected.Add([string]$Node.display_name)
-        }
-        foreach ($child in @($Node.children)) { Visit-DataAgentFunction -Node $child }
-    }
-    foreach ($element in $Elements) { Visit-DataAgentFunction -Node $element }
-    return @($selected | Sort-Object -Unique)
-}
+. (Join-Path $PSScriptRoot '../utilities/data-agent-selection.ps1')
 
 
 function Repair-DataAgentTableSelection {
@@ -591,7 +466,7 @@ function New-KqlDatasource {
         $datasourceElements += @{ id = [guid]::NewGuid().ToString(); display_name = 'Functions'; type = 'kusto.functions'; is_selected = $true; children = @() }
     }
     $datasourceJson = (@{
-        '$schema' = "1.0.0"
+        '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
         artifactId = $KqlDbId
         workspaceId = $WorkspaceId
         displayName = $DisplayName
@@ -600,7 +475,7 @@ function New-KqlDatasource {
         dataSourceInstructions = $Instructions
         elements = $datasourceElements
     } | ConvertTo-Json -Depth 20)
-    $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
+    $fewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
     $selectedTables = @($Elements | Where-Object { [string]$_.type -eq 'kusto.table' } | ForEach-Object { [string]$_.display_name })
     return @{ FolderName = "kusto-$DisplayName"; DatasourceId = $KqlDbId; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectionKind = 'kusto'; SelectedTables = $selectedTables; SelectedFunctions = @($Functions) }
 }
@@ -611,7 +486,7 @@ function New-LakehouseDatasource {
         @{ display_name = 'dbo'; type = 'lakehouse_tables.schema'; is_selected = $true; children = @($Tables | ForEach-Object { @{ display_name = $_; type = 'lakehouse_tables.table'; is_selected = $true } }) }
     )
     $datasourceJson = (@{
-        '$schema' = "1.0.0"
+        '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
         artifactId = $LakehouseId
         workspaceId = $WorkspaceId
         displayName = $DisplayName
@@ -620,8 +495,9 @@ function New-LakehouseDatasource {
         dataSourceInstructions = $Instructions
         elements = $elements
     } | ConvertTo-Json -Depth 30)
-    $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
-    return @{ FolderName = "lakehouse_tables-$DisplayName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectionKind = 'lakehouse'; SelectedTables = @($Tables) }
+    $fewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
+    # Match Fabric's stored folder prefix; the datasource type stays lakehouse_tables.
+    return @{ FolderName = "lakehouse-tables-$DisplayName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectionKind = 'lakehouse'; SelectedTables = @($Tables); SelectedFunctions = @() }
 }
 
 function New-OntologyDatasourceIfAvailable {
@@ -641,7 +517,7 @@ function New-OntologyDatasourceIfAvailable {
             @{ id = $_; is_selected = $true; display_name = $_; type = 'ontology.entity'; description = $null; children = @() }
         })
         $datasourceJson = (@{
-            '$schema'              = "1.0.0"
+            '$schema'              = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
             artifactId             = $ontology.id
             workspaceId            = $WorkspaceId
             displayName            = $OntologyName
@@ -650,7 +526,7 @@ function New-OntologyDatasourceIfAvailable {
             dataSourceInstructions = $Instructions
             elements               = $elements
         } | ConvertTo-Json -Depth 20)
-        $fewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
+        $fewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
         return @{ FolderName = "ontology-$OntologyName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson }
     } catch {
         Write-Host "  ⚠ Could not attach ontology datasource '$OntologyName': $(Get-ErrorMessage $_)" -ForegroundColor Yellow
@@ -977,21 +853,29 @@ if (-not $SkipPayerRti) {
         $acrLoginServer = az acr show --name $acrName --query loginServer -o tsv
         $claimImageTag = "deploy-$(Get-Date -AsUTC -Format 'yyyyMMddHHmmss')"
         Write-Host "  Building claim-emulator:$claimImageTag in ACR $acrName..." -ForegroundColor White
-        Invoke-AcrBuildWithTagVerification -Registry $acrName -Repository "claim-emulator" -Tag $claimImageTag -ContextPath "phase-7/claim-emulator"
-        $claimImageDigest = az acr manifest show-metadata --registry $acrName --name "claim-emulator:$claimImageTag" --query digest -o tsv 2>$null
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($claimImageDigest)) { throw "Could not resolve immutable claim-emulator image digest" }
-        $resourceTagsJson = if ($Tags.Count -gt 0) { $Tags | ConvertTo-Json -Compress } else { '{}' }
-        $deploymentParams = @(
-            "acrName=$acrName",
-            "imageName=$acrLoginServer/claim-emulator@$claimImageDigest",
-            "eventHubName=claim-stream",
-            "eventHubNamespace=$EventHubNamespace",
-            "eventRatePerMinute=$ClaimEventRatePerMinute",
-            "resourceTags=$resourceTagsJson"
-        )
+        $claimImageDigest = Invoke-AcrBuildWithTagVerification -Registry $acrName -Repository "claim-emulator" -Tag $claimImageTag -ContextPath "phase-7/claim-emulator"
+        # Transport object parameters as JSON on disk, not through Windows cmd quoting.
+        $claimParamsObj = @{
+            '$schema' = "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#"
+            contentVersion = "1.0.0.0"
+            parameters = @{
+                acrName = @{ value = $acrName }
+                imageName = @{ value = "$acrLoginServer/claim-emulator@$claimImageDigest" }
+                eventHubName = @{ value = "claim-stream" }
+                eventHubNamespace = @{ value = $EventHubNamespace }
+                eventRatePerMinute = @{ value = $ClaimEventRatePerMinute }
+                resourceTags = @{ value = $Tags }
+            }
+        }
+        $claimParamsFile = [System.IO.Path]::GetTempFileName()
         Write-Host "  Deploying claim-emulator-grp..." -ForegroundColor White
-        az deployment group create --resource-group $ResourceGroupName --name claim-emulator --template-file "bicep/claim-emulator.bicep" --parameters @deploymentParams | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "claim-emulator deployment failed" }
+        try {
+            [System.IO.File]::WriteAllText($claimParamsFile, ($claimParamsObj | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+            az deployment group create --resource-group $ResourceGroupName --name claim-emulator --template-file "bicep/claim-emulator.bicep" --parameters "@$claimParamsFile" | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "claim-emulator deployment failed" }
+        } finally {
+            Remove-Item -LiteralPath $claimParamsFile -Force -ErrorAction SilentlyContinue
+        }
         if ($Tags.Count -gt 0) {
             $containerGroupId = az container show --resource-group $ResourceGroupName --name claim-emulator-grp --query id -o tsv
             $tagUpdateArgs = @()
