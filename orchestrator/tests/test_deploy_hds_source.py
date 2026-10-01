@@ -775,7 +775,7 @@ class HdsSourceTests(unittest.TestCase):
                 _Response(payload={"id": "job", "status": "Completed"}),
             ])
 
-            def request_raw(self, _method, _url):
+            def request_raw(self, _method, _url, *, timeout_seconds=None):
                 return next(self.responses)
 
         progress = []

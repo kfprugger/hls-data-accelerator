@@ -4,46 +4,71 @@ import base64
 import requests
 import time
 import subprocess
+import shutil
 import argparse
 
 def get_fabric_token():
-    res = subprocess.run(["az", "account", "get-access-token", "--resource", "https://api.fabric.microsoft.com", "-o", "json"], capture_output=True, text=True)
+    az = shutil.which("az") or "az"
+    res = subprocess.run([az, "account", "get-access-token", "--resource", "https://api.fabric.microsoft.com", "-o", "json"], capture_output=True, text=True)
     if res.returncode != 0:
-        raise RuntimeError("Failed to get az token")
+        raise RuntimeError(f"Failed to get az token: {res.stderr.strip()}")
     return json.loads(res.stdout)["accessToken"]
 
-def wait_for_lro(loc, headers):
-    while True:
-        time.sleep(3)
-        op = requests.get(loc, headers=headers).json()
-        if op["status"] in ["Succeeded", "Completed"]:
+def wait_for_lro(loc, headers, timeout_seconds=1200, interval_seconds=3):
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        time.sleep(min(interval_seconds, max(0, deadline - time.monotonic())))
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            response = requests.get(loc, headers=headers, timeout=min(60, remaining))
+        except requests.exceptions.SSLError:
+            raise
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            continue
+        if response.status_code in (429, 500, 502, 503, 504):
+            continue
+        response.raise_for_status()
+        op = response.json()
+        if time.monotonic() >= deadline:
+            break
+        status = op.get("status")
+        if status in ("Succeeded", "Completed"):
             return op
-        if op["status"] in ["Failed", "Cancelled"]:
-            raise RuntimeError(f"LRO failed: {op}")
+        if status in ("Failed", "Cancelled", "Canceled", "Deduped"):
+            raise RuntimeError(f"Operation did not succeed: {op}")
+    raise TimeoutError(f"Operation did not complete within {timeout_seconds} seconds: {loc}")
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--workspace-id", required=True)
     parser.add_argument("--ontology-id", required=True)
     parser.add_argument("--graph-id", required=True)
+    parser.add_argument("--skip-refresh", action="store_true", help="Materialize definition; the caller owns the subsequent refresh")
+    parser.add_argument("--if-empty", action="store_true", help="Preserve an existing populated graph definition")
     args = parser.parse_args()
 
     token = get_fabric_token()
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "x-ms-fabric-skill": "fabriciq-ontology-cli"}
     ws_id = args.workspace_id
     ont_id = args.ontology_id
     graph_id = args.graph_id
     
     print(f"Getting Ontology {ont_id} definition...")
-    r = requests.post(f"https://api.fabric.microsoft.com/v1/workspaces/{ws_id}/ontologies/{ont_id}/getDefinition", headers=headers)
+    r = requests.post(f"https://api.fabric.microsoft.com/v1/workspaces/{ws_id}/ontologies/{ont_id}/getDefinition", headers=headers, timeout=60)
     if r.status_code == 200:
         ont_def = r.json()
-    else:
+    elif r.status_code == 202:
         loc = r.headers.get("Location")
         if not loc: loc = f"https://api.fabric.microsoft.com/v1/operations/{r.headers.get('x-ms-operation-id')}"
         wait_for_lro(loc, headers)
         res_uri = loc if loc.endswith("/result") else loc + "/result"
-        ont_def = requests.get(res_uri, headers=headers).json()
+        result = requests.get(res_uri, headers=headers, timeout=60)
+        result.raise_for_status()
+        ont_def = result.json()
+    else:
+        r.raise_for_status()
 
     entities = {}
     relationships = []
@@ -188,15 +213,28 @@ def main():
     }
 
     print("Backing up GraphModel...")
-    r = requests.post(f"https://api.fabric.microsoft.com/v1/workspaces/{ws_id}/items/{graph_id}/getDefinition", headers=headers)
+    r = requests.post(f"https://api.fabric.microsoft.com/v1/workspaces/{ws_id}/items/{graph_id}/getDefinition", headers=headers, timeout=60)
     if r.status_code == 200:
         graph_def_orig = r.json()
-    else:
+    elif r.status_code == 202:
         loc = r.headers.get("Location")
         if not loc: loc = f"https://api.fabric.microsoft.com/v1/operations/{r.headers.get('x-ms-operation-id')}"
         wait_for_lro(loc, headers)
         res_uri = loc if loc.endswith("/result") else loc + "/result"
-        graph_def_orig = requests.get(res_uri, headers=headers).json()
+        result = requests.get(res_uri, headers=headers, timeout=60)
+        result.raise_for_status()
+        graph_def_orig = result.json()
+    else:
+        r.raise_for_status()
+
+    original_type = next((p for p in graph_def_orig['definition']['parts'] if p['path'] == 'graphType.json'), None)
+    if args.if_empty and original_type:
+        current_type = json.loads(base64.b64decode(original_type['payload']))
+        if current_type.get('nodeTypes'):
+            print("Existing populated graph definition preserved.")
+            return
+    if not nodeTypes or not nodeTables:
+        raise RuntimeError("Ontology has no materializable Lakehouse nodes; refusing an empty graph definition")
         
     with open(f".graph_backup_{graph_id}.json", "w") as f:
         json.dump(graph_def_orig, f, indent=2)
@@ -215,7 +253,7 @@ def main():
         "definition": {
             "parts": parts
         }
-    })
+    }, timeout=60)
     
     if r.status_code == 200:
         print("GraphModel updated directly.")
@@ -226,23 +264,20 @@ def main():
         print("GraphModel update LRO completed.")
     else:
         raise RuntimeError(f"Update failed: {r.status_code} {r.text}")
+    if args.skip_refresh:
+        print("Graph definition materialized; caller must verify the subsequent refresh.")
+        return
 
     print("Triggering graph refresh...")
-    r = requests.post(f"https://api.fabric.microsoft.com/v1/workspaces/{ws_id}/graphModels/{graph_id}/jobs/refreshGraph/instances", headers=headers)
+    r = requests.post(f"https://api.fabric.microsoft.com/v1/workspaces/{ws_id}/graphModels/{graph_id}/jobs/refreshGraph/instances", headers=headers, timeout=60)
     if r.status_code == 202:
         loc = r.headers.get("Location")
-        if loc:
-            job_id = loc.split('/')[-1]
-            loc = f"https://api.fabric.microsoft.com/v1/workspaces/{ws_id}/graphModels/{graph_id}/jobs/instances/{job_id}"
-            while True:
-                time.sleep(5)
-                op = requests.get(loc, headers=headers).json()
-                if op["status"] in ["Completed", "Succeeded"]:
-                    print("Graph refresh completed.")
-                    break
-                if op["status"] in ["Failed", "Cancelled"]:
-                    raise RuntimeError(f"Refresh job failed: {op['status']}")
-                print("Refresh status:", op["status"])
+        if not loc:
+            raise RuntimeError("Graph refresh accepted without a Location; completion cannot be verified")
+        job_id = loc.rstrip('/').split('/')[-1]
+        loc = f"https://api.fabric.microsoft.com/v1/workspaces/{ws_id}/graphModels/{graph_id}/jobs/instances/{job_id}"
+        wait_for_lro(loc, headers, timeout_seconds=1200, interval_seconds=5)
+        print("Graph refresh completed.")
     else:
         raise RuntimeError(f"Failed to start refresh: {r.status_code} {r.text}")
 

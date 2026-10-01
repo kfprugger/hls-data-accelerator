@@ -1182,10 +1182,12 @@ if ($UseCachedSynthea) {
     Write-Host ""
     Write-Host "  Verifying Synthea blobs in storage..." -ForegroundColor DarkGray
     try {
-        $syntheaBlobCountRaw = az storage blob list --container-name $containerName `
+        # Avoid JMESPath parentheses in the Windows az.cmd wrapper.
+        $syntheaBlobNames = az storage blob list --container-name $containerName `
             --account-name $storageAccountName --auth-mode login `
-            --query "length(@)" -o tsv 2>$null
-        $syntheaBlobCount = ConvertTo-StrictIntFromCliOutput -Value $syntheaBlobCountRaw -Label "Synthea blob count"
+            --query "[].name" -o tsv 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Synthea blob listing failed (exit code $LASTEXITCODE)" }
+        $syntheaBlobCount = @($syntheaBlobNames | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
         if ($syntheaBlobCount -gt 0) {
             Write-Host "  ✓ Verified: $syntheaBlobCount Synthea blobs in '$containerName' container" -ForegroundColor Green
         } else {
@@ -1547,18 +1549,20 @@ az container logs --resource-group $ResourceGroupName --name dicom-loader-job 2>
     Write-Host ""
     Write-Host "  Verifying DICOM blobs in storage..." -ForegroundColor DarkGray
     try {
-        $dicomBlobCountRaw = az storage blob list --container-name "dicom-output" `
+        $dicomBlobNames = az storage blob list --container-name "dicom-output" `
             --account-name $storageAccountName --auth-mode login `
-            --query "length(@)" -o tsv 2>$null
-        $dicomBlobCount = ConvertTo-StrictIntFromCliOutput -Value $dicomBlobCountRaw -Label "DICOM blob count" -EmptyAsZero
+            --query "[].name" -o tsv 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "DICOM blob listing failed (exit code $LASTEXITCODE)" }
+        $dicomBlobCount = @($dicomBlobNames | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
         if ($dicomBlobCount -gt 0) {
             Write-Host "  ✓ Verified: $dicomBlobCount DICOM blobs in 'dicom-output' container" -ForegroundColor Green
         } else {
             # Try filesystem API for HNS-enabled accounts
-            $dicomFilesRaw = az storage fs file list --file-system "dicom-output" `
+            $dicomFileNames = az storage fs file list --file-system "dicom-output" `
                 --account-name $storageAccountName --auth-mode login `
-                --query "length(@)" -o tsv 2>$null
-            $dicomFiles = ConvertTo-StrictIntFromCliOutput -Value $dicomFilesRaw -Label "DICOM filesystem file count" -EmptyAsZero
+                --query "[].name" -o tsv 2>$null
+            if ($LASTEXITCODE -ne 0) { throw "DICOM filesystem listing failed (exit code $LASTEXITCODE)" }
+            $dicomFiles = @($dicomFileNames | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }).Count
             if ($dicomFiles -gt 0) {
                 Write-Host "  ✓ Verified: $dicomFiles DICOM files in 'dicom-output' filesystem" -ForegroundColor Green
             } else {

@@ -2600,8 +2600,9 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
 
                 # Placeholders live inside JSON string literals, so their quotes are backslash-escaped.
                 $daIpynbJson = $daIpynbJson.Replace('WORKSPACE_ID = \"\"', "WORKSPACE_ID = \`"$p4WsId\`"")
-                $daIpynbJson = $daIpynbJson.Replace('LAKEHOUSE_ID = \"\"', "LAKEHOUSE_ID = \`"$p4SilverLhId\`"")
+                # Replace the longer mirror token first; it contains LAKEHOUSE_ID.
                 $daIpynbJson = $daIpynbJson.Replace('MIRROR_LAKEHOUSE_ID = \"\"', "MIRROR_LAKEHOUSE_ID = \`"$p4GoldLhId\`"")
+                $daIpynbJson = $daIpynbJson.Replace('LAKEHOUSE_ID = \"\"', "LAKEHOUSE_ID = \`"$p4SilverLhId\`"")
                 $daIpynbJson = $daIpynbJson.Replace('INCLUDE_FHIR = True', "INCLUDE_FHIR = $pyIncludeFhir")
                 $daIpynbJson = $daIpynbJson.Replace('INCLUDE_DICOM = True', "INCLUDE_DICOM = $pyIncludeDicom")
 

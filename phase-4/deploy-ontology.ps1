@@ -702,11 +702,26 @@ if (-not $graphModel) {
 $graphModelId = $graphModel.id
 Write-Host "  ✓ Graph model: $($graphModel.displayName) ($graphModelId)" -ForegroundColor Green
 
+# An auto-generated companion can be an empty shell. Populate that definition
+# before the single verified refresh instead of suppressing a failed hydration.
+$graphMaterializer = Join-Path $PSScriptRoot 'deploy-graph-model.py'
+if (-not (Test-Path $graphMaterializer)) { throw "Required graph materializer is missing: $graphMaterializer" }
+$lockedPython = if ($IsWindows) { Join-Path $PSScriptRoot '../orchestrator/.venv/Scripts/python.exe' } else { Join-Path $PSScriptRoot '../orchestrator/.venv/bin/python' }
+$pythonPath = if (Test-Path $lockedPython) { $lockedPython } else { $null }
+if (-not $pythonPath) {
+    $pythonCommand = Get-Command python3 -ErrorAction SilentlyContinue
+    if (-not $pythonCommand) { $pythonCommand = Get-Command python -ErrorAction SilentlyContinue }
+    if (-not $pythonCommand) { throw 'Python is required to materialize the ontology companion graph' }
+    $pythonPath = $pythonCommand.Source
+}
+& $pythonPath $graphMaterializer --workspace-id $workspaceId --ontology-id $ontologyId --graph-id $graphModelId --if-empty --skip-refresh
+if ($LASTEXITCODE -ne 0) { throw "Graph definition materialization failed (exit $LASTEXITCODE); refresh was not started" }
+
 Write-Host "  Triggering graph hydration for '$OntologyName'..." -ForegroundColor White
 $jobBody = '{"jobType":"RefreshGraph"}'
 Invoke-WebRequest -Method POST `
     -Uri "$FabricApiBase/workspaces/$workspaceId/items/$graphModelId/jobs/instances?jobType=RefreshGraph" `
-    -Headers @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" } `
+    -Headers @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" } `
     -Body $jobBody -UseBasicParsing -ErrorAction Stop | Out-Null
 Write-Host "  ✓ Graph refresh invoked" -ForegroundColor Green
 
@@ -715,7 +730,8 @@ $refreshCompleted = $false
 while ((New-TimeSpan -Start $daStart).TotalMinutes -lt 15) {
     Start-Sleep 15
     try {
-        $daJobs = (Invoke-RestMethod -Uri "$FabricApiBase/workspaces/$workspaceId/items/$graphModelId/jobs/instances?limit=1" -Headers @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" } -ErrorAction Stop).value
+        $remainingRefreshSeconds = [Math]::Max(1, [Math]::Ceiling(900 - (New-TimeSpan -Start $daStart).TotalSeconds))
+        $daJobs = (Invoke-RestMethod -Uri "$FabricApiBase/workspaces/$workspaceId/items/$graphModelId/jobs/instances?limit=1" -Headers @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" } -TimeoutSec ([Math]::Min(30, $remainingRefreshSeconds)) -ErrorAction Stop).value
     } catch {
         $jobStatusCode = $null
         try { $jobStatusCode = [int]$_.Exception.Response.StatusCode } catch {}
@@ -730,7 +746,7 @@ while ((New-TimeSpan -Start $daStart).TotalMinutes -lt 15) {
         Write-Host "  ✓ Graph hydration completed successfully" -ForegroundColor Green
         $refreshCompleted = $true
         break
-    } elseif ($daJobs -and $daJobs[0].status -eq 'Failed') {
+    } elseif ($daJobs -and $daJobs[0].status -in @('Failed', 'Cancelled', 'Canceled', 'Deduped')) {
         $errJson = $daJobs[0] | ConvertTo-Json -Depth 10
         throw "Graph hydration failed: $errJson"
     } else {

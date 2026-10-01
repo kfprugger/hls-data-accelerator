@@ -95,6 +95,9 @@ repo-overview-video/
 # Generated Microsoft HDS source-deployment stage
 .hds-build/
 
+# Ontology definition recovery snapshots are generated operational artifacts.
+.graph_backup_*.json
+
 # Local task context and generated synthetic cohorts
 .token-saver/
 synthea/.generated/
