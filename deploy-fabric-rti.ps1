@@ -2697,7 +2697,6 @@ if (-not $SkipHdsGuidance) {
     Write-Host "      4. Select version 1.11.4 and click Add" -ForegroundColor Gray
     Write-Host "      5. Click 'Publish' to save the environment" -ForegroundColor Gray
     Write-Host "      6. Wait for the environment to finish publishing" -ForegroundColor Gray
-    Write-Host "      See: docs/images/hds-scipy-external-repositories.png" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  7b. CREATE ONELAKE SHORTCUT (Bronze LH → FHIR export storage):" -ForegroundColor Yellow
     Write-Host "      FHIR data was exported to ADLS Gen2 in Step 6.5." -ForegroundColor Gray

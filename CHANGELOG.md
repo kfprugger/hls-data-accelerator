@@ -34,6 +34,7 @@
 - **Added** ten governed `agent_*` Gold products for patient/device summaries, current clinical triage, imaging cohorts, FHIR-derived care gaps, streaming fraud risk, high-cost trajectories, payer worklists, cross-domain context, and typed healthcare relationships; expanded Silver claim parsing to retain provider, facility, diagnosis, procedure, geospatial, event-type, and fraud-evidence fields.
 - **Verified** all five live Genie conversations against direct Databricks SQL baselines: patient gender 59 female/41 male, 100 devices and 7,218,000 seven-day telemetry events, imaging CR 12/CT 88, 74,297 typed claim events with zero incomplete-schema rows, and 100 patient-device relationships. The destination validator passed 18/18 with no skips.
 - **Fixed** five-minute stream scheduling so `max_concurrent_runs: 1` drops overlapping ticks instead of queueing them; the previous queue accumulated stale runs behind serverless startup. Deployment validation now fails on enabled queueing or queued runs.
+- **Removed** presentation scripts, generated diagrams, B-roll assets, planning notes, temporary Azure CLI state, logs, and Python caches from the repository; deployment runbooks, validators, bundle state, ownership receipts, and executable artifacts remain. `.gitignore` now prevents those disposable files from returning during later deployments.
 
 ### Fresh Deployment Reliability
 - **Added** a read-only-by-default Data Agent schema refresh utility from PR #7: preserves published Lakehouse/KQL selections and explicit column subsets, requires backups for apply, rejects missing metadata and concurrent definition changes, and verifies both draft and published selections. Payer deployment and refresh now share one native selection implementation; see [the runbook](docs/DATA-AGENT-SCHEMA-REFRESH.md).
@@ -165,7 +166,6 @@
 - **Added** `patient_payer` lookup in `materialize_claims_quality.py` — picks each patient's most recent active `Coverage` and propagates payer bucket to facts and quality aggregates
 - **Added** `agg_quality_summary` is now computed per measure × payer_category instead of per measure only — enables side-by-side payer comparisons in Direct Lake
 - **Added** 14 payer-stratified DAX measures in `_Measures` (Quality Rate / Collection Rate / Denial Rate / Total Paid / Patients Measured per payer)
-- **Updated** `docs/phase-5-cms-quality-and-claims.md` with payer stratification section and suggested visuals for the Payer Performance page
 - **Backwards compatible**: payer columns default to "Unknown" when Coverage data is absent; no schema-breaking changes (uses `mergeSchema` on overwrite)
 
 ## [Unreleased] — April 24, 2026

@@ -4,6 +4,9 @@ state-tracking/
 .orchestrator-state.json
 .orchestrator-state.json.bak
 orchestrator/.orchestrator-cache.json
+azure-databricks/implementation/env.sh
+azure-databricks/implementation/.state/
+azure-databricks/implementation/bundle/.databricks/
 
 # Debug / log artifacts
 .pi-run/
@@ -11,6 +14,18 @@ deploy-log*.txt
 schema-dump.txt
 _dicom_logs.txt
 
+/logs/
+/commands/
+/scratch/
+/az.json
+/az.sess
+/azureProfile.json
+/commandIndex.json
+/config
+/extensionHelpIndex.json
+/extensionIndex.json
+/helpIndex.json
+/versionCheck.json
 # AI planning / private content
 .ai/youtube-script.md
 *youtube-script*.md
@@ -23,6 +38,14 @@ youtube-scripts/
 **/*video-script*
 **/*youtube_script*
 **/*youtube-script*
+docs/
+.ai/
+Project_Architecture_Blueprint.md
+*talk-track*
+*talk_track*
+*voice-over*
+*recording-script*
+*recording_script*
 eh-test.json
 orchestrator/orchestrator.log
 orchestrator/logs/
@@ -35,6 +58,9 @@ orchestrator/backend-crash-dump.log
 .codegraph/
 $null
 
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 # Python
 __pycache__/
 *.pyc
@@ -49,9 +75,6 @@ video/node_packages/
 video/out/
 video/.remotion/
 
-# Generated walkthrough video assets
-docs/*-walkthrough.mp4
-docs/video-assets/
 
 # Orchestrator UI
 orchestrator-ui/.azurite/

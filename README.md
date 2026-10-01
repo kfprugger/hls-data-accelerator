@@ -13,19 +13,13 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2EA44F?style=flat-square"></a>
 </p>
 
-[Quickstart](#quickstart) · [How it works](#how-it-works) · [Deployment phases](#deployment-phases) · [Documentation](#documentation) · [Teardown](#teardown)
+[Quickstart](#quickstart) · [How it works](#how-it-works) · [Deployment phases](#deployment-phases) · [Operations references](#operations-references) · [Teardown](#teardown)
 
 </div>
 
 > [!IMPORTANT]
 > This repository is a reference accelerator for synthetic demonstration data and re-tagged public imaging data. It is not a medical device, clinical decision-support product, or production PHI landing zone. A full deployment creates billable Azure and Fabric resources.
 
-<a href="docs/diagrams/system-overview.html">
-  <img src="docs/diagrams/system-overview.visual-check.1440x900.light.png#gh-light-mode-only" alt="HLS Data Accelerator system overview showing healthcare sources flowing through Azure into Microsoft Fabric and developer-facing analytics and action surfaces">
-  <img src="docs/diagrams/system-overview.visual-check.1440x900.dark.png#gh-dark-mode-only" alt="HLS Data Accelerator system overview showing healthcare sources flowing through Azure into Microsoft Fabric and developer-facing analytics and action surfaces">
-</a>
-
-<p align="center"><sub><a href="docs/diagrams/system-overview.html">Open the interactive system overview</a> · search, trace relationships, switch themes, and export the diagram</sub></p>
 
 ## Why this exists
 
@@ -158,15 +152,15 @@ $account = az account show --output json | ConvertFrom-Json
 
 The conceptual phase model below matches the orchestrator monitor. A full deployment overlaps some work—for example, HDS source staging can run while Azure ingestion completes—but every phase has an explicit exit contract.
 
-| Phase | Purpose | Primary implementation | Details | Interactive diagram |
-|---:|---|---|---|---|
-| 1 | Data Fabric Foundation | `phase-1/deploy.ps1`, `phase-1/deploy-fhir.ps1`, workspace provisioning in `Deploy-All.ps1` | [Phase 1 guide](docs/phase-1-data-fabric-foundation.md) | [Open](docs/diagrams/phase-1-data-fabric-foundation.html) |
-| 2 | Active Patient Telemetry | `deploy-fabric-rti.ps1` core deployment and `-Phase2` enrichment | [Phase 2 guide](docs/phase-2-active-patient-telemetry.md) | [Open](docs/diagrams/phase-2-active-patient-telemetry.html) |
-| 3 | HDS Bridge + Row Gates | `orchestrator/activities/deploy_hds_source.py`, `phase-2/storage-access-trusted-workspace.ps1` | [Phase 3 guide](docs/phase-3-hds-bridge-and-row-gates.md) | [Open](docs/diagrams/phase-3-hds-bridge-and-row-gates.html) |
-| 4 | Semantic Intelligence + UX | `FabricDicomCohortingToolkit`, `phase-4/deploy-ontology.ps1`, `phase-2/deploy-data-agents.ps1` | [Phase 4 guide](docs/phase-4-semantic-intelligence-and-ux.md) | [Open](docs/diagrams/phase-4-semantic-intelligence-and-ux.html) |
-| 5 | Bedside Alerting + Action | `ClinicalAlertActivator` deployment inside `Deploy-All.ps1` | [Phase 5 guide](docs/phase-5-bedside-alerting-and-action.md) | [Open](docs/diagrams/phase-5-bedside-alerting-and-action.html) |
-| 6 | Population Health + Quality | `phase-5/materialize_claims_quality.py` and the canonical Power BI project | [Phase 6 guide](docs/phase-6-population-health-and-quality.md) | [Open](docs/diagrams/phase-6-population-health-and-quality.html) |
-| 7 | Payer RTI + Operations | `phase-7/deploy-payer-rti.ps1` and the claim emulator | [Phase 7 guide](docs/phase-7-payer-rti-and-ops.md) | [Open](docs/diagrams/phase-7-payer-rti-and-ops.html) |
+| Phase | Purpose | Primary implementation |
+|---:|---|---|
+| 1 | Data Fabric Foundation | `phase-1/deploy.ps1`, `phase-1/deploy-fhir.ps1`, workspace provisioning in `Deploy-All.ps1` |
+| 2 | Active Patient Telemetry | `deploy-fabric-rti.ps1` core deployment and `-Phase2` enrichment |
+| 3 | HDS Bridge + Row Gates | `orchestrator/activities/deploy_hds_source.py`, `phase-2/storage-access-trusted-workspace.ps1` |
+| 4 | Semantic Intelligence + UX | `FabricDicomCohortingToolkit`, `phase-4/deploy-ontology.ps1`, `phase-2/deploy-data-agents.ps1` |
+| 5 | Bedside Alerting + Action | `ClinicalAlertActivator` deployment inside `Deploy-All.ps1` |
+| 6 | Population Health + Quality | `phase-5/materialize_claims_quality.py` and the canonical Power BI project |
+| 7 | Payer RTI + Operations | `phase-7/deploy-payer-rti.ps1` and the claim emulator |
 
 ### Targeted switches are continuation modes
 
@@ -198,7 +192,6 @@ Historical CLI switch names do not map one-to-one to the conceptual phase number
 - Telemetry and claims use separate Eventstreams because each topology owns one `DefaultStream` and the schemas route to different Eventhouse tables.
 - Required pipelines and row gates are ordered. OMOP does not start until selected clinical and imaging prerequisites complete.
 
-For the deeper component map, orchestration design, recovery model, and repository tree, read the [Project Architecture Blueprint](Project_Architecture_Blueprint.md).
 
 ## Deployment modes
 
@@ -229,7 +222,8 @@ hls-data-accelerator/
 ├── orchestrator-ui/                # React + Fluent UI frontend
 ├── eval/                           # API-first deployment evaluation harness
 ├── vendor/microsoft-hds/1.4.0/     # Microsoft HDS source and empty schemas; no bundled datasets
-└── docs/                           # Phase guides and interactive Archify diagrams
+├── azure-databricks/               # Databricks deployment and validation assets
+└── docs/                           # Data Agent schema refresh runbook
 ```
 
 ## Validation
@@ -245,7 +239,7 @@ A created resource is not automatically a working surface. The deployment and ev
 - Data Agent definitions are published with their intended datasources.
 - OHIF resolves and renders indexed studies through the DICOMweb proxy.
 
-See the [evaluation harness guide](eval/README.md) and the [interactive end-to-end verification map](docs/hls-end-to-end-verification.html).
+See the [evaluation harness guide](eval/README.md).
 
 If an existing Data Agent shows stale or inaccessible schema selections, use the [Data Agent schema refresh runbook](docs/DATA-AGENT-SCHEMA-REFRESH.md). The utility is read-only by default; apply requires backups and verifies both draft and published selections.
 
@@ -264,25 +258,11 @@ If an existing Data Agent shows stale or inaccessible schema selections, use the
 
 Use `-SkipAzure` for Fabric-only cleanup or `-SkipFabric` for Azure-only cleanup.
 
-## Documentation
+## Operations references
 
-### Phase guides
-
-- [Phase 1 — Data Fabric Foundation](docs/phase-1-data-fabric-foundation.md)
-- [Phase 2 — Active Patient Telemetry](docs/phase-2-active-patient-telemetry.md)
-- [Phase 3 — HDS Bridge + Row Gates](docs/phase-3-hds-bridge-and-row-gates.md)
-- [Phase 4 — Semantic Intelligence + UX](docs/phase-4-semantic-intelligence-and-ux.md)
-- [Phase 5 — Bedside Alerting + Action](docs/phase-5-bedside-alerting-and-action.md)
-- [Phase 6 — Population Health + Quality](docs/phase-6-population-health-and-quality.md)
-- [Phase 7 — Payer RTI + Operations](docs/phase-7-payer-rti-and-ops.md)
-
-### Deep dives and operations
-
-- [Project Architecture Blueprint](Project_Architecture_Blueprint.md)
+- [Azure Databricks destination](azure-databricks/README.md)
 - [Microsoft HDS v1.4.0 source deployment](fabric-rti/HDS-SETUP-GUIDE.md)
-- [Ontology setup guide](docs/ONTOLOGY-SETUP-GUIDE.md)
 - [Evaluation harness](eval/README.md)
-- [End-to-end verification diagram](docs/hls-end-to-end-verification.html)
 - [Changelog](CHANGELOG.md)
 
 ## Safety and scope
