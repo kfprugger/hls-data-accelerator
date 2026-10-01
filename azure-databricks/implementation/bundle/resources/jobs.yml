@@ -1,0 +1,78 @@
+resources:
+  jobs:
+    # Batch source path stops after the Silver gate. Streaming must become fresh
+    # before the separate Gold job can resolve claim_events.
+    hls_batch_medallion:
+      name: hls-batch-medallion
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      tasks:
+        - task_key: bronze_files
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.hls_bronze_files.id}
+            full_refresh: false
+
+        - task_key: silver_files
+          depends_on:
+            - task_key: bronze_files
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.hls_silver_files.id}
+            full_refresh: false
+
+        # Fail closed before starting streams or spending Gold compute.
+        - task_key: silver_gates
+          depends_on:
+            - task_key: silver_files
+          notebook_task:
+            notebook_path: ../src/gates_silver.py
+            base_parameters:
+              catalog: ${var.catalog}
+
+    # Triggered Bronze -> Silver -> freshness gate -> Gold avoids table races,
+    # scales serverless compute to zero, and keeps serving products current.
+    hls_stream_freshness_gate:
+      name: hls-stream-to-gold
+      max_concurrent_runs: 1
+      queue:
+        enabled: false
+      schedule:
+        quartz_cron_expression: "0 0/5 * * * ?"
+        timezone_id: America/New_York
+        pause_status: UNPAUSED
+      tasks:
+        - task_key: bronze_streams
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.hls_bronze_streams.id}
+            full_refresh: false
+
+        - task_key: silver_streams
+          depends_on:
+            - task_key: bronze_streams
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.hls_silver_streams.id}
+            full_refresh: false
+
+        - task_key: stream_freshness
+          depends_on:
+            - task_key: silver_streams
+          notebook_task:
+            notebook_path: ../src/gates_streams.py
+            base_parameters:
+              catalog: ${var.catalog}
+              max_age_minutes: "10"
+
+        - task_key: gold_products
+          depends_on:
+            - task_key: stream_freshness
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.hls_gold_products.id}
+            full_refresh: false
+
+        - task_key: gold_gates
+          depends_on:
+            - task_key: gold_products
+          notebook_task:
+            notebook_path: ../src/gates_gold.py
+            base_parameters:
+              catalog: ${var.catalog}

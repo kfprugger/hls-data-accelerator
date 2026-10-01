@@ -1,0 +1,87 @@
+resources:
+  pipelines:
+    # One pipeline per target schema. A Lakeflow pipeline publishes into a single
+    # schema, so schema boundaries are expressed as separate pipelines rather than
+    # the single Fabric workspace that previously held every lakehouse.
+
+    # Replaces OneLake shortcuts + HDS Bronze file ingestion.
+    hls_bronze_files:
+      name: hls-bronze-files
+      catalog: ${var.catalog}
+      schema: bronze
+      serverless: true
+      continuous: false
+      photon: true
+      libraries:
+        - file:
+            path: ../src/bronze_files.py
+      configuration:
+        hls.catalog: ${var.catalog}
+        hls.fhir_export_volume: ${var.fhir_export_volume}
+        hls.dicom_volume: ${var.dicom_volume}
+        hls.state_volume: ${var.state_volume}
+
+    # Replaces the HDS clinical and imaging Silver pipelines and their row gates.
+    hls_silver_files:
+      name: hls-silver-files
+      catalog: ${var.catalog}
+      schema: silver
+      serverless: true
+      continuous: false
+      photon: true
+      libraries:
+        - file:
+            path: ../src/silver_clinical.py
+      configuration:
+        hls.catalog: ${var.catalog}
+
+    # Triggered serverless ingestion replaces the Eventstreams without idle compute.
+    hls_bronze_streams:
+      name: hls-bronze-streams
+      catalog: ${var.catalog}
+      schema: bronze
+      serverless: true
+      continuous: false
+      photon: true
+      libraries:
+        - file:
+            path: ../src/bronze_streams.py
+      configuration:
+        hls.catalog: ${var.catalog}
+        hls.eventhub.namespace: ${var.eventhub_namespace}
+        hls.eventhub.telemetry_hub: ${var.telemetry_hub}
+        hls.eventhub.claims_hub: ${var.claims_hub}
+        hls.eventhub.telemetry_consumer_group: ${var.telemetry_consumer_group}
+        hls.eventhub.claims_consumer_group: ${var.claims_consumer_group}
+        hls.eventhub.secret_scope: ${var.eventhub_secret_scope}
+        hls.eventhub.secret_key: ${var.eventhub_secret_key}
+        hls.stream.starting_offsets: latest
+        hls.stream.max_offsets_per_trigger: "50000"
+
+    # Triggered Silver enrichment runs after the Bronze stream update finishes.
+    hls_silver_streams:
+      name: hls-silver-streams
+      catalog: ${var.catalog}
+      schema: silver
+      serverless: true
+      continuous: false
+      photon: true
+      libraries:
+        - file:
+            path: ../src/silver_realtime.py
+      configuration:
+        hls.catalog: ${var.catalog}
+
+    # Replaces OMOP analytics, quality materialization, and payer worklist notebooks.
+    hls_gold_products:
+      name: hls-gold-products
+      catalog: ${var.catalog}
+      schema: gold
+      serverless: true
+      continuous: false
+      photon: true
+      libraries:
+        - file:
+            path: ../src/gold_products.py
+      configuration:
+        hls.catalog: ${var.catalog}

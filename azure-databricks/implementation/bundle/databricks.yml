@@ -1,0 +1,75 @@
+bundle:
+  name: hls-data-accelerator
+  engine: direct
+
+# Variables replace the Fabric workspace/capacity inputs of Deploy-All.ps1.
+variables:
+  catalog:
+    description: Unity Catalog created by sql/unity_catalog_bootstrap.sql
+    default: hls_dev
+  eventhub_namespace:
+    description: Existing Event Hubs namespace name (no suffix)
+  telemetry_hub:
+    default: telemetry-stream
+  claims_hub:
+    default: claim-stream
+  telemetry_consumer_group:
+    default: hls-dbx-telemetry
+  claims_consumer_group:
+    default: hls-dbx-claims
+  eventhub_secret_scope:
+    description: Databricks secret scope holding the listen-only Event Hubs key
+    default: hls-eventhubs
+  eventhub_secret_key:
+    default: listen-key
+  fhir_export_volume:
+    description: Governed read-only FHIR export volume path
+    default: /Volumes/hls_dev/bronze/fhir_export
+  dicom_volume:
+    description: Governed read-only DICOM volume path
+    default: /Volumes/hls_dev/bronze/dicom_source
+  state_volume:
+    description: Managed volume for Auto Loader schemas and ingestion state
+    default: /Volumes/hls_dev/meta/ingestion_state
+  alert_email:
+    description: Reviewed clinical alert recipient. Empty disables the alert.
+    default: ""
+  warehouse_id:
+    description: Existing SQL warehouse ID for dashboards and alerts
+    default: ""
+  workload_principal:
+    description: Service principal application ID that owns bundle deploys and workload runs
+    default: ""
+
+include:
+  - resources/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+    variables:
+      catalog: hls_dev
+      fhir_export_volume: /Volumes/hls_dev/bronze/fhir_export
+      dicom_volume: /Volumes/hls_dev/bronze/dicom_source
+      state_volume: /Volumes/hls_dev/meta/ingestion_state
+
+  test:
+    mode: production
+    variables:
+      catalog: hls_test
+      fhir_export_volume: /Volumes/hls_test/bronze/fhir_export
+      dicom_volume: /Volumes/hls_test/bronze/dicom_source
+      state_volume: /Volumes/hls_test/meta/ingestion_state
+    run_as:
+      service_principal_name: ${var.workload_principal}
+
+  prod:
+    mode: production
+    variables:
+      catalog: hls_prod
+      fhir_export_volume: /Volumes/hls_prod/bronze/fhir_export
+      dicom_volume: /Volumes/hls_prod/bronze/dicom_source
+      state_volume: /Volumes/hls_prod/meta/ingestion_state
+    run_as:
+      service_principal_name: ${var.workload_principal}

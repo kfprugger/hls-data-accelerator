@@ -1,0 +1,186 @@
+resources:
+  genie_spaces:
+    patient_360:
+      title: HLS Patient 360
+      description: Governed patient summaries across FHIR clinical history, device assignments, current telemetry, and imaging.
+      warehouse_id: ${var.warehouse_id}
+      serialized_space: |
+        {
+          "version": 2,
+          "config": {
+            "sample_questions": [
+              {"id":"10000000000000000000000000000001","question":["Count patients by gender without returning names or IDs."]},
+              {"id":"10000000000000000000000000000002","question":["Show the latest vital signs for all assigned devices with collection timestamps."]},
+              {"id":"10000000000000000000000000000003","question":["Show the 30-minute vital-sign trend for device MASIMO-RADIUS7-0001."]},
+              {"id":"10000000000000000000000000000004","question":["Give the clinical, medication, procedure, immunization, imaging, and latest-device summary for MASIMO-RADIUS7-0033."]},
+              {"id":"10000000000000000000000000000005","question":["How many devices are reporting, and what is the latest telemetry timestamp?"]}
+            ]
+          },
+          "data_sources": {
+            "tables": [
+              {"identifier":"${var.catalog}.gold.agent_patient_360","description":["One governed row per synthetic patient with demographics and summarized clinical history."],"column_configs":[{"column_name":"gender","enable_entity_matching":true},{"column_name":"patient_name","enable_entity_matching":true},{"column_name":"state","enable_entity_matching":true}]},
+              {"identifier":"${var.catalog}.gold.agent_patient_device","description":["Patient-device assignments with latest typed telemetry and UTC/Eastern timestamps."],"column_configs":[{"column_name":"device_id","enable_entity_matching":true}]},
+              {"identifier":"${var.catalog}.silver.telemetry","description":["Typed, deduplicated telemetry history at device-event grain."]}
+            ]
+          },
+          "instructions": {
+            "text_instructions": [
+              {"id":"11000000000000000000000000000001","content":["Use agent_patient_360 for patient summaries, agent_patient_device for patient-device assignment and latest readings, and silver.telemetry for time trends. This environment contains synthetic demo data. Never present SpO2, pulse rate, perfusion index, or signal quality without latest_reading_utc or latest_reading_eastern. Use America/New_York for Eastern time. Return names only when the user explicitly asks for patient-level results. Do not provide diagnosis or treatment advice; report governed data and recommend human clinical review."]}
+            ],
+            "example_question_sqls": [
+              {"id":"12000000000000000000000000000001","question":["Count patients by gender without returning names or IDs."],"sql":["SELECT gender, COUNT(*) AS patient_count FROM ${var.catalog}.gold.agent_patient_360 GROUP BY gender ORDER BY gender"]},
+              {"id":"12000000000000000000000000000002","question":["Show the latest vital signs for all assigned devices with collection timestamps."],"sql":["SELECT device_id, latest_spo2, latest_pulse_rate, latest_perfusion_index, latest_signal_quality, latest_reading_utc, latest_reading_eastern FROM ${var.catalog}.gold.agent_patient_device ORDER BY device_id"]},
+              {"id":"12000000000000000000000000000003","question":["Show the 30-minute vital-sign trend for device MASIMO-RADIUS7-0001."],"sql":["SELECT device_id, observed_at AS reading_time_utc, from_utc_timestamp(observed_at, 'America/New_York') AS reading_time_eastern, spo2, pulse_rate, perfusion_index, signal_quality FROM ${var.catalog}.silver.telemetry WHERE device_id = 'MASIMO-RADIUS7-0001' AND observed_at >= current_timestamp() - INTERVAL 30 MINUTES ORDER BY observed_at"]},
+              {"id":"12000000000000000000000000000004","question":["Give the clinical, medication, procedure, immunization, imaging, and latest-device summary for MASIMO-RADIUS7-0033."],"sql":["SELECT p.patient_name, p.gender, p.age_years, p.city, p.state, p.condition_summary, p.medication_summary, p.procedure_summary, p.immunization_summary, p.imaging_study_summary, d.device_id, d.latest_spo2, d.latest_pulse_rate, d.latest_reading_utc, d.latest_reading_eastern FROM ${var.catalog}.gold.agent_patient_360 p JOIN ${var.catalog}.gold.agent_patient_device d ON p.patient_id = d.patient_id WHERE d.device_id = 'MASIMO-RADIUS7-0033'"]},
+              {"id":"12000000000000000000000000000005","question":["How many devices are reporting, and what is the latest telemetry timestamp?"],"sql":["SELECT COUNT(DISTINCT device_id) AS reporting_device_count, MAX(observed_at) AS latest_event_time_utc FROM ${var.catalog}.silver.telemetry WHERE observed_at >= current_timestamp() - INTERVAL 7 DAYS"]}
+            ]
+          }
+        }
+
+    clinical_triage:
+      title: HLS Clinical Triage
+      description: Current device-alert prioritization with patient, medication, procedure, imaging, and vital-sign context.
+      warehouse_id: ${var.warehouse_id}
+      serialized_space: |
+        {
+          "version": 2,
+          "config": {
+            "sample_questions": [
+              {"id":"20000000000000000000000000000001","question":["Run a current clinical triage and list critical alerts first."]},
+              {"id":"20000000000000000000000000000002","question":["How many current alerts are there by severity and type?"]},
+              {"id":"20000000000000000000000000000003","question":["Which devices currently have low oxygen saturation?"]},
+              {"id":"20000000000000000000000000000004","question":["Which devices currently have pulse-rate anomalies?"]},
+              {"id":"20000000000000000000000000000005","question":["Count telemetry events and devices over the last seven days and return the latest UTC timestamp."]}
+            ]
+          },
+          "data_sources": {
+            "tables": [
+              {"identifier":"${var.catalog}.gold.agent_clinical_triage","description":["Current 15-minute alert cohort using Fabric-equivalent SpO2 and pulse thresholds, enriched with patient context."],"column_configs":[{"column_name":"alert_tier","enable_entity_matching":true},{"column_name":"alert_type","enable_entity_matching":true},{"column_name":"device_id","enable_entity_matching":true}]},
+              {"identifier":"${var.catalog}.gold.agent_patient_device","description":["Governed patient-device assignments and latest device readings."]},
+              {"identifier":"${var.catalog}.silver.telemetry","description":["Typed, deduplicated telemetry events for detail and trend questions."]}
+            ]
+          },
+          "instructions": {
+            "text_instructions": [
+              {"id":"21000000000000000000000000000001","content":["Use agent_clinical_triage for current severity and alert-type questions; its thresholds already encode CRITICAL, URGENT, WARNING, MULTI_METRIC, SPO2_LOW, and PULSE_ABNORMAL logic. Sort by priority_rank then last_reading_utc. A zero-row current window is a valid zero, not unavailable data. Always include last_reading_utc or last_reading_eastern with vital signs. Use silver.telemetry only for detailed trends or seven-day volume. Never provide autonomous clinical decisions; recommend human clinical review."]}
+            ],
+            "example_question_sqls": [
+              {"id":"22000000000000000000000000000001","question":["Run a current clinical triage and list critical alerts first."],"sql":["SELECT priority_rank, alert_tier, alert_type, device_id, patient_name, min_spo2, max_pulse_rate, last_reading_utc, last_reading_eastern, condition_summary, medication_summary FROM ${var.catalog}.gold.agent_clinical_triage ORDER BY priority_rank, last_reading_utc DESC"]},
+              {"id":"22000000000000000000000000000002","question":["How many current alerts are there by severity and type?"],"sql":["SELECT alert_tier, alert_type, COUNT(*) AS alert_count, MAX(last_reading_utc) AS latest_event_time_utc FROM ${var.catalog}.gold.agent_clinical_triage GROUP BY alert_tier, alert_type ORDER BY MIN(priority_rank), alert_type"]},
+              {"id":"22000000000000000000000000000003","question":["Which devices currently have low oxygen saturation?"],"sql":["SELECT device_id, patient_name, alert_tier, min_spo2, avg_spo2, reading_count, last_reading_utc, last_reading_eastern FROM ${var.catalog}.gold.agent_clinical_triage WHERE min_spo2 < 94 ORDER BY priority_rank, min_spo2"]},
+              {"id":"22000000000000000000000000000004","question":["Which devices currently have pulse-rate anomalies?"],"sql":["SELECT device_id, patient_name, alert_tier, min_pulse_rate, max_pulse_rate, avg_pulse_rate, reading_count, last_reading_utc, last_reading_eastern FROM ${var.catalog}.gold.agent_clinical_triage WHERE max_pulse_rate > 110 OR min_pulse_rate < 50 ORDER BY priority_rank, device_id"]},
+              {"id":"22000000000000000000000000000005","question":["Count telemetry events and devices over the last seven days and return the latest UTC timestamp."],"sql":["SELECT COUNT(DISTINCT device_id) AS device_count, COUNT(*) AS telemetry_event_count, MAX(observed_at) AS latest_event_time_utc, '${var.catalog}.silver.telemetry' AS data_source FROM ${var.catalog}.silver.telemetry WHERE observed_at >= current_timestamp() - INTERVAL 7 DAYS"]}
+            ]
+          }
+        }
+
+    imaging_cohort:
+      title: HLS Multi-Layer Imaging Cohort Agent
+      description: Imaging cohort discovery across FHIR studies, DICOM inventory, modality, patient demographics, and clinical summaries.
+      warehouse_id: ${var.warehouse_id}
+      serialized_space: |
+        {
+          "version": 2,
+          "config": {
+            "sample_questions": [
+              {"id":"30000000000000000000000000000001","question":["Count imaging studies and represented patients by modality."]},
+              {"id":"30000000000000000000000000000002","question":["Count imaging studies by status."]},
+              {"id":"30000000000000000000000000000003","question":["List patients with MRI studies in the last month, including scan dates."]},
+              {"id":"30000000000000000000000000000004","question":["Return total studies, patients, series, instances, and storage bytes."]},
+              {"id":"30000000000000000000000000000005","question":["Find CT imaging patients and include their clinical condition summaries."]}
+            ]
+          },
+          "data_sources": {
+            "tables": [
+              {"identifier":"${var.catalog}.gold.agent_imaging_cohort","description":["Study-modality rows joined to governed patient identity and DICOM series, instance, and byte counts."],"column_configs":[{"column_name":"imaging_status","enable_entity_matching":true},{"column_name":"modality_code","enable_entity_matching":true},{"column_name":"patient_name","enable_entity_matching":true}]},
+              {"identifier":"${var.catalog}.gold.agent_patient_360","description":["Patient-level clinical summaries used to enrich imaging cohorts."]}
+            ]
+          },
+          "instructions": {
+            "text_instructions": [
+              {"id":"31000000000000000000000000000001","content":["Use agent_imaging_cohort for all study, modality, status, patient, series, instance, and storage questions. Count DISTINCT imaging_study_resource_id because one study can have more than one modality row. Count DISTINCT patient_id for represented patients. Modality codes follow DICOM conventions: MR is MRI, CT is CT, MG is mammography, CR/DX are X-ray, PT is PET, NM is nuclear medicine. Use agent_patient_360 only when clinical summaries are requested. This is synthetic demo data; do not make clinical recommendations."]}
+            ],
+            "example_question_sqls": [
+              {"id":"32000000000000000000000000000001","question":["Count imaging studies and represented patients by modality."],"sql":["SELECT modality_code, COUNT(DISTINCT imaging_study_resource_id) AS study_count, COUNT(DISTINCT patient_id) AS patient_count FROM ${var.catalog}.gold.agent_imaging_cohort GROUP BY modality_code ORDER BY modality_code"]},
+              {"id":"32000000000000000000000000000002","question":["Count imaging studies by status."],"sql":["SELECT imaging_status, COUNT(DISTINCT imaging_study_resource_id) AS study_count, COUNT(DISTINCT patient_id) AS patient_count FROM ${var.catalog}.gold.agent_imaging_cohort GROUP BY imaging_status ORDER BY imaging_status"]},
+              {"id":"32000000000000000000000000000003","question":["List patients with MRI studies in the last month, including scan dates."],"sql":["SELECT DISTINCT patient_name, patient_id, started_at, study_description FROM ${var.catalog}.gold.agent_imaging_cohort WHERE modality_code = 'MR' AND started_at >= add_months(current_timestamp(), -1) ORDER BY started_at DESC"]},
+              {"id":"32000000000000000000000000000004","question":["Return total studies, patients, series, instances, and storage bytes."],"sql":["SELECT COUNT(DISTINCT imaging_study_resource_id) AS total_studies, COUNT(DISTINCT patient_id) AS total_patients, SUM(series_count) AS total_series, SUM(instance_count) AS total_instances, SUM(study_bytes) AS total_bytes FROM (SELECT DISTINCT imaging_study_resource_id, patient_id, series_count, instance_count, study_bytes FROM ${var.catalog}.gold.agent_imaging_cohort)"]},
+              {"id":"32000000000000000000000000000005","question":["Find CT imaging patients and include their clinical condition summaries."],"sql":["SELECT DISTINCT i.patient_name, i.patient_id, i.started_at, i.study_description, p.condition_summary FROM ${var.catalog}.gold.agent_imaging_cohort i LEFT JOIN ${var.catalog}.gold.agent_patient_360 p ON i.patient_id = p.patient_id WHERE i.modality_code = 'CT' ORDER BY i.started_at DESC"]}
+            ]
+          }
+        }
+
+    payer_ops_triage:
+      title: HLS Payer Ops Triage
+      description: Current claims, provider fraud evidence, high-cost trajectories, care gaps, and human-reviewed payer routing.
+      warehouse_id: ${var.warehouse_id}
+      serialized_space: |
+        {
+          "version": 2,
+          "config": {
+            "sample_questions": [
+              {"id":"40000000000000000000000000000001","question":["Count current claim events by event type and return the total."]},
+              {"id":"40000000000000000000000000000002","question":["Which providers have the highest active fraud risk, and what evidence supports the score?"]},
+              {"id":"40000000000000000000000000000003","question":["Show the current payer operations worklist."]},
+              {"id":"40000000000000000000000000000004","question":["Which members are trending toward high-cost status?"]},
+              {"id":"40000000000000000000000000000005","question":["Show open care gaps requiring provider outreach."]}
+            ]
+          },
+          "data_sources": {
+            "tables": [
+              {"identifier":"${var.catalog}.gold.agent_care_gaps","description":["Open CMS-oriented care gaps derived from governed FHIR data."]},
+              {"identifier":"${var.catalog}.gold.agent_fraud_risk","description":["Fabric-equivalent 60-minute fraud score and evidence at claim grain."]},
+              {"identifier":"${var.catalog}.gold.agent_high_cost_members","description":["Fabric-equivalent 90-day high-cost member trajectory."]},
+              {"identifier":"${var.catalog}.gold.agent_payer_worklist","description":["Unified fraud, high-cost, and care-gap queue with human-reviewed routing actions."],"column_configs":[{"column_name":"alert_domain","enable_entity_matching":true},{"column_name":"priority","enable_entity_matching":true},{"column_name":"scenario_source","enable_entity_matching":true}]},
+              {"identifier":"${var.catalog}.silver.claim_events","description":["Typed current claim stream including provider, facility, diagnosis, procedure, amount, location, and injected demo fraud evidence."],"column_configs":[{"column_name":"event_type","enable_entity_matching":true},{"column_name":"payer_id","enable_entity_matching":true},{"column_name":"provider_id","enable_entity_matching":true}]}
+            ]
+          },
+          "instructions": {
+            "text_instructions": [
+              {"id":"41000000000000000000000000000001","content":["Use silver.claim_events for raw claim-event volume, agent_fraud_risk for provider fraud evidence, agent_high_cost_members for cost trajectory, agent_care_gaps for quality gaps, and agent_payer_worklist for routing. Always disclose scenario_source when present. FRAUD routes to SIU review, HIGH_COST to care management review, and CARE_GAP to provider outreach. These are decision-support recommendations only: never authorize payment, denial, outreach, or case action. A human must review every action."]}
+            ],
+            "example_question_sqls": [
+              {"id":"42000000000000000000000000000001","question":["Count current claim events by event type and return the total."],"sql":["SELECT event_type, COUNT(*) AS event_count, SUM(COUNT(*)) OVER () AS total_count, '${var.catalog}.silver.claim_events' AS data_source FROM ${var.catalog}.silver.claim_events GROUP BY event_type ORDER BY event_type"]},
+              {"id":"42000000000000000000000000000002","question":["Which providers have the highest active fraud risk, and what evidence supports the score?"],"sql":["SELECT provider_id, MAX(fraud_score) AS fraud_score, MAX_BY(risk_tier, fraud_score) AS risk_tier, MAX_BY(fraud_flags, fraud_score) AS fraud_flags, MAX_BY(claim_id, fraud_score) AS evidence_claim_id, MAX(score_timestamp) AS score_timestamp FROM ${var.catalog}.gold.agent_fraud_risk GROUP BY provider_id ORDER BY fraud_score DESC LIMIT 10"]},
+              {"id":"42000000000000000000000000000003","question":["Show the current payer operations worklist."],"sql":["SELECT priority_rank, alert_domain, priority, alert_time, patient_id, provider_id, claim_id, metric_name, metric_value, message, recommended_action, scenario_source FROM ${var.catalog}.gold.agent_payer_worklist ORDER BY priority_rank, alert_time DESC"]},
+              {"id":"42000000000000000000000000000004","question":["Which members are trending toward high-cost status?"],"sql":["SELECT patient_id, risk_tier, cost_trend, rolling_spend_30d, rolling_spend_90d, ed_visits_30d, last_claim_time FROM ${var.catalog}.gold.agent_high_cost_members ORDER BY CASE risk_tier WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 ELSE 3 END, rolling_spend_30d DESC"]},
+              {"id":"42000000000000000000000000000005","question":["Show open care gaps requiring provider outreach."],"sql":["SELECT patient_id, measure_id, gap_type, days_overdue, recommended_action, scenario_source, refreshed_at FROM ${var.catalog}.gold.agent_care_gaps WHERE gap_status = 'open' ORDER BY days_overdue DESC, patient_id"]}
+            ]
+          }
+        }
+
+    healthcare_graph:
+      title: HLS Healthcare Graph Agent
+      description: Cross-domain relational traversal across patients, devices, conditions, alerts, imaging, claims, payer risk, and care gaps.
+      warehouse_id: ${var.warehouse_id}
+      serialized_space: |
+        {
+          "version": 2,
+          "config": {
+            "sample_questions": [
+              {"id":"50000000000000000000000000000001","question":["Count all patient-to-device relationships without sampling."]},
+              {"id":"50000000000000000000000000000002","question":["Return one actual patient-to-device relationship and identify the source."]},
+              {"id":"50000000000000000000000000000003","question":["Show a patient with connected device, diagnoses, current alert, payer, claim risk, and care gap context."]},
+              {"id":"50000000000000000000000000000004","question":["Which devices are associated with patients who have high-cost payer risk?"]},
+              {"id":"50000000000000000000000000000005","question":["Which patients have both an open care gap and recent abnormal telemetry?"]}
+            ]
+          },
+          "data_sources": {
+            "tables": [
+              {"identifier":"${var.catalog}.gold.agent_cross_domain_context","description":["Wide governed context for validated cross-domain questions over patient, device, clinical, imaging, payer, and care-gap data."],"column_configs":[{"column_name":"alert_tier","enable_entity_matching":true},{"column_name":"device_id","enable_entity_matching":true},{"column_name":"payer_alert_domain","enable_entity_matching":true}]},
+              {"identifier":"${var.catalog}.gold.agent_healthcare_relationships","description":["Typed edge list linking Patient, Device, Condition, Claim, ImagingStudy, ClinicalAlert, and CareGap entities."],"column_configs":[{"column_name":"relationship_type","enable_entity_matching":true},{"column_name":"scenario_source","enable_entity_matching":true},{"column_name":"source_type","enable_entity_matching":true},{"column_name":"target_type","enable_entity_matching":true}]}
+            ]
+          },
+          "instructions": {
+            "text_instructions": [
+              {"id":"51000000000000000000000000000001","content":["Databricks has no one-to-one Fabric IQ ontology object in this solution. Use agent_healthcare_relationships as the authoritative relational edge set and agent_cross_domain_context for joined context. Describe this as governed relational traversal, not an ontology graph. Entity counts must use aggregate COUNT or COUNT DISTINCT with no sample and no LIMIT. Keep example relationships separate from totals. Always return scenario_source. Never infer a relationship absent from the edge table or authorize a clinical or payer action."]}
+            ],
+            "example_question_sqls": [
+              {"id":"52000000000000000000000000000001","question":["Count all patient-to-device relationships without sampling."],"sql":["SELECT COUNT(*) AS relationship_count, COUNT(DISTINCT source_id) AS patient_count, COUNT(DISTINCT target_id) AS device_count, '${var.catalog}.gold.agent_healthcare_relationships' AS data_source FROM ${var.catalog}.gold.agent_healthcare_relationships WHERE source_type = 'Patient' AND relationship_type = 'HAS_DEVICE' AND target_type = 'Device'"]},
+              {"id":"52000000000000000000000000000002","question":["Return one actual patient-to-device relationship and identify the source."],"sql":["SELECT source_id AS patient_id, relationship_type, target_id AS device_id, scenario_source FROM ${var.catalog}.gold.agent_healthcare_relationships WHERE source_type = 'Patient' AND relationship_type = 'HAS_DEVICE' AND target_type = 'Device' ORDER BY patient_id, device_id LIMIT 1"]},
+              {"id":"52000000000000000000000000000003","question":["Show a patient with connected device, diagnoses, current alert, payer, claim risk, and care gap context."],"sql":["SELECT patient_id, patient_name, device_id, condition_summary, alert_time, alert_tier, latest_spo2, latest_pulse_rate, payer_id, payer_category, payer_alert_domain, payer_priority, payer_claim_id, high_cost_risk_tier, care_gap_measure, care_gap_status, scenario_source FROM ${var.catalog}.gold.agent_cross_domain_context ORDER BY CASE alert_tier WHEN 'CRITICAL' THEN 1 WHEN 'URGENT' THEN 2 ELSE 3 END, alert_time DESC NULLS LAST LIMIT 1"]},
+              {"id":"52000000000000000000000000000004","question":["Which devices are associated with patients who have high-cost payer risk?"],"sql":["SELECT DISTINCT patient_id, patient_name, device_id, high_cost_risk_tier, cost_trend, rolling_spend_30d, scenario_source FROM ${var.catalog}.gold.agent_cross_domain_context WHERE high_cost_risk_tier IN ('CRITICAL','HIGH') ORDER BY rolling_spend_30d DESC"]},
+              {"id":"52000000000000000000000000000005","question":["Which patients have both an open care gap and recent abnormal telemetry?"],"sql":["SELECT DISTINCT patient_id, patient_name, device_id, care_gap_measure, care_gap_status, alert_tier, latest_spo2, latest_pulse_rate, alert_time, scenario_source FROM ${var.catalog}.gold.agent_cross_domain_context WHERE care_gap_status = 'open' AND (latest_spo2 < 94 OR latest_pulse_rate > 110 OR latest_pulse_rate < 50) ORDER BY alert_time DESC NULLS LAST"]}
+            ]
+          }
+        }
