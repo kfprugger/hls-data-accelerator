@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 HDS_VERSION = "1.4.0"
 DTT_VERSION = "0.3.1.1271"
-STAGING_PATCH_VERSION = "2026-09-29.2"
+STAGING_PATCH_VERSION = "2026-10-01.1"
 COMPANY_PREFIX = "healthcare1"
 TECHNICAL_PREFIX = "msft"
 DEPLOYMENT_LAKEHOUSE = "deployment_lakehouse"
@@ -425,6 +425,18 @@ def _patch_omop_pipeline(path: Path) -> None:
     path.write_text(json.dumps(pipeline, separators=(",", ":")), encoding="utf-8")
 
 
+def _patch_customer_insights_goal_mapping(path: Path) -> None:
+    """Use fields that exist in the deployed HDS v1.4 Goal Silver schema."""
+    config = json.loads(path.read_text(encoding="utf-8"))
+    by_name = {column.get("name"): column for column in config.get("columns", [])}
+    expected = {"Id": "idOrig", "SubjectPatient": "subject.idOrig"}
+    if any(by_name.get(name, {}).get("expression") != expression for name, expression in expected.items()):
+        raise ValueError("Customer Insights Goal mappings no longer match HDS v1.4.0")
+    by_name["Id"]["expression"] = "id"
+    by_name["SubjectPatient"]["expression"] = "regexp_extract(subject.reference, '([^/]+)$', 1)"
+    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+
 def patch_notebook(source: Path, destination: Path) -> None:
     notebook = json.loads(source.read_text(encoding="utf-8"))
     _replace_notebook_text(
@@ -664,6 +676,8 @@ def stage_source_payload(force: bool = False) -> Path:
         shutil.rmtree(BUILD_ROOT)
     artifact_destination = BUILD_ROOT / ARTIFACT_ROOT_NAME
     shutil.copytree(HDS_ROOT / ARTIFACT_ROOT_NAME, artifact_destination)
+    goal_mapping_path = artifact_destination / "healthcare-configuration" / HDS_VERSION / "_internal" / "fhir4" / "transformation" / "ci" / "goal.columnsconfig.json"
+    _patch_customer_insights_goal_mapping(goal_mapping_path)
     omop_pipelines = list(artifact_destination.rglob("msft_omop_analytics.json"))
     if len(omop_pipelines) != 1:
         raise ValueError(f"Expected one OMOP pipeline definition, found {omop_pipelines}")

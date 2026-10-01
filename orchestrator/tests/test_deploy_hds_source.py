@@ -427,6 +427,21 @@ class HdsSourceTests(unittest.TestCase):
         self.assertEqual(summary["deployment_notebooks"], 9)
         self.assertEqual(summary["validation_notebooks"], 3)
 
+    def test_staged_customer_insights_goal_mapping_uses_reference_string(self):
+        relative = Path("healthcare-configuration") / hds.HDS_VERSION / "_internal" / "fhir4" / "transformation" / "ci" / "goal.columnsconfig.json"
+        vendor_path = hds.HDS_ROOT / hds.ARTIFACT_ROOT_NAME / relative
+        staged_path = hds.BUILD_ROOT / hds.ARTIFACT_ROOT_NAME / relative
+        vendor_config = json.loads(vendor_path.read_text())
+        staged_config = json.loads(staged_path.read_text())
+        vendor_id = next(column for column in vendor_config["columns"] if column["name"] == "Id")
+        staged_id = next(column for column in staged_config["columns"] if column["name"] == "Id")
+        vendor_subject = next(column for column in vendor_config["columns"] if column["name"] == "SubjectPatient")
+        staged_subject = next(column for column in staged_config["columns"] if column["name"] == "SubjectPatient")
+        self.assertEqual(vendor_id["expression"], "idOrig")
+        self.assertEqual(staged_id["expression"], "id")
+        self.assertEqual(vendor_subject["expression"], "subject.idOrig")
+        self.assertEqual(staged_subject["expression"], "regexp_extract(subject.reference, '([^/]+)$', 1)")
+
     def test_staged_omop_pipeline_does_not_repeat_clinical_ingestion(self):
         staged = next((hds.BUILD_ROOT / hds.ARTIFACT_ROOT_NAME).rglob("msft_omop_analytics.json"))
         vendor = next((hds.HDS_ROOT / hds.ARTIFACT_ROOT_NAME).rglob("msft_omop_analytics.json"))
