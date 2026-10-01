@@ -90,14 +90,31 @@ If references resolve but a user still sees the warning, verify that user's
 access to the source and SQL analytics endpoint. Agents execute under the asking
 user's permissions. See [Fabric Data Agent concepts](https://learn.microsoft.com/fabric/data-science/concept-data-agent).
 
-Deployment scripts that reconstruct name-only selections can reintroduce the
-problem. Rerun this utility after refreshing metadata when necessary; it is not
-automatically invoked during deployment.
+The legacy deployment paths now import datasource references, instructions, and
+examples without hand-built schema overrides. They enumerate native staging
+elements through the public management API, apply exact table/function selections
+using service-issued element IDs, publish, and verify both staging and published
+selections. This avoids name-only schema roots and invented GUIDs that can publish
+successfully but remain unusable.
+
+Patient 360 and Clinical Triage select the clinical Silver contract plus native
+telemetry/alert tables and five helper functions. The imaging cohort agent selects
+13 Silver tables, 19 OMOP Gold tables, and its deterministic imaging KQL source;
+updates preserve unrelated existing datasource bindings such as the clinical
+ontology. KQL functions are selected through native element overrides, not emitted
+as `kusto.function` nodes in imported public-definition JSON.
+
+For BrakeKat operations, a cached Az PowerShell context can remain usable when
+Azure CLI is signed into another tenant. Check `Get-AzContext` and acquire tokens
+with an explicit `Get-AzAccessToken -TenantId ...`; verify `TenantId` before API
+calls. The standalone imaging deployer accepts `-TenantId` and can use that
+explicitly pinned native credential without changing the shared CLI account.
 
 ## Offline tests
 
 ```powershell
 .\utilities\tests\test_data_agent_refresh.ps1
+.\utilities\tests\test_native_data_agent_selection.ps1
 .\phase-7\tests\test_data_agent_selection.ps1
 ```
 

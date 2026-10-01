@@ -54,6 +54,8 @@ function Get-AccessTokenForResource {
 
 function Get-FabricAccessToken { return Get-AccessTokenForResource -ResourceUrl "https://api.fabric.microsoft.com" }
 
+. (Join-Path $PSScriptRoot '../utilities/data-agent-selection.ps1')
+
 function Invoke-FabricApi {
     param (
         [string]$Method   = "GET",
@@ -185,25 +187,13 @@ if ($silverLh) {
 Write-Host ""
 
 # ============================================================================
-# KQL ELEMENTS: native tables plus deterministic aggregate helper functions
+# KQL selection contracts are applied to service-generated metadata after import
 # ============================================================================
 
-$kqlElements = @(
-    @{ id = [guid]::NewGuid().ToString(); display_name = "TelemetryRaw";  type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "AlertHistory";  type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "Functions"; type = "kusto.functions"; is_selected = $true; children = @(
-        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_CurrentAlertSeverity"; type = "kusto.function"; is_selected = $true },
-        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_LowOxygen"; type = "kusto.function"; is_selected = $true },
-        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_TelemetrySevenDaySummary"; type = "kusto.function"; is_selected = $true },
-        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_CurrentDeviceSummary"; type = "kusto.function"; is_selected = $true },
-        @{ id = [guid]::NewGuid().ToString(); display_name = "agent_ClinicalAggregateSummary"; type = "kusto.function"; is_selected = $true }
-    ) }
-)
+$kqlFunctions = @('agent_CurrentAlertSeverity', 'agent_LowOxygen', 'agent_TelemetrySevenDaySummary', 'agent_CurrentDeviceSummary', 'agent_ClinicalAggregateSummary')
 
 # ============================================================================
-# LAKEHOUSE ELEMENTS: Silver tables under dbo schema
-# Matches the working Cohorting Agent pattern: flat schema → table structure,
-# no random GUIDs, type = lakehouse_tables (not "lakehouse")
+# Silver table contracts are applied through the native element API, not imported schema overrides
 # ============================================================================
 
 $silverTables = @(
@@ -212,20 +202,6 @@ $silverTables = @(
     'Immunization'
 )
 if ($IncludeDicomImaging) { $silverTables += 'ImagingStudy' }
-$lakehouseElements = @(
-    @{
-        display_name = 'dbo'
-        type         = 'lakehouse_tables.schema'
-        is_selected  = $true
-        children     = @($silverTables | ForEach-Object {
-            @{
-                display_name = $_
-                type         = 'lakehouse_tables.table'
-                is_selected  = $true
-            }
-        })
-    }
-)
 
 # ============================================================================
 # SHARED LAKEHOUSE DATASOURCE INSTRUCTIONS + FEW-SHOTS
@@ -528,11 +504,20 @@ function Deploy-DataAgent {
             -Definition $definition.definition
         Write-Host "  ✓ Definition applied successfully" -ForegroundColor Green
     } catch {
-        $errBody = $_.ErrorDetails.Message
-        Write-Host "  ⚠ Definition update failed: $errBody" -ForegroundColor Yellow
-        Write-Host "    The agent was created but may need manual configuration." -ForegroundColor Yellow
-        Write-Host "    Open it in Fabric portal to add datasources." -ForegroundColor Yellow
-        throw "Definition update failed for Data Agent '$Name'"
+        Write-Host "  Definition update failed for '$Name': $($_.Exception.Message)" -ForegroundColor Red
+        throw
+    }
+    $selectionContracts = @()
+    $nativeApi = { param($method, $endpoint, $body) Invoke-FabricApi -Method $method -Endpoint $endpoint -Body $body }
+    foreach ($ds in $DataSources) {
+        $source = $ds.DatasourceJson | ConvertFrom-Json -Depth 100
+        if ($source.type -notin @('lakehouse_tables', 'kusto')) { continue }
+        $tables = @($ds.SelectedTables)
+        $functions = @()
+        if ($source.type -eq 'kusto') { $functions = @($ds.SelectedFunctions) }
+        $contract = @{ WorkspaceId = $workspaceId; DataAgentId = $agentId; DatasourceId = $source.artifactId; Tables = $tables; Functions = $functions; InvokeApi = $nativeApi }
+        Set-DataAgentNativeSchemaSelection @contract
+        $selectionContracts += $contract
     }
     Write-Host "  Publishing Data Agent staging configuration..." -ForegroundColor White
     try {
@@ -544,6 +529,10 @@ function Deploy-DataAgent {
         Write-Host "  ✓ Data Agent published successfully" -ForegroundColor Green
     } catch {
         throw "Publish failed for Data Agent '$Name': $($_.Exception.Message)"
+    }
+    foreach ($contract in $selectionContracts) {
+        Set-DataAgentNativeSchemaSelection @contract -VerifyOnly
+        Set-DataAgentNativeSchemaSelection @contract -VerifyOnly -Published
     }
 
 
@@ -880,7 +869,7 @@ TelemetryRaw
         type                   = "kusto"
         userDescription        = "KQL database with Masimo telemetry, clinical alerts, device status, and alert-history tables for clinical device workflows"
         dataSourceInstructions = $p360KqlDsInstructions
-        elements               = $kqlElements
+        elements               = @()
     } | ConvertTo-Json -Depth 10)
 
     $kqlFewShotsJson = (@{
@@ -896,14 +885,14 @@ TelemetryRaw
         type                   = "lakehouse_tables"
         userDescription        = $lakehouseUserDescription
         dataSourceInstructions = $lhDsInstructions
-        elements               = $lakehouseElements
+        elements               = @()
     } | ConvertTo-Json -Depth 20)
 
     $lhFewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = $lhFewShots } | ConvertTo-Json -Depth 10)
 
     $p360DataSources = @(
-        @{ FolderName = "kusto-$kqlDbDisplayName";          DatasourceJson = $kqlDatasourceJson; FewShotsJson = $kqlFewShotsJson },
-        @{ FolderName = "lakehouse_tables-$silverLhName";   DatasourceJson = $lhDatasourceJson;  FewShotsJson = $lhFewShotsJson }
+        @{ FolderName = "kusto-$kqlDbDisplayName"; DatasourceJson = $kqlDatasourceJson; FewShotsJson = $kqlFewShotsJson; SelectedTables = @('TelemetryRaw', 'AlertHistory'); SelectedFunctions = $kqlFunctions },
+        @{ FolderName = "lakehouse-tables-$silverLhName"; DatasourceJson = $lhDatasourceJson; FewShotsJson = $lhFewShotsJson; SelectedTables = $silverTables }
     )
     $clinicalOntologyDs = New-OntologyDatasourceIfAvailable `
         -OntologyName "ClinicalDeviceOntology" `
@@ -1200,7 +1189,7 @@ TelemetryRaw
         type                   = "kusto"
         userDescription        = "KQL database with Masimo telemetry, clinical alerts, device status, and alert-history tables for clinical triage workflows"
         dataSourceInstructions = $triageKqlDsInstructions
-        elements               = $kqlElements
+        elements               = @()
     } | ConvertTo-Json -Depth 10)
 
     $kqlFewShotsJson = (@{
@@ -1216,14 +1205,14 @@ TelemetryRaw
         type                   = "lakehouse_tables"
         userDescription        = $lakehouseUserDescription
         dataSourceInstructions = $lhDsInstructions
-        elements               = $lakehouseElements
+        elements               = @()
     } | ConvertTo-Json -Depth 20)
 
     $lhFewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = $lhFewShots } | ConvertTo-Json -Depth 10)
 
     $triageDataSources = @(
-        @{ FolderName = "kusto-$kqlDbDisplayName";          DatasourceJson = $kqlDatasourceJson; FewShotsJson = $kqlFewShotsJson },
-        @{ FolderName = "lakehouse_tables-$silverLhName";   DatasourceJson = $lhDatasourceJson;  FewShotsJson = $lhFewShotsJson }
+        @{ FolderName = "kusto-$kqlDbDisplayName"; DatasourceJson = $kqlDatasourceJson; FewShotsJson = $kqlFewShotsJson; SelectedTables = @('TelemetryRaw', 'AlertHistory'); SelectedFunctions = $kqlFunctions },
+        @{ FolderName = "lakehouse-tables-$silverLhName"; DatasourceJson = $lhDatasourceJson; FewShotsJson = $lhFewShotsJson; SelectedTables = $silverTables }
     )
     $clinicalOntologyDs = New-OntologyDatasourceIfAvailable `
         -OntologyName "ClinicalDeviceOntology" `
