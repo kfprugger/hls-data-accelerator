@@ -179,7 +179,7 @@ Invoke-WebRequest -Method POST `
 | `healthcare1_msft_omop_analytics` | Silver → Gold OMOP (must run AFTER imaging + clinical) |
 
 ### Pipeline Sequence Rule
-Default deployment monitor order: **optional SDoH/claims sidecars → Clinical (wait) → optional CMA (non-blocking) → Imaging (wait) → OMOP (wait)**. Sidecars are discovered from live DataPipeline items and invoked best-effort before the Clinical wait; CMA can start after Clinical/Silver readiness and does not wait for OMOP.
+Default deployment monitor order: **optional SDoH/claims sidecars → Clinical (wait) → required POA (wait) → optional CMA (non-blocking) → Imaging (wait) → OMOP (wait) → optional Customer Insights (wait)**. Sidecars are discovered from live DataPipeline items and invoked best-effort before the Clinical wait; POA and CMA start after Clinical/Silver readiness passes. Customer Insights runs serially at the end after ensuring its ADLS container, workspace-identity connection, and `Files/main` shortcut, then a bounded repair notebook registers every populated `all_entities` Delta directory as a Lakehouse table. Customer Insights failures remain warnings so they do not invalidate completed Clinical, Imaging, or OMOP work.
 
 ### Poll Pipeline Status
 ```powershell

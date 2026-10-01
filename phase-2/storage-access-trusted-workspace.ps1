@@ -52,6 +52,10 @@ param(
     [string]$OmopPipelineName = "healthcare1_msft_omop_analytics",
     [string]$CmaPipelineName = "healthcare1_msft_cma",
     [string]$PoaPipelineName = "healthcare1_msft_poa_ingestion",
+    [string]$CustomerInsightsPipelineName = "healthcare1_msft_customer_insights",
+    [string]$CustomerInsightsLakehouseName = "healthcare1_msft_customer_insights",
+    [string]$CustomerInsightsContainerName = "customer-insights",
+    [string]$CustomerInsightsShortcutName = "main",
     [string[]]$OptionalSidecarPipelineNames = @(),
     [string[]]$OptionalSidecarPipelineNamePatterns = @('sdoh','social.?determinant','claim','claims','cclf'),
 
@@ -290,14 +294,26 @@ function Invoke-OptionalDataPipelineSerialized {
     param(
         [Parameter(Mandatory)][string]$WorkspaceId,
         [Parameter(Mandatory)][string]$PipelineName,
-        [Parameter(Mandatory)][object]$Pipeline,
+        [object]$Pipeline,
         [Parameter(Mandatory)][hashtable]$FabricHeaders,
         [Parameter(Mandatory)][string]$StepName,
         [int]$MaxAttempts = 3,
-        [int]$TimeoutMinutes = 60
+        [int]$TimeoutMinutes = 60,
+        [string]$SkipReason = 'not deployed',
+        [switch]$NonBlockingFailure
     )
 
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
+    $status = 'SKIPPED'
+    $acceptExistingRun = $false
+
+    if (-not $Pipeline) {
+        Write-Log "─── ${StepName}: SKIPPING serialized pipeline '$PipelineName' ($SkipReason) ───" 'INFO'
+        $timer.Stop()
+        Record-Step -Name $StepName -Status $status -Seconds $timer.Elapsed.TotalSeconds
+        return [pscustomobject]@{ Name = $PipelineName; Id = $null; Status = $status; Invoked = $false; AlreadyRunning = $false }
+    }
+
     $pipelineId = [string]$Pipeline.id
     $runUri = "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$pipelineId/jobs/Pipeline/instances"
     Write-Log "─── ${StepName}: Running write-conflicting pipeline '$PipelineName' serially ───" 'INFO'
@@ -307,7 +323,7 @@ function Invoke-OptionalDataPipelineSerialized {
         $acceptExistingRun = $false
         try {
             $null = Invoke-FabricApiRequest -Method Post -Uri $runUri -Headers $FabricHeaders -Description "Run serialized pipeline '$PipelineName'"
-            Write-Log "  '$PipelineName' invoked (attempt $attempt/$MaxAttempts); waiting for completion before core HDS writers start." 'INFO'
+            Write-Log "  '$PipelineName' invoked (attempt $attempt/$MaxAttempts); waiting for terminal completion." 'INFO'
         } catch {
             $errMsg = $_.Exception.Message
             if ($errMsg -match '409|already running|TooManyRequestsForJobs') {
@@ -315,6 +331,11 @@ function Invoke-OptionalDataPipelineSerialized {
                 $acceptExistingRun = $true
             } else {
                 $timer.Stop()
+                if ($NonBlockingFailure) {
+                    Record-Step -Name $StepName -Status 'WARN' -Seconds $timer.Elapsed.TotalSeconds
+                    Write-Log "  ⚠ Optional pipeline '$PipelineName' could not start: $errMsg" 'WARN'
+                    return [pscustomobject]@{ Name = $PipelineName; Id = $pipelineId; Status = 'WARN'; Invoked = $false; AlreadyRunning = $false }
+                }
                 Record-Step -Name $StepName -Status 'FAILED' -Seconds $timer.Elapsed.TotalSeconds
                 throw
             }
@@ -354,6 +375,12 @@ function Invoke-OptionalDataPipelineSerialized {
         }
 
         $timer.Stop()
+        if ($NonBlockingFailure) {
+            Record-Step -Name $StepName -Status 'WARN' -Seconds $timer.Elapsed.TotalSeconds
+            $detail = if ([string]::IsNullOrWhiteSpace($failureText)) { "did not complete within $TimeoutMinutes minutes" } else { $failureText }
+            Write-Log "  ⚠ Optional pipeline '$PipelineName' did not complete: $detail" 'WARN'
+            return [pscustomobject]@{ Name = $PipelineName; Id = $pipelineId; Status = 'WARN'; Invoked = $true; AlreadyRunning = $acceptExistingRun }
+        }
         Record-Step -Name $StepName -Status 'FAILED' -Seconds $timer.Elapsed.TotalSeconds
         if ([string]::IsNullOrWhiteSpace($failureText)) {
             throw "Serialized pipeline '$PipelineName' did not complete within $TimeoutMinutes minutes."
@@ -988,6 +1015,41 @@ function Get-FabricConnectionByDisplayName {
     return $items | Where-Object { $_.displayName -eq $DisplayName } | Select-Object -First 1
 }
 
+function Test-FabricAdlsConnectionMatch {
+    param(
+        [AllowNull()][object]$Connection,
+        [Parameter(Mandatory)][string]$StorageAccountName,
+        [Parameter(Mandatory)][string]$ContainerName
+    )
+    if (-not $Connection) { return $false }
+    $expectedPath = "https://$StorageAccountName.dfs.core.windows.net/$ContainerName"
+    $actualPath = [string]$Connection.connectionDetails.path
+    $connectionType = [string]$Connection.connectionDetails.type
+    $credentialType = [string]$Connection.credentialDetails.credentialType
+    return (
+        $actualPath.TrimEnd('/') -ieq $expectedPath.TrimEnd('/') -and
+        $connectionType -match 'AdlsGen2|AzureDataLakeStorage' -and
+        $credentialType -eq 'WorkspaceIdentity'
+    )
+}
+
+function Test-FabricAdlsShortcutTarget {
+    param(
+        [AllowNull()][object]$Shortcut,
+        [Parameter(Mandatory)][string]$ExpectedLocation,
+        [Parameter(Mandatory)][string]$ExpectedSubpath,
+        [Parameter(Mandatory)][string]$ExpectedConnectionId
+    )
+    if (-not $Shortcut) { return $false }
+    $target = $Shortcut.target.adlsGen2
+    if (-not $target) { return $false }
+    return (
+        ([string]$target.location).TrimEnd('/') -ieq $ExpectedLocation.TrimEnd('/') -and
+        ([string]$target.subpath).Trim('/') -ieq $ExpectedSubpath.Trim('/') -and
+        [string]$target.connectionId -eq $ExpectedConnectionId
+    )
+}
+
 function New-FabricAdlsConnection {
     param(
         [Parameter(Mandatory)][string]$AccessToken,
@@ -996,15 +1058,19 @@ function New-FabricAdlsConnection {
         [Parameter(Mandatory)][string]$ContainerName
     )
 
-    # Check for existing connection
-    $existing = Get-FabricConnectionByDisplayName -AccessToken $AccessToken -DisplayName $DisplayName
-    if ($existing -and $existing.PSObject.Properties['id']) {
-        Write-Log "  Reusing existing connection '$DisplayName' (ID: $($existing.id))." 'INFO'
-        return [string]$existing.id
-    }
-
     $dfsHost = "$StorageAccountName.dfs.core.windows.net"
     $dfsUrl  = "https://$dfsHost"
+
+    # Reuse only an exact account/container WorkspaceIdentity connection. A
+    # matching display name with stale details would make Fabric write elsewhere.
+    $existing = Get-FabricConnectionByDisplayName -AccessToken $AccessToken -DisplayName $DisplayName
+    if ($existing -and $existing.PSObject.Properties['id']) {
+        if (-not (Test-FabricAdlsConnectionMatch -Connection $existing -StorageAccountName $StorageAccountName -ContainerName $ContainerName)) {
+            throw "Existing Fabric connection '$DisplayName' does not match ADLS target '$dfsUrl/$ContainerName' with WorkspaceIdentity credentials."
+        }
+        Write-Log "  Reusing verified connection '$DisplayName' (ID: $($existing.id))." 'INFO'
+        return [string]$existing.id
+    }
 
     # Discover supported ADLS connection type
     $headers = Get-FabricApiHeaders -AccessToken $AccessToken
@@ -1085,9 +1151,14 @@ function New-FabricAdlsConnection {
         $result = Invoke-FabricApiRequest -Method Post -Uri $uri -Headers $headers -Body $body -Description "Create ADLS connection '$DisplayName'"
     } catch {
         if ($_.Exception.Message -match '409|DuplicateConnectionName') {
-            Write-Log "  Connection '$DisplayName' already exists (409). Looking up..." 'WARN'
+            Write-Log "  Connection '$DisplayName' already exists (409). Looking up and validating its target..." 'WARN'
             $retry = Get-FabricConnectionByDisplayName -AccessToken $AccessToken -DisplayName $DisplayName
-            if ($retry -and $retry.PSObject.Properties['id']) { return [string]$retry.id }
+            if ($retry -and $retry.PSObject.Properties['id']) {
+                if (-not (Test-FabricAdlsConnectionMatch -Connection $retry -StorageAccountName $StorageAccountName -ContainerName $ContainerName)) {
+                    throw "Duplicate Fabric connection '$DisplayName' does not match ADLS target '$dfsUrl/$ContainerName' with WorkspaceIdentity credentials."
+                }
+                return [string]$retry.id
+            }
         }
         throw
     }
@@ -1122,7 +1193,203 @@ function Get-FabricShortcutByName {
     }
     $items = @()
     if ($result.Response.PSObject.Properties['value']) { $items = @($result.Response.value) }
-    return $items | Where-Object { $_.name -eq $ShortcutName -and $_.path -eq $ShortcutPath } | Select-Object -First 1
+    $normalizedPath = $ShortcutPath.Trim('/')
+    return $items | Where-Object {
+        $_.name -eq $ShortcutName -and ([string]$_.path).Trim('/') -eq $normalizedPath
+    } | Select-Object -First 1
+}
+
+function Ensure-FabricAdlsShortcut {
+    param(
+        [Parameter(Mandatory)][string]$AccessToken,
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$ShortcutName,
+        [Parameter(Mandatory)][string]$ShortcutPath,
+        [Parameter(Mandatory)][string]$ExpectedLocation,
+        [Parameter(Mandatory)][string]$ExpectedSubpath,
+        [Parameter(Mandatory)][string]$ExpectedConnectionId,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders
+    )
+
+    $shortcut = Get-FabricShortcutByName -AccessToken $AccessToken `
+        -WorkspaceId $WorkspaceId -LakehouseId $LakehouseId `
+        -ShortcutName $ShortcutName -ShortcutPath $ShortcutPath
+    if ($shortcut) {
+        if (-not (Test-FabricAdlsShortcutTarget -Shortcut $shortcut -ExpectedLocation $ExpectedLocation -ExpectedSubpath $ExpectedSubpath -ExpectedConnectionId $ExpectedConnectionId)) {
+            throw "Existing shortcut '$ShortcutName' does not match '$ExpectedLocation/$($ExpectedSubpath.Trim('/'))' and connection '$ExpectedConnectionId'."
+        }
+        return $shortcut
+    }
+
+    $body = @{
+        path = $ShortcutPath.Trim('/')
+        name = $ShortcutName
+        target = @{
+            adlsGen2 = @{
+                location = $ExpectedLocation.TrimEnd('/')
+                subpath = "/$($ExpectedSubpath.Trim('/'))"
+                connectionId = $ExpectedConnectionId
+            }
+        }
+    }
+    $uri = "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$LakehouseId/shortcuts?shortcutConflictPolicy=Abort"
+    try {
+        Invoke-FabricApiRequest -Method Post -Uri $uri -Headers $FabricHeaders -Body $body -Description "Create shortcut '$ShortcutName'" | Out-Null
+    } catch {
+        if ($_.Exception.Message -notmatch '409|EntityConflict|shortcut.*already exists') { throw }
+        Write-Log "  Shortcut '$ShortcutName' was created concurrently; reading back and validating its target." 'WARN'
+    }
+
+    $shortcut = Get-FabricShortcutByName -AccessToken $AccessToken `
+        -WorkspaceId $WorkspaceId -LakehouseId $LakehouseId `
+        -ShortcutName $ShortcutName -ShortcutPath $ShortcutPath
+    if (-not (Test-FabricAdlsShortcutTarget -Shortcut $shortcut -ExpectedLocation $ExpectedLocation -ExpectedSubpath $ExpectedSubpath -ExpectedConnectionId $ExpectedConnectionId)) {
+        throw "Shortcut '$ShortcutName' was not found with the expected ADLS target after creation or conflict recovery."
+    }
+    return $shortcut
+}
+
+function Invoke-CustomerInsightsTableRegistration {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$LakehouseName,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders,
+        [string]$NotebookName = 'Customer Insights Table Registration Repair',
+        [int]$TimeoutMinutes = 15
+    )
+
+    $supportedTables = @(
+        'Appointment', 'AppointmentParticipant', 'CarePlan', 'CarePlanCondition',
+        'Condition', 'Encounter', 'EncounterParticipant', 'Location', 'Patient',
+        'PatientAddress', 'Practitioner', 'PractitionerAddress', 'Goal'
+    )
+    $requiredTables = @('Appointment', 'Condition', 'Encounter', 'Location', 'Patient')
+    $tablesJson = $supportedTables | ConvertTo-Json -Compress
+    $requiredJson = $requiredTables | ConvertTo-Json -Compress
+    $code = @"
+import json
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.getOrCreate()
+tables = $tablesJson
+required_nonempty = set($requiredJson)
+results = []
+for table in tables:
+    location = f"Files/main/all_entities/{table}"
+    try:
+        spark.read.format("delta").load(location).limit(1).collect()
+    except Exception:
+        print(f"CUSTOMER_INSIGHTS_SKIP={table}: no populated Delta target")
+        continue
+    spark.sql(f"CREATE TABLE IF NOT EXISTS `{table}` USING DELTA LOCATION '{location}'")
+    rows = spark.table(f"`{table}`").count()
+    if table in required_nonempty and rows <= 0:
+        raise RuntimeError(f"Required Customer Insights table {table} has no rows")
+    results.append({"table": table, "rows": rows, "location": location})
+
+registered = {row["table"] for row in results}
+missing = sorted(required_nonempty - registered)
+if missing:
+    raise RuntimeError(f"Required Customer Insights tables were not registered: {missing}")
+print("CUSTOMER_INSIGHTS_REGISTRATION=" + json.dumps(results, sort_keys=True))
+"@
+
+    $sourceLines = @($code -split "`r?`n" | ForEach-Object { "$_`n" })
+    $notebook = @{
+        nbformat = 4
+        nbformat_minor = 5
+        metadata = @{
+            language_info = @{ name = 'python' }
+            kernel_info = @{ name = 'synapse_pyspark' }
+            kernelspec = @{ name = 'synapse_pyspark'; display_name = 'Synapse PySpark' }
+        }
+        cells = @(@{
+            cell_type = 'code'
+            execution_count = $null
+            metadata = @{}
+            outputs = @()
+            source = $sourceLines
+        })
+    }
+    $notebookJson = $notebook | ConvertTo-Json -Depth 30 -Compress
+    $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($notebookJson))
+    $definition = @{
+        format = 'ipynb'
+        parts = @(@{ path = 'notebook-content.ipynb'; payload = $payload; payloadType = 'InlineBase64' })
+    }
+
+    $notebooksResult = Invoke-FabricApiRequest -Method Get `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items?type=Notebook" `
+        -Headers $FabricHeaders -Description 'List notebooks for Customer Insights registration'
+    $repairNotebook = @($notebooksResult.Response.value) | Where-Object {
+        $_.displayName -eq $NotebookName -and $_.type -eq 'Notebook'
+    } | Select-Object -First 1
+
+    if ($repairNotebook) {
+        $operation = Invoke-FabricApiRequest -Method Post `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$($repairNotebook.id)/updateDefinition" `
+            -Headers $FabricHeaders -Body @{ definition = $definition } `
+            -Description 'Update Customer Insights table-registration notebook'
+        Wait-FabricOperation -OperationResult $operation -Headers $FabricHeaders -Description 'Update Customer Insights table-registration notebook'
+    } else {
+        $operation = Invoke-FabricApiRequest -Method Post `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items" `
+            -Headers $FabricHeaders -Body @{
+                displayName = $NotebookName
+                type = 'Notebook'
+                description = 'Registers populated Customer Insights Delta outputs as Lakehouse tables.'
+                definition = $definition
+            } -Description 'Create Customer Insights table-registration notebook'
+        Wait-FabricOperation -OperationResult $operation -Headers $FabricHeaders -Description 'Create Customer Insights table-registration notebook'
+        $notebooksResult = Invoke-FabricApiRequest -Method Get `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items?type=Notebook" `
+            -Headers $FabricHeaders -Description 'Refresh notebooks after Customer Insights registration create'
+        $repairNotebook = @($notebooksResult.Response.value) | Where-Object {
+            $_.displayName -eq $NotebookName -and $_.type -eq 'Notebook'
+        } | Select-Object -First 1
+    }
+    if (-not $repairNotebook) { throw "Customer Insights table-registration notebook '$NotebookName' was not found after deployment." }
+
+    $recentJobs = Invoke-FabricApiRequest -Method Get `
+        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$($repairNotebook.id)/jobs/instances?limit=5" `
+        -Headers $FabricHeaders -Description 'List Customer Insights registration notebook jobs'
+    $activeJob = @($recentJobs.Response.value) | Where-Object { $_.status -in @('NotStarted', 'InProgress', 'Running') } | Select-Object -First 1
+
+    if ($activeJob) {
+        $jobLocation = "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$($repairNotebook.id)/jobs/instances/$($activeJob.id)"
+        Write-Log "  Customer Insights table-registration notebook is already running ($($activeJob.id)); monitoring it." 'WARN'
+    } else {
+        $runBody = @{
+            executionData = @{
+                parameters = @{}
+                configuration = @{
+                    defaultLakehouse = @{ name = $LakehouseName; id = $LakehouseId; workspaceId = $WorkspaceId }
+                    useStarterPool = $true
+                }
+            }
+        }
+        $run = Invoke-FabricApiRequest -Method Post `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$($repairNotebook.id)/jobs/instances?jobType=RunNotebook" `
+            -Headers $FabricHeaders -Body $runBody -Description 'Run Customer Insights table-registration notebook'
+        $jobLocation = [string]$run.Headers['Location']
+        if ([string]::IsNullOrWhiteSpace($jobLocation)) { throw 'Customer Insights table-registration notebook run returned no job Location.' }
+    }
+
+    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
+    while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 15
+        $job = Invoke-FabricApiRequest -Method Get -Uri $jobLocation -Headers $FabricHeaders -Description 'Poll Customer Insights table-registration notebook'
+        $status = [string]$job.Response.status
+        Write-Log "  Customer Insights table-registration notebook status: $status" 'INFO'
+        if ($status -eq 'Completed') { return $true }
+        if ($status -in @('Failed', 'Cancelled', 'Canceled')) {
+            $failure = try { $job.Response.failureReason | ConvertTo-Json -Depth 20 -Compress } catch { [string]$job.RawContent }
+            throw "Customer Insights table-registration notebook failed: $failure"
+        }
+    }
+    throw "Customer Insights table-registration notebook did not complete within $TimeoutMinutes minutes."
 }
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -1718,13 +1985,21 @@ $cmaPipeline = $pipelines | Where-Object { $_.displayName -eq $CmaPipelineName }
 $cmaId = if ($cmaPipeline) { [string]$cmaPipeline.id } else { $null }
 $poaPipeline = $pipelines | Where-Object { $_.displayName -eq $PoaPipelineName } | Select-Object -First 1
 $poaId = if ($poaPipeline) { [string]$poaPipeline.id } else { $null }
+$ciPipeline = $pipelines | Where-Object { $_.displayName -eq $CustomerInsightsPipelineName -and $_.type -eq 'DataPipeline' } | Select-Object -First 1
+$ciId = if ($ciPipeline) { [string]$ciPipeline.id } else { $null }
+
 if ($cmaPipeline) {
     Write-Log "  Detected optional CMA pipeline '$CmaPipelineName' (ID: $cmaId). It will be invoked after Clinical/Silver readiness, before Imaging and OMOP." 'INFO'
 } else {
     Write-Log "  Optional CMA pipeline '$CmaPipelineName' not found; no CMA follow-up action will run." 'INFO'
 }
+if ($ciPipeline) {
+    Write-Log "  Detected optional Customer Insights pipeline '$CustomerInsightsPipelineName' (ID: $ciId). It will be invoked after Clinical/Silver readiness." 'INFO'
+} else {
+    Write-Log "  Optional Customer Insights pipeline '$CustomerInsightsPipelineName' not found; no Customer Insights follow-up action will run." 'INFO'
+}
 
-$excludedPipelineNames = @($ClinicalPipelineName, $ImagingPipelineName, $OmopPipelineName, $CmaPipelineName, $PoaPipelineName)
+$excludedPipelineNames = @($ClinicalPipelineName, $ImagingPipelineName, $OmopPipelineName, $CmaPipelineName, $PoaPipelineName, $CustomerInsightsPipelineName)
 $optionalSidecarPipelines = Resolve-OptionalSidecarPipelines -Pipelines $pipelines -Names $OptionalSidecarPipelineNames -Patterns $OptionalSidecarPipelineNamePatterns -ExcludedNames $excludedPipelineNames
 $optionalSidecarResults = @()
 $serializedSidecars = @($optionalSidecarPipelines | Where-Object { [string]$_.displayName -match '(?i)claim|cclf' })
@@ -2232,6 +2507,98 @@ if ($cmaPipeline -and ($cmaInvoked -or $cmaAlreadyRunning)) {
     }
 }
 
+# ── Step 11: Optional Customer Insights follow-up ──
+# Customer Insights is an optional downstream data product. If deployed, ensure
+# its required ADLS-backed Files/main shortcut exists, then run it serially after
+# the core writers. Any failure remains a warning and cannot invalidate Clinical,
+# Imaging, OMOP, or the overall deployment result.
+$ciCompleted = $false
+$ciPrerequisitesReady = $false
+
+if ($ciPipeline -and $clinicalCompleted) {
+    try {
+        Use-DeploymentAzSubscription
+        $ciStorageContext = New-AzStorageContext -StorageAccountName $storageAccountName -UseConnectedAccount
+        $ciContainer = Get-AzStorageContainer -Name $CustomerInsightsContainerName -Context $ciStorageContext -ErrorAction SilentlyContinue
+        if (-not $ciContainer) {
+            $null = New-AzStorageContainer -Name $CustomerInsightsContainerName -Context $ciStorageContext -Permission Off
+            Write-Log "  Created Customer Insights ADLS container '$CustomerInsightsContainerName'." 'INFO'
+        } else {
+            Write-Log "  Customer Insights ADLS container '$CustomerInsightsContainerName' already exists." 'INFO'
+        }
+
+        $ciLakehouseResult = Invoke-FabricApiRequest -Method Get `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$workspaceId/items?type=Lakehouse" `
+            -Headers $fabHeaders -Description 'List lakehouses for Customer Insights'
+        $ciLakehouse = @($ciLakehouseResult.Response.value) | Where-Object {
+            $_.displayName -eq $CustomerInsightsLakehouseName -and $_.type -eq 'Lakehouse'
+        } | Select-Object -First 1
+        if (-not $ciLakehouse) { throw "Customer Insights Lakehouse '$CustomerInsightsLakehouseName' was not found." }
+
+        $ciConnectionName = "fab-$storageAccountName-customer-insights-adls-conn"
+        $ciConnectionId = New-FabricAdlsConnection -AccessToken $fabricToken `
+            -DisplayName $ciConnectionName `
+            -StorageAccountName $storageAccountName `
+            -ContainerName $CustomerInsightsContainerName
+
+        $ciExpectedLocation = "https://$storageAccountName.dfs.core.windows.net"
+        $ciShortcut = Ensure-FabricAdlsShortcut `
+            -AccessToken $fabricToken `
+            -WorkspaceId $workspaceId `
+            -LakehouseId ([string]$ciLakehouse.id) `
+            -ShortcutName $CustomerInsightsShortcutName `
+            -ShortcutPath 'Files' `
+            -ExpectedLocation $ciExpectedLocation `
+            -ExpectedSubpath "/$CustomerInsightsContainerName" `
+            -ExpectedConnectionId $ciConnectionId `
+            -FabricHeaders $fabHeaders
+        Write-Log "  Customer Insights shortcut ready: Files/$CustomerInsightsShortcutName → $CustomerInsightsContainerName" 'INFO'
+        $ciPrerequisitesReady = $true
+    } catch {
+        Write-Log "  ⚠ Customer Insights prerequisite setup failed: $($_.Exception.Message)" 'WARN'
+    }
+}
+
+if (-not $ciPipeline) {
+    $ciResult = Invoke-OptionalDataPipelineSerialized -WorkspaceId $workspaceId -PipelineName $CustomerInsightsPipelineName -Pipeline $null -FabricHeaders $fabHeaders -StepName 'Customer Insights Pipeline' -SkipReason 'not deployed'
+} elseif (-not $clinicalCompleted) {
+    $ciTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Log '─── Step 11: SKIPPING Customer Insights pipeline (Clinical/Silver readiness did not complete) ───' 'WARN'
+    $ciTimer.Stop()
+    Record-Step -Name 'Customer Insights Pipeline' -Status 'SKIPPED' -Seconds $ciTimer.Elapsed.TotalSeconds
+    $ciResult = [pscustomobject]@{ Name = $CustomerInsightsPipelineName; Id = $ciId; Status = 'SKIPPED'; Invoked = $false; AlreadyRunning = $false }
+} elseif (-not $ciPrerequisitesReady) {
+    Record-Step -Name 'Customer Insights Pipeline' -Status 'WARN' -Seconds 0
+    $ciResult = [pscustomobject]@{ Name = $CustomerInsightsPipelineName; Id = $ciId; Status = 'WARN'; Invoked = $false; AlreadyRunning = $false }
+} else {
+    $ciResult = Invoke-OptionalDataPipelineSerialized `
+        -WorkspaceId $workspaceId `
+        -PipelineName $CustomerInsightsPipelineName `
+        -Pipeline $ciPipeline `
+        -FabricHeaders $fabHeaders `
+        -StepName 'Customer Insights Pipeline' `
+        -MaxAttempts 3 `
+        -TimeoutMinutes 60 `
+        -NonBlockingFailure
+    $ciCompleted = $ciResult.Status -eq 'COMPLETED'
+}
+
+if ($ciPrerequisitesReady) {
+    try {
+        $ciRegistrationCompleted = Invoke-CustomerInsightsTableRegistration `
+            -WorkspaceId $workspaceId `
+            -LakehouseId ([string]$ciLakehouse.id) `
+            -LakehouseName $CustomerInsightsLakehouseName `
+            -FabricHeaders $fabHeaders
+        if ($ciRegistrationCompleted) {
+            $ciCompleted = $true
+            Write-Log '  ✓ Customer Insights populated Delta outputs are registered as Lakehouse tables.' 'INFO'
+        }
+    } catch {
+        Write-Log "  ⚠ Customer Insights table registration failed without blocking core deployment: $($_.Exception.Message)" 'WARN'
+    }
+}
+
 
 # ── Summary ──
 $overallTimer.Stop()
@@ -2246,6 +2613,7 @@ if (-not $omopPipeline) {
     $blockingFailures += 'OMOP pipeline did not complete successfully'
 }
 if ($cmaPipeline -and -not $cmaCompleted) { $blockingFailures += 'CMA pipeline did not complete successfully' }
+
 
 
 Write-Host ""

@@ -17,6 +17,12 @@ foreach ($functionName in @(
     "Assert-SilverFhirReferencesIntact",
     "Invoke-OptionalDataPipelineNonBlocking",
     "Invoke-OptionalDataPipelineSerialized",
+    "Get-FabricShortcutByName",
+    "Ensure-FabricAdlsShortcut",
+    "Invoke-CustomerInsightsTableRegistration",
+    "New-FabricAdlsConnection",
+    "Test-FabricAdlsConnectionMatch",
+    "Test-FabricAdlsShortcutTarget",
     "Invoke-FabricApiRequest",
     "Test-TransientFabricNotebookSessionFailure"
 )) {
@@ -166,8 +172,190 @@ Assert-Equal -Expected "INVOKED" -Actual $cmaRegressionResult.Status `
     -Message "A successful optional pipeline trigger should report INVOKED status."
 
 $SqlEndpointInvokeFabricApiRequest = ${function:Invoke-FabricApiRequest}
+function Get-FabricApiHeaders {
+    param([string]$AccessToken)
+    return @{}
+}
+function Invoke-FabricApiRequest {
+    param(
+        [Parameter(Mandatory)][string]$Method,
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][hashtable]$Headers,
+        [object]$Body,
+        [string]$Description = ''
+    )
+    return [pscustomobject]@{
+        Response = [pscustomobject]@{
+            value = @([pscustomobject]@{ id = 'shortcut-id'; name = 'main'; path = '/Files' })
+        }
+    }
+}
+$normalizedShortcut = Get-FabricShortcutByName `
+    -AccessToken 'token' -WorkspaceId 'workspace-id' -LakehouseId 'lakehouse-id' `
+    -ShortcutName 'main' -ShortcutPath 'Files'
+Assert-Equal -Expected 'shortcut-id' -Actual $normalizedShortcut.id `
+    -Message 'Shortcut lookup should normalize Fabric API leading slashes in the path.'
+
+$validConnection = [pscustomobject]@{
+    connectionDetails = [pscustomobject]@{
+        path = 'https://storage.dfs.core.windows.net/customer-insights'
+        type = 'AzureDataLakeStorage'
+    }
+    credentialDetails = [pscustomobject]@{ credentialType = 'WorkspaceIdentity' }
+}
+Assert-Equal -Expected $true -Actual (Test-FabricAdlsConnectionMatch -Connection $validConnection -StorageAccountName 'storage' -ContainerName 'customer-insights') `
+    -Message 'Exact Customer Insights ADLS connection details should be reusable.'
+$validConnection.connectionDetails.path = 'https://storage.dfs.core.windows.net/wrong-container'
+Assert-Equal -Expected $false -Actual (Test-FabricAdlsConnectionMatch -Connection $validConnection -StorageAccountName 'storage' -ContainerName 'customer-insights') `
+    -Message 'A same-name connection with a stale container target must be rejected.'
+
+$validShortcut = [pscustomobject]@{
+    target = [pscustomobject]@{
+        adlsGen2 = [pscustomobject]@{
+            location = 'https://storage.dfs.core.windows.net'
+            subpath = '/customer-insights'
+            connectionId = 'connection-id'
+        }
+    }
+}
+Assert-Equal -Expected $true -Actual (Test-FabricAdlsShortcutTarget -Shortcut $validShortcut -ExpectedLocation 'https://storage.dfs.core.windows.net' -ExpectedSubpath '/customer-insights' -ExpectedConnectionId 'connection-id') `
+    -Message 'Exact Customer Insights shortcut details should pass validation.'
+$validShortcut.target.adlsGen2.subpath = '/wrong-container'
+Assert-Equal -Expected $false -Actual (Test-FabricAdlsShortcutTarget -Shortcut $validShortcut -ExpectedLocation 'https://storage.dfs.core.windows.net' -ExpectedSubpath '/customer-insights' -ExpectedConnectionId 'connection-id') `
+    -Message 'A same-name shortcut with a stale target must be rejected.'
+
+$FabricManagementEndpoint = 'https://api.fabric.microsoft.com'
+function Get-FabricApiHeaders {
+    param([string]$AccessToken)
+    return @{}
+}
+$script:DuplicateConnection = $null
+$script:ConnectionLookupCount = 0
+function Get-FabricConnectionByDisplayName {
+    param([string]$AccessToken, [string]$DisplayName)
+    $script:ConnectionLookupCount++
+    if ($script:ConnectionLookupCount -eq 1) { return $null }
+    return $script:DuplicateConnection
+}
+function Invoke-FabricApiRequest {
+    param([string]$Method, [string]$Uri, [hashtable]$Headers, [object]$Body, [string]$Description = '')
+    if ($Method -eq 'Get' -and $Uri -like '*supportedConnectionTypes') {
+        return [pscustomobject]@{ Response = [pscustomobject]@{ value = @() }; StatusCode = 200; Headers = @{} }
+    }
+    if ($Method -eq 'Post' -and $Uri -like '*/connections') {
+        throw 'FABRIC API Post connection returned 409 DuplicateConnectionName'
+    }
+    throw "Unexpected connection API call: $Method $Uri"
+}
+$script:DuplicateConnection = [pscustomobject]@{
+    id = 'duplicate-id'
+    connectionDetails = [pscustomobject]@{ path = 'https://storage.dfs.core.windows.net/wrong-container'; type = 'AzureDataLakeStorage' }
+    credentialDetails = [pscustomobject]@{ credentialType = 'WorkspaceIdentity' }
+}
+Assert-ThrowsLike `
+    -ScriptBlock { New-FabricAdlsConnection -AccessToken 'token' -DisplayName 'duplicate' -StorageAccountName 'storage' -ContainerName 'customer-insights' } `
+    -ExpectedText "does not match ADLS target" `
+    -Message 'Duplicate-name race must reject a stale connection target.'
+
+$script:ConnectionLookupCount = 0
+$script:DuplicateConnection = [pscustomobject]@{
+    id = 'verified-duplicate-id'
+    connectionDetails = [pscustomobject]@{ path = 'https://storage.dfs.core.windows.net/customer-insights'; type = 'AzureDataLakeStorage' }
+    credentialDetails = [pscustomobject]@{ credentialType = 'WorkspaceIdentity' }
+}
+$verifiedDuplicateId = New-FabricAdlsConnection -AccessToken 'token' -DisplayName 'duplicate' -StorageAccountName 'storage' -ContainerName 'customer-insights'
+Assert-Equal -Expected 'verified-duplicate-id' -Actual $verifiedDuplicateId `
+    -Message 'Duplicate-name race may reuse only an exact validated connection.'
+
+$script:ShortcutLookups = 0
+function Get-FabricShortcutByName {
+    param([string]$AccessToken, [string]$WorkspaceId, [string]$LakehouseId, [string]$ShortcutName, [string]$ShortcutPath)
+    $script:ShortcutLookups++
+    if ($script:ShortcutLookups -eq 1) { return $null }
+    return [pscustomobject]@{
+        id = 'concurrent-shortcut'
+        name = 'main'
+        path = '/Files'
+        target = [pscustomobject]@{
+            adlsGen2 = [pscustomobject]@{
+                location = 'https://storage.dfs.core.windows.net'
+                subpath = '/customer-insights'
+                connectionId = 'connection-id'
+            }
+        }
+    }
+}
+function Invoke-FabricApiRequest {
+    param([string]$Method, [string]$Uri, [hashtable]$Headers, [object]$Body, [string]$Description = '')
+    if ($Method -eq 'Post' -and $Uri -like '*shortcuts?shortcutConflictPolicy=Abort') {
+        throw 'FABRIC API Post shortcut returned 409 EntityConflict'
+    }
+    throw "Unexpected shortcut API call: $Method $Uri"
+}
+$raceRecoveredShortcut = Ensure-FabricAdlsShortcut `
+    -AccessToken 'token' -WorkspaceId 'workspace-id' -LakehouseId 'lakehouse-id' `
+    -ShortcutName 'main' -ShortcutPath 'Files' `
+    -ExpectedLocation 'https://storage.dfs.core.windows.net' `
+    -ExpectedSubpath '/customer-insights' -ExpectedConnectionId 'connection-id' `
+    -FabricHeaders @{}
+Assert-Equal -Expected 'concurrent-shortcut' -Actual $raceRecoveredShortcut.id `
+    -Message 'Shortcut duplicate-name race should re-read and validate the concurrently created shortcut.'
+Assert-Equal -Expected 2 -Actual $script:ShortcutLookups `
+    -Message 'Shortcut duplicate-name race should perform a readback after the 409 conflict.'
+
+$FabricManagementEndpoint = 'https://api.fabric.microsoft.com'
+$script:RegistrationDefinitionChecked = $false
+$script:RegistrationRunChecked = $false
+function Wait-FabricOperation { param($OperationResult, [hashtable]$Headers, [string]$Description, [int]$TimeoutSeconds = 600) }
+function Start-Sleep { param([int]$Seconds) }
+function Invoke-FabricApiRequest {
+    param(
+        [Parameter(Mandatory)][string]$Method,
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][hashtable]$Headers,
+        [object]$Body,
+        [string]$Description = ''
+    )
+    if ($Method -eq 'Get' -and $Uri -like '*items?type=Notebook') {
+        return [pscustomobject]@{ Response = [pscustomobject]@{ value = @([pscustomobject]@{ id = 'repair-notebook'; type = 'Notebook'; displayName = 'Customer Insights Table Registration Repair' }) }; StatusCode = 200; Headers = @{} }
+    }
+    if ($Method -eq 'Post' -and $Uri -like '*updateDefinition') {
+        $decoded = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$Body.definition.parts[0].payload))
+        if ($decoded -notmatch 'Files/main/all_entities' -or $decoded -notmatch 'CREATE TABLE IF NOT EXISTS') {
+            throw 'Registration notebook payload does not register populated Customer Insights Delta outputs.'
+        }
+        $script:RegistrationDefinitionChecked = $true
+        return [pscustomobject]@{ Response = $null; StatusCode = 200; Headers = @{} }
+    }
+    if ($Method -eq 'Get' -and $Uri -like '*jobs/instances?limit=5') {
+        return [pscustomobject]@{ Response = [pscustomobject]@{ value = @() }; StatusCode = 200; Headers = @{} }
+    }
+    if ($Method -eq 'Post' -and $Uri -like '*jobs/instances?jobType=RunNotebook') {
+        Assert-Equal -Expected 'customer-insights-id' -Actual $Body.executionData.configuration.defaultLakehouse.id `
+            -Message 'Registration notebook must run against the Customer Insights Lakehouse.'
+        Assert-Equal -Expected 'healthcare1_msft_customer_insights' -Actual $Body.executionData.configuration.defaultLakehouse.name `
+            -Message 'Registration notebook must retain the Customer Insights Lakehouse name.'
+        $script:RegistrationRunChecked = $true
+        return [pscustomobject]@{ Response = $null; StatusCode = 202; Headers = @{ Location = 'https://api.fabric.microsoft.com/job/registration' } }
+    }
+    if ($Method -eq 'Get' -and $Uri -eq 'https://api.fabric.microsoft.com/job/registration') {
+        return [pscustomobject]@{ Response = [pscustomobject]@{ status = 'Completed' }; StatusCode = 200; Headers = @{} }
+    }
+    throw "Unexpected registration API call: $Method $Uri"
+}
+$registrationResult = Invoke-CustomerInsightsTableRegistration `
+    -WorkspaceId 'workspace-id' -LakehouseId 'customer-insights-id' `
+    -LakehouseName 'healthcare1_msft_customer_insights' -FabricHeaders @{}
+Assert-Equal -Expected $true -Actual $registrationResult `
+    -Message 'Customer Insights registration notebook should complete successfully.'
+Assert-Equal -Expected $true -Actual $script:RegistrationDefinitionChecked `
+    -Message 'Customer Insights registration must update the repair notebook definition.'
+Assert-Equal -Expected $true -Actual $script:RegistrationRunChecked `
+    -Message 'Customer Insights registration must execute the repair notebook.'
+Remove-Item function:Start-Sleep -ErrorAction SilentlyContinue
 $script:SerializedPosts = 0
 $script:SerializedPolls = 0
+$script:SerializedFailureMessage = 'DELTA_CONCURRENT_APPEND ConcurrentAppendException'
 function Invoke-FabricApiRequest {
     param(
         [Parameter(Mandatory)][string]$Method,
@@ -185,7 +373,7 @@ function Invoke-FabricApiRequest {
         [pscustomobject]@{
             status = 'Failed'
             startTimeUtc = (Get-Date).ToUniversalTime().ToString('o')
-            failureReason = [pscustomobject]@{ message = 'DELTA_CONCURRENT_APPEND ConcurrentAppendException' }
+            failureReason = [pscustomobject]@{ message = $script:SerializedFailureMessage }
         }
     } else {
         [pscustomobject]@{
@@ -197,6 +385,39 @@ function Invoke-FabricApiRequest {
     return [pscustomobject]@{ Response = [pscustomobject]@{ value = @($job) } }
 }
 function Start-Sleep { param([int]$Seconds) }
+$skipResult = Invoke-OptionalDataPipelineSerialized `
+    -WorkspaceId 'workspace-id' -PipelineName 'healthcare1_msft_customer_insights' `
+    -Pipeline $null -FabricHeaders @{} -StepName 'Customer Insights Pipeline'
+Assert-Equal -Expected 'SKIPPED' -Actual $skipResult.Status `
+    -Message 'A null pipeline passed to the serialized helper should return SKIPPED status.'
+Assert-Equal -Expected $false -Actual $skipResult.Invoked `
+    -Message 'A skipped serialized pipeline should not be invoked.'
+
+$ciResult = Invoke-OptionalDataPipelineSerialized `
+    -WorkspaceId 'workspace-id' -PipelineName 'healthcare1_msft_customer_insights' `
+    -Pipeline ([pscustomobject]@{ id = 'pipeline-id' }) -FabricHeaders @{} `
+    -StepName 'Customer Insights Pipeline' -MaxAttempts 3 -TimeoutMinutes 1
+Assert-Equal -Expected 'COMPLETED' -Actual $ciResult.Status `
+    -Message 'Customer Insights should complete via the serialized helper.'
+Assert-Equal -Expected $true -Actual $ciResult.Invoked `
+    -Message 'A successful optional serialized pipeline trigger must expose Invoked=true.'
+Assert-Equal -Expected 2 -Actual $script:SerializedPosts `
+    -Message 'Customer Insights should retry exactly once after a concurrent append failure.'
+$script:SerializedPosts = 0
+$script:SerializedPolls = 0
+$script:SerializedFailureMessage = 'AnalysisException: optional target table has no source rows'
+$ciWarning = Invoke-OptionalDataPipelineSerialized `
+    -WorkspaceId 'workspace-id' -PipelineName 'healthcare1_msft_customer_insights' `
+    -Pipeline ([pscustomobject]@{ id = 'pipeline-id' }) -FabricHeaders @{} `
+    -StepName 'Customer Insights Pipeline' -MaxAttempts 1 -TimeoutMinutes 1 -NonBlockingFailure
+Assert-Equal -Expected 'WARN' -Actual $ciWarning.Status `
+    -Message 'Customer Insights terminal failure should remain a warning when NonBlockingFailure is selected.'
+Assert-Equal -Expected $true -Actual $ciWarning.Invoked `
+    -Message 'A warning-only terminal failure should record that the optional pipeline was invoked.'
+$script:SerializedPosts = 0
+$script:SerializedPolls = 0
+$script:SerializedFailureMessage = 'DELTA_CONCURRENT_APPEND ConcurrentAppendException'
+
 $serializedResult = Invoke-OptionalDataPipelineSerialized `
     -WorkspaceId 'workspace-id' -PipelineName 'healthcare1_msft_cma' `
     -Pipeline ([pscustomobject]@{ id = 'pipeline-id' }) -FabricHeaders @{} `
