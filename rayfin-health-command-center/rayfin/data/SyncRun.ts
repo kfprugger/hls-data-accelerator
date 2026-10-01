@@ -1,12 +1,8 @@
 import { entity, authenticated, uuid, text, int, date, set } from '@microsoft/rayfin-core';
 
-/**
- * Provenance for one Gold-to-app sync. The dashboard reads the newest
- * succeeded run to show how fresh its figures are, and a failed run keeps its
- * error text so a stale dashboard can explain itself instead of going quiet.
- */
+/** Publication attempts; only a successful transaction advances the snapshot. */
 @entity('SyncRun')
-@authenticated('*')
+@authenticated('read')
 export class SyncRun {
     @uuid() id!: string;
 
@@ -27,4 +23,11 @@ export class SyncRun {
     @text({ max: 200 }) sources!: string;
 
     @text({ max: 500, optional: true }) error?: string;
+
+    /** SQL-authenticated identity, never supplied by the browser. */
+    @text({ max: 200, optional: true }) publisherId?: string;
+
+    @int({ optional: true }) expectedVersion?: number;
+
+    @int({ optional: true }) publishedVersion?: number;
 }

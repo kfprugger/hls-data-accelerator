@@ -12,9 +12,10 @@
         "moduleResolution": "nodenext"
     },
     "include": [
-        "**/*"
+        "data/**/*.ts"
     ],
     "exclude": [
-        ".temp/**/*"
+        ".temp/**/*",
+        "functions/**/*"
     ]
 }

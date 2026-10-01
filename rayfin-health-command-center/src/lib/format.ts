@@ -67,7 +67,9 @@ export function pct(value: unknown, digits = 1): string {
 /** Demo data is synthetic, but member identifiers are still masked on screen. */
 export function maskId(value: unknown): string {
     const s = str(value, "");
-    if (s.length <= 8) return s || "—";
+    if (!s) return "—";
+    if (s.length <= 4) return "…";
+    if (s.length <= 8) return `…${s.slice(-4)}`;
     return `${s.slice(0, 4)}…${s.slice(-4)}`;
 }
 
@@ -75,10 +77,11 @@ export function maskId(value: unknown): string {
 export function maskName(value: unknown): string {
     const s = str(value, "");
     if (!s || s === "—") return "—";
-    return s
+    const initials = s
         .split(/\s+/)
+        .map((part) => part.replace(/[^A-Za-z]/g, "").charAt(0).toUpperCase())
         .filter(Boolean)
-        .map((part) => `${part.replace(/[^A-Za-z]/g, "").charAt(0).toUpperCase()}.`)
-        .join(" ");
+        .slice(0, 8);
+    return initials.length ? initials.map((initial) => `${initial}.`).join(" ") : "—";
 }
 

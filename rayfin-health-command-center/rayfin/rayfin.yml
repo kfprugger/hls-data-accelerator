@@ -20,5 +20,6 @@ services:
     buildCommand: npm run build:fabric
     indexDocument: index.html
   functions:
-    enabled: false
+    enabled: true
+    buildCommand: npm run build
 publishable_key: pk-bq8EbZqob-CgQ-0g-St5

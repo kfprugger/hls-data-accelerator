@@ -6,13 +6,13 @@
 // Direct Lake semantic models over the med-0906 Gold lakehouses.
 //-----------------------------------------------------------------------
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Activity, Database, HeartPulse, RefreshCw, ScanLine, Wallet } from "lucide-react";
 
 import { useAuth } from "@/hooks/auth.context";
 import { formatStored, useSnapshot, type SeriesRecord, type WorklistRecord } from "@/hooks/use-snapshot";
-import { syncFromGold } from "@/lib/sync-gold";
+import { getSyncAccess, syncFromGold } from "@/lib/sync-gold";
 import { ACCENT, type Accent } from "@/components/accent";
 import { DataRows, Gauge, Kpi, Panel, RankedBars, Skeleton } from "@/components/visuals";
 import { cn } from "@/lib/utils";
@@ -33,13 +33,33 @@ export default function App() {
     const [lens, setLens] = useState<Accent>("payer");
     const [syncing, setSyncing] = useState(false);
     const [syncError, setSyncError] = useState<string | undefined>();
-    const autoSyncTried = useRef(false);
+    const [access, setAccess] = useState<Awaited<ReturnType<typeof getSyncAccess>>>();
+    const [accessError, setAccessError] = useState<string>();
+    const [now, setNow] = useState(Date.now());
     const { isAuthenticated, isLoading: authLoading, error: authError } = useAuth();
     const { snapshot, isLoading: snapshotLoading, error, reload } = useSnapshot(isAuthenticated);
-    const { kpis, series, worklist, lastRun } = snapshot;
+    const { kpis, series, worklist, lastRun, capturedAt, version } = snapshot;
 
-    const isLoading = authLoading || snapshotLoading;
-    const empty = isAuthenticated && !snapshotLoading && kpis.length === 0;
+    const isLoading = authLoading || (snapshotLoading && version === 0);
+    const empty = isAuthenticated && !snapshotLoading && version === 0;
+
+    useEffect(() => {
+        let active = true;
+        setAccess(undefined);
+        setAccessError(undefined);
+        if (isAuthenticated) {
+            void getSyncAccess().then(
+                (result) => { if (active) setAccess(result); },
+                (err) => { if (active) setAccessError(err instanceof Error ? err.message : String(err)); },
+            );
+        }
+        return () => { active = false; };
+    }, [isAuthenticated]);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+        return () => window.clearInterval(timer);
+    }, []);
 
     const runSync = useCallback(async () => {
         if (!isAuthenticated) {
@@ -58,14 +78,7 @@ export default function App() {
         }
     }, [isAuthenticated, reload]);
 
-    // First run against a fresh database: fill it from Gold without making an
-    // operator find the button. Only attempted once per session, and only when
-    // the database read itself succeeded.
-    useEffect(() => {
-        if (autoSyncTried.current || authLoading || !isAuthenticated || snapshotLoading || error || !empty || syncing) return;
-        autoSyncTried.current = true;
-        void runSync();
-    }, [authLoading, isAuthenticated, snapshotLoading, error, empty, syncing, runSync]);
+    // Mounting is always read-only. An authorized writer explicitly seeds via Sync.
 
     const kpisFor = useCallback(
         (which: Accent) => kpis.filter((k) => k.lens === which).sort((a, b) => a.rank - b.rank),
@@ -83,12 +96,15 @@ export default function App() {
     const headline = useMemo(() => {
         const spec = HEADLINE[lens];
         const record = kpis.find((k) => k.lens === lens && k.metricKey === spec.metric);
-        const caption = record?.caption ?? (empty ? "Database is empty — run a sync" : "—");
+        const caption = record?.caption ?? (empty ? "No published snapshot" : "—");
         return { value: record ? formatStored(record.value, record.unit) : "—", label: spec.label, sub: caption };
     }, [lens, kpis, empty]);
 
     const stars = kpis.find((k) => k.lens === "provider" && k.metricKey === "stars");
-    const capturedAt = lastRun?.completedAt ?? lastRun?.startedAt;
+    const captureAge = capturedAt ? Math.max(0, Math.floor((now - Date.parse(capturedAt)) / 60_000)) : 0;
+    const ageLabel = captureAge < 60 ? `${captureAge}m ago` : captureAge < 1440 ? `${Math.floor(captureAge / 60)}h ago` : `${Math.floor(captureAge / 1440)}d ago`;
+    const failedAttempt = lastRun && ["failed", "conflict", "denied"].includes(lastRun.status) &&
+        (!capturedAt || Date.parse(lastRun.completedAt ?? lastRun.startedAt) >= Date.parse(capturedAt)) ? lastRun : undefined;
 
     return (
         <div className="min-h-screen bg-[#070b16] text-white">
@@ -161,11 +177,17 @@ export default function App() {
                     <div className="ml-auto flex items-center gap-3 text-xs text-white/40">
                         <span className="flex items-center gap-1.5">
                             <Database className="h-3.5 w-3.5" />
-                            {capturedAt ? `synced ${new Date(capturedAt).toLocaleString()}` : "never synced"}
+                            {capturedAt ? `v${version} · captured ${new Date(capturedAt).toLocaleString()} (${ageLabel})` : "not yet published"}
                         </span>
+                        <span>{!isAuthenticated ? "Sign-in required" : accessError ? "Sync access unavailable" : access ? (access.canSync ? "Writer" : "Read-only viewer") : "Checking access"}</span>
+                        <button
+                            onClick={() => { setSyncError(undefined); void reload(); }}
+                            disabled={snapshotLoading || syncing || !isAuthenticated}
+                            className="hover:text-white/80 disabled:opacity-50"
+                        >Reload snapshot</button>
                         <button
                             onClick={runSync}
-                            disabled={syncing || authLoading || !isAuthenticated}
+                            disabled={syncing || authLoading || !isAuthenticated || !access?.canSync}
                             className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 transition-colors hover:border-white/25 hover:text-white/80 disabled:opacity-50"
                         >
                             <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
@@ -176,7 +198,7 @@ export default function App() {
 
                 <p className="mt-3 text-sm text-white/40">{LENSES.find((l) => l.id === lens)?.blurb}</p>
 
-                {!authLoading && (authError || !isAuthenticated || error || syncError || empty) && (
+                {!authLoading && (authError || !isAuthenticated || error || syncError || accessError || failedAttempt || empty) && (
                     <motion.div
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -189,10 +211,16 @@ export default function App() {
                                 : !isAuthenticated
                                     ? "Open this app from the med-0906 workspace so Fabric can sign you in and connect the database."
                                     : error
-                                        ? `The app database could not be read (${error.message}).`
+                                        ? `The app database could not be refreshed (${error.message}). ${version ? `Still displaying published version ${version}.` : "No publication is available."}`
                                         : syncError
-                                            ? `Sync failed: ${syncError}`
-                                            : "The app database has no snapshot yet. Syncing from Gold will load the Direct Lake models into it."}
+                                            ? `Sync not published: ${syncError}`
+                                            : accessError
+                                                ? `Sync access could not be checked (${accessError}). Reading published data does not require sync permission.`
+                                                : failedAttempt
+                                                    ? `Latest sync attempt ${failedAttempt.status} at ${new Date(failedAttempt.completedAt ?? failedAttempt.startedAt).toLocaleString()}: ${failedAttempt.error ?? "No new snapshot was published."} ${version ? `Still displaying version ${version}.` : ""}`
+                                                    : access?.canSync
+                                                        ? "No snapshot is published yet. Use Sync from Gold to publish the first complete snapshot."
+                                                        : "No snapshot is published yet. An authorized writer must sync from Gold; viewers cannot seed or change the database."}
                         </span>
                     </motion.div>
                 )}
@@ -235,8 +263,8 @@ export default function App() {
                                                 <span className="font-mono text-xs">{r.subject}</span>,
                                                 r.segment ?? "—",
                                                 <span className="tabular-nums">{formatStored(r.primaryValue, r.primaryUnit)}</span>,
-                                                <span className="tabular-nums">{formatStored(r.secondaryValue ?? 0, r.secondaryUnit ?? "count")}</span>,
-                                                r.flagged
+                                                <span className="tabular-nums">{r.secondaryValue === undefined ? "—" : formatStored(r.secondaryValue, r.secondaryUnit ?? "count")}</span>,
+                                                r.flagged === undefined ? <span className="text-white/35">—</span> : r.flagged
                                                     ? <span className="rounded-md bg-sky-400/15 px-2 py-0.5 text-xs text-sky-300">Yes</span>
                                                     : <span className="text-white/35">No</span>,
                                             ])}
@@ -255,7 +283,7 @@ export default function App() {
                                             value={stars?.value ?? 0}
                                             max={5}
                                             label={stars ? stars.value.toFixed(1) : "—"}
-                                            caption={stars?.caption ?? "Run a sync to load Stars performance."}
+                                            caption={stars?.caption ?? "No published Stars caption is available."}
                                         />
                                     </Panel>
 
@@ -307,7 +335,7 @@ export default function App() {
                                                 <span className="font-mono text-xs">{r.subject}</span>,
                                                 r.segment ?? "—",
                                                 <span className="tabular-nums">{formatStored(r.primaryValue, r.primaryUnit)}</span>,
-                                                <span className="tabular-nums">{formatStored(r.secondaryValue ?? 0, r.secondaryUnit ?? "count")}</span>,
+                                                <span className="tabular-nums">{r.secondaryValue === undefined ? "—" : formatStored(r.secondaryValue, r.secondaryUnit ?? "count")}</span>,
                                             ])}
                                         />
                                     )}
@@ -318,9 +346,9 @@ export default function App() {
                 </AnimatePresence>
 
                 <footer className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-white/5 pt-5 text-xs text-white/35">
-                    <span>App database · KpiSnapshot · SeriesPoint · WorklistRow · SyncRun</span>
-                    <span>Source · Direct Lake over healthcare1_reporting_gold</span>
-                    {lastRun && <span>Last run wrote {lastRun.kpiRows + lastRun.seriesRows + lastRun.worklistRows} rows</span>}
+                    <span>App database · PublishedSnapshot · SyncRun</span>
+                    <span>Sources · {snapshot.sources ?? "popHealthGold,imagingGold"}</span>
+                    {version > 0 && <span>Publication v{version} · {kpis.length + series.length + worklist.length} rows · publisher {snapshot.publisherId}</span>}
                     <span className="ml-auto">Synthetic demonstration data — identifiers masked</span>
                 </footer>
             </div>
@@ -338,7 +366,7 @@ function Bars({ rows, accent }: { rows: SeriesRecord[]; accent: Accent }) {
                 display: formatStored(r.value, r.unit),
                 meta: r.detail,
             }))}
-            emptyLabel="No snapshot rows — run a sync"
+            emptyLabel="No rows in the current snapshot"
         />
     );
 }

@@ -17,24 +17,28 @@ database, and all three lenses render from that single snapshot.
 
 ## How the numbers get there
 
-The dashboard reads the app's **own database**, not live DAX. Four entities in
-`rayfin/data/` back it:
+The dashboard reads the app's **own database**, not live DAX. The local hardened
+implementation exposes two read-only authenticated entities in `rayfin/data/`:
 
 | Entity | Table | Holds |
 |---|---|---|
-| `KpiSnapshot` | `KpiSnapshots` | headline figures per lens, with unit and caption |
-| `SeriesPoint` | `SeriesPoints` | ranked bars: payer segments, care gaps, risk tiers, Stars measures, modality mix |
-| `WorklistRow` | `WorklistRows` | high-cost members and heavy imaging acquisitions, already masked |
-| `SyncRun` | `SyncRuns` | provenance: when the last sync ran, what it wrote, why it failed |
+| `PublishedSnapshot` | `PublishedSnapshots` | one complete versioned JSON snapshot containing all three lenses |
+| `SyncRun` | `SyncRuns` | SQL-generated publication provenance, row counts, and terminal outcome |
 
-Every entity is `@authenticated('*')`, so the data plane rejects anonymous
-callers — `POST /graphql` without a session returns
-`Anonymous access to this app is not enabled`.
+`src/lib/sync-gold.ts` collects the ten shipped DAX queries and masks identifiers
+before calling the trusted `publishSnapshot` function. The function uses the
+SDK's on-behalf-of SQL token; SQL requires membership in `health_snapshot_writer`
+and permits only execution of the publication procedure, not direct table writes.
+Snapshot replacement and its successful audit record commit in one transaction.
+An expected-version check elects one winner among concurrent publishers; denied,
+conflicting, or failed publication leaves the displayed snapshot intact. A lost
+response requires reloading the published state before deciding whether to retry.
 
-`src/lib/sync-gold.ts` is the only module that touches a semantic model. It
-executes the ten shipped DAX queries, masks identifiers, replaces the snapshot
-tables and records a `SyncRun`. The app runs it automatically the first time it
-finds an empty database, and the **Sync from Gold** button re-runs it on demand.
+The Sync control and automatic first-run sync are restricted to authorized writers.
+This publication path is covered by local unit tests and TypeScript compilation
+but is **not yet deployed**: its live SQL permissions, publication, and Gold
+reconciliation have not been verified, and the previously deployed app does not
+reflect it. Do not infer live authorization from the source, tests, or that URL.
 
 ## Data dependency
 
@@ -80,6 +84,15 @@ npx rayfin up status
 
 `rayfin up db apply` compiles `rayfin/data/*.ts` first; run `tsc -p
 rayfin/tsconfig.json` beforehand if the CLI reports no compiled entities.
+
+The hardened publication path also requires applying
+`rayfin/functions/sql/publication.sql` to the discovered app SQL database,
+enrolling an approved existing external SQL principal with `grant-writer.sql`,
+and configuring the trusted function's `SQL_SERVER` and `SQL_DATABASE` from that
+database's discovered connection properties. Never put access tokens in app
+configuration. Verify permissions and the published audit with
+`inspect-publication.sql`; the opt-in live integration scenario requires distinct
+writer, viewer, and observer tokens and an actual Gold snapshot.
 
 Both the app database and the semantic models require a Fabric session, so a
 standalone browser sees an empty dashboard and a banner that names the reason

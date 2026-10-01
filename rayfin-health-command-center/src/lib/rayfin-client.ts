@@ -5,9 +5,10 @@
 import RayfinClient from "@microsoft/rayfin-client";
 
 import type { AppSchema } from "../../rayfin/data/schema";
+import type { AppFunctionsSchema } from "../../rayfin/functions/src/types";
 
-/** The app's Rayfin client, typed against the entities in rayfin/data. */
-export type AppRayfinClient = RayfinClient<AppSchema>;
+/** Typed against the entities and the CLI-generated native function contract. */
+export type AppRayfinClient = RayfinClient<AppSchema, AppFunctionsSchema>;
 
 let _client: AppRayfinClient | undefined;
 
@@ -31,7 +32,7 @@ export function getRayfinClient(): AppRayfinClient {
         );
     }
 
-    _client = new RayfinClient<AppSchema>({
+    _client = new RayfinClient<AppSchema, AppFunctionsSchema>({
         baseUrl,
         publishableKey,
         authStorage: true,
