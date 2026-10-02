@@ -8,7 +8,7 @@ export class PublishedSnapshot {
 
     @int() version!: number;
 
-    @text({ max: -1 }) payloadJson!: string;
+    @text() payloadJson!: string;
 
     @date() capturedAt!: Date;
 

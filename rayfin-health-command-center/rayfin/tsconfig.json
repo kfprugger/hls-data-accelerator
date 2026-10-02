@@ -2,6 +2,10 @@
     "extends": "../tsconfig.json",
     "compilerOptions": {
         "outDir": ".temp/compiled",
+        // Keep incremental state inside the output the CLI deletes before each compile;
+        // the inherited app tsbuildinfo (or any copy outside .temp/compiled) makes tsc
+        // skip emit after `rayfin up` removes .temp/compiled.
+        "tsBuildInfoFile": ".temp/compiled/tsconfig.rayfin.tsbuildinfo",
         "rootDir": ".",
         "declaration": true,
         "composite": true,

@@ -76,12 +76,12 @@ BEGIN
         (N'worklist',N'secondaryValue',2,0,NULL),(N'worklist',N'secondaryUnit',1,0,16),
         (N'worklist',N'flagged',3,0,NULL),(N'worklist',N'rank',2,1,NULL);
     IF EXISTS (SELECT 1 FROM @rows r CROSS APPLY OPENJSON(r.document) p
-        LEFT JOIN @fields f ON f.section = r.section AND f.name = p.[key]
+        LEFT JOIN @fields f ON f.section = r.section AND f.name = p.[key] COLLATE Latin1_General_100_BIN2
         WHERE f.name IS NULL OR f.jsonType <> p.type
             OR (p.type = 1 AND (LEN(LTRIM(RTRIM(p.value))) = 0 OR DATALENGTH(p.value) / 2 > f.maxLength))
             OR (p.type = 2 AND (TRY_CONVERT(float, p.value) IS NULL OR TRY_CONVERT(float, p.value) < 0 OR TRY_CONVERT(float, p.value) > 9007199254740991)))
         OR EXISTS (SELECT 1 FROM @rows r JOIN @fields f ON r.section = f.section AND f.required = 1
-            WHERE NOT EXISTS (SELECT 1 FROM OPENJSON(r.document) p WHERE p.[key] = f.name))
+            WHERE NOT EXISTS (SELECT 1 FROM OPENJSON(r.document) p WHERE p.[key] COLLATE Latin1_General_100_BIN2 = f.name))
         OR EXISTS (SELECT 1 FROM @rows r CROSS APPLY OPENJSON(r.document) p GROUP BY r.section, r.rowNumber, p.[key] HAVING COUNT(*) <> 1)
         THROW 51001, 'Invalid snapshot field.', 1;
 
@@ -91,8 +91,8 @@ BEGIN
         (N'openGaps',N'provider',N'count'),(N'qualityRate',N'provider',N'percent'),(N'avgReadmit',N'provider',N'percent'),
         (N'avgRaf',N'provider',N'ratio'),(N'stars',N'provider',N'ratio'),(N'studies',N'medtech',N'count'),
         (N'files',N'medtech',N'count'),(N'perPatient',N'medtech',N'ratio'),(N'avgAge',N'medtech',N'ratio');
-    IF EXISTS (SELECT 1 FROM @rows r LEFT JOIN @metrics m ON m.metricKey = JSON_VALUE(r.document, '$.metricKey')
-        WHERE r.section = N'kpis' AND (m.metricKey IS NULL OR m.lens <> JSON_VALUE(r.document, '$.lens') OR m.unit <> JSON_VALUE(r.document, '$.unit')
+    IF EXISTS (SELECT 1 FROM @rows r LEFT JOIN @metrics m ON m.metricKey = JSON_VALUE(r.document, '$.metricKey') COLLATE Latin1_General_100_BIN2
+        WHERE r.section = N'kpis' AND (m.metricKey IS NULL OR m.lens <> JSON_VALUE(r.document, '$.lens') COLLATE Latin1_General_100_BIN2 OR m.unit <> JSON_VALUE(r.document, '$.unit') COLLATE Latin1_General_100_BIN2
             OR JSON_VALUE(r.document, '$.sourceModel') COLLATE Latin1_General_100_BIN2 <> CASE WHEN m.lens = N'medtech' THEN N'imagingGold' ELSE N'popHealthGold' END))
         OR EXISTS (SELECT JSON_VALUE(document, '$.metricKey') FROM @rows WHERE section = N'kpis' GROUP BY JSON_VALUE(document, '$.metricKey') HAVING COUNT(*) <> 1)
         THROW 51001, 'Invalid or incomplete snapshot metrics.', 1;
@@ -100,8 +100,8 @@ BEGIN
     DECLARE @series TABLE (name nvarchar(32) COLLATE Latin1_General_100_BIN2, lens nvarchar(16) COLLATE Latin1_General_100_BIN2, unit nvarchar(16) COLLATE Latin1_General_100_BIN2);
     INSERT @series VALUES (N'payerSegment',N'payer',N'money'),(N'careGap',N'provider',N'count'),(N'riskTier',N'provider',N'count'),
         (N'starMeasure',N'provider',N'ratio'),(N'modality',N'medtech',N'count');
-    IF EXISTS (SELECT 1 FROM @rows r LEFT JOIN @series s ON s.name = JSON_VALUE(r.document, '$.series')
-        WHERE r.section = N'series' AND (s.name IS NULL OR s.lens <> JSON_VALUE(r.document, '$.lens') OR s.unit <> JSON_VALUE(r.document, '$.unit')))
+    IF EXISTS (SELECT 1 FROM @rows r LEFT JOIN @series s ON s.name = JSON_VALUE(r.document, '$.series') COLLATE Latin1_General_100_BIN2
+        WHERE r.section = N'series' AND (s.name IS NULL OR s.lens <> JSON_VALUE(r.document, '$.lens') COLLATE Latin1_General_100_BIN2 OR s.unit <> JSON_VALUE(r.document, '$.unit') COLLATE Latin1_General_100_BIN2))
         THROW 51001, 'Invalid snapshot series.', 1;
 
     IF EXISTS (SELECT 1 FROM @rows WHERE section = N'worklist' AND (

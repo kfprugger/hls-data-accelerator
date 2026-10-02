@@ -17,13 +17,17 @@ database, and all three lenses render from that single snapshot.
 
 ## How the numbers get there
 
-The dashboard reads the app's **own database**, not live DAX. The local hardened
-implementation exposes two read-only authenticated entities in `rayfin/data/`:
+The dashboard reads the app's **own database**, not live DAX. Two read-only
+authenticated entities in `rayfin/data/` serve it:
 
 | Entity | Table | Holds |
 |---|---|---|
 | `PublishedSnapshot` | `PublishedSnapshots` | one complete versioned JSON snapshot containing all three lenses |
 | `SyncRun` | `SyncRuns` | SQL-generated publication provenance, row counts, and terminal outcome |
+
+The legacy `KpiSnapshot`, `SeriesPoint`, and `WorklistRow` tables from the previous
+design stay registered read-only so schema apply never drops them; the dashboard
+does not read them.
 
 `src/lib/sync-gold.ts` collects the ten shipped DAX queries and masks identifiers
 before calling the trusted `publishSnapshot` function. The function uses the
@@ -34,11 +38,15 @@ An expected-version check elects one winner among concurrent publishers; denied,
 conflicting, or failed publication leaves the displayed snapshot intact. A lost
 response requires reloading the published state before deciding whether to retry.
 
-The Sync control and automatic first-run sync are restricted to authorized writers.
-This publication path is covered by local unit tests and TypeScript compilation
-but is **not yet deployed**: its live SQL permissions, publication, and Gold
-reconciliation have not been verified, and the previously deployed app does not
-reflect it. Do not infer live authorization from the source, tests, or that URL.
+The Sync control is restricted to authorized writers. The SQL publication layer is
+applied to the deployed database with one enrolled writer, and version 1 was
+published on 2026-10-02 through `dbo.PublishHealthSnapshot` as that writer; all 14
+KPIs matched the Gold semantic models. The in-app Sync control cannot publish yet:
+the Rayfin backend rejects AppBackend function calls for this tenant with
+`WorkloadException`/`FeatureNotSupported` (Rayfin Functions are experimental), which
+the banner shows as HTTP 400 until Functions access is enabled. When the function
+itself runs and fails, `getSyncAccess` returns a non-sensitive cause code such as
+`sql-token-unavailable` that the banner displays.
 
 ## Data dependency
 
@@ -82,14 +90,18 @@ npx tsc -p rayfin/tsconfig.json && npx rayfin up db apply --yes   # apply schema
 npx rayfin up status
 ```
 
-`rayfin up db apply` compiles `rayfin/data/*.ts` first; run `tsc -p
-rayfin/tsconfig.json` beforehand if the CLI reports no compiled entities.
+`rayfin up db apply` compiles `rayfin/data/*.ts` itself. `rayfin/tsconfig.json`
+keeps its incremental build info inside `.temp/compiled`, so a recompile after the
+CLI clears that folder always emits the entities.
 
 The hardened publication path also requires applying
 `rayfin/functions/sql/publication.sql` to the discovered app SQL database,
-enrolling an approved existing external SQL principal with `grant-writer.sql`,
-and configuring the trusted function's `SQL_SERVER` and `SQL_DATABASE` from that
-database's discovered connection properties. Never put access tokens in app
+enrolling an approved external SQL principal with `grant-writer.sql` (a workspace
+admin who connects without a database user first needs
+`CREATE USER [upn] FROM EXTERNAL PROVIDER`), and setting the trusted function's
+`SQL_SERVER` and `SQL_DATABASE` secrets with `rayfin secret set <name> --stdin`
+(names are declared in `rayfin.yml`) from that database's discovered connection
+properties. Never put access tokens in app
 configuration. Verify permissions and the published audit with
 `inspect-publication.sql`; the opt-in live integration scenario requires distinct
 writer, viewer, and observer tokens and an actual Gold snapshot.

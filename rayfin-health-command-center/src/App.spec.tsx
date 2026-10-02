@@ -43,6 +43,17 @@ describe("dashboard publication lifecycle", () => {
         expect(mocks.write).not.toHaveBeenCalled();
     });
 
+    it("shows the server's sync-access cause instead of a writer or viewer badge", async () => {
+        mocks.read.mockResolvedValue([]);
+        mocks.access.mockResolvedValue({ canSync: false, version: 0, publisherId: "", unavailableReason: "sql-token-unavailable" });
+        render(<App />);
+        await screen.findByText(/Sync access could not be checked \(server reported sql-token-unavailable\)/);
+        expect(screen.getByText("Sync access unavailable")).toBeInTheDocument();
+        expect(screen.queryByText("Read-only viewer")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Sync from Gold" })).toBeDisabled();
+        expect(mocks.publish).not.toHaveBeenCalled();
+    });
+
     it("allows an authorized writer to seed only after explicitly choosing sync", async () => {
         mocks.read.mockResolvedValue([]);
         mocks.access.mockResolvedValue({ canSync: true, version: 0, publisherId: "synthetic-writer" });

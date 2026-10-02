@@ -49,7 +49,11 @@ export default function App() {
         setAccessError(undefined);
         if (isAuthenticated) {
             void getSyncAccess().then(
-                (result) => { if (active) setAccess(result); },
+                (result) => {
+                    if (!active) return;
+                    if (result.unavailableReason) setAccessError(`server reported ${result.unavailableReason}`);
+                    else setAccess(result);
+                },
                 (err) => { if (active) setAccessError(err instanceof Error ? err.message : String(err)); },
             );
         }

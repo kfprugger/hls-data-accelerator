@@ -19,7 +19,13 @@ services:
     folder: dist
     buildCommand: npm run build:fabric
     indexDocument: index.html
+    assetAccess: protected
   functions:
     enabled: true
     buildCommand: npm run build
 publishable_key: pk-bq8EbZqob-CgQ-0g-St5
+secrets:
+  - name: SQL_SERVER
+    description: "TDS host of the app SQL database used by the trusted publishSnapshot function"
+  - name: SQL_DATABASE
+    description: "Name of the app SQL database used by the trusted publishSnapshot function"

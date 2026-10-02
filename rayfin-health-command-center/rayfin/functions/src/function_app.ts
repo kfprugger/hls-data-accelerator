@@ -7,12 +7,24 @@ import { parseSnapshotPayload, validateExpectedVersion } from './snapshot-payloa
 import { executeProcedure, isSqlPermissionDenied, type SqlRow, type SqlSettings } from './sql.js';
 
 const udf = new UserDataFunctions();
+const NOT_CONFIGURED = 'Snapshot SQL connection is not configured.';
 
 function settings(ctx: RayfinContext<AppSchema>): SqlSettings {
     const server = ctx.getSecret('SQL_SERVER') ?? process.env.SQL_SERVER;
     const database = ctx.getSecret('SQL_DATABASE') ?? process.env.SQL_DATABASE;
-    if (!server || !database) throw new UserDataFunctionInternalError('Snapshot SQL connection is not configured.');
+    if (!server || !database) throw new UserDataFunctionInternalError(NOT_CONFIGURED);
     return { server, database, token: ctx.getToken(AudienceType.Sql) };
+}
+
+/** Operator-facing cause code; never carries server names, tokens, payloads, or SQL text. */
+function failureReason(error: unknown): string {
+    if (error instanceof UserDataFunctionInternalError && error.message === NOT_CONFIGURED) return 'sql-connection-not-configured';
+    // RayfinContext.getToken throws this when the host delivered no OBO token for the SQL audience.
+    if (error instanceof UserDataFunctionInvalidInputError) return 'sql-token-unavailable';
+    const driverError = error as { number?: unknown; code?: unknown } | null;
+    if (typeof driverError?.number === 'number') return `sql-error-${driverError.number}`;
+    if (typeof driverError?.code === 'string') return `sql-${driverError.code.toLowerCase()}`;
+    return 'unexpected';
 }
 
 function metadata(row: SqlRow) {
@@ -31,20 +43,29 @@ function metadata(row: SqlRow) {
     };
 }
 
-async function access(connection: SqlSettings) {
+interface SyncAccess {
+    canSync: boolean; version: number; capturedAt: string;
+    kpiRows: number; seriesRows: number; worklistRows: number; publisherId: string;
+}
+
+async function access(connection: SqlSettings): Promise<SyncAccess> {
     const row = await executeProcedure(connection, 'dbo.GetHealthSyncAccess');
     if (typeof row.canSync !== 'boolean') throw new UserDataFunctionInternalError('SQL returned invalid sync permission.');
     return { canSync: row.canSync, ...metadata(row) };
 }
 
 udf.func('getSyncAccess', async (ctx: RayfinContext<AppSchema>): Promise<{
-    canSync: boolean; version: number; publisherId: string;
+    canSync: boolean; version: number; publisherId: string; unavailableReason?: string;
 }> => {
     try {
         const result = await access(settings(ctx));
         return { canSync: result.canSync, version: result.version, publisherId: result.publisherId };
-    } catch {
-        throw new UserDataFunctionInternalError('Unable to check server sync permissions. No publication was attempted.');
+    } catch (error) {
+        // A read-only answer with a cause code: the client SDK drops error bodies, so a thrown
+        // error would reach the UI only as a bare HTTP status.
+        const reason = failureReason(error);
+        console.error(`[getSyncAccess] sync access unavailable: ${reason}`);
+        return { canSync: false, version: 0, publisherId: '', unavailableReason: reason };
     }
 }, [udf.connection({ audienceType: AudienceType.Sql })]);
 
@@ -52,10 +73,16 @@ udf.func('publishSnapshot', async (payloadJson: string, expectedVersion: number,
     status: 'published' | 'conflict' | 'denied'; version: number; capturedAt: string;
     kpiRows: number; seriesRows: number; worklistRows: number; publisherId: string;
 }> => {
-    const connection = settings(ctx);
-    let permission: Awaited<ReturnType<typeof access>>;
-    try { permission = await access(connection); }
-    catch { throw new UserDataFunctionInternalError('Unable to check server sync permissions. No publication was attempted.'); }
+    let connection: SqlSettings;
+    let permission: SyncAccess;
+    try {
+        connection = settings(ctx);
+        permission = await access(connection);
+    } catch (error) {
+        const reason = failureReason(error);
+        console.error(`[publishSnapshot] sync access check failed: ${reason}`);
+        throw new UserDataFunctionInternalError(`Unable to check server sync permissions (${reason}). No publication was attempted.`);
+    }
     if (!permission.canSync) {
         const { canSync: _canSync, ...current } = permission;
         return { status: 'denied', ...current };
