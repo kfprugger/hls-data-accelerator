@@ -189,16 +189,18 @@ $runs[0].status  # NotStarted | InProgress | Completed | Failed | Cancelled
 
 ## Docker Base Images
 
-All Dockerfiles use MCR (no Docker Hub rate limits):
+All Dockerfiles use MCR (no Docker Hub rate limits); Python images pin the Azure Linux 3 Python 3.12 digest
+(`mcr.microsoft.com/azurelinux/base/python:3.12@sha256:b006d366…`), which `pydicom` 2.4.5 requires:
 | Image | Base |
 |-------|------|
-| Emulator | `mcr.microsoft.com/cbl-mariner/base/python:3` |
+| Telemetry emulator (`phase-1/deploy.ps1` template) | `mcr.microsoft.com/azurelinux/base/python:3.12` |
+| Claim emulator (`phase-7/claim-emulator`) | `mcr.microsoft.com/azurelinux/base/python:3.12` |
 | Synthea | `mcr.microsoft.com/openjdk/jdk:17-ubuntu` |
-| FHIR Loader | `mcr.microsoft.com/cbl-mariner/base/python:3` |
-| DICOM Loader | `mcr.microsoft.com/cbl-mariner/base/python:3` |
-| DICOM Proxy | `mcr.microsoft.com/cbl-mariner/base/python:3` |
+| FHIR Loader | `mcr.microsoft.com/azurelinux/base/python:3.12` |
+| DICOM Loader | `mcr.microsoft.com/azurelinux/base/python:3.12` |
+| DICOM Proxy (FabricDicomCohortingToolkit) | `mcr.microsoft.com/azurelinux/base/python:3.12` |
 
-**Mariner notes**: Uses `tdnf` (not `apt-get`), needs `ln -sf /usr/bin/python3 /usr/bin/python` symlink, ODBC driver package is `msodbcsql18` with `ENV ACCEPT_EULA=Y`.
+**Azure Linux notes**: Uses `tdnf` (not `apt-get`), needs `ln -sf /usr/bin/python3 /usr/bin/python` symlink, ODBC driver package is `msodbcsql18` with `ENV ACCEPT_EULA=Y`, Kerberos is `krb5` (not Mariner's `krb5-libs`). Locks are hash-enforced; networks that block PyPI pass `--build-arg PIP_INDEX_URL=<index>`.
 
 ## Common Issues & Fixes
 

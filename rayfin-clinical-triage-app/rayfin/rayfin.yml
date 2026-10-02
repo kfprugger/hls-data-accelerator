@@ -16,6 +16,8 @@ services:
       - https://tough-bolt-f41e8d694c-westus2.webapp.fabricapps.net
       - https://rich-heath-ac8cddda24-westus2.webapp.fabricapps.net
       - https://rusty-knoll-fb007fbed9-westus2.webapp.fabricapps.net
+      - http://127.0.0.1:5173
+      - https://quail-bloom-5bc68f5406-westus2.webapp.fabricapps.net
     fabric:
       enabled: true
   data:
@@ -26,6 +28,7 @@ services:
     folder: dist
     buildCommand: npm run build
     indexDocument: index.html
+    assetAccess: protected
   storage:
     enabled: false
   functions:
