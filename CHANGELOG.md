@@ -2,6 +2,22 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Durable Authenticated Cardiology Workflow
+- **Added** private managed-identity Blob operational state with ETag-conditional review resolution, exact pending-run persistence, recoverable FHIR write intents with stable resource IDs, and per-run idempotent simulated receipts. Existing cloud demo/template profiles retain Cosmos conditional persistence rather than degrading to memory.
+- **Replaced** the live fixed demo reviewer with independently verified Entra user tokens, per-request identity isolation, object-ID operator/reviewer allowlists, and actual-actor audit. Removed the obsolete configurable approver-role field; additional reviewers are parameterized through `CardiologyReviewerUsers`.
+- **Added** private workflow and Easy Auth token containers with shared-key/anonymous access disabled and container-scoped app-identity grants; enabled managed-identity token storage through the current auth-config API without SAS secrets.
+- **Separated** source health from readiness: cached unavailable Gold is explicit and not scored; saved reviews stay accessible when Fabric is paused, while new cohort mutations are denied. The UI shows source errors/read times and per-measure freshness independently of SSE connectivity.
+- **Verified** ACR `ch7`, actual BrakeKat Entra identity, signed-user reviewer denial 403 and restored permission, identical pending review/FHIR overlay after a real restart without inference, concurrent single-winner 200/409 resolution, actual-actor durable audit, and replay 404.
+- **Verified** three recovered FHIR clinical IDs/values against independent Gold SQL, cohort 27 and zero pending writes; warm/cold paused-capacity reads retained cached data with health 503/readiness 200 and saved-audit access. F64 was returned to Paused.
+- **Fixed** token-store policy reconstruction before redeployment preflight so an already enabled intended store is not incorrectly quarantined, and migrated the existing pnpm build approvals to supported workspace configuration.
+
+### Cardiology Existing-Estate Validation
+- **Fixed** Fabric skill attribution on the Phase 8 role-assignment calls and cardiology Gold refresh requests.
+- **Verified** the parameterized BrakeKat app continuation with existing tags, assigned users, HDS endpoints, identity grants, and model preserved; ACR run `ch5` deployed `75b716326126-dirty-20260929221007`.
+- **Verified** protected synthetic real-model recommendation, exact patient/draft review, reload recovery, rejection without dispatch, simulated approval, and wrong-patient/reviewer/duplicate/replay denial. The workflow retains fixed-demo-principal and process-memory limitations.
+- **Verified** two additive synthetic admissions and five exact FHIR-to-Gold clinical Observation matches; the cohort reached 26 and the app's pending-write count cleared after the existing clinical ingestion, projection, and SQL metadata sync.
+- **Restored** `fabrjbwu2` to its initial F64/Paused state after the run and restored the prior Azure CLI subscription selection.
+
 ### Health Command Center Fabric App
 - **Added** [`rayfin-health-command-center/`](rayfin-health-command-center/), a Rayfin Fabric App that serves payer, provider, and medtech operations from one surface. A controlled sync reads the Direct Lake models over `healthcare1_reporting_gold`, masks identifiers, and writes the app's own MSSQL snapshot; the dashboard renders from that database rather than querying a model on every mount.
 - **Added** three lenses over the shared Gold layer: payer claims economics with collection/denial rates, PMPM, revenue at risk and the highest-cost members; provider quality with open care gaps, RAF, readmission risk tiers and a CMS Stars gauge; and medtech imaging throughput with modality mix and DICOM instance volume.

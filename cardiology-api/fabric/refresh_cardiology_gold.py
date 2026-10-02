@@ -55,9 +55,12 @@ def token(resource: str) -> str:
 
 
 def http(method: str, url: str, tok: str, body: dict | None = None, headers: dict | None = None):
+    headers = dict(headers or {})
+    if urllib.parse.urlparse(url).hostname == "api.fabric.microsoft.com":
+        headers["x-ms-fabric-skill"] = "spark-cli"
     req = urllib.request.Request(url, method=method, data=json.dumps(body).encode() if body is not None else None,
                                  headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json",
-                                          **(headers or {})})
+                                          **headers})
     try:
         with urllib.request.urlopen(req, timeout=120) as r:
             raw = r.read()

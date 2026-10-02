@@ -64,6 +64,18 @@ param eventhouseQueryUri string
 @description('KQL database on eventhouseQueryUri holding TelemetryRaw.')
 param eventhouseDatabase string
 
+@description('Expected Entra tenant for authenticated operators.')
+param authTenantId string = subscription().tenantId
+
+@description('Single-tenant sign-in application client ID; required for the live image.')
+param authClientId string = ''
+
+@description('Entra user object IDs permitted to operate the synthetic cohort.')
+param operatorObjectIds array = []
+
+@description('Entra user object IDs permitted to approve or reject reviews.')
+param reviewerObjectIds array = []
+
 var suffix = uniqueString(resourceGroup().id)
 var allTags = union(tags, { 'hls-workload': 'cardiology-app', dataClassification: 'synthetic-only' })
 var aiName = '${prefix}-ai-${suffix}'
@@ -128,6 +140,16 @@ resource appIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-3
   name: '${prefix}-app-id'
   location: location
   tags: allTags
+}
+
+module durableState 'cardiology-state.bicep' = {
+  name: '${prefix}-state'
+  params: {
+    prefix: prefix
+    location: location
+    tags: tags
+    appPrincipalId: appIdentity.properties.principalId
+  }
 }
 
 var acrPull = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
@@ -231,19 +253,24 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CALDOVA_FHIR_URL', value: fhirUrl }
             { name: 'CALDOVA_EVENTHOUSE_QUERY_URI', value: eventhouseQueryUri }
             { name: 'CALDOVA_EVENTHOUSE_DATABASE', value: eventhouseDatabase }
+            { name: 'CALDOVA_STATE_BLOB_URL', value: durableState.outputs.stateBlobUrl }
+            { name: 'CALDOVA_AUTH_TENANT_ID', value: authTenantId }
+            { name: 'CALDOVA_AUTH_CLIENT_ID', value: authClientId }
+            { name: 'CALDOVA_OPERATOR_OBJECT_IDS', value: join(operatorObjectIds, ',') }
+            { name: 'CALDOVA_REVIEWER_OBJECT_IDS', value: join(reviewerObjectIds, ',') }
           ]
           probes: useRegistryImage ? [
             {
               type: 'Readiness'
-              httpGet: { path: '/api/health', port: 4317 }
+              httpGet: { path: '/api/ready', port: 4317 }
               periodSeconds: 10
               failureThreshold: 6
             }
           ] : []
         }
       ]
-      // EXACTLY ONE REPLICA: cohort, approvals, and runs live in process memory
-      // (the Cosmos-backed profile is blocked), so a second replica would split state.
+      // Keep one replica for the remaining in-process event/settings adapters.
+      // Reviews and pending FHIR writes use durable ETag-conditional state.
       scale: {
         minReplicas: 1
         maxReplicas: 1
@@ -259,3 +286,5 @@ output acrName string = acr.name
 output acrLoginServer string = acr.properties.loginServer
 output aiAccountName string = ai.name
 output identityClientId string = appIdentity.properties.clientId
+output stateBlobUrl string = durableState.outputs.stateBlobUrl
+output authContainerUri string = durableState.outputs.authContainerUri

@@ -171,11 +171,11 @@ $statements = @($ast.EndBlock.Statements)
 $start = @(0..($statements.Count - 1) | Where-Object { $statements[$_].Extent.Text -like '$appIdentity = *' })[0]
 $end = @($start..($statements.Count - 1) | Where-Object { $statements[$_].Extent.Text -eq 'Resolve-IdentityFacts' })[0]
 $constants = @($statements | Where-Object { $_.Extent.Text -match '^\$(FhirDataContributor|FabricApi) = ' } | ForEach-Object { $_.Extent.Text })
-$getProp = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Get-Prop' }, $true).Extent.Text
-$block = (@($getProp) + $constants + @($statements[$start..($end - 1)] | ForEach-Object { $_.Extent.Text })) -join "`n"
+$helpers = @('Get-Prop', 'Get-Output' | ForEach-Object { $name = $_; $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true).Extent.Text })
+$block = ($helpers + $constants + @($statements[$start..($end - 1)] | ForEach-Object { $_.Extent.Text })) -join "`n"
 
 $state = $env:SCENARIO | ConvertFrom-Json
-$ResourceGroupName = "rg-test"; $Prefix = "cardioe2e"
+$ResourceGroupName = "rg-test"; $Prefix = "cardioe2e"; $RepoRoot = "/repo"; $Location = "eastus2"; $Tags = @{}
 $FabricWorkspaceId = $env:WORKSPACE; $FhirServiceId = $env:FHIR_ID; $FhirUrl = $env:FHIR_URL
 $calls = [System.Collections.Generic.List[string]]::new()
 $bodies = [System.Collections.Generic.List[object]]::new()
@@ -188,7 +188,8 @@ function Invoke-Az {
     if ($bodyAt -ge 0) { $bodies.Add((Get-Content -Raw $Arguments[$bodyAt + 1].Substring(1) | ConvertFrom-Json)) }
     $out = $null
     switch -Wildcard ($line) {
-        "identity show*" { $out = '{"clientId":"cid","principalId":"pid"}' }
+        "identity show*" { $out = '{"id":"/subscriptions/s/resourceGroups/rg-test/providers/Microsoft.ManagedIdentity/userAssignedIdentities/cardioe2e-app-id","clientId":"cid","principalId":"pid"}' }
+        "deployment group create*" { $out = '{"authContainerUri":{"type":"String","value":"https://st.blob.core.windows.net/auth-tokens"}}' }
         "resource show*" { $out = $state.audience }
         "role assignment list*" { $out = if ($state.fhirGranted) { ConvertTo-Json -InputObject @($FhirServiceId.Replace("resourceGroups", "resourcegroups")) } else { "[]" } }
         "role assignment create*" { $state.fhirGranted = $true; $out = "" }
@@ -239,6 +240,11 @@ class HdsGrantBehaviourTests(unittest.TestCase):
         self.assertEqual(create[create.index("--scope") + 1], FHIR_ID)
         self.assertTrue(self.writes(result)[1].startswith(f"rest --method POST --url {self.ROLES_URL} "))
         self.assertEqual(result["bodies"], [{"principal": {"id": "pid", "type": "ServicePrincipal"}, "role": "Viewer"}])
+        # The durable state and token containers exist before the identity is granted HDS access.
+        state = [i for i, c in enumerate(result["calls"]) if c.startswith("deployment group create") and "cardioe2e-state-bootstrap" in c]
+        grants = [i for i, c in enumerate(result["calls"]) if c.startswith(("role assignment create", "rest --method POST"))]
+        self.assertEqual(len(state), 1, result["calls"])
+        self.assertLess(state[0], grants[0])
 
     def test_existing_grants_are_left_alone(self) -> None:
         result = self.run_grants(fhirGranted=True, fabricRole="Viewer")  # Viewer only on page two
@@ -278,7 +284,7 @@ function Emit-PhaseTransition { param($Phase, $Label, $StepCount) }
 function Invoke-Step { param($StepName, $Description, [scriptblock]$Action) & $Action }
 function Assert-LastExternalCommandSucceeded { param($Name) }
 $ResourceGroupName = "rg-test"; $Location = "eastus2"; $Tags = @{}
-$ExpectedTenantId = "t"; $ExpectedSubscriptionId = "s"; $CardiologyAppPath = ""; $CardiologyAppUsers = @()
+$ExpectedTenantId = "t"; $ExpectedSubscriptionId = "s"; $CardiologyAppPath = ""; $CardiologyAppUsers = @(); $CardiologyReviewerUsers = @()
 $CardiologyFabricWorkspaceId = ""; $CardiologyFabricSqlHost = ""; $CardiologyFabricGoldDatabase = ""; $CardiologyFhirServiceId = ""
 $CardiologyFhirUrl = $env:CARDIOLOGY_FHIR_URL
 $CardiologyEventhouseQueryUri = $env:CARDIOLOGY_EVENTHOUSE_QUERY_URI; $CardiologyEventhouseDatabase = ""

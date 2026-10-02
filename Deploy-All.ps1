@@ -110,6 +110,7 @@ param (
     # ── Phase 8 (Cardiology App) ──
     [string]$CardiologyAppPath = "",       # Local checkout of kfprugger/caldova-cardio-e2e; empty = sibling of this repo (cloned if missing)
     [string[]]$CardiologyAppUsers = @(),   # Extra UPNs allowed to sign in; the deploying az user is always allowed
+    [string[]]$CardiologyReviewerUsers = @(), # Additional assigned sign-in users allowed to resolve reviews
     # HDS data the app serves and the identity is granted; empty = phase-8/deploy-cardiology-app.ps1's default (med-0906)
     [string]$CardiologyFabricWorkspaceId = "",   # Fabric workspace (app identity gets Viewer)
     [string]$CardiologyFabricSqlHost = "",       # Fabric SQL analytics endpoint host
@@ -1329,6 +1330,7 @@ function Invoke-CardiologyAppPhase {
             -ExpectedSubscriptionId $ExpectedSubscriptionId `
             -CardiologyAppPath $CardiologyAppPath `
             -CardiologyAppUsers $CardiologyAppUsers `
+            -CardiologyReviewerUsers $CardiologyReviewerUsers `
             @hdsAccess
         Assert-LastExternalCommandSucceeded "deploy-cardiology-app.ps1"
     }

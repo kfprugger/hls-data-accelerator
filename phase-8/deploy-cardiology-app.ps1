@@ -7,6 +7,8 @@ param (
     [string]$ExpectedSubscriptionId = "9bbee190-dc61-4c58-ab47-1275cb04018f",
     [string]$CardiologyAppPath = "",
     [string[]]$CardiologyAppUsers = @(),
+    # Additional reviewers must also be assigned sign-in users. The deployer reviews by default.
+    [string[]]$CardiologyReviewerUsers = @(),
     # Lowercase letters and digits only (Azure naming; also keeps it inert inside
     # the JMESPath and OData string literals built from it). Bicep caps it at 12.
     # Options = 'None': ValidatePattern ignores case unless told otherwise.
@@ -55,6 +57,16 @@ $ImageRepo = "cardiology-app"
 $DefaultAccessRole = "00000000-0000-0000-0000-000000000000"
 $FhirDataContributor = "5a1fc7df-4bf1-4951-a576-89034ee01acd"
 $FabricApi = "https://api.fabric.microsoft.com"
+$script:authContainerUri = ""
+$script:appIdentityResourceId = ""
+
+function Get-AuthConfigUrl {
+    return "https://management.azure.com/subscriptions/$ExpectedSubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.App/containerApps/$appName/authConfigs/current?api-version=2026-07-01"
+}
+
+function Get-AuthConfig {
+    return (Invoke-Az @("rest", "--method", "GET", "--url", (Get-AuthConfigUrl), "--query", "properties", "-o", "json")).Out | ConvertFrom-Json
+}
 
 function Invoke-Az {
     param ([Parameter(Mandatory)][string[]]$Arguments, [switch]$AllowFailure)
@@ -85,15 +97,25 @@ function Get-Prop {
 # The one auth config this deployer writes (PUT whole) and accepts. Nonce
 # validation is explicit because the service allows turning it off.
 function Get-IntendedAuthConfig([string]$ClientId) {
+    $login = [ordered]@{ preserveUrlFragmentsForLogins = $false; nonce = [ordered]@{ validateNonce = $true } }
+    if ($script:authContainerUri) {
+        $login.tokenStore = [ordered]@{
+            enabled = $true
+            azureBlobStorage = [ordered]@{
+                blobContainerUri = $script:authContainerUri
+                managedIdentityResourceId = $script:appIdentityResourceId
+            }
+        }
+    }
     return [ordered]@{
         platform = [ordered]@{ enabled = $true }
-        globalValidation = [ordered]@{ unauthenticatedClientAction = "RedirectToLoginPage"; redirectToProvider = "azureactivedirectory"; excludedPaths = @("/api/health") }
+        globalValidation = [ordered]@{ unauthenticatedClientAction = "RedirectToLoginPage"; redirectToProvider = "azureactivedirectory"; excludedPaths = @("/api/health", "/api/ready") }
         identityProviders = [ordered]@{ azureActiveDirectory = [ordered]@{
             enabled = $true
             registration = [ordered]@{ clientId = $ClientId; clientSecretSettingName = "microsoft-provider-authentication-secret"; openIdIssuer = "https://login.microsoftonline.com/$ExpectedTenantId/v2.0" }
             validation = [ordered]@{ defaultAuthorizationPolicy = [ordered]@{ allowedApplications = @() } }
         } }
-        login = [ordered]@{ preserveUrlFragmentsForLogins = $false; nonce = [ordered]@{ validateNonce = $true } }
+        login = $login
         httpSettings = [ordered]@{ requireHttps = $true }
     }
 }
@@ -185,6 +207,15 @@ function Deploy-Template {
             fhirUrl = @{ value = $FhirUrl }
             eventhouseQueryUri = @{ value = $EventhouseQueryUri }
             eventhouseDatabase = @{ value = $EventhouseDatabase }
+            authTenantId = @{ value = $ExpectedTenantId }
+            authClientId = @{ value = "" }
+            operatorObjectIds = @{ value = @() }
+            reviewerObjectIds = @{ value = @() }
+        }
+        if ($UseRegistry) {
+            $parameters.authClientId.value = $script:appId
+            $parameters.operatorObjectIds.value = @($script:allowed)
+            $parameters.reviewerObjectIds.value = @($script:reviewers)
         }
         # A container app deployment replaces its whole secret set; pass the
         # sign-in secret back so an authenticated app keeps working.
@@ -273,6 +304,13 @@ function Resolve-IdentityFacts {
         $users += $id
     }
     $script:allowed = @($users | Select-Object -Unique)
+    $reviewers = @($deployerId)
+    foreach ($upn in $CardiologyReviewerUsers | Where-Object { $_ }) {
+        $id = (Invoke-Az @("ad", "user", "show", "--id", $upn, "--query", "id", "-o", "tsv")).Out.Trim()
+        if (-not $id -or $script:allowed -notcontains $id) { throw "Reviewer $upn must be an assigned CardiologyAppUsers account." }
+        $reviewers += $id
+    }
+    $script:reviewers = @($reviewers | Select-Object -Unique)
 }
 $displayName = "cardiology-app-$ResourceGroupName"
 $ownerTag = "hls-cardiology-app:$($account.id)/$($ResourceGroupName.ToLowerInvariant())/$appName"
@@ -344,7 +382,16 @@ function Get-RegistrationProblem([string]$ClientId, [switch]$AssigneesAtMost) {
 if ($appExists) {
     try {
         Resolve-IdentityFacts  # inside the boundary: a failed lookup quarantines too
-        $currentAuth = (Invoke-Az @("containerapp", "auth", "show", "-g", $ResourceGroupName, "-n", $appName, "-o", "json")).Out | ConvertFrom-Json
+        # Recover intended token-store coordinates from this deployment's own
+        # outputs before comparing policy; an enabled store is not a weakness.
+        $priorState = Invoke-Az @("deployment", "group", "show", "-g", $ResourceGroupName,
+            "-n", "$Prefix-state-bootstrap", "--query", "properties.outputs", "-o", "json") -AllowFailure
+        if ($priorState.Code -eq 0 -and $priorState.Out) {
+            $script:authContainerUri = Get-Output ($priorState.Out | ConvertFrom-Json) "authContainerUri"
+            $script:appIdentityResourceId = (Invoke-Az @("identity", "show", "-g", $ResourceGroupName,
+                "-n", "$Prefix-app-id", "--query", "id", "-o", "tsv")).Out.Trim()
+        }
+        $currentAuth = Get-AuthConfig
         $weakness = Get-AccessPolicyProblem $currentAuth (Get-AppIngress)
         if (-not $weakness) {
             $weakness = Get-RegistrationProblem ([string]$currentAuth.identityProviders.azureActiveDirectory.registration.clientId) -AssigneesAtMost
@@ -438,9 +485,29 @@ Write-Host "  ✓ Infrastructure ready (registry $acrName)" -ForegroundColor Gre
 # an existing Fabric role of this identity (it is this app's alone) is set to
 # Viewer. No other principal's access is touched.
 $appIdentity = (Invoke-Az @("identity", "show", "-g", $ResourceGroupName, "-n", "$Prefix-app-id",
-    "--query", "{clientId:clientId,principalId:principalId}", "-o", "json")).Out | ConvertFrom-Json
+    "--query", "{id:id,clientId:clientId,principalId:principalId}", "-o", "json")).Out | ConvertFrom-Json
 $appPrincipal = [string](Get-Prop $appIdentity "principalId")
 if (-not $appPrincipal -or -not (Get-Prop $appIdentity "clientId")) { throw "The app identity $Prefix-app-id has no principal or client id." }
+$script:appIdentityResourceId = [string]$appIdentity.id
+
+# Provision durable operations and Easy Auth token containers before publishing.
+# Both use container-scoped managed-identity grants; no storage keys or SAS URLs.
+$stateParameters = New-TemporaryFile
+try {
+    @{
+        '$schema' = "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#"
+        contentVersion = "1.0.0.0"
+        parameters = @{
+            prefix = @{ value = $Prefix }; location = @{ value = $Location }
+            tags = @{ value = $Tags }; appPrincipalId = @{ value = $appPrincipal }
+        }
+    } | ConvertTo-Json -Depth 10 | Set-Content $stateParameters -Encoding utf8
+    $stateOutputs = (Invoke-Az @("deployment", "group", "create", "-g", $ResourceGroupName,
+        "-n", "$Prefix-state-bootstrap", "--template-file", (Join-Path $RepoRoot "bicep/cardiology-state.bicep"),
+        "--parameters", "@$stateParameters", "--query", "properties.outputs", "-o", "json")).Out | ConvertFrom-Json
+    $script:authContainerUri = Get-Output $stateOutputs "authContainerUri"
+    Write-Host "  ✓ Durable workflow and sign-in token containers provisioned with Entra-only access" -ForegroundColor Green
+} finally { Remove-Item $stateParameters -ErrorAction SilentlyContinue }
 
 # The FHIR URL the app is given must be the service it is granted.
 $fhirAudience = (Invoke-Az @("resource", "show", "--ids", $FhirServiceId,
@@ -487,13 +554,14 @@ function Get-FabricError([string]$Text) {
     return $Text.Trim()
 }
 function Invoke-Fabric([string]$Method, [string]$Url, $Body = $null) {
-    $arguments = @("rest", "--method", $Method, "--url", $Url, "--resource", $FabricApi, "-o", "json")
+    $arguments = @("rest", "--method", $Method, "--url", $Url, "--resource", $FabricApi,
+        "--headers", "Content-Type=application/json", "x-ms-fabric-skill=e2e-medallion-architecture", "-o", "json")
     $bodyFile = $null
     try {
         if ($null -ne $Body) {
             $bodyFile = New-TemporaryFile
             $Body | ConvertTo-Json -Depth 5 | Set-Content $bodyFile -Encoding utf8
-            $arguments += @("--headers", "Content-Type=application/json", "--body", "@$bodyFile")
+            $arguments += @("--body", "@$bodyFile")
         }
         $result = Invoke-Az $arguments -AllowFailure
         if ($result.Code -ne 0) { throw (Get-FabricError $result.Err) }
@@ -665,7 +733,7 @@ try {
         return $false
     }
     function Get-InstalledSecret {
-        $auth = Invoke-Az @("containerapp", "auth", "show", "-g", $ResourceGroupName, "-n", $appName, "-o", "json") -AllowFailure
+        $auth = Invoke-Az @("rest", "--method", "GET", "--url", (Get-AuthConfigUrl), "--query", "properties", "-o", "json") -AllowFailure
         try { $settingName = ($auth.Out | ConvertFrom-Json).identityProviders.azureActiveDirectory.registration.clientSecretSettingName } catch { $settingName = "" }
         if ($auth.Code -ne 0 -or -not $settingName) { return "" }
         $installed = Invoke-Az @("containerapp", "secret", "show", "-g", $ResourceGroupName, "-n", $appName,
@@ -704,7 +772,7 @@ try {
     try {
         $authBody | ConvertTo-Json -Depth 20 | Set-Content $authFile -Encoding utf8
         Invoke-Az @("rest", "--method", "PUT", "--headers", "Content-Type=application/json", "--body", "@$($authFile.FullName)", "-o", "none",
-            "--url", "https://management.azure.com/subscriptions/$($account.id)/resourceGroups/$ResourceGroupName/providers/Microsoft.App/containerApps/$appName/authConfigs/current?api-version=2024-03-01") | Out-Null
+            "--url", (Get-AuthConfigUrl)) | Out-Null
     } finally { Remove-Item $authFile -ErrorAction SilentlyContinue }
 
     # Easy Auth redirects only browser requests (others get 401), so probe as one,
@@ -741,7 +809,7 @@ try {
     # replaces it (a weak ingress already quarantined the app above), so the
     # pre-publish gate checks everything except ingress (-BeforePublish).
     function Test-AuthConfig([switch]$BeforePublish) {
-        $cfg = (Invoke-Az @("containerapp", "auth", "show", "-g", $ResourceGroupName, "-n", $appName, "-o", "json")).Out | ConvertFrom-Json
+        $cfg = Get-AuthConfig
         $ingress = $null
         if (-not $BeforePublish) { $ingress = Get-AppIngress }
         $weakness = Get-AccessPolicyProblem $cfg $ingress $appId
@@ -818,9 +886,9 @@ if ($builtTags.Code -eq 0 -and ($builtTags.Out -split "`n") -contains $tag) {
     $healthOk = $false; $problem = "not checked"
     while ((Get-Date) -lt $deadline -and -not ($healthOk -and -not $problem)) {
         try {
-            $health = Invoke-RestMethod -Uri "$appUrl/api/health" -TimeoutSec 15
+            $health = Invoke-RestMethod -Uri "$appUrl/api/ready" -TimeoutSec 15
             $healthOk = $health.status -eq "ok" -and $health.profile -eq "live" -and $health.revision -eq $tag
-            $problem = if ($healthOk) { Test-SignInEnforced } else { "health reported status=$($health.status) profile=$($health.profile) revision=$($health.revision)" }
+            $problem = if ($healthOk) { Test-SignInEnforced } else { "readiness reported status=$($health.status) profile=$($health.profile) revision=$($health.revision)" }
         } catch { $healthOk = $false; $problem = "health: $($_.Exception.Message)" }
         if (-not ($healthOk -and -not $problem)) { Start-Sleep -Seconds 10 }
     }
@@ -829,7 +897,7 @@ if ($builtTags.Code -eq 0 -and ($builtTags.Out -split "`n") -contains $tag) {
     if ($problem) { throw "Sign-in configuration broke during the revision deploy: $problem" }
 } finally { if ($browser) { $browser.Dispose() }; $tokenClient.Dispose(); $secret = $null }
 
-Write-Host "  ✓ $appUrl healthy on revision $tag; unauthenticated visitors are sent to sign-in" -ForegroundColor Green
+Write-Host "  ✓ $appUrl ready on revision $tag; source health is reported separately and sign-in is enforced" -ForegroundColor Green
 Write-Host ""
 Write-Host "CARDIOLOGY_APP_URL=$appUrl"
 Write-Host "Phase 8 Cardiology App complete." -ForegroundColor Green
