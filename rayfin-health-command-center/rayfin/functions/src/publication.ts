@@ -32,19 +32,28 @@ class AccessCheckError extends Error {
 }
 
 /**
- * `email` claim of a Rayfin access token. The payload is not signature-checked here; the writer
- * lookup is authenticated with this same token, so a forged claim cannot get past that call.
+ * Caller email from a Rayfin access token: the top-level `email` claim, or, in managed-hosting
+ * tokens, `xms_attr.<appId>.rfn_email` (where `@microsoft/rayfin-auth` reads it). Disagreeing
+ * values yield null. The payload is not signature-checked here; the writer lookup is
+ * authenticated with this same token, so a forged claim cannot get past that call.
  */
 export function tokenEmail(accessToken: string): string | null {
     const payload = accessToken.split('.')[1];
     if (!payload) return null;
+    let claims: unknown;
     try {
-        const claims: unknown = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-        const email = (claims as { email?: unknown } | null)?.email;
-        return typeof email === 'string' && email.trim() !== '' ? email.trim() : null;
+        claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     } catch {
         return null;
     }
+    if (!claims || typeof claims !== 'object') return null;
+    const { email, xms_attr: appAttributes } = claims as { email?: unknown; xms_attr?: unknown };
+    const candidates = [email];
+    if (appAttributes && typeof appAttributes === 'object') {
+        for (const attributes of Object.values(appAttributes)) candidates.push((attributes as { rfn_email?: unknown } | null)?.rfn_email);
+    }
+    const emails = new Set(candidates.filter((value): value is string => typeof value === 'string' && value.trim() !== '').map((value) => value.trim()));
+    return emails.size === 1 ? [...emails][0] : null;
 }
 
 /** Operator-facing cause code; never carries server names, tokens, payloads, or SQL text. */

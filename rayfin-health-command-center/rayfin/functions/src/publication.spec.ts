@@ -97,4 +97,11 @@ describe('tokenEmail', () => {
         expect(tokenEmail('not-a-jwt')).toBeNull();
         expect(tokenEmail('e30.%%%.signature')).toBeNull();
     });
+
+    it('reads the managed-hosting email from xms_attr and rejects disagreeing identities', () => {
+        expect(tokenEmail(token({ sub: 'user-1', idtyp: 'user', xms_attr: { 'app-1': { rfn_email: 'writer@contoso.test' } } }))).toBe('writer@contoso.test');
+        expect(tokenEmail(token({ email: 'writer@contoso.test', xms_attr: { 'app-1': { rfn_email: 'writer@contoso.test' } } }))).toBe('writer@contoso.test');
+        expect(tokenEmail(token({ email: 'writer@contoso.test', xms_attr: { 'app-1': { rfn_email: 'other@contoso.test' } } }))).toBeNull();
+        expect(tokenEmail(token({ xms_attr: { 'app-1': null } }))).toBeNull();
+    });
 });

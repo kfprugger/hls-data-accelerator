@@ -48,15 +48,14 @@ deciding whether to retry.
 
 The Sync control is restricted to authorized writers. Version 1 was published on
 2026-10-02 through `dbo.PublishHealthSnapshot`; all 14 KPIs matched the Gold
-semantic models. The Rayfin 1.36.2 application-auth build is deployed with the
-`SnapshotWriter` allowlist (one enrolled writer, the app identity in
-`health_snapshot_writer`), and the SQL boundary rejects unenrolled or missing
-publishers live. Before this release, the Rayfin backend rejected in-app function
-calls with `WorkloadException`/`FeatureNotSupported`, shown in the banner as
-HTTP 400; open the app as a signed-in writer to confirm the badge reads `Writer`.
-When a function runs but cannot decide, `getSyncAccess` returns a non-sensitive
-cause code such as `writer-lookup-failed`, `caller-identity-unavailable` or
-`sql-token-unavailable` that the banner displays.
+semantic models. After the Rayfin 1.36.2 application-auth release, in-app Sync
+published version 2 the same day through `publishSnapshot` as the allowlisted
+writer, and the SQL boundary rejects unenrolled or missing publishers live.
+Managed-hosting Rayfin tokens carry the caller's email as
+`xms_attr.<appId>.rfn_email` rather than a top-level `email` claim; the function
+reads either. When a function runs but cannot decide, `getSyncAccess` returns a
+non-sensitive cause code such as `writer-lookup-failed`,
+`caller-identity-unavailable` or `sql-token-unavailable` that the banner displays.
 
 ## Data dependency
 
