@@ -1,7 +1,9 @@
 -- Run against the discovered AppBackend SQL database as its schema administrator.
--- Apply Rayfin entities first, then this script. Never drop legacy snapshot tables.
+-- Apply Rayfin entities first (including SnapshotWriter), then this script. Never drop legacy snapshot tables.
 -- The only write capability granted to an operator is EXECUTE on the publisher.
--- No EXECUTE AS/owner impersonation: role checks and audit see the caller's OBO session.
+-- Functions use application auth: SQL sees the app identity (the AppBackend item owner), which must
+-- hold health_snapshot_writer (grant-app-identity.sql). The function verifies the human caller against
+-- dbo.SnapshotWriters and passes that email as @publisherId; the publisher re-checks it below.
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 GO
@@ -39,6 +41,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE parent_object_id = OBJE
         CHECK (id = '00000000-0000-0000-0000-000000000001' AND version > 0 AND ISJSON(payloadJson) = 1);
 IF DATABASE_PRINCIPAL_ID(N'health_snapshot_writer') IS NULL
     CREATE ROLE health_snapshot_writer AUTHORIZATION dbo;
+IF OBJECT_ID(N'dbo.SnapshotWriters', N'U') IS NULL
+    THROW 51004, 'Apply the Rayfin SnapshotWriter entity before publication.sql.', 1;
 GO
 
 CREATE OR ALTER PROCEDURE dbo.ValidateHealthSnapshot
@@ -140,7 +144,7 @@ BEGIN
     SELECT CAST(CASE WHEN IS_ROLEMEMBER(N'health_snapshot_writer') = 1
         AND HAS_PERMS_BY_NAME(N'dbo.PublishHealthSnapshot', N'OBJECT', N'EXECUTE') = 1 THEN 1 ELSE 0 END AS bit) AS canSync,
         COALESCE(p.version, 0) AS version,
-        CONVERT(nvarchar(200), ORIGINAL_LOGIN()) AS publisherId,
+        COALESCE(p.publisherId, N'') AS publisherId,
         COALESCE(CONVERT(nvarchar(33), p.capturedAt, 127) + N'Z', N'') AS capturedAt,
         (SELECT COUNT(*) FROM OPENJSON(p.payloadJson, '$.kpis')) AS kpiRows,
         (SELECT COUNT(*) FROM OPENJSON(p.payloadJson, '$.series')) AS seriesRows,
@@ -151,15 +155,18 @@ GO
 
 CREATE OR ALTER PROCEDURE dbo.PublishHealthSnapshot
     @payloadJson nvarchar(max),
-    @expectedVersion int
+    @expectedVersion int,
+    @publisherId nvarchar(200)
 AS
 BEGIN
     SET NOCOUNT ON;
     SET XACT_ABORT ON;
-    -- Check even if someone accidentally grants EXECUTE to a broader principal later.
+    DECLARE @actor nvarchar(200) = NULLIF(LTRIM(RTRIM(@publisherId)), N'');
+    -- Check even if someone accidentally grants EXECUTE to a broader principal later, and never
+    -- record a publisher the allowlist does not contain.
     IF ISNULL(IS_ROLEMEMBER(N'health_snapshot_writer'), 0) <> 1
+        OR @actor IS NULL OR NOT EXISTS (SELECT 1 FROM dbo.SnapshotWriters WHERE email = @actor)
         THROW 51003, 'Snapshot publication permission denied.', 1;
-    DECLARE @actor nvarchar(200) = CONVERT(nvarchar(200), ORIGINAL_LOGIN());
     DECLARE @runId uniqueidentifier = NEWID(), @startedAt datetime2 = SYSUTCDATETIME();
     DECLARE @version int = 0, @capturedAt datetime2, @publishedBy nvarchar(200), @currentPayload nvarchar(max);
     DECLARE @kpiRows int, @seriesRows int, @worklistRows int;
@@ -214,7 +221,7 @@ GO
 -- Direct CRUD (including a generic Rayfin mutation route) remains denied.
 IF EXISTS (
     SELECT 1 FROM sys.objects o JOIN sys.schemas s ON s.schema_id = o.schema_id
-    WHERE o.object_id IN (OBJECT_ID(N'dbo.PublishedSnapshots'), OBJECT_ID(N'dbo.SyncRuns'),
+    WHERE o.object_id IN (OBJECT_ID(N'dbo.PublishedSnapshots'), OBJECT_ID(N'dbo.SyncRuns'), OBJECT_ID(N'dbo.SnapshotWriters'),
         OBJECT_ID(N'dbo.GetHealthSyncAccess'), OBJECT_ID(N'dbo.PublishHealthSnapshot'), OBJECT_ID(N'dbo.ValidateHealthSnapshot'))
         AND COALESCE(o.principal_id, s.principal_id) <> DATABASE_PRINCIPAL_ID(N'dbo')
 )

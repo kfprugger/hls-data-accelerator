@@ -19,7 +19,7 @@
 export type AppFunctionsSchema = {
   getSyncAccess: {
     input: Record<string, never>;
-    output: { canSync: boolean; version: number; publisherId: string; unavailableReason?: string };
+    output: { canSync: boolean; version: number; publisherId: string; unavailableReason?: undefined | string };
   };
   publishSnapshot: {
     input: { payloadJson: string; expectedVersion: number };

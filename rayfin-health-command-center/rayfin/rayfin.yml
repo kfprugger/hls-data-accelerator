@@ -22,6 +22,8 @@ services:
     assetAccess: protected
   functions:
     enabled: true
+    auth:
+      type: application
     buildCommand: npm run build
 publishable_key: pk-bq8EbZqob-CgQ-0g-St5
 secrets:

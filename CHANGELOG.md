@@ -2,6 +2,13 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Rayfin 1.36.2 and dependency security upgrades (2026-10-02)
+
+- **Upgraded** both Rayfin apps to Rayfin 1.36.2 (`@microsoft/rayfin-*`, `rayfin-mcp`, `fabric-user-data-functions`, plus the exact same-release `fabric-embedded-host`), installed through a one-time exception to the 7-day npm release-age policy approved for that release train only; every other changed package is older than 7 days. The command center also moves to `fabric-app-data` 1.1.0 (CLI 3.0.0), `fabric-datagrid`/`fabric-visuals` 4.1.0, Vite 7.3 and Vitest 4.1.
+- **Changed** the command center's Functions to application authentication (`services.functions.auth.type: application`) with the documented `RayfinContext<AppSchema, AudienceType.Sql>`/`ctx.Tokens.Sql`/`ctx.Secrets` pattern and `[]` connections. Because SQL now sees the app identity (the AppBackend owner) for every caller, publication is authorized per person: the function reads the caller's own `SnapshotWriter` allowlist row through `ctx.getDataClient()` (read-only entity with a `claims.email` policy) and requires it to match the token's email claim; `dbo.PublishHealthSnapshot` re-checks the allowlist and records that verified email as publisher. `grant-writer.sql` now enrolls a person's email, and the new `grant-app-identity.sql` enrolls the app identity in `health_snapshot_writer`.
+- **Fixed** all 126 open Dependabot alerts (2 critical, 46 high): npm lockfiles in `rayfin-health-command-center`, `rayfin-clinical-triage-app` and `orchestrator-ui`; `pydicom` 2.4.5, `requests` 2.33.0 and `cryptography` 50.0.0 in the loaders and orchestrator. `dicom-loader`, `fhir-loader` and the telemetry emulator template move from end-of-life CBL-Mariner Python 3.9 to a digest-pinned Azure Linux 3 Python 3.12 base (required by `pydicom` 2.4.5), with hash-enforced locks and an optional `PIP_INDEX_URL` build argument for networks that block PyPI.
+- **Deployed** the command center to `med-0906` with Rayfin 1.36.2 (functions with `contextAudiences: ["Sql"]`, DAB config v11 with the `SnapshotWriter` read policy and unique email constraint), applied `publication.sql`, enrolled the app identity and one writer, and verified live that `PublishHealthSnapshot` rejects an unenrolled or null publisher with 51003 without changing version 1 or writing audit rows.
+
 ### Windows ARM and source-only HDS deployment (2026-09-29)
 
 - Restored the three original DTT `configuration_compiler/config_files_models/env` source files and corrected case-insensitive ignore rules. Clean-checkout wheel builds now reject missing runtime modules or invalid `RECORD` entries.

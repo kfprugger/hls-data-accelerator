@@ -6,13 +6,12 @@ export interface SqlSettings {
     token: string;
 }
 export type SqlRow = Record<string, unknown>;
+export type Procedure = 'dbo.GetHealthSyncAccess' | 'dbo.PublishHealthSnapshot';
+/** `publisherId` is the caller's allowlisted email, verified by the function before publication. */
+export interface Publication { payloadJson: string; expectedVersion: number; publisherId: string }
 
-/** Each call gets its own OBO-authenticated session; no token-bearing shared pool. */
-export function executeProcedure(
-    settings: SqlSettings,
-    procedure: 'dbo.GetHealthSyncAccess' | 'dbo.PublishHealthSnapshot',
-    publication?: { payloadJson: string; expectedVersion: number },
-): Promise<SqlRow> {
+/** Each call opens its own session with the invocation's app-identity SQL token; no token-bearing shared pool. */
+export function executeProcedure(settings: SqlSettings, procedure: Procedure, publication?: Publication): Promise<SqlRow> {
     return new Promise((resolve, reject) => {
         const connection = new Connection({
             server: settings.server,
@@ -45,6 +44,7 @@ export function executeProcedure(
             if (publication) {
                 request.addParameter('payloadJson', TYPES.NVarChar, publication.payloadJson, { length: Infinity });
                 request.addParameter('expectedVersion', TYPES.Int, publication.expectedVersion);
+                request.addParameter('publisherId', TYPES.NVarChar, publication.publisherId, { length: 200 });
             }
             connection.callProcedure(request);
         });

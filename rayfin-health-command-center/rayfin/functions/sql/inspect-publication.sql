@@ -1,4 +1,4 @@
--- Run with the real caller's SQL-audience OBO token, not an impersonation context.
+-- Run with the app identity's SQL token (the AppBackend item owner), the identity Functions use.
 SET NOCOUNT ON;
 SELECT ORIGINAL_LOGIN() AS authenticatedLogin, USER_NAME() AS databasePrincipal,
     IS_ROLEMEMBER(N'health_snapshot_writer') AS writerRole,
@@ -7,9 +7,10 @@ SELECT ORIGINAL_LOGIN() AS authenticatedLogin, USER_NAME() AS databasePrincipal,
     HAS_PERMS_BY_NAME(N'dbo.PublishedSnapshots',N'OBJECT',N'UPDATE') AS directUpdate,
     HAS_PERMS_BY_NAME(N'dbo.PublishedSnapshots',N'OBJECT',N'DELETE') AS directDelete;
 EXEC dbo.GetHealthSyncAccess;
+SELECT email AS enrolledWriter FROM dbo.SnapshotWriters ORDER BY email;
 SELECT o.name, o.type_desc, USER_NAME(COALESCE(o.principal_id,s.principal_id)) AS effectiveOwner
 FROM sys.objects o JOIN sys.schemas s ON s.schema_id=o.schema_id
-WHERE o.object_id IN (OBJECT_ID(N'dbo.PublishedSnapshots'),OBJECT_ID(N'dbo.SyncRuns'),
+WHERE o.object_id IN (OBJECT_ID(N'dbo.PublishedSnapshots'),OBJECT_ID(N'dbo.SyncRuns'),OBJECT_ID(N'dbo.SnapshotWriters'),
     OBJECT_ID(N'dbo.GetHealthSyncAccess'),OBJECT_ID(N'dbo.PublishHealthSnapshot'),OBJECT_ID(N'dbo.ValidateHealthSnapshot'));
 -- Exactly one row after initialization; counts/version/actor/timestamp must agree with winning audit.
 SELECT p.id,p.version,p.capturedAt,p.publisherId,p.syncRunId,r.status,r.expectedVersion,r.publishedVersion,
