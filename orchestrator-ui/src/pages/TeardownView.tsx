@@ -8,6 +8,7 @@ import {
   Checkbox,
   Dropdown,
   Field,
+  Input,
   Option,
   Subtitle1,
   Text,
@@ -35,6 +36,7 @@ import {
   startTeardown,
   startTeardownBatch,
   type DeploymentCapacityMapping,
+  type TeardownRequest,
 } from "../api";
 import { useAppState } from "../AppState";
 import { typeBadge } from "../components/TypeBadges";
@@ -191,6 +193,7 @@ export function TeardownView() {
   const [error, setError] = useState("");
   const [subscriptions, setSubscriptions] = useState<MockSubscription[]>(getMockSubscriptions());
   const [candidates, setCandidates] = useState<TeardownCandidate[]>([]);
+  const [candidateScope, setCandidateScope] = useState<{ subscriptionId: string; expectedTenantId?: string }>({ subscriptionId: "" });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [lockedIds, setLockedIds] = useState<Set<string>>(new Set());
@@ -203,6 +206,7 @@ export function TeardownView() {
   const [scanMessage, setScanMessage] = useState("");
   const [scanCounts, setScanCounts] = useState({ fabric: 0, azure: 0, spn: 0 });
   const [dryRun, setDryRun] = useState(true);
+  const [frontEndResourceGroups, setFrontEndResourceGroups] = useState("");
 
   // Load locks from backend on mount
   useEffect(() => {
@@ -272,6 +276,7 @@ export function TeardownView() {
     // Otherwise stay idle until the user clicks Scan Resources.
     if (teardownScan.status === "completed" || teardownScan.status === "running") {
       setCandidates((teardownScan.candidates as TeardownCandidate[]) ?? []);
+      setCandidateScope({ subscriptionId: teardownScan.subscriptionId, expectedTenantId: teardownScan.expectedTenantId });
       setScanCounts(teardownScan.counts);
       setScanPhase(teardownScan.phase || teardownScan.status);
       setScanMessage(teardownScan.message || "Resource scan running...");
@@ -286,6 +291,9 @@ export function TeardownView() {
 
   // Keep candidates in sync with the global background scan
   useEffect(() => {
+    if (teardownScan.status === "completed" || teardownScan.status === "running") {
+      setCandidateScope({ subscriptionId: teardownScan.subscriptionId, expectedTenantId: teardownScan.expectedTenantId });
+    }
     if (teardownScan.status === "completed") {
       setCandidates((teardownScan.candidates as TeardownCandidate[]) ?? []);
       setScanCounts(teardownScan.counts);
@@ -306,7 +314,7 @@ export function TeardownView() {
       if (!candidates.length) setError(teardownScan.error || "Background scan failed");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teardownScan.status, teardownScan.candidates, teardownScan.counts, teardownScan.phase, teardownScan.message]);
+  }, [teardownScan.status, teardownScan.candidates, teardownScan.counts, teardownScan.phase, teardownScan.message, teardownScan.subscriptionId, teardownScan.expectedTenantId]);
 
   useEffect(() => {
     return () => {
@@ -375,6 +383,7 @@ export function TeardownView() {
   const handleMockScan = () => {
     setError("Demo mode: showing mock teardown candidates only. No live resources are listed.");
     setCandidates(scanForTeardownCandidates(selectedSubscription));
+    setCandidateScope({ subscriptionId: selectedSubscription });
     setScanned(true);
     setScanning(false);
     setUsingMock(true);
@@ -489,6 +498,14 @@ export function TeardownView() {
       setError("Select at least one resource to tear down.");
       return;
     }
+    if (!candidateScope.subscriptionId) {
+      setError("The subscription for these scan results is unknown. Select a subscription and scan resources again before teardown.");
+      return;
+    }
+    if (scanning) {
+      setError("Wait for the resource scan to finish before teardown.");
+      return;
+    }
     const selected = candidates.filter((c) => selectedIds.has(c.id));
     const names = selected.map((c) => `${c.type}: ${c.name}${c.resourceCount !== undefined ? ` (${c.resourceCount} item/resource${c.resourceCount === 1 ? "" : "s"})` : ""}${c.detail ? ` — ${c.detail}` : ""}`).join("\n  ");
     if (dryRun) {
@@ -503,6 +520,18 @@ export function TeardownView() {
     setLoading(true);
     setError("");
 
+    if (usingMock) {
+      for (const candidate of selected) startMockTeardown(candidate);
+      setLoading(false);
+      navigate("/teardown/monitor");
+      return;
+    }
+    const scope = {
+      subscription_id: candidateScope.subscriptionId,
+      ...(candidateScope.expectedTenantId ? { expected_tenant_id: candidateScope.expectedTenantId } : {}),
+      discover_front_ends: true,
+    };
+    const extraGroups = [...new Set(frontEndResourceGroups.split(",").map((name) => name.trim()).filter(Boolean))];
     // Group selection into independent teardown jobs so multiple workspaces
     // and multiple Azure RGs each run in their own parallel pipeline rather
     // than being forced through a single sequential request.
@@ -510,8 +539,7 @@ export function TeardownView() {
     // Pairing rule: a Fabric workspace and an Azure RG that deploy together
     // (same capacityMapping) are submitted as ONE job so the backend can keep
     // them logically linked in the history view.
-    type TeardownJob = { fabric_workspace_name: string; resource_group_name: string; delete_workspace: boolean; delete_azure_rg: boolean };
-    const jobs: TeardownJob[] = [];
+    const jobs: TeardownRequest[] = [];
     const selectedFabric = selected.filter((c) => c.type === "fabric");
     const selectedAzure = selected.filter((c) => c.type === "azure");
     const pairedRgNames = new Set<string>();
@@ -524,6 +552,8 @@ export function TeardownView() {
       const rgName = pairedRg?.[0] ?? "";
       if (rgName) pairedRgNames.add(rgName);
       jobs.push({
+        ...scope,
+        ...(rgName ? { front_end_resource_groups: extraGroups } : {}),
         fabric_workspace_name: ws.name,
         resource_group_name: rgName,
         delete_workspace: true,
@@ -535,6 +565,8 @@ export function TeardownView() {
     for (const rg of selectedAzure) {
       if (pairedRgNames.has(rg.name)) continue;
       jobs.push({
+        ...scope,
+        front_end_resource_groups: extraGroups,
         fabric_workspace_name: "",
         resource_group_name: rg.name,
         delete_workspace: false,
@@ -977,6 +1009,12 @@ export function TeardownView() {
             <Card size="small" style={{ marginTop: tokens.spacingVerticalS }}>
               <CardHeader header={<Text weight="semibold" size={300}>Teardown plan</Text>} />
               <div style={{ padding: `0 ${tokens.spacingHorizontalL} ${tokens.spacingVerticalM}`, display: "grid", gap: tokens.spacingVerticalXS }}>
+                <Text size={200}>Scan subscription: {candidateScope.subscriptionId || "Unknown — scan resources again"}</Text>
+                {hasAzure && (
+                  <Field label="Additional front-end resource groups (optional)" hint="Comma-separated names. Discovery remains enabled; only groups tied to each deployment are deleted.">
+                    <Input value={frontEndResourceGroups} onChange={(_, data) => setFrontEndResourceGroups(data.value)} placeholder="rg-cardiology, rg-dicom-viewer" />
+                  </Field>
+                )}
                 {selected.slice(0, 8).map((item) => (
                   <Text key={item.id} size={200}>{item.type.toUpperCase()} · {item.name}</Text>
                 ))}
@@ -989,7 +1027,7 @@ export function TeardownView() {
                 appearance="primary"
                 icon={<DeleteRegular />}
                 onClick={handleTeardown}
-                disabled={loading}
+                disabled={loading || scanning}
                 style={{ backgroundColor: tokens.colorPaletteRedBackground3 }}
               >
                 {loading ? "Starting teardown…" : dryRun ? `Preview ${selectedIds.size} resource(s)` : `${mode}: Delete ${selectedIds.size} resource(s)`}

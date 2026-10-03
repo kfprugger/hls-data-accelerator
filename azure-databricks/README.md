@@ -3,7 +3,9 @@
 This folder defines how to keep the HLS Data Accelerator's Azure source estate while replacing the Microsoft Fabric destination with Azure Databricks.
 
 > [!IMPORTANT]
-> This is an implementation-ready architecture and deployment contract, not a second executable path in the current orchestrator. The existing `Deploy-All.ps1`, `Preflight-Check.ps1`, `Teardown-All.ps1`, FastAPI activities, and evaluation harness call Fabric APIs directly. They must not be presented as Databricks-capable until the adapter work described here is implemented and tested.
+> This is an implementation-ready architecture and deployment contract, not a second executable deployment path in the current orchestrator. `Deploy-All.ps1`, `Preflight-Check.ps1`, deployment activities, and the evaluation harness retain Fabric dependencies. Shared teardown is the exception: `orchestrator/shared/full_teardown.py`, also exposed through `Teardown-All.ps1`, already includes a Databricks Unity Catalog phase for objects bound to the deployment's Access Connector. That cleanup capability does not prove the broader destination adapter described here is implemented or tested.
+
+Teardown pins tokens to an explicit deployment subscription and optionally checks an expected tenant. It discovers owned front ends (including Rayfin, cardiology, DICOM viewer and hosted orchestrator resources) and reports shared/unrelated groups as skipped. Preview from the repository root with `Teardown-All.ps1 -FabricWorkspaceName <workspace> -ResourceGroupName <rg> -SubscriptionId <subscription> -ExpectedTenantId <tenant> -Plan`. For a deployment without a Fabric workspace, use `python -m shared.full_teardown --subscription <subscription> --resource-group <rg> --expected-tenant <tenant> --delete-resource-group --plan` from `orchestrator/`. Neither preview deletes resources. See [root teardown guidance](../README.md#teardown).
 
 
 ## Decision

@@ -34,6 +34,9 @@
 #   .\Deploy-All.ps1 -Phase3                                          # Run Phase 3 only (imaging toolkit)
 #   .\Deploy-All.ps1 -Phase4 -AlertEmail "nurse@hospital.com"          # Run Phase 4 only (ontology + activator)
 #   .\Deploy-All.ps1 -RebuildContainers                                # Force ACR image rebuilds
+#   .\Deploy-All.ps1 -Teardown -FabricWorkspaceName "my-workspace" -ResourceGroupName "my-rg" -Location eastus -ExpectedSubscriptionId "<subscription-id>"
+#     Teardown previews then deletes without prompting, including owned front ends. Use
+#     Teardown-All.ps1 -Plan for read-only discovery and -ExpectedTenantId for a tenant guard.
 
 param (
     # ── Azure ──
@@ -120,7 +123,7 @@ param (
     [switch]$JsonLogs,
 
     # ── Cleanup ──
-    [switch]$Teardown                # Run cleanup scripts instead of deployment
+    [switch]$Teardown                # Shared full teardown, pinned to ExpectedSubscriptionId or the Az context subscription
 )
 
 $ErrorActionPreference = "Stop"
@@ -1344,14 +1347,14 @@ Write-Host ""
 # ============================================================================
 
 if ($Teardown) {
-    Invoke-Step -StepName "Delete Fabric Workspace" -Description "Removing $FabricWorkspaceName" -Action {
-        & "$ScriptDir\cleanup\Remove-FabricWorkspace.ps1" `
-            -FabricWorkspaceName $FabricWorkspaceName -Force
-    }
-
-    Invoke-Step -StepName "Delete Azure Infrastructure" -Description "Removing resource group $ResourceGroupName" -Action {
-        & "$ScriptDir\cleanup\Remove-AzureInfra.ps1" `
-            -ResourceGroupName $ResourceGroupName -Force -Wait
+    Invoke-Step -StepName "Full Deployment Teardown" -Description "Removing $FabricWorkspaceName, $ResourceGroupName and owned front ends" -Action {
+        if ([string]::IsNullOrWhiteSpace($ExpectedSubscriptionId)) {
+            throw "Teardown requires -ExpectedSubscriptionId; the current Az/CLI context subscription is never used for deletion"
+        }
+        & (Join-Path $ScriptDir "Teardown-All.ps1") `
+            -FabricWorkspaceName $FabricWorkspaceName -ResourceGroupName $ResourceGroupName `
+            -SubscriptionId $ExpectedSubscriptionId -ExpectedTenantId $ExpectedTenantId -Force
+        if ($LASTEXITCODE -ne 0) { throw "Teardown-All.ps1 failed with exit code $LASTEXITCODE" }
     }
 
     Write-Summary -PhaseName "Teardown"

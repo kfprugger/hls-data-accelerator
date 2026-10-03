@@ -54,9 +54,14 @@ cd C:\git\hls-data-accelerator
 .\Teardown-All.ps1 `
     -FabricWorkspaceName "med-device-rti-hds-MMDD" `
     -ResourceGroupName "rg-med-device-rti-MMDD" `
-    -Force -Wait
+    -SubscriptionId "<deployment-subscription-id>" `
+    -ExpectedTenantId "<tenant-id>" -Plan
 ```
-Omit `-Wait` to teardown async (non-blocking). AHDS RG deletion takes 5-15 min.
+`-Plan` is read-only and retains deployment state. Remove it to execute after typing `yes`, or use `-Force` to skip confirmation. Every execution previews first and waits for deletion; there is no asynchronous `-Wait` switch. Only successful non-plan runs remove local deployment state.
+
+The shared implementation includes Rayfin apps, deployment-bound Fabric connections and Unity Catalog objects, and owned cardiology, DICOM viewer and hosted orchestrator front ends. Automatic front-end group discovery checks deployment ties and reports shared/unrelated groups as skipped with reasons. `-FrontEndResourceGroup <string[]>` and optional `-DicomViewerResourceGroup` explicitly select additional groups, still subject to ownership checks. `-NoFrontEndDiscovery` disables automatic front-end group discovery.
+
+Pass `-SubscriptionId` unless `HLS_SUBSCRIPTION_ID` or deployment state provides it; never rely on the Azure CLI default. `-ExpectedTenantId` refuses a mismatch. Workspace/RG names may come from deployment state; no resource group name is hardcoded. `-SkipAzure` omits main resource group deletion; `-SkipFabric` omits workspace deletion. Review remaining front-end and connection actions in the plan. `Deploy-All.ps1 -Teardown` invokes this same teardown with `-Force` and the deployment's `-ExpectedSubscriptionId`, and refuses to run if that parameter is empty.
 
 ### Ontology Deploy
 ```powershell
@@ -217,7 +222,7 @@ All Dockerfiles use MCR (no Docker Hub rate limits); Python images pin the Azure
 
 ## Teardown Validation
 
-The teardown script validates both workspace and RG before deleting. If either is not found, it shows fuzzy "Did you mean?" suggestions and prompts for partial teardown. Use `-Force` to skip confirmation.
+The shared teardown preflight pins tokens to the selected subscription, checks the expected tenant, and resolves deployment ownership before any deletion. It prints the plan without fuzzy-name substitutions. The final `RESULT:` JSON and readable summary identify deleted items, skipped front ends and failures. `-Force` skips only confirmation, not safety checks; `-Plan` performs no deletion.
 
 ## Key File Locations
 

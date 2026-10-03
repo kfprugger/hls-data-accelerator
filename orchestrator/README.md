@@ -1,6 +1,14 @@
 # Deployment Orchestrator — FastAPI Backend + React UI
 
-The orchestrator provides a visual deployment experience for the HLS Data Accelerator. It consists of a Python FastAPI backend that calls the same PowerShell scripts (`Deploy-All.ps1`, `Teardown-All.ps1`) and a React + Fluent UI frontend.
+The orchestrator provides a visual deployment experience for the HLS Data Accelerator. It consists of a Python FastAPI backend and a React + Fluent UI frontend. Deployment invokes `Deploy-All.ps1`; local and Durable teardown use the same `shared/full_teardown.py` implementation as the root `Teardown-All.ps1` wrapper.
+
+`POST /api/teardown/start` and each job in `POST /api/teardown/batch/start` require an explicit deployment `subscription_id`, with an optional `expected_tenant_id` guard. Missing subscriptions return HTTP 400; an invalid batch is rejected before any job starts. The local API never defaults from `HLS_SUBSCRIPTION_ID` or the Azure CLI account. Front-end discovery includes owned Rayfin, cardiology, DICOM viewer and hosted orchestrator resources; shared/unrelated groups are skipped with reasons. `front_end_resource_groups` explicitly selects groups subject to ownership checks, and `discover_front_ends: false` disables automatic group discovery. The **Databricks Unity Catalog** phase removes objects bound to the deployment's Access Connector before Azure resource group deletion.
+
+The Durable Functions `/teardown/start` endpoint requires **both** `subscription_id` and `expected_tenant_id`; it returns HTTP 400 if either is absent.
+
+Records preserve `customStatus.subscriptionId`, `customStatus.expectedTenantId` and `customStatus.frontEndResourceGroups`; final results are in `output.teardown` (`plan`, `deleted`, `failures`, `skipped`, `status`). Interrupted-teardown reconciliation uses only the record's pinned `subscriptionId` and skips legacy unpinned records.
+
+For read-only discovery from `orchestrator/`, run `python -m shared.full_teardown --subscription <subscription> --workspace <workspace> --resource-group <rg> --expected-tenant <tenant> --delete-workspace --delete-resource-group --plan`. The root wrapper exposes the same preview as `Teardown-All.ps1 -SubscriptionId <subscription> -FabricWorkspaceName <workspace> -ResourceGroupName <rg> -ExpectedTenantId <tenant> -Plan`. Plans delete nothing. See [teardown parameters and confirmation behavior](../README.md#teardown).
 
 ## 💻 Developer Quick Start
 

@@ -246,17 +246,26 @@ If an existing Data Agent shows stale or inaccessible schema selections, use the
 ## Teardown
 
 > [!CAUTION]
-> Teardown deletes the selected Fabric workspace and Azure resource groups. Review the resolved names before using `-Force`.
+> Teardown deletes the selected Fabric workspace, main Azure resource group and owned front ends. Preview with `-Plan` and review every delete/skip decision before executing.
 
 ```powershell
 ./Teardown-All.ps1 `
   -FabricWorkspaceName "<fabric-workspace>" `
   -ResourceGroupName "<resource-group>" `
-  -Force `
-  -Wait
+  -SubscriptionId "<deployment-subscription-id>" `
+  -ExpectedTenantId "<tenant-id>" `
+  -Plan
 ```
 
-Use `-SkipAzure` for Fabric-only cleanup or `-SkipFabric` for Azure-only cleanup.
+Remove `-Plan` to execute after typing `yes`; add `-Force` to skip that prompt. Every execution prints a read-only plan first, waits for Azure deletion, and reports deleted items, skipped front ends with reasons, and failures. Local deployment state is removed only after a successful non-plan run.
+
+The shared teardown includes Rayfin apps, deployment-bound Fabric connections and Databricks Unity Catalog objects, and owned cardiology, DICOM viewer and Azure-hosted orchestrator front ends. Discovery checks deployment ties and skips shared or unrelated groups. Supply `-FrontEndResourceGroup @("<front-end-rg>")` for explicit groups (ownership checks still apply); `-DicomViewerResourceGroup` is an optional explicit group with no default. `-NoFrontEndDiscovery` disables automatic front-end group discovery.
+
+If preflight warns that lakehouse or Eventhouse endpoints could not be read (for example, while capacity is paused), SQL/Eventhouse-only front ends may not be discovered. Do not treat that as an empty inventory: investigate the warning and supply known front-end resource groups explicitly for ownership validation.
+
+`-SubscriptionId` is required unless `HLS_SUBSCRIPTION_ID` or the deployment state supplies it; the Azure CLI default subscription is never used. `-ExpectedTenantId` refuses a tenant mismatch before deletion. Workspace and main resource group names may default from deployment state; there is no fallback resource group name. `-SkipAzure` omits main resource group deletion and `-SkipFabric` omits workspace deletion; always inspect the remaining connection and front-end actions in the plan.
+
+`Deploy-All.ps1 -Teardown` uses the same implementation with `-Force`, pinned to `-ExpectedSubscriptionId`; it refuses to run if that parameter is empty, so the current Az PowerShell or CLI context is never the target. Use `Teardown-All.ps1 -Plan` when you only want a preview.
 
 ## Operations references
 

@@ -40,7 +40,6 @@ logger.addFilter(_InstanceCorrelationFilter())
 # The Deploy-All.ps1 script lives in the repo root
 SCRIPT_DIR = Path(__file__).resolve().parent.parent.parent
 DEPLOY_SCRIPT = SCRIPT_DIR / "Deploy-All.ps1"
-TEARDOWN_SCRIPT = SCRIPT_DIR / "cleanup" / "Remove-AllResources.ps1"
 PREFLIGHT_SCRIPT = SCRIPT_DIR / "Preflight-Check.ps1"
 
 # Regex to parse step markers from PowerShell output
@@ -198,25 +197,6 @@ def run_deploy(config: dict[str, Any], step_callback: Any = None, pid_callback: 
         "resources": {
             "fabric_workspace_name": config.get("fabric_workspace_name", ""),
             "resource_group_name": config.get("resource_group_name", ""),
-        },
-    }
-
-
-def run_teardown(config: dict[str, Any], step_callback: Any = None) -> dict[str, Any]:
-    """Run Remove-AllResources.ps1 for teardown."""
-    start = time.time()
-    args = _build_teardown_args(config)
-    logger.info("Invoking Remove-AllResources.ps1 with args: %s", " ".join(args[2:]))
-    exit_code = _run_powershell(args, step_callback)
-    duration = time.time() - start
-
-    return {
-        "phase": "Teardown",
-        "duration_seconds": duration,
-        "exit_code": exit_code,
-        "results": {
-            "items_deleted": 0 if exit_code != 0 else -1,
-            "errors": [] if exit_code == 0 else [f"Exit code: {exit_code}"],
         },
     }
 
@@ -494,24 +474,6 @@ def _build_deploy_args(config: dict[str, Any]) -> list[str]:
         args.append("-Phase4")
     if config.get("phase7_only"):
         args.append("-Phase7")
-
-    return args
-
-
-def _build_teardown_args(config: dict[str, Any]) -> list[str]:
-    """Build the pwsh command line for Remove-AllResources.ps1."""
-    args = [
-        "pwsh", "-NoProfile", "-NonInteractive", "-File",
-        str(TEARDOWN_SCRIPT),
-        "-Force",
-    ]
-
-    if config.get("fabric_workspace_name"):
-        args += ["-FabricWorkspaceName", config["fabric_workspace_name"]]
-    if config.get("resource_group_name"):
-        args += ["-ResourceGroupName", config["resource_group_name"]]
-    if config.get("delete_workspace"):
-        args.append("-DeleteWorkspace")
 
     return args
 

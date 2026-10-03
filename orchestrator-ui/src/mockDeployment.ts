@@ -765,45 +765,17 @@ export interface TeardownInstance {
 
 const teardownInstances = new Map<string, TeardownInstance>();
 
-const FABRIC_TEARDOWN_STEPS = [
-  { name: "Data Agents", delay: 2000, logs: ["Deleting Patient 360 agent…", "Deleting Clinical Triage agent…", "Deleting Cohorting Agent…", "✓ 3 agents deleted"] },
-  { name: "Ontology", delay: 1500, logs: ["Deleting ClinicalDeviceOntology…", "✓ Ontology deleted"] },
-  { name: "Reflex", delay: 1000, logs: ["Deleting ClinicalAlertActivator…", "✓ Reflex deleted"] },
-  { name: "Data Pipelines", delay: 2000, logs: ["Deleting 4 HDS pipelines…", "✓ Pipelines deleted"] },
-  { name: "Eventstream", delay: 1000, logs: ["Deleting TelemetryIngestion eventstream…", "✓ Eventstream deleted"] },
-  { name: "KQL Dashboards", delay: 1500, logs: ["Deleting ClinicalMonitor dashboard…", "Deleting ClinicalAlertsMap dashboard…", "✓ 2 dashboards deleted"] },
-  { name: "KQL Database", delay: 1000, logs: ["Deleting MasimoKQLDB…", "✓ KQL Database deleted"] },
-  { name: "Eventhouse", delay: 1500, logs: ["Deleting MasimoEventhouse…", "✓ Eventhouse deleted"] },
-  { name: "Lakehouses", delay: 2500, logs: ["Deleting healthcare1_msft_bronze…", "Deleting healthcare1_msft_silver…", "Deleting healthcare1_msft_gold…", "Deleting healthcare1_msft_reporting…", "Deleting 4 SQL endpoints…", "✓ 4 lakehouses + endpoints deleted"] },
-  { name: "Notebooks", delay: 2000, logs: ["Deleting 13 notebooks…", "✓ Notebooks deleted"] },
-  { name: "HDS & Environment", delay: 2000, logs: ["Deleting healthcare1_msft HDS solution…", "Deleting healthcare1_environment…", "Deleting SemanticModel…", "✓ HDS + environment deleted"] },
-  { name: "Workspace Identity", delay: 1000, logs: ["Deprovisioning workspace identity…", "✓ Identity deprovisioned"] },
-  { name: "Workspace", delay: 1500, logs: ["Deleting workspace med-device-rti-hds-0404-1…", "✓ Workspace deleted"] },
-];
-
-const AZURE_TEARDOWN_STEPS = [
-  { name: "Container Instances", delay: 2000, logs: ["Deleting masimo-emulator ACI…", "Deleting synthea-generator-job…", "Deleting fhir-loader-job…", "Deleting dicom-loader-job…", "✓ 4 container instances deleted"] },
-  { name: "FHIR Service", delay: 3000, logs: ["Deleting FHIR service fhir-xyz…", "Deleting FHIR workspace hdws-xyz…", "✓ FHIR resources deleted"] },
-  { name: "DICOM Loader Data", delay: 1000, logs: ["Deleting DICOM loader job metadata…", "DICOM .dcm files removed with storage account / resource group", "✓ DICOM loader data cleanup covered"] },
-  { name: "Container Registry", delay: 1500, logs: ["Deleting ACR masimoxyzacr…", "✓ ACR deleted"] },
-  { name: "Storage Accounts", delay: 2000, logs: ["Deleting stfhirxyz (hot)…", "Deleting stfhircoolxyz (cool)…", "✓ 2 storage accounts deleted"] },
-  { name: "Key Vault", delay: 1000, logs: ["Deleting kv-masimoxyz…", "✓ Key Vault deleted"] },
-  { name: "Event Hub", delay: 1500, logs: ["Deleting namespace masimoxyz-eh-ns…", "✓ Event Hub namespace deleted"] },
-  { name: "Managed Identity", delay: 1000, logs: ["Deleting id-aci-fhir-jobs…", "✓ Managed Identity deleted"] },
-  { name: "Resource Group", delay: 6000, logs: [
-    "Initiating resource group deletion: rg-med-device-rti…",
-    "Polling RG deletion status… (Deleting)",
-    "Polling RG deletion status… (Deleting) [10s]",
-    "Polling RG deletion status… (Deleting) [20s]",
-    "Polling RG deletion status… (Deleting) [30s]",
-    "Polling RG deletion status… (Deleting) [40s]",
-    "Verifying: GET /subscriptions/.../resourceGroups/rg-med-device-rti → 404 Not Found",
-    "✓ Resource group deleted and verified"
-  ] },
-];
-
-const SPN_TEARDOWN_STEPS = [
-  { name: "App Registration", delay: 2000, logs: ["Finding app registration…", "Deleting app registration…", "✓ SPN deleted"] },
+const TEARDOWN_STEPS = [
+  { name: "Preflight", delay: 1000, logs: ["Demo: checking subscription, tenant, and deployment ownership"] },
+  { name: "Front-End Apps", delay: 1500, logs: ["Demo: deleting Rayfin AppBackends and companion items"] },
+  { name: "Databricks Unity Catalog", delay: 1500, logs: ["Demo: removing catalog objects tied to the deployment access connector"] },
+  { name: "Fabric Connections", delay: 1000, logs: ["Demo: removing connections to deployment endpoints"] },
+  { name: "Workspace Identity", delay: 1000, logs: ["Demo: deprovisioning workspace identity"] },
+  { name: "Delete Workspace", delay: 1500, logs: ["Demo: deleting workspace and its items"] },
+  { name: "Front-End Entra Apps", delay: 1000, logs: ["Demo: deleting deployment-owned front-end app registrations"] },
+  { name: "Front-End Resource Groups", delay: 1500, logs: ["Demo: deleting linked cardiology, viewer, and orchestrator resource groups"] },
+  { name: "Azure Resource Group", delay: 2000, logs: ["Demo: deleting the main deployment resource group"] },
+  { name: "Verification", delay: 1000, logs: ["Demo: verifying deleted resources are absent"] },
 ];
 
 /**
@@ -812,10 +784,11 @@ const SPN_TEARDOWN_STEPS = [
 export function startMockTeardown(candidate: TeardownCandidate): string {
   const instanceId = `teardown-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36)}`;
 
-  const stepDefs =
-    candidate.type === "fabric" ? FABRIC_TEARDOWN_STEPS
-    : candidate.type === "azure" ? AZURE_TEARDOWN_STEPS
-    : SPN_TEARDOWN_STEPS;
+  const stepDefs = TEARDOWN_STEPS.filter((step) => {
+    if (candidate.type === "fabric") return !["Databricks Unity Catalog", "Azure Resource Group"].includes(step.name);
+    if (candidate.type === "azure") return !["Front-End Apps", "Workspace Identity", "Delete Workspace"].includes(step.name);
+    return ["Preflight", "Workspace Identity", "Verification"].includes(step.name);
+  });
 
   const instance: TeardownInstance = {
     instanceId,
@@ -852,7 +825,7 @@ function runTeardownSteps(
       inst.steps[idx].logs.push({
         timestamp: now(),
         level: "info",
-        message: `Deleting: ${def.name}…`,
+        message: `Demo phase: ${def.name}…`,
       });
     }, startDelay);
 

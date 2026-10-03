@@ -6,10 +6,13 @@ import os
 
 import importlib
 import io
+import json
 import logging
 import sys
+import shutil
 import threading
 import types
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -472,6 +475,126 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertEqual(phase["status"], "succeeded")
         self.assertEqual(phase["subSteps"][0]["status"], "succeeded")
         self.assertEqual(phase["detail"], "Post-deployment validation passed after repair.")
+
+    def test_teardown_batch_with_an_unpinned_job_starts_nothing(self) -> None:
+        from fastapi import HTTPException
+
+        started: list[str] = []
+
+        def record_task(coro, name):
+            started.append(name)
+            coro.close()
+
+        self.local_server._create_logged_task = record_task
+        before = dict(self.local_server.deployments)
+        request = self.local_server.TeardownBatchRequest(jobs=[
+            self.local_server.TeardownRequest(resource_group_name="rg-a", subscription_id="sub-a"),
+            self.local_server.TeardownRequest(resource_group_name="rg-b"),
+        ])
+
+        with self.assertRaises(HTTPException) as raised:
+            asyncio.run(self.local_server.start_teardown_batch(request))
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertEqual(started, [])
+        self.assertEqual(self.local_server.deployments, before)
+
+    def test_unpinned_teardown_record_is_not_reconciled(self) -> None:
+        record = {
+            "runtimeStatus": "Running",
+            "customStatus": {"runType": "teardown", "resourceGroupName": "rg-a", "workspaceName": "ws-a"},
+            "output": None,
+        }
+        self.local_server._az_run = lambda *args, **kwargs: self.fail("must not query the Azure CLI default subscription")
+
+        self.assertFalse(self.local_server._reconcile_teardown(record))
+        self.assertEqual(record["runtimeStatus"], "Running")
+
+    def test_reconciliation_does_not_complete_a_teardown_with_unfinished_phases(self) -> None:
+        class GoneGroup:
+            def __init__(self, tokens):
+                pass
+
+            def call(self, method, url, resource, body=None):
+                return 404, None
+
+        record = {
+            "runtimeStatus": "Running",
+            "customStatus": {"runType": "teardown", "resourceGroupName": "rg-a", "subscriptionId": "sub-a"},
+            "output": {"status": "running", "resources": {}, "phases": [
+                {"phase": "Preflight", "status": "succeeded"},
+                {"phase": "Front-End Resource Groups", "status": "running"},
+            ]},
+        }
+        with patch("shared.full_teardown.Rest", GoneGroup):
+            self.assertTrue(self.local_server._reconcile_teardown(record))
+
+        self.assertEqual(record["runtimeStatus"], "Running")
+        self.assertNotEqual(record["customStatus"].get("status"), "succeeded")
+
+    def test_teardown_with_failures_is_reported_failed_with_its_phases(self) -> None:
+        class FailingTeardown:
+            def __init__(self, spec, tokens, report):
+                self.report = report
+
+            def run(self):
+                self.report.phase("Preflight", "running")
+                self.report.phase("Preflight", "succeeded")
+                self.report.phase("Azure Resource Group", "running")
+                self.report.phase("Azure Resource Group", "failed")
+                return {"status": "failed", "failures": ["Azure Resource Group: still deleting"], "deleted": {}, "skipped": []}
+
+        instance_id = "teardownFull-test"
+        self.local_server.deployments[instance_id] = {"instanceId": instance_id, "runtimeStatus": "Running",
+                                                      "customStatus": {"runType": "teardown", "logs": []}, "output": None}
+        request = self.local_server.TeardownRequest(resource_group_name="rg-a", delete_azure_rg=True, subscription_id="sub-a")
+
+        with patch("shared.full_teardown.DeploymentTeardown", FailingTeardown):
+            asyncio.run(self.local_server._run_teardown(instance_id, request))
+
+        record = self.local_server.deployments.pop(instance_id)
+        self.assertEqual(record["runtimeStatus"], "Failed")
+        self.assertEqual(record["customStatus"]["cloudStatus"], "needs_attention")
+        self.assertEqual([(p["phase"], p["status"]) for p in record["output"]["phases"]],
+                         [("Preflight", "succeeded"), ("Azure Resource Group", "failed")])
+        self.assertEqual(record["output"]["teardown"]["failures"], ["Azure Resource Group: still deleting"])
+
+    def _repo_with_ledger(self, workspace: str) -> Path:
+        repo = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, repo, True)
+        (repo / "orchestrator").mkdir()
+        (repo / "state-tracking").mkdir()
+        (repo / "state-tracking" / f".deployment-state-{workspace}.json").write_text(json.dumps({"phases": [
+            {"resources": {"FabricWorkspaceName": workspace}, "steps": [{"name": "Phase 1: Fabric Workspace", "success": True}]},
+        ]}))
+        return repo
+
+    def test_deploy_ledger_is_not_backfilled_into_teardown_records(self) -> None:
+        repo = self._repo_with_ledger("ws-a")
+
+        def record(run_type: str) -> dict:
+            return {"customStatus": {"runType": run_type, "workspaceName": "ws-a"},
+                    "output": {"phases": [{"phase": "Preflight", "status": "running"}]}}
+
+        teardown, deploy = record("teardown"), record("deploy")
+        with patch.object(self.local_server, "__file__", str(repo / "orchestrator" / "local_server.py")):
+            self.local_server._backfill_successful_steps_from_state_tracking("t", teardown)
+            self.local_server._backfill_successful_steps_from_state_tracking("d", deploy)
+
+        self.assertEqual([p["phase"] for p in teardown["output"]["phases"]], ["Preflight"])
+        self.assertIn("Phase 1: Fabric Workspace", [p["phase"] for p in deploy["output"]["phases"]])
+
+    def test_successful_teardown_removes_only_its_workspace_ledger(self) -> None:
+        repo = self._repo_with_ledger("ws-a")
+        other = repo / "state-tracking" / ".deployment-state-ws-b.json"
+        other.write_text("{}")
+
+        with patch.object(self.local_server, "__file__", str(repo / "orchestrator" / "local_server.py")):
+            self.local_server._remove_deployment_state("../state-tracking/x", lambda *args: None)
+            self.local_server._remove_deployment_state("ws-a", lambda *args: None)
+
+        self.assertFalse((repo / "state-tracking" / ".deployment-state-ws-a.json").exists())
+        self.assertTrue(other.exists())
 
 
 if __name__ == "__main__":

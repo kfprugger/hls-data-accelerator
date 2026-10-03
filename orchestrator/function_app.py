@@ -143,6 +143,14 @@ async def start_teardown(req: func.HttpRequest, client: df.DurableOrchestrationC
             mimetype="application/json",
         )
 
+    missing = [key for key in ("subscription_id", "expected_tenant_id") if not str((body or {}).get(key) or "").strip()]
+    if missing:
+        return func.HttpResponse(
+            json.dumps({"error": f"Teardown requires {', '.join(missing)}: every call is pinned to one subscription and tenant"}),
+            status_code=400,
+            mimetype="application/json",
+        )
+
     instance_id = await client.start_new(
         "teardown_orchestrator",
         client_input=body,
@@ -402,14 +410,15 @@ def deploy_all_orchestrator(context):
 
 @app.orchestration_trigger(context_name="context")
 def teardown_orchestrator(context):
-    """Teardown orchestrator — maps to Remove-AllResources.ps1."""
+    """Teardown orchestrator: shared.full_teardown via activity_teardown."""
     config = context.get_input()
 
     context.set_custom_status({"currentPhase": "Teardown", "status": "running"})
 
     result = yield context.call_activity("activity_teardown", config)
 
-    context.set_custom_status({"currentPhase": "Teardown", "status": "succeeded"})
+    context.set_custom_status({"currentPhase": "Teardown", "status": result.get("status", "failed"),
+                               "phases": result.get("phases", [])})
 
     return result
 
@@ -530,7 +539,7 @@ def activity_deploy_payer_rti(input_data: dict) -> dict:
 
 @app.activity_trigger(input_name="config")
 def activity_teardown(config: dict) -> dict:
-    """Teardown all resources."""
+    """Tear down one deployment and its owned front ends (shared.full_teardown)."""
     from activities.teardown import run
     return run(config)
 

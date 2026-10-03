@@ -13,9 +13,10 @@ import {
 } from "./api";
 
 interface BackgroundScanState {
-  // Teardown resource scan — kicked off at app-mount so the Teardown tab
-  // never has to wait for a fresh scan when the user navigates to it.
+  // Keep the subscription/tenant snapshot with the candidates, not the current selector.
   scanId: string;
+  subscriptionId: string;
+  expectedTenantId?: string;
   status: "idle" | "running" | "completed" | "failed" | "missing";
   candidates: unknown[];
   counts: { fabric: number; azure: number; spn: number };
@@ -45,6 +46,7 @@ interface AppState {
 
 const defaultScan: BackgroundScanState = {
   scanId: "",
+  subscriptionId: "",
   status: "idle",
   candidates: [],
   counts: { fabric: 0, azure: 0, spn: 0 },
@@ -96,8 +98,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
 
     stopPolling();
+    const subscription = subscriptions.find((item) => item.id === subscriptionId);
+    const matchingAuth = [authContext?.cli, authContext?.pwsh].find(
+      (context) => context?.loggedIn && context.subscriptionId.toLowerCase() === subscriptionId.toLowerCase() && context.tenantId,
+    );
+    const expectedTenantId = subscription?.tenantId || matchingAuth?.tenantId || undefined;
     setTeardownScan({
       ...defaultScan,
+      subscriptionId,
+      expectedTenantId,
       status: "running",
       startedAt: new Date().toISOString(),
     });
@@ -117,6 +126,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               const status = job.status ?? "running";
               setTeardownScan({
                 scanId: data.scanId,
+                subscriptionId,
+                expectedTenantId,
                 status,
                 candidates: job.candidates ?? [],
                 counts: job.counts ?? { fabric: 0, azure: 0, spn: 0 },

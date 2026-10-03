@@ -176,6 +176,11 @@ export interface DeploymentStatus {
     status: string;
     phases: PhaseInfo[];
     resources: Record<string, string>;
+    teardown?: {
+      status?: string;
+      skipped?: Array<{ name: string; skip_reason: string }>;
+      failures?: string[];
+    };
   } | null;
   customStatus: {
     currentPhase: string;
@@ -251,6 +256,7 @@ export interface HealthStatus extends LiveStatus {
 export interface Subscription {
   id: string;
   name: string;
+  tenantId?: string;
 }
 
 export async function startDeployment(
@@ -296,12 +302,18 @@ export async function cancelDeployment(instanceId: string): Promise<void> {
   });
 }
 
-export async function startTeardown(config: {
+export interface TeardownRequest {
   fabric_workspace_name: string;
   resource_group_name: string;
   delete_workspace: boolean;
   delete_azure_rg: boolean;
-}): Promise<{ instanceId: string }> {
+  subscription_id: string;
+  expected_tenant_id?: string;
+  front_end_resource_groups?: string[];
+  discover_front_ends?: boolean;
+}
+
+export async function startTeardown(config: TeardownRequest): Promise<{ instanceId: string }> {
   return requestJson(`${API_BASE}/teardown/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -323,12 +335,7 @@ export interface TeardownBatchResult {
   statusUrl: string;
 }
 
-export async function startTeardownBatch(jobs: Array<{
-  fabric_workspace_name: string;
-  resource_group_name: string;
-  delete_workspace: boolean;
-  delete_azure_rg: boolean;
-}>): Promise<TeardownBatchResult> {
+export async function startTeardownBatch(jobs: TeardownRequest[]): Promise<TeardownBatchResult> {
   return requestJson(`${API_BASE}/teardown/batch/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -86,7 +86,9 @@ Legend:
 | deployment state JSON/SQLite | Extend | workspace host/ID, catalog, bundle target, job/pipeline/warehouse IDs, evidence |
 | resume/repair switches | Rebuild | named Databricks recovery boundaries; do not overload historical Fabric phase numbers |
 | `eval/deployment_eval_harness.py` | Rebuild destination probes | Azure metrics + Databricks REST/SQL + real rendered surfaces |
-| `Teardown-All.ps1` | Separate implementation | stop streams/alerts, destroy bundle, remove UC bindings, then optionally delete Azure resources |
+| `Teardown-All.ps1` / `orchestrator/shared/full_teardown.py` | Shared implementation | subscription-pinned cleanup already discovers owned front ends and removes deployment-bound Unity Catalog objects; stopping streams/alerts and destroying bundle-managed resources remain Databricks-native lifecycle work |
+
+Preview with `Teardown-All.ps1 -SubscriptionId <subscription> -ExpectedTenantId <tenant> -FabricWorkspaceName <workspace> -ResourceGroupName <rg> -Plan`. For Azure/Databricks without Fabric, run `python -m shared.full_teardown --subscription <subscription> --expected-tenant <tenant> --resource-group <rg> --delete-resource-group --plan` from `orchestrator/`. Plans delete nothing; automatic front-end discovery reports shared/unrelated groups as skipped. See [teardown parameters](../README.md#teardown).
 
 ## Data product mapping
 

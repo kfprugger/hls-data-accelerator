@@ -1,118 +1,61 @@
-"""Teardown: Remove all deployed resources.
+"""Durable teardown activity: the shared ownership-aware teardown in ``shared.full_teardown``.
 
-Ports logic from cleanup/Remove-AllResources.ps1:
-- Delete Fabric workspace items in dependency order
-- Deprovision workspace identity
-- Delete Entra app registrations
-- Optionally delete workspace itself
-- Delete Azure resource group
+Runs as the Function App's managed identity. The hosted app has no ambient subscription context, so
+the request must name both ``subscription_id`` and ``expected_tenant_id``; every token and ARM,
+Graph, Fabric and Databricks call is pinned to them.
 """
 
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any
 
-from shared.azure_client import AzureClient
-from shared.fabric_client import FabricClient
+from shared.full_teardown import CredentialTokens, DeploymentTeardown, TeardownRefused, TeardownSpec
 
 logger = logging.getLogger(__name__)
 
-# Deletion order (reverse dependency)
-ITEM_TYPES_TO_DELETE = [
-    "DataAgent",
-    "Ontology",
-    "DataPipeline",
-    "Eventstream",
-    "KQLDashboard",
-    "KQLDatabase",
-    "Eventhouse",
-    "Lakehouse",
-    "Notebook",
-    "SemanticModel",
-    "Report",
-]
+_LEVELS = {"error": logging.ERROR, "warn": logging.WARNING}
+
+
+class _LogReport:
+    def __init__(self) -> None:
+        self.phases: list[dict[str, str]] = []
+
+    def log(self, level: str, message: str) -> None:
+        logger.log(_LEVELS.get(level, logging.INFO), "%s", message)
+
+    def phase(self, name: str, status: str) -> None:
+        phase = next((p for p in self.phases if p["phase"] == name), None)
+        if phase is None:
+            self.phases.append({"phase": name, "status": status})
+        else:
+            phase["status"] = status
+
+
+def spec_from_config(config: dict[str, Any]) -> TeardownSpec:
+    return TeardownSpec(
+        workspace_name=config.get("fabric_workspace_name") or "",
+        resource_group_name=config.get("resource_group_name") or "",
+        delete_workspace=bool(config.get("delete_workspace", False)),
+        delete_azure_rg=bool(config.get("delete_azure_rg", True)),
+        subscription_id=config.get("subscription_id") or "",
+        expected_tenant_id=config.get("expected_tenant_id") or "",
+        front_end_resource_groups=[g.strip() for g in config.get("front_end_resource_groups") or [] if g.strip()],
+        discover_front_ends=bool(config.get("discover_front_ends", True)),
+    )
 
 
 def run(config: dict[str, Any]) -> dict[str, Any]:
-    """Execute teardown of all resources.
+    """Tear down one deployment and its owned front ends; never raises for a refused request."""
+    from azure.identity import DefaultAzureCredential
 
-    Args:
-        config: DeploymentConfig as dict, plus:
-            - delete_workspace: bool (default False)
-            - delete_azure_rg: bool (default True)
-
-    Returns:
-        Teardown results.
-    """
-    start = time.time()
-    results: dict[str, Any] = {"items_deleted": 0, "errors": []}
-
-    workspace_name = config["fabric_workspace_name"]
-    rg_name = config.get("resource_group_name", "")
-    delete_workspace = config.get("delete_workspace", False)
-    delete_azure = config.get("delete_azure_rg", True)
-
-    # ── Fabric Cleanup ─────────────────────────────────────────────────
-    fabric = FabricClient(config.get("fabric_api_base", "https://api.fabric.microsoft.com/v1"))
-
-    ws = fabric.find_workspace(workspace_name)
-    if ws:
-        workspace_id = ws["id"]
-        logger.info("Cleaning workspace '%s' (%s)…", workspace_name, workspace_id)
-
-        # Delete items by type in dependency order
-        for item_type in ITEM_TYPES_TO_DELETE:
-            try:
-                items = fabric.list_items(workspace_id, item_type)
-                for item in items:
-                    try:
-                        fabric.delete_item(workspace_id, item["id"])
-                        results["items_deleted"] += 1
-                        logger.info(
-                            "Deleted %s: %s",
-                            item_type,
-                            item.get("displayName", item["id"]),
-                        )
-                    except Exception as e:
-                        results["errors"].append(
-                            f"Failed to delete {item_type} '{item.get('displayName')}': {e}"
-                        )
-            except Exception:
-                pass  # Item type may not exist
-
-        # Deprovision workspace identity
-        try:
-            fabric.deprovision_workspace_identity(workspace_id)
-            logger.info("Workspace identity deprovisioned.")
-        except Exception as e:
-            logger.warning("Identity deprovision: %s", e)
-
-        # Delete workspace itself
-        if delete_workspace:
-            try:
-                fabric.call("DELETE", f"/workspaces/{workspace_id}")
-                logger.info("Workspace '%s' deleted.", workspace_name)
-            except Exception as e:
-                results["errors"].append(f"Failed to delete workspace: {e}")
-    else:
-        logger.warning("Workspace '%s' not found — skipping Fabric cleanup.", workspace_name)
-
-    # ── Azure Cleanup ──────────────────────────────────────────────────
-    if delete_azure and rg_name:
-        try:
-            azure = AzureClient()
-            azure.delete_resource_group(rg_name, wait=True)
-            results["azure_rg_deleted"] = True
-        except Exception as e:
-            results["errors"].append(f"Failed to delete RG '{rg_name}': {e}")
-            results["azure_rg_deleted"] = False
-
-    duration = time.time() - start
-
-    return {
-        "phase": "Teardown",
-        "duration_seconds": duration,
-        "results": results,
-    }
+    spec = spec_from_config(config)
+    report = _LogReport()
+    try:
+        tokens = CredentialTokens(DefaultAzureCredential(), spec.expected_tenant_id)
+        result = DeploymentTeardown(spec, tokens, report).run()
+    except TeardownRefused as refused:
+        logger.error("Teardown refused; nothing was deleted: %s", refused)
+        return {"status": "refused", "reason": str(refused), "phases": report.phases}
+    result["phases"] = report.phases
+    return result

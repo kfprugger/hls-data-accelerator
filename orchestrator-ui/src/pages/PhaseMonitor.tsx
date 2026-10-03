@@ -1047,14 +1047,14 @@ export function PhaseMonitor() {
   // Milestone definitions (static templates)
   type MilestoneDef = { label: string; shortLabel?: string; phaseIndices: number[]; namePatterns: string[]; position: number; endWeight: number; phaseNumber?: number };
 
-  // Teardown-specific milestones: reverse order of deployment phases.
-  // Teardown-specific milestones: describe actual teardown operations.
+  // The shared runner emits only applicable phases; each operation has its own group.
   const TEARDOWN_MILESTONES: MilestoneDef[] = [
-    { label: "Workspace Items", phaseIndices: [0], namePatterns: ["Fabric Workspace Items"], position: 8, endWeight: 20 },
-    { label: "Workspace Identity", phaseIndices: [1], namePatterns: ["Workspace Identity"], position: 36, endWeight: 40 },
-    { label: "Workspace Deletion", phaseIndices: [2], namePatterns: ["Delete Workspace"], position: 64, endWeight: 60 },
-    { label: "Azure Resources", phaseIndices: [3], namePatterns: ["Azure Resource Group"], position: 90, endWeight: 80 },
-  ];
+    "Preflight", "Front-End Apps", "Databricks Unity Catalog", "Fabric Connections",
+    "Workspace Identity", "Delete Workspace", "Front-End Entra Apps",
+    "Front-End Resource Groups", "Azure Resource Group", "Verification",
+  ].map((name, index) => ({
+    label: name, phaseIndices: [index], namePatterns: [name], position: 8 + index * 9, endWeight: (index + 1) * 10,
+  }));
 
   const MILESTONES: MilestoneDef[] = [
     { label: "1. Data Fabric Foundation", shortLabel: "Foundation", phaseIndices: [0, 1, 2, 3], namePatterns: ["Fabric Workspace", "Base Azure Infrastructure", "FHIR", "Shared HDS Infrastructure", "DICOM Loader", "ImagingStudy"], position: 8, endWeight: 34, phaseNumber: 1 },
@@ -1232,20 +1232,10 @@ export function PhaseMonitor() {
   const hasFailedSubSteps = (phase: PhaseInfo) => phaseSubSteps(phase).some((subStep) => subStep.status === "failed");
 
   const allMilestonesTemplate = isTeardown ? TEARDOWN_MILESTONES : MILESTONES;
-  // Filter milestones to those whose phaseNumber is in the active set.
-  // For teardown: hide Fabric milestones when only an Azure RG is being torn down.
-  const teardownHasFabric = !!(status?.customStatus as Record<string, unknown>)?.workspaceName;
-  const teardownHasAzure = !!(status?.customStatus as Record<string, unknown>)?.resourceGroupName;
-  const FABRIC_TEARDOWN_PATTERNS = new Set(["Fabric Workspace Items", "Workspace Identity", "Delete Workspace"]);
-  const AZURE_TEARDOWN_PATTERNS = new Set(["Azure Resource Group"]);
+  // Use reported phases, not resource-name heuristics: discovered front ends can
+  // apply even when the operator did not explicitly select their resource group.
   const baseFilteredMilestones = isTeardown
-    ? allMilestonesTemplate.filter((ms) => {
-        const isFabricMilestone = ms.namePatterns.some((p) => FABRIC_TEARDOWN_PATTERNS.has(p));
-        const isAzureMilestone = ms.namePatterns.some((p) => AZURE_TEARDOWN_PATTERNS.has(p));
-        if (isFabricMilestone && !teardownHasFabric) return false;
-        if (isAzureMilestone && !teardownHasAzure) return false;
-        return true;
-      })
+    ? allMilestonesTemplate.filter((ms) => phases.some((phase) => ms.namePatterns.includes(phase.phase)))
     : isMock
       ? allMilestonesTemplate
       : allMilestonesTemplate.filter((ms) => activeMilestoneNumbers.has(ms.phaseNumber ?? 0));
@@ -2138,6 +2128,22 @@ export function PhaseMonitor() {
                 {rgName && <span className={styles.configItem}><AzureBadge /> {rgName}</span>}
                 {targets && targets.map((t, i) => <span key={i} className={styles.configItem}><Badge color="warning" size="small">Target</Badge> {t}</span>)}
               </div>
+              {!!status?.output?.teardown?.skipped?.length && (
+                <div>
+                  <Text weight="semibold">Skipped front ends</Text>
+                  {status.output.teardown.skipped.map((frontEnd, index) => (
+                    <Text key={`${frontEnd.name}-${index}`} block>{frontEnd.name}: {frontEnd.skip_reason}</Text>
+                  ))}
+                </div>
+              )}
+              {!!status?.output?.teardown?.failures?.length && (
+                <MessageBar intent="error">
+                  <MessageBarBody>
+                    <Text weight="semibold">Teardown failures</Text>
+                    {status.output.teardown.failures.map((failure, index) => <Text key={index} block>{failure}</Text>)}
+                  </MessageBarBody>
+                </MessageBar>
+              )}
             </Card>
           );
         }

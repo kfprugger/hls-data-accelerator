@@ -10,11 +10,12 @@ The current repository does not yet expose a runnable `-Destination Databricks` 
 
 - `Deploy-All.ps1` provisions and calls Fabric throughout the seven phases.
 - `Preflight-Check.ps1` requires Fabric workspace/capacity checks.
-- `Teardown-All.ps1` requires a Fabric workspace and calls the Fabric API.
 - `orchestrator/shared/models.py` and the local/Durable orchestrators carry Fabric-specific configuration and resource IDs.
 - `eval/deployment_eval_harness.py` proves Fabric items and Fabric runtime behavior.
 
 A real implementation must introduce a destination adapter and migrate every caller. Do not hide Fabric calls behind runtime `try/except` branches or report this blueprint as deployed.
+
+Teardown already uses one shared implementation, `orchestrator/shared/full_teardown.py`, from the local/Durable APIs and `Teardown-All.ps1`. It pins tokens to the supplied subscription, checks `--expected-tenant` when supplied, discovers deployment-owned front ends, and runs a **Databricks Unity Catalog** phase for catalogs, external locations and storage credentials tied to the deployment's Access Connector. This does not implement the remaining Databricks deployment adapter.
 
 ## Target invariants
 
@@ -307,7 +308,7 @@ Required clean cutover:
 - persist bundle target, catalog, workspace host/ID, pipeline/job IDs, SQL warehouse ID, and deployment evidence
 - add a Databricks-specific continuation/repair path; do not overload historical Fabric phase switches
 
-## Teardown order
+## Databricks-native teardown target
 
 1. Pause/disable SQL alert schedules and producer jobs.
 2. Stop Lakeflow continuous pipelines and wait for terminal state.
@@ -318,7 +319,15 @@ Required clean cutover:
 7. Delete Azure source/viewer/orchestrator resource groups only when explicitly selected.
 8. Retain or delete source ADLS/FHIR data according to the synthetic-data and evidence policy.
 
-Never adapt `Teardown-All.ps1` by supplying a fake Fabric workspace. The Databricks path needs its own discovery and ownership checks.
+The sequence above remains the target lifecycle for bundle-managed workloads, not a claim that shared teardown already stops alerts/pipelines or destroys bundles. Do not supply a fake Fabric workspace. For an Azure/Databricks deployment without Fabric, preview the existing shared cleanup from `orchestrator/`:
+
+```bash
+python -m shared.full_teardown --subscription <deployment-subscription-id> \
+  --resource-group <deployment-rg> --expected-tenant <tenant-id> \
+  --delete-resource-group --plan
+```
+
+`--plan` performs discovery only. The existing cleanup removes deployment-bound Unity Catalog objects before deleting Azure resource groups, discovers owned front ends, and skips shared/unrelated groups with reasons. Use repeatable `--front-end-resource-group <rg>` for explicit groups, still subject to ownership checks, or `--no-front-end-discovery` to disable automatic discovery. A subscription is mandatory; the Azure CLI default is never a teardown target. For Fabric deployments, `Teardown-All.ps1` wraps this same module with `-SubscriptionId`, `-ExpectedTenantId`, `-FrontEndResourceGroup`, `-NoFrontEndDiscovery` and read-only `-Plan`; see [root teardown guidance](../README.md#teardown).
 
 ## Official references
 
