@@ -1470,6 +1470,23 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
 
     live_evidence = _live_resume_prerequisites(req, cloud_state)
 
+    def safely_succeeded(phase: dict) -> bool:
+        return (
+            phase.get("status") == "succeeded"
+            and not phase.get("warnings")
+            and not _phase_has_blocking_logs(prior_deploy, phase.get("phase", ""))
+        )
+
+    # -SkipOntology skips every Phase 4 ontology step and Phase 6's DevicePayerOntology, and makes
+    # Deploy-All deploy the clinical agents without an ontology. A run that failed at "Ontology-Aware
+    # Data Agents" still lists "Phase 4: Ontology" and "Phase 4: Ontology Deployment" as succeeded,
+    # so the skip applies only when every one of those steps succeeded.
+    ontology_steps = [p for p in phases if "ONTOLOGY" in p.get("phase", "").upper()]
+    payer_ontology_done = req.skip_quality_measures or any(
+        "CMS QUALITY" in p.get("phase", "").upper() and safely_succeeded(p) for p in phases
+    )
+    ontology_complete = bool(ontology_steps) and payer_ontology_done and all(safely_succeeded(p) for p in ontology_steps)
+
     applied = False
     # Check each successful phase and enable corresponding skip flags.
     # A phase with error-level logs is not safe to skip: the PowerShell wrapper
@@ -1544,6 +1561,9 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
         elif "IMAGING & REPORTING" in phase_name:
             req.skip_imaging = True
         elif "ONTOLOGY" in phase_name:
+            if not ontology_complete:
+                logger.info("%s not skipping phase '%s' from %s because not every ontology step succeeded", mode, p.get("phase", ""), prior_deploy.get("instanceId"))
+                continue
             req.skip_ontology = True
         elif "DATA ACTIVATOR" in phase_name:
             req.skip_activator = True

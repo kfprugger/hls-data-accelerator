@@ -366,6 +366,37 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertFalse(request.skip_ops_agent)
         self.assertFalse(request.skip_graph_agent)
 
+    def _ontology_resume(self, phases: list[dict]):
+        request = self.local_server.DeployRequest(
+            fabric_workspace_name="med-test",
+            resource_group_name="rg-med-test",
+        )
+        prior = {"instanceId": "prior-run", "output": {"phases": phases}}
+        with (
+            patch.object(self.local_server, "_cloud_state_sync", return_value={"workspace": {"exists": True}, "resourceGroup": {"exists": True}}),
+            patch.object(self.local_server, "_live_resume_prerequisites", return_value={}),
+            patch.object(self.local_server, "_phase_live_prerequisites_ok", return_value=(True, "verified")),
+            patch.object(self.local_server, "_phase_has_blocking_logs", return_value=False),
+        ):
+            self.local_server._apply_success_skips_from_deployment(request, prior)
+        return request
+
+    def test_resume_reruns_ontology_unless_every_ontology_step_and_phase_6_succeeded(self) -> None:
+        phase_4 = [
+            {"phase": "PHASE 4: ONTOLOGY", "status": "succeeded"},
+            {"phase": "Phase 4: Ontology Deployment", "status": "succeeded"},
+            {"phase": "Phase 4: Ontology-Aware Data Agents", "status": "succeeded"},
+        ]
+        phase_6 = {"phase": "Phase 6: CMS Quality Measures", "status": "succeeded"}
+        agents_failed = phase_4[:2] + [{"phase": "Phase 4: Ontology-Aware Data Agents", "status": "failed"}]
+
+        self.assertFalse(self._ontology_resume(agents_failed + [phase_6]).skip_ontology)
+        # DevicePayerOntology deploys in Phase 6, so Phase 4 alone is not the whole ontology.
+        self.assertFalse(self._ontology_resume(phase_4).skip_ontology)
+        complete = self._ontology_resume(phase_4 + [phase_6])
+        self.assertTrue(complete.skip_ontology)
+        self.assertTrue(complete.skip_quality_measures)
+
     def test_scaffolding_only_disables_all_data_producers(self) -> None:
         request = self.local_server.DeployRequest(
             fabric_workspace_name="med-test",
