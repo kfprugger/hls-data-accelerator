@@ -53,7 +53,25 @@ read -r -p "Deploy these resources to target '$ENVIRONMENT'? [y/N] " confirm
 
 echo
 echo "Step 3 of 3: deploy."
-databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" --fail-on-active-runs
+deploy_log="$(mktemp)"
+trap 'rm -f "$deploy_log"' EXIT
+if ! databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" --fail-on-active-runs 2>&1 | tee "$deploy_log"; then
+  # On a fresh workspace the Genie spaces cannot be created yet: the Gold and Silver tables
+  # they query only exist after 06-run-and-gate.sh runs the pipelines. Accept exactly that
+  # case: every error is a Genie space creation error and nothing else is left undeployed.
+  errors="$(grep '^Error:' "$deploy_log" || true)"
+  undeployed="$(databricks bundle summary -t "$ENVIRONMENT" "${common_vars[@]}" -o json |
+    jq -r '.resources | to_entries[] | .key as $type | .value | to_entries[] | select(.value.id == null) | $type')"
+  if [[ -n "$errors" ]] && ! grep -qv '^Error: cannot create resources\.genie_spaces\.' <<<"$errors" &&
+     [[ -n "$undeployed" ]] && ! grep -qv '^genie_spaces$' <<<"$undeployed"; then
+    echo
+    echo "Every resource except the Genie spaces is deployed. They need the Gold and Silver"
+    echo "tables, so 06-run-and-gate.sh creates them after the gates pass."
+  else
+    echo "FAIL: bundle deploy failed (see the errors above)." >&2
+    exit 1
+  fi
+fi
 
 echo
 echo "Deployed resource summary:"

@@ -2213,6 +2213,17 @@ if (($Phase2 -or $Phase3) -and -not $SkipImaging) {
                 throw "Phase 3 requires the Gold OMOP pipeline to have completed. Run the OMOP pipeline first."
             }
 
+            # The imaging agent selects agent_imaging_summary and the agent_Imaging* functions in
+            # the Eventhouse. Phase 7 creates the other grounding assets; on a fresh workspace this
+            # step runs first, so create the imaging ones here (idempotent).
+            $p3Kql = (Invoke-P3FabricRest -Uri "$p3Base/workspaces/$p3WsId/kqlDatabases" `
+                -Label 'Find KQL database for imaging grounding').value | Select-Object -First 1
+            if (-not $p3Kql) { throw "No KQL database in '$FabricWorkspaceName'; Phase 2 RTI must run before Phase 3." }
+            $p3KustoUri = [string]$p3Kql.properties.queryServiceUri
+            $p3KustoHeaders = @{ Authorization = "Bearer $(Get-CachedAccessToken $p3KustoUri)"; 'Content-Type' = 'application/json' }
+            . (Join-Path $ScriptDir "phase-7/agent-grounding-backfills.ps1")
+            Invoke-ImagingAgentGrounding -KustoUri $p3KustoUri -DatabaseName $p3Kql.displayName -KustoHeaders $p3KustoHeaders
+
             # Step 3a: Deploy Cohorting Data Agent
             Write-Host ""
             Write-Host "  --- Step 7a: Cohorting Data Agent ---" -ForegroundColor Cyan

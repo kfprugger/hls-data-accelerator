@@ -104,10 +104,22 @@ export DICOM_OUTPUT_URL="$(jq -r '.dicomOutputUrl.value' .state/foundation-$ENVI
 databricks auth login --host "$DATABRICKS_HOST"
 ```
 
+Without a browser, `export DATABRICKS_AUTH_TYPE=azure-cli` instead of `auth login`: the CLI then
+uses tokens from the Azure CLI profile you deployed with (`az account show` must be the target
+subscription), and the workspace creator is already a workspace admin.
+
 ### Step 2b — The one manual privileged action
 
 In the Databricks **account console**: Catalog → Metastores → assign the regional metastore
 to this workspace.
+
+An account admin can do the same from the CLI, still deliberately and by hand:
+
+```bash
+databricks metastores list   # pick the metastore in the workspace's region
+databricks metastores assign <workspace-id> <metastore-id> hive_metastore
+databricks metastores current   # confirm
+```
 
 **Teaching note.** Metastore assignment is account-scoped, not workspace-scoped, and it is
 irreversible in practice for a shared metastore. No script in this package performs it,
@@ -185,6 +197,10 @@ Graph. They use governed `agent_*` Gold products, tested SQL examples, and the e
 serverless warehouse. The graph agent is explicitly relational: Databricks has no one-to-one
 Fabric IQ ontology object, so it traverses a typed edge table and never claims ontology identity.
 
+On a fresh workspace the Genie spaces cannot be created in this step: the Gold and Silver
+tables they query do not exist until Step 6 runs the pipelines. Step 5 then reports that only
+the Genie spaces are pending and succeeds; any other deploy error still fails it.
+
 Authors open **Genie Agents** in the workspace; consumers use the app switcher → **Genie One**
 or a bundle-summary URL. Share `CAN RUN`, then grant `SELECT` only on the attached Unity Catalog
 objects. The author supplies warehouse compute credentials, but every data query is still
@@ -201,6 +217,9 @@ path (Bronze streams → Silver streams → freshness gate → Gold → Gold gat
 every five minutes to stay inside the ten-minute freshness gate and scales to zero between
 triggered updates. `max_concurrent_runs: 1` plus disabled run queueing drops overlapping ticks
 instead of accumulating stale five-minute runs behind a slow serverless startup.
+
+After both gates pass it redeploys the bundle, which creates the Genie spaces on a fresh
+workspace and leaves existing ones unchanged.
 
 **Teaching note on why gates are jobs, not notes.** The Fabric deployment learned this the
 hard way: a created Eventstream with `Running` nodes and zero fresh rows is a failure, and a

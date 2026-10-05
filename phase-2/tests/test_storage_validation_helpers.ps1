@@ -14,6 +14,8 @@ foreach ($functionName in @(
     "Get-LakehouseTableRowCount",
     "Assert-BronzeTableHasData",
     "Assert-LakehouseTableHasData",
+    "Wait-LakehouseTableHasData",
+    "Sync-LakehouseSqlEndpoint",
     "Assert-SilverFhirReferencesIntact",
     "Invoke-OptionalDataPipelineNonBlocking",
     "Invoke-OptionalDataPipelineSerialized",
@@ -478,12 +480,18 @@ function Invoke-LakehouseScalarQuery {
         [Parameter(Mandatory)][string]$Token,
         [Parameter(Mandatory)][string]$Query
     )
+    if ($Query -like "*INFORMATION_SCHEMA.TABLES*") {
+        $script:SilverVisibilityChecks++
+        return $script:SilverVisibleTables[[Math]::Min($script:SilverVisibilityChecks, $script:SilverVisibleTables.Count) - 1]
+    }
     $script:SilverReferenceQueries += $Query
     return $script:SilverBrokenReferenceCount
 }
 
 $script:SilverReferenceQueries = @()
 $script:SilverBrokenReferenceCount = 0
+$script:SilverVisibleTables = @(13)
+$script:SilverVisibilityChecks = 0
 Assert-SilverFhirReferencesIntact -WorkspaceId "ws" -LakehouseId "lh" -LakehouseName "silver" -FabricHeaders @{}
 if (-not ($script:SilverReferenceQueries[0] -like "*`$.reference*`$.msftSourceReference*`$.idOrig*`$.identifier.value*")) {
     throw "Silver reference validation should accept reference, HDS source fields, and FHIR identifier.value. Query was: $($script:SilverReferenceQueries[0])"
@@ -498,6 +506,49 @@ Assert-ThrowsLike `
     -ScriptBlock { Assert-SilverFhirReferencesIntact -WorkspaceId "ws" -LakehouseId "lh" -LakehouseName "silver" -FabricHeaders @{} } `
     -ExpectedText "Silver FHIR reference check failed for Condition.subject: 130 rows have missing $.reference/$.msftSourceReference/$.idOrig/$.identifier.value." `
     -Message "Silver reference validation should fail only when all supported HDS reference fields are missing."
+
+function Start-Sleep { param([int]$Seconds) }
+$script:EndpointSyncs = 0
+Set-Item function:Invoke-FabricApiRequest {
+    param([string]$Method, [string]$Uri, [hashtable]$Headers, [object]$Body, [string]$Description = '')
+    if ($Uri -like '*/sqlEndpoints/endpoint-id/refreshMetadata') {
+        $script:EndpointSyncs++
+        return [pscustomobject]@{ StatusCode = 200; Headers = @{} }
+    }
+    return [pscustomobject]@{ Response = [pscustomobject]@{ properties = [pscustomobject]@{
+        sqlEndpointProperties = [pscustomobject]@{ connectionString = "server.database.fabric.microsoft.com"; id = "endpoint-id" } } } }
+}
+$script:SilverReferenceQueries = @()
+$script:SilverBrokenReferenceCount = 0
+$script:SilverVisibleTables = @(0, 13)
+$script:SilverVisibilityChecks = 0
+Assert-SilverFhirReferencesIntact -WorkspaceId "ws" -LakehouseId "lh" -LakehouseName "silver" -FabricHeaders @{}
+Assert-Equal -Expected 2 -Actual $script:SilverVisibilityChecks `
+    -Message 'Silver validation should wait for a lagging SQL endpoint to list its tables before querying them.'
+Assert-Equal -Expected 1 -Actual $script:EndpointSyncs `
+    -Message 'Silver validation should ask the SQL endpoint to sync its metadata before re-checking.'
+
+$script:SilverVisibleTables = @(5)
+$script:SilverVisibilityChecks = 0
+Assert-ThrowsLike `
+    -ScriptBlock { Assert-SilverFhirReferencesIntact -WorkspaceId "ws" -LakehouseId "lh" -LakehouseName "silver" -FabricHeaders @{} } `
+    -ExpectedText "Silver SQL endpoint lists 5 of 13 required tables after 20 minutes." `
+    -Message "Silver validation should fail clearly when the endpoint never lists the required tables."
+
+# The Lakehouse wrote rows, but the SQL endpoint still serves the empty table version until synced.
+$script:EndpointSyncs = 0
+Set-Item function:Get-LakehouseTableRowCount {
+    param([string]$WorkspaceId, [string]$LakehouseId, [string]$LakehouseName, [string]$TableName, [hashtable]$FabricHeaders, [string]$Label)
+    if ($script:EndpointSyncs -gt 0) { return 8794 } else { return 0 }
+}
+Wait-LakehouseTableHasData -WorkspaceId "ws" -LakehouseId "lh" -LakehouseName "bronze" -TableName "ImagingDicom" `
+    -FabricHeaders @{} -Reason "Imaging pipeline completion" -PollSeconds 0
+Assert-Equal -Expected 1 -Actual $script:EndpointSyncs `
+    -Message 'A readiness wait should sync the SQL endpoint when it still reports an empty table.'
+if (-not ($script:Logs -contains "[INFO]   ✓ Lakehouse table dbo.ImagingDicom contains 8794 rows.")) {
+    throw "A readiness wait should report the rows the synced endpoint shows."
+}
+Remove-Item function:Start-Sleep -ErrorAction SilentlyContinue
 
 if (-not (Test-TransientFabricNotebookSessionFailure -FailureText 'Failed to create session for executing notebook. SessionId: abc')) {
     throw "Notebook session creation failures should be classified as transient."

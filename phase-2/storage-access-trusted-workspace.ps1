@@ -426,6 +426,31 @@ function Wait-FabricOperation {
     throw "Fabric operation timed out: $Description"
 }
 
+function Sync-LakehouseSqlEndpoint {
+    # A Lakehouse SQL analytics endpoint can keep serving an old table version (or no table)
+    # long after a pipeline commits. refreshMetadata makes the latest Delta versions visible.
+    # Best effort: the caller's bounded readiness check still decides success.
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders,
+        [string]$Label = 'Lakehouse'
+    )
+    try {
+        $detail = Invoke-FabricApiRequest -Method Get `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/lakehouses/$LakehouseId" `
+            -Headers $FabricHeaders -Description "Get $Label SQL endpoint"
+        $endpointId = [string]$detail.Response.properties.sqlEndpointProperties.id
+        if ([string]::IsNullOrWhiteSpace($endpointId)) { return }
+        $result = Invoke-FabricApiRequest -Method Post `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/sqlEndpoints/$endpointId/refreshMetadata" `
+            -Headers $FabricHeaders -Body @{} -Description "Sync $Label SQL endpoint metadata"
+        Wait-FabricOperation -OperationResult $result -Headers $FabricHeaders -Description "Sync $Label SQL endpoint metadata" -TimeoutSeconds 300
+    } catch {
+        Write-Log "  $Label SQL endpoint metadata sync did not complete: $($_.Exception.Message)" 'WARN'
+    }
+}
+
 function New-FabricItemDefinitionFromDirectory {
     param(
         [Parameter(Mandatory)][string]$ItemDirectory,
@@ -772,6 +797,7 @@ function Wait-LakehouseTableHasData {
         $elapsedMinutes = [math]::Round((New-TimeSpan -Start $started).TotalMinutes, 1)
         if ($elapsedMinutes -ge $TimeoutMinutes) { break }
         Write-Log "  $Label table dbo.$TableName is not ready yet ($elapsedMinutes min); retrying in ${PollSeconds}s." 'INFO'
+        Sync-LakehouseSqlEndpoint -WorkspaceId $WorkspaceId -LakehouseId $LakehouseId -FabricHeaders $FabricHeaders -Label $Label
         Start-Sleep -Seconds $PollSeconds
     } while ($true)
 
@@ -813,6 +839,19 @@ function Assert-SilverFhirReferencesIntact {
         @{ Label = 'Claim.patient'; Table = 'Claim'; Column = 'patient_string'; JsonPath = '$.reference' },
         @{ Label = 'ExplanationOfBenefit.patient'; Table = 'ExplanationOfBenefit'; Column = 'patient_string'; JsonPath = '$.reference' }
     )
+
+    # On a fresh workspace the Silver SQL endpoint can list newly written tables many minutes
+    # after the pipeline created them; wait (bounded) until every table checked here is visible.
+    $requiredTables = @(@($checks | ForEach-Object { $_.Table }) + 'Patient' | Select-Object -Unique)
+    $visibleQuery = "SELECT COUNT_BIG(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME IN ($(($requiredTables | ForEach-Object { "'$_'" }) -join ', '))"
+    for ($attempt = 1; ; $attempt++) {
+        $visible = [long](Invoke-LakehouseScalarQuery -Server $server -Database $LakehouseName -Token $sqlToken -Query $visibleQuery)
+        if ($visible -ge $requiredTables.Count) { break }
+        if ($attempt -ge 40) { throw "Silver SQL endpoint lists $visible of $($requiredTables.Count) required tables after 20 minutes." }
+        Write-Log "  Silver SQL endpoint lists $visible of $($requiredTables.Count) required tables; retrying in 30s." 'INFO'
+        Sync-LakehouseSqlEndpoint -WorkspaceId $WorkspaceId -LakehouseId $LakehouseId -FabricHeaders $FabricHeaders -Label 'Silver'
+        Start-Sleep -Seconds 30
+    }
 
     foreach ($check in $checks) {
         $query = "SELECT COUNT_BIG(*) FROM dbo.[$($check.Table)] WHERE [$($check.Column)] IS NOT NULL AND COALESCE(NULLIF(JSON_VALUE([$($check.Column)], '$.reference'), ''), NULLIF(JSON_VALUE([$($check.Column)], '$.msftSourceReference'), ''), NULLIF(JSON_VALUE([$($check.Column)], '$.idOrig'), ''), NULLIF(JSON_VALUE([$($check.Column)], '$.identifier.value'), '')) IS NULL"

@@ -2,6 +2,15 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Fresh-workspace deployment fixes (med-1003, 2026-10-05)
+
+A full deployment into a new workspace (`med-1003`) exposed ordering and timing assumptions that existing workspaces never hit.
+
+- **Fixed** HDS environment staging: a just-created Fabric environment reports publish state `Success` with nothing published, and Fabric answers an empty published or staged library list with 404 `EnvironmentLibrariesNotFound`. Staging now treats exactly that error as "no libraries" and stages and publishes; any other 404 still fails.
+- **Fixed** Phase 3 readiness against lagging Lakehouse SQL endpoints. Silver tables were not yet listed after the clinical pipeline, and bronze `ImagingDicom` read 0 rows over SQL for 25 minutes while its Delta log held 8,794. Readiness waits now call `refreshMetadata` on the Lakehouse's SQL endpoint before each retry, and Silver reference validation waits (bounded, 20 minutes) until every table it checks is listed.
+- **Fixed** Phase 3 imaging Data Agent on a fresh workspace: it selects `agent_imaging_summary` and the `agent_Imaging*` functions, which only Phase 7 created. They now live in `Invoke-ImagingAgentGrounding` (`phase-7/agent-grounding-backfills.ps1`), which Phase 3 runs before configuring the agent and Phase 7 re-runs.
+- **Fixed** the Databricks destination on a fresh workspace: Genie spaces query Gold and Silver tables that only exist after Step 6, so `05-deploy-bundle.sh` succeeds when the Genie spaces are the only pending resources (any other error still fails) and `06-run-and-gate.sh` creates them after both gates pass. The README documents `DATABRICKS_AUTH_TYPE=azure-cli` for browserless runs and the account-admin CLI for metastore assignment.
+
 ### Unified ownership-aware teardown (2026-10-03)
 
 - **Added** `orchestrator/shared/full_teardown.py`, the single teardown implementation used by the local API, the Durable Functions activity and `Teardown-All.ps1` (`python -m shared.full_teardown`, with `--plan` for a read-only preview). Every ARM, Graph, Fabric and Databricks token is minted for one explicit subscription; an optional expected tenant is checked before anything is deleted, so an Azure CLI or Az PowerShell default in another tenant can never become the target.

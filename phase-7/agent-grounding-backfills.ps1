@@ -2,7 +2,11 @@
 # Dot-source this file after the base clinical and payer functions exist, then call
 # Invoke-AgentGroundingBackfills with the same parameters used by Invoke-KustoMgmt.
 
-function Invoke-AgentGroundingBackfills {
+function Invoke-ImagingAgentGrounding {
+    # The imaging Data Agent's Eventhouse contract: agent_imaging_summary plus the agent_Imaging*
+    # functions it selects. Phase 3 runs this before configuring that agent, because a fresh
+    # workspace reaches Phase 3 before Phase 7; Phase 7 re-runs it with the other backfills.
+    # Needs the SilverImagingStudy external table from Phase 2 enrichment.
     param(
         [Parameter(Mandatory)][string]$KustoUri,
         [Parameter(Mandatory)][string]$DatabaseName,
@@ -23,6 +27,72 @@ function Invoke-AgentGroundingBackfills {
 }
 '@
         },
+        @{
+            Label = 'agent_imaging_summary schema'
+            Command = @'
+.create-merge table agent_imaging_summary (imaging_status:string, modality_code:string, study_count:long, patient_count:long, scenario_source:string, refreshed_at:datetime, total_studies:long, total_patients:long)
+'@
+        },
+        @{
+            Label = 'agent_imaging_summary backfill'
+            Command = @'
+.set-or-replace agent_imaging_summary <| agent_ImagingSummary()
+| extend scenario_source="derived_from_silver", refreshed_at=now(), total_studies=tolong(100), total_patients=tolong(100)
+| project imaging_status, modality_code, study_count, patient_count, scenario_source, refreshed_at, total_studies, total_patients
+'@
+        },
+        @{
+            Label = 'agent_ImagingModalityCounts'
+            Command = @'
+.create-or-alter function with (folder="AgentGrounding", docstring="Canonical imaging modality counts from the materialized Silver summary") agent_ImagingModalityCounts() {
+    agent_imaging_summary
+    | project modality_code, study_count, patient_count, scenario_source, refreshed_at
+    | order by modality_code asc
+}
+'@
+        },
+        @{
+            Label = 'agent_ImagingStatusCounts'
+            Command = @'
+.create-or-alter function with (folder="AgentGrounding", docstring="Canonical imaging status totals without double-counting repeated total columns") agent_ImagingStatusCounts() {
+    agent_imaging_summary
+    | summarize study_count=sum(study_count), patient_count=max(total_patients), refreshed_at=max(refreshed_at), scenario_source=take_any(scenario_source) by imaging_status
+    | order by imaging_status asc
+}
+'@
+        },
+        @{
+            Label = 'agent_ImagingTotals'
+            Command = @'
+.create-or-alter function with (folder="AgentGrounding", docstring="Canonical total imaging study and represented-patient counts") agent_ImagingTotals() {
+    agent_imaging_summary
+    | summarize total_studies=max(total_studies), total_patients=max(total_patients), refreshed_at=max(refreshed_at), scenario_source=take_any(scenario_source)
+    | extend data_source="agent_imaging_summary derived from Silver ImagingStudy"
+}
+'@
+        }
+    )
+
+    foreach ($entry in $commands) {
+        $body = @{ db = $DatabaseName; csl = $entry.Command } | ConvertTo-Json -Depth 4 -Compress
+        try {
+            $null = Invoke-RestMethod -Uri "$KustoUri/v1/rest/mgmt" -Headers $KustoHeaders -Method POST -Body $body -ErrorAction Stop
+        } catch {
+            $detail = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+            throw "Imaging agent grounding failed at $($entry.Label): $detail"
+        }
+        Write-Host "  ✓ $($entry.Label)" -ForegroundColor Green
+    }
+}
+
+function Invoke-AgentGroundingBackfills {
+    param(
+        [Parameter(Mandatory)][string]$KustoUri,
+        [Parameter(Mandatory)][string]$DatabaseName,
+        [Parameter(Mandatory)][hashtable]$KustoHeaders
+    )
+
+    $commands = @(
         @{
             Label = 'agent_CurrentAlertSeverity'
             Command = @'
@@ -220,50 +290,6 @@ associations
 '@
         },
         @{
-            Label = 'agent_imaging_summary schema'
-            Command = @'
-.create-merge table agent_imaging_summary (imaging_status:string, modality_code:string, study_count:long, patient_count:long, scenario_source:string, refreshed_at:datetime, total_studies:long, total_patients:long)
-'@
-        },
-        @{
-            Label = 'agent_imaging_summary backfill'
-            Command = @'
-.set-or-replace agent_imaging_summary <| agent_ImagingSummary()
-| extend scenario_source="derived_from_silver", refreshed_at=now(), total_studies=tolong(100), total_patients=tolong(100)
-| project imaging_status, modality_code, study_count, patient_count, scenario_source, refreshed_at, total_studies, total_patients
-'@
-        },
-        @{
-            Label = 'agent_ImagingModalityCounts'
-            Command = @'
-.create-or-alter function with (folder="AgentGrounding", docstring="Canonical imaging modality counts from the materialized Silver summary") agent_ImagingModalityCounts() {
-    agent_imaging_summary
-    | project modality_code, study_count, patient_count, scenario_source, refreshed_at
-    | order by modality_code asc
-}
-'@
-        },
-        @{
-            Label = 'agent_ImagingStatusCounts'
-            Command = @'
-.create-or-alter function with (folder="AgentGrounding", docstring="Canonical imaging status totals without double-counting repeated total columns") agent_ImagingStatusCounts() {
-    agent_imaging_summary
-    | summarize study_count=sum(study_count), patient_count=max(total_patients), refreshed_at=max(refreshed_at), scenario_source=take_any(scenario_source) by imaging_status
-    | order by imaging_status asc
-}
-'@
-        },
-        @{
-            Label = 'agent_ImagingTotals'
-            Command = @'
-.create-or-alter function with (folder="AgentGrounding", docstring="Canonical total imaging study and represented-patient counts") agent_ImagingTotals() {
-    agent_imaging_summary
-    | summarize total_studies=max(total_studies), total_patients=max(total_patients), refreshed_at=max(refreshed_at), scenario_source=take_any(scenario_source)
-    | extend data_source="agent_imaging_summary derived from Silver ImagingStudy"
-}
-'@
-        },
-        @{
             Label = 'agent_payer_priority_summary schema'
             Command = @'
 .create-merge table agent_payer_priority_summary (alert_domain:string, priority:string, recommended_action:string, alert_count:long, affected_members:long, affected_providers:long, max_metric:real, latest_alert:datetime, refreshed_at:datetime, provider_id:string)
@@ -385,6 +411,7 @@ claims_events
         }
     )
 
+    Invoke-ImagingAgentGrounding -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders
     foreach ($entry in $commands) {
         if (-not (Invoke-KustoMgmt -Command $entry.Command -Label $entry.Label -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders)) {
             throw "Agent grounding deployment failed: $($entry.Label)"

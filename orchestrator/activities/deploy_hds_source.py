@@ -922,11 +922,27 @@ def validate_source_contract(
         raise RuntimeError(f"HDS source contract incomplete: {json.dumps(missing, sort_keys=True)}")
     return {"expected": {key: len(value) for key, value in expected.items()}, "environment_id": environment["id"], "master_status": master_job.get("status")}
 
+def _no_environment_libraries(exc: requests.HTTPError) -> bool:
+    """Fabric answers an empty published or staged library list with 404 EnvironmentLibrariesNotFound."""
+    response = exc.response
+    if response is None or response.status_code != 404:
+        return False
+    try:
+        return response.json().get("errorCode") == "EnvironmentLibrariesNotFound"
+    except ValueError:
+        return False
+
+
 def _environment_custom_libraries(fabric: FabricClient, endpoint: str) -> set[str]:
     names: set[str] = set()
     page_endpoint = f"{endpoint}?beta=false"
     while True:
-        page = fabric.call("GET", page_endpoint)
+        try:
+            page = fabric.call("GET", page_endpoint)
+        except requests.HTTPError as exc:
+            if _no_environment_libraries(exc):
+                return names
+            raise
         names.update(item["name"] for item in page["libraries"] if item["libraryType"] == "Custom")
         token = page.get("continuationToken")
         if not token or token == "null":

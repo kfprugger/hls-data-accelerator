@@ -43,6 +43,12 @@ echo
 echo "== Scheduled stream-to-Gold workflow =="
 databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_stream_freshness_gate
 
+echo
+echo "== Genie spaces =="
+# They query the Gold and Silver tables the gates just verified, so a fresh workspace can
+# only create them now. Idempotent when they already exist.
+databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}"
+
 
 echo
 echo "All pipelines ran and every gate passed."

@@ -282,6 +282,22 @@ class _EnvironmentFabric:
         return _Response(status_code=200)
 
 
+class _FreshEnvironmentFabric(_EnvironmentFabric):
+    """Live Fabric answers an empty library list with 404 EnvironmentLibrariesNotFound."""
+
+    def __init__(self, published, staging=None, error_code="EnvironmentLibrariesNotFound"):
+        super().__init__(published, staging)
+        self.error_code = error_code
+
+    def call(self, method, endpoint):
+        if endpoint.split("?", 1)[0].endswith("/libraries"):
+            content = self.staging if "/staging/" in endpoint else self.published
+            if not any(path.endswith(".whl") for path in content):
+                body = {"errorCode": self.error_code}
+                raise hds.requests.HTTPError(response=SimpleNamespace(status_code=404, json=lambda: body))
+        return super().call(method, endpoint)
+
+
 class HdsEnvironmentIntegrityTests(unittest.TestCase):
     def setUp(self):
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -302,6 +318,19 @@ class HdsEnvironmentIntegrityTests(unittest.TestCase):
         self.assertEqual(fabric.publish_count, 0)
         self.assertEqual(fabric.published, self.desired)
         self.assertEqual(fabric.staging, {})
+
+    def test_new_environment_without_libraries_is_staged_and_published(self):
+        # A just-created environment reports publish state Success with nothing published.
+        fabric = _FreshEnvironmentFabric({}, staging={})
+        hds._deploy_environment(fabric, "workspace", self.root)
+        self.assertEqual(fabric.publish_count, 1)
+        self.assertEqual(fabric.published, self.desired)
+
+    def test_other_library_404_is_not_treated_as_empty(self):
+        fabric = _FreshEnvironmentFabric({}, staging={}, error_code="ItemNotFound")
+        with self.assertRaises(hds.requests.HTTPError):
+            hds._deploy_environment(fabric, "workspace", self.root)
+        self.assertEqual(fabric.publish_count, 0)
 
     def test_same_named_changed_wheel_is_uploaded_and_published(self):
         for path in self.desired:
