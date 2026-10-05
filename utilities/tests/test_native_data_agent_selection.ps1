@@ -2,6 +2,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '../data-agent-selection.ps1')
+$script:sleeps=0
+function Start-Sleep { param([int]$Seconds); $script:sleeps++ }
 function Assert-True($value,[string]$message){if(-not $value){throw $message}}
 function Assert-Throws([scriptblock]$action,[string]$pattern){try{&$action}catch{if($_.Exception.Message -notmatch $pattern){throw};return};throw "Expected failure: $pattern"}
 $script:patient=[pscustomobject]@{id='native+patient/=';type='Table';displayName='Patient';state='Available';isSelected=$false;hasSubElements=$false}
@@ -9,6 +11,7 @@ $script:condition=[pscustomobject]@{id='native-condition';type='Table';displayNa
 $script:function=[pscustomobject]@{id='native-fn';type='Function';displayName='fn_Count';state='Available';isSelected=$false;hasSubElements=$false}
 $script:patches=0
 $script:duplicate=$false
+$script:functionHiddenReads=0
 $api={
  param($method,$endpoint,$body)
  $query=[Web.HttpUtility]::ParseQueryString(([uri]('https://local.invalid'+$endpoint)).Query)
@@ -28,7 +31,11 @@ $api={
   if($query['continuationToken'] -ne 'next+page/='){throw 'Continuation token was not preserved'}
   return [pscustomobject]@{value=@($script:condition);continuationToken=$null}
  }
- if($query['rootId'] -eq 'functions'){return [pscustomobject]@{value=@($script:function);continuationToken=$null}}
+ if($query['rootId'] -eq 'functions'){
+  # A just-attached datasource can list its functions only after a later sync.
+  if($script:functionHiddenReads -gt 0){$script:functionHiddenReads--;return [pscustomobject]@{value=@();continuationToken=$null}}
+  return [pscustomobject]@{value=@($script:function);continuationToken=$null}
+ }
  return [pscustomobject]@{value=@([pscustomobject]@{id='schemas';type='Schemas';displayName='Schemas';hasSubElements=$true},[pscustomobject]@{id='functions';type='Functions';displayName='Functions';hasSubElements=$true});continuationToken=$null}
 }
 $selectionArgs=@{WorkspaceId='workspace';DataAgentId='agent';DatasourceId='source';Tables=@('Patient');Functions=@('fn_Count');InvokeApi=$api}
@@ -50,4 +57,17 @@ $tableOnly=@{}+$selectionArgs
 $tableOnly.Remove('Functions')
 Set-DataAgentNativeSchemaSelection @tableOnly
 Assert-True ($patient.isSelected -and -not $condition.isSelected -and -not $function.isSelected) 'A table-only contract must not synthesize an empty function target or keep unrelated functions selected.'
+$patient.isSelected=$false
+$function.isSelected=$false
+$script:functionHiddenReads=1
+$script:sleeps=0
+Set-DataAgentNativeSchemaSelection @selectionArgs
+Assert-True ($patient.isSelected -and $function.isSelected -and $script:sleeps -eq 1) 'A function missing from the first read of a just-attached datasource must be selected once a later sync lists it.'
+$missingFn=@{}+$selectionArgs
+$missingFn.Functions=@('fn_Absent')
+$missingFn.SyncWaitSeconds=30
+$script:sleeps=0
+$before=$script:patches
+Assert-Throws {Set-DataAgentNativeSchemaSelection @missingFn} 'Missing, ambiguous, or unavailable native Function'
+Assert-True ($script:sleeps -eq 2 -and $script:patches -eq $before) 'A target that never appears must fail after the bounded wait without any selection writes.'
 Write-Host 'Native Data Agent selection boundary tests passed.'
