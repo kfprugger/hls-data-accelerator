@@ -1160,6 +1160,196 @@ function Sync-FabricSqlEndpointMetadata {
     }
 }
 
+function Add-OntologyDatasourceToAgents {
+    # Attach an ontology datasource to existing Data Agents and republish them. Phase 4 binds
+    # ClinicalDeviceOntology; Phase 6 binds DevicePayerOntology once its Gold tables exist.
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$OntologyName,
+        [Parameter(Mandatory)][string[]]$AgentNames,
+        [Parameter(Mandatory)][string]$UserDescription,
+        [Parameter(Mandatory)][string]$DataSourceInstructions,
+        [string[]]$RemoveOntologyNames = @(),
+        [Parameter(Mandatory)][string[]]$EntityTypes,
+        [switch]$OptionalAgents,
+        [string]$FabricApiBase = "https://api.fabric.microsoft.com/v1"
+    )
+
+    $headers = @{ Authorization = "Bearer $(Get-CachedAccessToken 'https://api.fabric.microsoft.com')"; "Content-Type" = "application/json" }
+    function Invoke-FabricGetWithRetry {
+        param([Parameter(Mandatory)][string]$Uri, [int]$MaxRetries = 8)
+        for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
+            try {
+                return Invoke-RestMethod -Uri $Uri -Headers $headers -ErrorAction Stop
+            } catch {
+                $statusCode = $null
+                try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+                $errBody = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+                if (($statusCode -eq 403 -and $errBody -match 'RequestDeniedByInboundPolicy|Forbidden') -or $statusCode -in @(429, 500, 502, 503, 504)) {
+                    if ($attempt -lt $MaxRetries) {
+                        $delay = [Math]::Min(120, 10 * [Math]::Pow(2, $attempt - 1))
+                        Write-Host "  Fabric API transient HTTP ${statusCode}; retrying in ${delay}s... ($attempt/$MaxRetries)" -ForegroundColor Yellow
+                        Start-Sleep -Seconds $delay
+                        continue
+                    }
+                }
+                throw $_
+            }
+        }
+    }
+
+    $ontologies = (Invoke-FabricGetWithRetry -Uri "$FabricApiBase/workspaces/$WorkspaceId/ontologies").value
+    $ontology = $ontologies | Where-Object { $_.displayName -eq $OntologyName } | Select-Object -First 1
+    if (-not $ontology) { throw "Ontology '$OntologyName' not found — agent binding skipped" }
+
+    $ontologyId = $ontology.id
+    Write-Host "  ✓ Ontology found: $OntologyName ($ontologyId)" -ForegroundColor Green
+
+    $agents = (Invoke-FabricGetWithRetry -Uri "$FabricApiBase/workspaces/$WorkspaceId/items?type=DataAgent").value
+    $bindingFailures = @()
+    foreach ($agentName in $AgentNames) {
+        $agent = $agents | Where-Object { $_.displayName -eq $agentName } | Select-Object -First 1
+        if (-not $agent) {
+            $msg = "Agent '$agentName' not found"
+            if ($OptionalAgents) { Write-Host "  ⚠ $msg; skipping optional ontology binding" -ForegroundColor Yellow; continue }
+            $bindingFailures += $msg
+            continue
+        }
+
+        Write-Host "  Binding $OntologyName to '$agentName'..." -ForegroundColor White
+        $bound = $false
+        for ($bindAttempt = 1; $bindAttempt -le 6 -and -not $bound; $bindAttempt++) {
+            try {
+                $headers = @{ Authorization = "Bearer $(Get-CachedAccessToken 'https://api.fabric.microsoft.com')"; "Content-Type" = "application/json" }
+                $defResp = Invoke-WebRequest -Method POST `
+                    -Uri "$FabricApiBase/workspaces/$WorkspaceId/dataAgents/$($agent.id)/getDefinition" `
+                    -Headers $headers -UseBasicParsing -ErrorAction Stop
+                if ($defResp.StatusCode -eq 200) {
+                    $defResult = $defResp.Content | ConvertFrom-Json -Depth 50
+                } elseif ($defResp.StatusCode -eq 202) {
+                    $defLocation = $defResp.Headers["Location"]
+                    if ($defLocation -is [array]) { $defLocation = $defLocation[0] }
+                    if (-not $defLocation) { throw "Data Agent getDefinition returned 202 without a Location header for '$agentName'" }
+                    $defResult = $null
+                    for ($pollAttempt = 1; $pollAttempt -le 24; $pollAttempt++) {
+                        Start-Sleep 5
+                        $headers = @{ Authorization = "Bearer $(Get-CachedAccessToken 'https://api.fabric.microsoft.com')"; "Content-Type" = "application/json" }
+                        $defOperation = Invoke-RestMethod -Uri $defLocation -Headers $headers -ErrorAction Stop
+                        if ($defOperation.status -eq "Succeeded") {
+                            $defResult = Invoke-RestMethod -Uri "$($defLocation.TrimEnd('/'))/result" -Headers $headers -ErrorAction Stop
+                            break
+                        }
+                        if ($defOperation.status -eq "Failed") { throw "Data Agent getDefinition failed for '$agentName': $($defOperation.error.message)" }
+                    }
+                    if (-not $defResult) { throw "Data Agent getDefinition timed out for '$agentName'" }
+                } else {
+                    throw "Data Agent getDefinition returned HTTP $($defResp.StatusCode) for '$agentName'"
+                }
+                $existingParts = @($defResult.definition.parts)
+
+                $ontologyNamesToRemove = @($RemoveOntologyNames + $OntologyName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+                foreach ($removeName in $ontologyNamesToRemove) {
+                    $safeRemoveName = [regex]::Escape("ontology-$removeName")
+                    $existingParts = @($existingParts | Where-Object { $_.path -notmatch $safeRemoveName })
+                }
+
+                # An ontology datasource with an empty element list contributes nothing to the
+                # agent: every entity type must be present and selected.
+                $ontElements = @($EntityTypes | ForEach-Object {
+                    [ordered]@{
+                        id           = $_
+                        is_selected  = $true
+                        display_name = $_
+                        type         = "ontology.entity"
+                        description  = $null
+                        children     = @()
+                    }
+                })
+
+                $ontDatasourceJson = @{
+                    '$schema'              = "1.0.0"
+                    artifactId             = $ontologyId
+                    workspaceId            = $WorkspaceId
+                    displayName            = $OntologyName
+                    type                   = "ontology"
+                    userDescription        = $UserDescription
+                    dataSourceInstructions = $DataSourceInstructions
+                    elements               = $ontElements
+                } | ConvertTo-Json -Depth 10
+
+                $ontFewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = @() } | ConvertTo-Json -Depth 5)
+                $ontFolderName = "ontology-$OntologyName"
+                $ontDsPart = @{
+                    path        = "Files/Config/draft/$ontFolderName/datasource.json"
+                    payload     = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ontDatasourceJson))
+                    payloadType = "InlineBase64"
+                }
+                $ontFsPart = @{
+                    path        = "Files/Config/draft/$ontFolderName/fewshots.json"
+                    payload     = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ontFewShotsJson))
+                    payloadType = "InlineBase64"
+                }
+
+                $updatedParts = @($existingParts) + @($ontDsPart, $ontFsPart)
+                $updateBody = @{ definition = @{ parts = $updatedParts } }
+                $updateResp = Invoke-WebRequest -Method POST `
+                    -Uri "$FabricApiBase/workspaces/$WorkspaceId/dataAgents/$($agent.id)/updateDefinition" `
+                    -Headers $headers `
+                    -Body ($updateBody | ConvertTo-Json -Depth 20) `
+                    -UseBasicParsing -ErrorAction Stop
+
+                if ($updateResp.StatusCode -notin @(200, 202)) {
+                    throw "Ontology datasource update returned HTTP $($updateResp.StatusCode) for '$agentName'"
+                }
+                if ($updateResp.StatusCode -eq 202) {
+                    $upOpId = $updateResp.Headers["x-ms-operation-id"]
+                    if ($upOpId -is [array]) { $upOpId = $upOpId[0] }
+                    if (-not $upOpId) { throw "Ontology datasource update returned 202 without an operation ID for '$agentName'" }
+                    $updateComplete = $false
+                    for ($pollAttempt = 1; $pollAttempt -le 24; $pollAttempt++) {
+                        Start-Sleep 5
+                        $headers = @{ Authorization = "Bearer $(Get-CachedAccessToken 'https://api.fabric.microsoft.com')"; "Content-Type" = "application/json" }
+                        $upOp = Invoke-RestMethod -Uri "$FabricApiBase/operations/$upOpId" -Headers $headers -ErrorAction Stop
+                        if ($upOp.status -eq "Succeeded") { $updateComplete = $true; break }
+                        if ($upOp.status -eq "Failed") { throw "Ontology datasource update failed for '$agentName': $($upOp.error.message)" }
+                    }
+                    if (-not $updateComplete) { throw "Ontology datasource update timed out for '$agentName'" }
+                }
+
+                $publishBody = @{
+                    publishedDescription = "$agentName with $OntologyName"
+                } | ConvertTo-Json
+                $publishResp = Invoke-WebRequest -Method POST `
+                    -Uri "$FabricApiBase/workspaces/$WorkspaceId/dataAgents/$($agent.id)/staging/publish" `
+                    -Headers $headers `
+                    -Body $publishBody `
+                    -UseBasicParsing -ErrorAction Stop
+                if ($publishResp.StatusCode -ne 200) {
+                    throw "Data Agent publish returned HTTP $($publishResp.StatusCode) for '$agentName'"
+                }
+                Write-Host "  ✓ $OntologyName datasource applied and '$agentName' published" -ForegroundColor Green
+                $bound = $true
+            } catch {
+                $bindStatusCode = $null
+                try { $bindStatusCode = [int]$_.Exception.Response.StatusCode } catch {}
+                $bindBody = $_.ErrorDetails.Message
+                if (($bindStatusCode -in @(429, 500, 502, 503, 504) -or $bindStatusCode -eq 403) -and $bindAttempt -lt 6) {
+                    $delay = [Math]::Min(20 * $bindAttempt, 120)
+                    Write-Host "    Agent binding transient HTTP $bindStatusCode for '$agentName' — retrying in ${delay}s... ($bindAttempt/6)" -ForegroundColor Yellow
+                    if ($bindBody) { Write-Host $bindBody -ForegroundColor DarkGray }
+                    Start-Sleep $delay
+                    continue
+                }
+                $bindingFailures += "Could not bind $OntologyName to '$agentName': $($_.Exception.Message)"
+            }
+        }
+    }
+
+    if ($bindingFailures.Count -gt 0) {
+        throw "Ontology agent binding failed: $($bindingFailures -join '; ')"
+    }
+}
+
 function Write-Phase3Diagnostics {
     param(
         [string]$Checkpoint,             # e.g. "PRE-VIEWER", "POST-NOTEBOOK"
@@ -2635,22 +2825,17 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
                 # Load the projection notebook from the repository so the deployed notebook and the
                 # checked-in notebook can never drift. The notebook ships with empty placeholders.
                 $daIpynbJson = Get-Content -Path $daNotebookPath -Raw
-                $pyIncludeFhir = if ($SkipFhir -and -not $Phase4) { "False" } else { "True" }
-                $pyIncludeDicom = if ($SkipDicom -and -not $Phase4) { "False" } else { "True" }
-
                 # Placeholders live inside JSON string literals, so their quotes are backslash-escaped.
                 $daIpynbJson = $daIpynbJson.Replace('WORKSPACE_ID = \"\"', "WORKSPACE_ID = \`"$p4WsId\`"")
                 # Replace the longer mirror token first; it contains LAKEHOUSE_ID.
                 $daIpynbJson = $daIpynbJson.Replace('MIRROR_LAKEHOUSE_ID = \"\"', "MIRROR_LAKEHOUSE_ID = \`"$p4GoldLhId\`"")
                 $daIpynbJson = $daIpynbJson.Replace('LAKEHOUSE_ID = \"\"', "LAKEHOUSE_ID = \`"$p4SilverLhId\`"")
-                $daIpynbJson = $daIpynbJson.Replace('INCLUDE_FHIR = True', "INCLUDE_FHIR = $pyIncludeFhir")
-                $daIpynbJson = $daIpynbJson.Replace('INCLUDE_DICOM = True', "INCLUDE_DICOM = $pyIncludeDicom")
 
                 # The graph-model loader reads zero rows from the change-data-feed enabled HDS Silver
                 # Patient/Device tables and cannot resolve an edge whose source node table lives in a
                 # different lakehouse from the edge table, so these projections are load-bearing.
-                if ($daIpynbJson -notmatch 'PatientOntology' -or $daIpynbJson -notmatch 'FactDiagnosisOntology') {
-                    throw "Projection notebook is missing the PatientOntology/FactDiagnosisOntology projections required by the ontology graph bindings"
+                if ($daIpynbJson -notmatch 'PatientOntology') {
+                    throw "Projection notebook is missing the PatientOntology projection required by the ontology graph bindings"
                 }
                 $daIpynbBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($daIpynbJson))
 
@@ -2838,16 +3023,19 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
         # ── Step 8c: Deploy Ontology ──
         Write-Host ""
         Write-Host "  --- Step 8c: Ontology Deployment ---" -ForegroundColor Cyan
-        Write-Host "  Deploying ClinicalDeviceOntology and DevicePayerOntology..." -ForegroundColor White
+        Write-Host "  Deploying ClinicalDeviceOntology (DevicePayerOntology follows the Phase 6 Gold materialization)..." -ForegroundColor White
 
-        Invoke-Step -StepName "Phase 4: Ontology Deployment" -Description "Deploying clinical and payer ontologies" -Action {
+        Invoke-Step -StepName "Phase 4: Ontology Deployment" -Description "Deploying the clinical ontology" -Action {
             Write-Host "  Deploying ClinicalDeviceOntology (clinical device graph only)..." -ForegroundColor White
 
+            # FHIR and DICOM families are always projected and bound. -SkipFhir/-SkipDicom only skip
+            # loading (a continuation passes them after an earlier run loaded the data), and HDS
+            # creates every Silver table, so a family that was never loaded yields empty entities.
             $clinicalOntologyArgs = @{
                 FabricWorkspaceName = $FabricWorkspaceName
                 OntologyName        = "ClinicalDeviceOntology"
-                IncludeFhir         = [bool]($Phase4 -or (-not $SkipFhir))
-                IncludeDicom        = [bool]($Phase4 -or (-not $SkipDicom))
+                IncludeFhir         = $true
+                IncludeDicom        = $true
                 IncludeTelemetry    = [bool](-not $SkipFabric)
                 IncludeGold         = $false
                 ReplaceExisting     = [bool]$ReplaceOntology
@@ -2855,24 +3043,6 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
             $global:LASTEXITCODE = 0
             & "$ScriptDir\phase-4\deploy-ontology.ps1" @clinicalOntologyArgs
             Assert-LastExternalCommandSucceeded "deploy-ontology.ps1 ClinicalDeviceOntology"
-
-            if (-not $SkipQualityMeasures) {
-                Write-Host ""
-                Write-Host "  Deploying DevicePayerOntology (device + patient + diagnosis + claims graph)..." -ForegroundColor White
-                $payerOntologyArgs = @{
-                    FabricWorkspaceName = $FabricWorkspaceName
-                    OntologyName        = "DevicePayerOntology"
-                    IncludeFhir         = [bool](-not $SkipFhir)
-                    IncludeDicom        = [bool](-not $SkipDicom)
-                    IncludeTelemetry    = [bool](-not $SkipFabric)
-                    IncludeGold         = $true
-                }
-                $global:LASTEXITCODE = 0
-                & "$ScriptDir\phase-4\deploy-ontology.ps1" @payerOntologyArgs
-                Assert-LastExternalCommandSucceeded "deploy-ontology.ps1 DevicePayerOntology"
-            } else {
-                Write-Host "  ⚠ Skipping DevicePayerOntology because -SkipQualityMeasures is set" -ForegroundColor Yellow
-            }
             Write-Host ""
         }
 
@@ -2899,217 +3069,16 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
         # ── Step 8d: Bind ontologies to the right Data Agents ──
         Write-Host "  --- Step 8d: Agent Ontology Binding ---" -ForegroundColor Cyan
 
-        function Add-OntologyDatasourceToAgents {
-            param(
-                [Parameter(Mandatory)][string]$OntologyName,
-                [Parameter(Mandatory)][string[]]$AgentNames,
-                [Parameter(Mandatory)][string]$UserDescription,
-                [Parameter(Mandatory)][string]$DataSourceInstructions,
-                [string[]]$RemoveOntologyNames = @(),
-                [Parameter(Mandatory)][string[]]$EntityTypes,
-                [switch]$OptionalAgents
-            )
-
-            $p4Token = Get-FabricTokenLocal
-            $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
-            function Invoke-P4RestWithRetry {
-                param([Parameter(Mandatory)][string]$Uri, [int]$MaxRetries = 8)
-                for ($attempt = 1; $attempt -le $MaxRetries; $attempt++) {
-                    try {
-                        return Invoke-RestMethod -Uri $Uri -Headers $p4Headers -ErrorAction Stop
-                    } catch {
-                        $statusCode = $null
-                        try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
-                        $errBody = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
-                        if (($statusCode -eq 403 -and $errBody -match 'RequestDeniedByInboundPolicy|Forbidden') -or $statusCode -in @(429, 500, 502, 503, 504)) {
-                            if ($attempt -lt $MaxRetries) {
-                                $delay = [Math]::Min(120, 10 * [Math]::Pow(2, $attempt - 1))
-                                Write-Host "  Fabric API transient HTTP ${statusCode}; retrying in ${delay}s... ($attempt/$MaxRetries)" -ForegroundColor Yellow
-                                Start-Sleep -Seconds $delay
-                                continue
-                            }
-                        }
-                        throw $_
-                    }
-                }
-            }
-
-            $ontologies = (Invoke-P4RestWithRetry -Uri "$p4Base/workspaces/$p4WsId/ontologies").value
-            $ontology = $ontologies | Where-Object { $_.displayName -eq $OntologyName } | Select-Object -First 1
-            if (-not $ontology) { throw "Ontology '$OntologyName' not found — agent binding skipped" }
-
-            $ontologyId = $ontology.id
-            Write-Host "  ✓ Ontology found: $OntologyName ($ontologyId)" -ForegroundColor Green
-
-            $agents = (Invoke-P4RestWithRetry -Uri "$p4Base/workspaces/$p4WsId/items?type=DataAgent").value
-            $bindingFailures = @()
-            foreach ($agentName in $AgentNames) {
-                $agent = $agents | Where-Object { $_.displayName -eq $agentName } | Select-Object -First 1
-                if (-not $agent) {
-                    $msg = "Agent '$agentName' not found"
-                    if ($OptionalAgents) { Write-Host "  ⚠ $msg; skipping optional ontology binding" -ForegroundColor Yellow; continue }
-                    $bindingFailures += $msg
-                    continue
-                }
-
-                Write-Host "  Binding $OntologyName to '$agentName'..." -ForegroundColor White
-                $bound = $false
-                for ($bindAttempt = 1; $bindAttempt -le 6 -and -not $bound; $bindAttempt++) {
-                    try {
-                        $p4Token = Get-FabricTokenLocal
-                        $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
-                        $defResp = Invoke-WebRequest -Method POST `
-                            -Uri "$p4Base/workspaces/$p4WsId/dataAgents/$($agent.id)/getDefinition" `
-                            -Headers $p4Headers -UseBasicParsing -ErrorAction Stop
-                        if ($defResp.StatusCode -eq 200) {
-                            $defResult = $defResp.Content | ConvertFrom-Json -Depth 50
-                        } elseif ($defResp.StatusCode -eq 202) {
-                            $defLocation = $defResp.Headers["Location"]
-                            if ($defLocation -is [array]) { $defLocation = $defLocation[0] }
-                            if (-not $defLocation) { throw "Data Agent getDefinition returned 202 without a Location header for '$agentName'" }
-                            $defResult = $null
-                            for ($pollAttempt = 1; $pollAttempt -le 24; $pollAttempt++) {
-                                Start-Sleep 5
-                                $p4Token = Get-FabricTokenLocal
-                                $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
-                                $defOperation = Invoke-RestMethod -Uri $defLocation -Headers $p4Headers -ErrorAction Stop
-                                if ($defOperation.status -eq "Succeeded") {
-                                    $defResult = Invoke-RestMethod -Uri "$($defLocation.TrimEnd('/'))/result" -Headers $p4Headers -ErrorAction Stop
-                                    break
-                                }
-                                if ($defOperation.status -eq "Failed") { throw "Data Agent getDefinition failed for '$agentName': $($defOperation.error.message)" }
-                            }
-                            if (-not $defResult) { throw "Data Agent getDefinition timed out for '$agentName'" }
-                        } else {
-                            throw "Data Agent getDefinition returned HTTP $($defResp.StatusCode) for '$agentName'"
-                        }
-                        $existingParts = @($defResult.definition.parts)
-
-                        $ontologyNamesToRemove = @($RemoveOntologyNames + $OntologyName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
-                        foreach ($removeName in $ontologyNamesToRemove) {
-                            $safeRemoveName = [regex]::Escape("ontology-$removeName")
-                            $existingParts = @($existingParts | Where-Object { $_.path -notmatch $safeRemoveName })
-                        }
-
-                        # An ontology datasource with an empty element list contributes nothing to the
-                        # agent: every entity type must be present and selected.
-                        $ontElements = @($EntityTypes | ForEach-Object {
-                            [ordered]@{
-                                id           = $_
-                                is_selected  = $true
-                                display_name = $_
-                                type         = "ontology.entity"
-                                description  = $null
-                                children     = @()
-                            }
-                        })
-
-                        $ontDatasourceJson = @{
-                            '$schema'              = "1.0.0"
-                            artifactId             = $ontologyId
-                            workspaceId            = $p4WsId
-                            displayName            = $OntologyName
-                            type                   = "ontology"
-                            userDescription        = $UserDescription
-                            dataSourceInstructions = $DataSourceInstructions
-                            elements               = $ontElements
-                        } | ConvertTo-Json -Depth 10
-
-                        $ontFewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = @() } | ConvertTo-Json -Depth 5)
-                        $ontFolderName = "ontology-$OntologyName"
-                        $ontDsPart = @{
-                            path        = "Files/Config/draft/$ontFolderName/datasource.json"
-                            payload     = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ontDatasourceJson))
-                            payloadType = "InlineBase64"
-                        }
-                        $ontFsPart = @{
-                            path        = "Files/Config/draft/$ontFolderName/fewshots.json"
-                            payload     = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ontFewShotsJson))
-                            payloadType = "InlineBase64"
-                        }
-
-                        $updatedParts = @($existingParts) + @($ontDsPart, $ontFsPart)
-                        $updateBody = @{ definition = @{ parts = $updatedParts } }
-                        $updateResp = Invoke-WebRequest -Method POST `
-                            -Uri "$p4Base/workspaces/$p4WsId/dataAgents/$($agent.id)/updateDefinition" `
-                            -Headers $p4Headers `
-                            -Body ($updateBody | ConvertTo-Json -Depth 20) `
-                            -UseBasicParsing -ErrorAction Stop
-
-                        if ($updateResp.StatusCode -notin @(200, 202)) {
-                            throw "Ontology datasource update returned HTTP $($updateResp.StatusCode) for '$agentName'"
-                        }
-                        if ($updateResp.StatusCode -eq 202) {
-                            $upOpId = $updateResp.Headers["x-ms-operation-id"]
-                            if ($upOpId -is [array]) { $upOpId = $upOpId[0] }
-                            if (-not $upOpId) { throw "Ontology datasource update returned 202 without an operation ID for '$agentName'" }
-                            $updateComplete = $false
-                            for ($pollAttempt = 1; $pollAttempt -le 24; $pollAttempt++) {
-                                Start-Sleep 5
-                                $p4Token = Get-FabricTokenLocal
-                                $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
-                                $upOp = Invoke-RestMethod -Uri "$p4Base/operations/$upOpId" -Headers $p4Headers -ErrorAction Stop
-                                if ($upOp.status -eq "Succeeded") { $updateComplete = $true; break }
-                                if ($upOp.status -eq "Failed") { throw "Ontology datasource update failed for '$agentName': $($upOp.error.message)" }
-                            }
-                            if (-not $updateComplete) { throw "Ontology datasource update timed out for '$agentName'" }
-                        }
-
-                        $publishBody = @{
-                            publishedDescription = "$agentName with $OntologyName"
-                        } | ConvertTo-Json
-                        $publishResp = Invoke-WebRequest -Method POST `
-                            -Uri "$p4Base/workspaces/$p4WsId/dataAgents/$($agent.id)/staging/publish" `
-                            -Headers $p4Headers `
-                            -Body $publishBody `
-                            -UseBasicParsing -ErrorAction Stop
-                        if ($publishResp.StatusCode -ne 200) {
-                            throw "Data Agent publish returned HTTP $($publishResp.StatusCode) for '$agentName'"
-                        }
-                        Write-Host "  ✓ $OntologyName datasource applied and '$agentName' published" -ForegroundColor Green
-                        $bound = $true
-                    } catch {
-                        $bindStatusCode = $null
-                        try { $bindStatusCode = [int]$_.Exception.Response.StatusCode } catch {}
-                        $bindBody = $_.ErrorDetails.Message
-                        if (($bindStatusCode -in @(429, 500, 502, 503, 504) -or $bindStatusCode -eq 403) -and $bindAttempt -lt 6) {
-                            $delay = [Math]::Min(20 * $bindAttempt, 120)
-                            Write-Host "    Agent binding transient HTTP $bindStatusCode for '$agentName' — retrying in ${delay}s... ($bindAttempt/6)" -ForegroundColor Yellow
-                            if ($bindBody) { Write-Host $bindBody -ForegroundColor DarkGray }
-                            Start-Sleep $delay
-                            continue
-                        }
-                        $bindingFailures += "Could not bind $OntologyName to '$agentName': $($_.Exception.Message)"
-                    }
-                }
-            }
-
-            if ($bindingFailures.Count -gt 0) {
-                throw "Ontology agent binding failed: $($bindingFailures -join '; ')"
-            }
-        }
-
         $clinicalAgentNames = @("Patient 360", "Clinical Triage")
-        if (-not $SkipImaging -and -not $SkipDicom) { $clinicalAgentNames += "HDS Multi-Layer Imaging Cohort Agent" }
+        if (-not $SkipImaging) { $clinicalAgentNames += "HDS Multi-Layer Imaging Cohort Agent" }
 
-        Add-OntologyDatasourceToAgents `
+        Add-OntologyDatasourceToAgents -WorkspaceId $p4WsId `
             -OntologyName "ClinicalDeviceOntology" `
             -AgentNames $clinicalAgentNames `
             -UserDescription "Clinical device semantic layer for Patient, Device, Encounter, Condition, MedicationRequest, Observation, ImagingStudy, DeviceAssociation, and real-time DeviceTelemetry." `
             -DataSourceInstructions "Use this ontology for clinical device vocabulary and relationship grounding only. It maps Patient↔Device, Patient→Encounter, Patient→Condition, Patient→Observation, Patient→MedicationRequest, Patient→ImagingStudy, and Device→DeviceTelemetry across Lakehouse and Eventhouse sources. Clinical alerts remain available through the KQL/Data Activator path (fn_ClinicalAlerts / ClinicalAlertActivator) rather than this ontology until Fabric exposes actionable AlertHistory ontology import diagnostics. The actual patient-device assignment rows and patient home/location demographics must still be queried from the Lakehouse dbo.Basic and dbo.Patient tables. Do not use it for payer/claims reasoning." `
             -RemoveOntologyNames @("DevicePayerOntology") `
             -EntityTypes @("Patient", "Encounter", "Condition", "MedRequest", "Observation", "ImagingStudy", "Device", "DeviceAssoc", "DeviceTelemetry")
-
-        if (-not $SkipQualityMeasures) {
-            Add-OntologyDatasourceToAgents `
-                -OntologyName "DevicePayerOntology" `
-                -AgentNames @("Payer Ops Triage", "Healthcare Graph Agent", "HealthcareOpsAgent") `
-                -UserDescription "Payer-oriented device ontology linking Patient, Device, Diagnosis, Claim, Payer, CareGap, PatientRisk, HighCostClaimant, clinical alerts, and telemetry." `
-                -DataSourceInstructions "Use this ontology for claims, payer operations, care gaps, high-cost claimant, RAF/risk, payer-category, and device-to-payer questions. It keeps payer semantics out of the clinical-device ontology while preserving patient/device/diagnosis/claim relationships." `
-                -RemoveOntologyNames @("ClinicalDeviceOntology") `
-                -EntityTypes @("Patient", "Encounter", "Condition", "MedRequest", "Observation", "ImagingStudy", "Device", "DeviceAssoc", "DeviceTelemetry", "Claim", "Payer", "Diagnosis", "PatientDiagnosis", "MedAdherence", "CareGap", "PatientRisk", "HighCostClaimant") `
-                -OptionalAgents
-        }
 
         Write-Host ""
     }
@@ -3421,7 +3390,7 @@ if (-not $Phase3 -and -not $Phase4 -and -not $Phase7) {
 Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
 
     Invoke-Step -StepName "Phase 6: CMS Quality Measures" `
-        -Description "Claims materialization, quality measures, Power BI report" -Action {
+        -Description "Claims materialization, quality measures, payer ontology, Power BI report" -Action {
 
         if ($SkipQualityMeasures) {
             Write-Host "  ⚠ Skipping CMS Quality Measures (-SkipQualityMeasures is set)" -ForegroundColor Yellow
@@ -3850,6 +3819,35 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
         } else {
             Write-Host "  ⚠ Notebook source not found at: $qualityNotebookPath" -ForegroundColor Yellow
             throw "Notebook source not found at: $qualityNotebookPath"
+        }
+
+        # ── Step 10a2: DevicePayerOntology ──
+        # The payer ontology binds Gold tables (fact_claim, care_gaps, agg_risk_scores,
+        # FactDiagnosisOntology, ...) that only the materialization above writes, so it is deployed
+        # here: in Phase 4 a fresh workspace has none of them yet.
+        if (-not $SkipOntology) {
+            Write-Host "  --- Step 10a2: DevicePayerOntology ---" -ForegroundColor Cyan
+            $payerOntologyArgs = @{
+                FabricWorkspaceName = $FabricWorkspaceName
+                OntologyName        = "DevicePayerOntology"
+                IncludeFhir         = $true
+                IncludeDicom        = $true
+                IncludeTelemetry    = [bool](-not $SkipFabric)
+                IncludeGold         = $true
+            }
+            $global:LASTEXITCODE = 0
+            & "$ScriptDir\phase-4\deploy-ontology.ps1" @payerOntologyArgs
+            Assert-LastExternalCommandSucceeded "deploy-ontology.ps1 DevicePayerOntology"
+
+            Add-OntologyDatasourceToAgents -WorkspaceId $p5WsId `
+                -OntologyName "DevicePayerOntology" `
+                -AgentNames @("Payer Ops Triage", "Healthcare Graph Agent", "HealthcareOpsAgent") `
+                -UserDescription "Payer-oriented device ontology linking Patient, Device, Diagnosis, Claim, Payer, CareGap, PatientRisk, HighCostClaimant, clinical alerts, and telemetry." `
+                -DataSourceInstructions "Use this ontology for claims, payer operations, care gaps, high-cost claimant, RAF/risk, payer-category, and device-to-payer questions. It keeps payer semantics out of the clinical-device ontology while preserving patient/device/diagnosis/claim relationships." `
+                -RemoveOntologyNames @("ClinicalDeviceOntology") `
+                -EntityTypes @("Patient", "Encounter", "Condition", "MedRequest", "Observation", "ImagingStudy", "Device", "DeviceAssoc", "DeviceTelemetry", "Claim", "Payer", "Diagnosis", "PatientDiagnosis", "MedAdherence", "CareGap", "PatientRisk", "HighCostClaimant") `
+                -OptionalAgents
+            Write-Host ""
         }
 
         # ── Step 10b: Deploy Population Health & Quality Dashboard report ──

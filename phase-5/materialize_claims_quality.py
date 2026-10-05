@@ -1826,5 +1826,15 @@ if validation_failures:
         print(f"  - {failure}")
     raise RuntimeError("Population Health & Quality materialization incomplete")
 
+# DevicePayerOntology's hasDiagnosis and diagnosisClassifiedAs edges join on the bare Patient key,
+# but fact_diagnosis stores patient_ref as "Patient/<uuid>". Project it from the final table, after
+# validation, so the projection exists even when fact_diagnosis is an empty placeholder.
+fact_diagnosis_ontology = spark.read.format("delta").table(f"{GOLD_LAKEHOUSE}.fact_diagnosis").withColumn(
+    "patient_id", F.regexp_replace(F.col("patient_ref"), "^Patient/", "")
+)
+fact_diagnosis_ontology.write.format("delta").mode("overwrite").option("overwriteSchema", "true") \
+    .saveAsTable(f"{GOLD_LAKEHOUSE}.FactDiagnosisOntology")
+print(f"  FactDiagnosisOntology: {fact_diagnosis_ontology.count():,} rows")
+
 print("\nDone.")
 

@@ -250,10 +250,10 @@ const PHASE_TOOLTIPS: Record<string, string> = {
   "Phase 3: HDS Source Deployment": "Build and deploy Microsoft HDS/DTT v1.4.0 source, publish the Fabric environment, run the master deployer, and validate managed-equivalent artifacts.",
   "Phase 3: DICOM Shortcut + HDS Pipelines": "DICOM shortcut; optional SDoH/claims sidecars; Clinical → CMA → Imaging → OMOP safe ordering; and row-count gates",
   "Phase 4: Imaging & Reporting": "Cohorting Agent, OHIF DICOM Viewer, Direct Lake imaging report, and proxy/index validation",
-  "Phase 4: Ontology": "DeviceAssociation table, ClinicalDeviceOntology, DevicePayerOntology, and agent binding",
+  "Phase 4: Ontology": "DeviceAssociation table, ClinicalDeviceOntology, and clinical agent binding",
   "Phase 4: Ontology-Aware Data Agents": "Patient 360 + Clinical Triage agents bound to ClinicalDeviceOntology",
   "Phase 5: Data Activator": "ClinicalAlertActivator Reflex + email notification rules",
-  "Phase 6: CMS Quality & Claims": "Claims star schema, quality measures, Star Ratings, HCC risk, and Power BI report",
+  "Phase 6: CMS Quality & Claims": "Claims star schema, quality measures, Star Ratings, HCC risk, DevicePayerOntology, and Power BI report",
   "Phase 7: Payer RTI & Ops": "Claim stream, payer scoring, activator, HealthcareOpsAgent, and graph agent",
 };
 
