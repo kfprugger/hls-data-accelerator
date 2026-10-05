@@ -3958,17 +3958,29 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             }
             
             if (-not $spnSuccess) {
-                try {
-                    $queryBody = @{ queries = @(@{ query = 'EVALUATE ROW("Rows", COUNTROWS(''agg_quality_measures''))' }); serializerSettings = @{ includeNulls = $true } } | ConvertTo-Json -Depth 8
-                    $queryUrl = "https://api.powerbi.com/v1.0/myorg/groups/$p5WsId/datasets/$qualityDatasetId/executeQueries"
-                    $queryResult = Invoke-P5PowerBiRest -Method POST -Uri $queryUrl -Body $queryBody -Label 'Validate quality semantic model DAX'
-                    $queryRows = @($queryResult.results[0].tables[0].rows)
-                    if ($queryRows.Count -gt 0) {
-                        Write-Host "  ✓ Quality semantic model executes DAX successfully; no manual credential action is required." -ForegroundColor Green
-                        $spnSuccess = $true
+                # A just-written Direct Lake model answers 400 for its first minutes; the same query
+                # passes later with no credential change. Retry before asking for manual authorization.
+                $queryBody = @{ queries = @(@{ query = 'EVALUATE ROW("Rows", COUNTROWS(''agg_quality_measures''))' }); serializerSettings = @{ includeNulls = $true } } | ConvertTo-Json -Depth 8
+                $queryUrl = "https://api.powerbi.com/v1.0/myorg/groups/$p5WsId/datasets/$qualityDatasetId/executeQueries"
+                $validationDeadline = (Get-Date).AddMinutes(5)
+                $validationError = ''
+                while ($true) {
+                    try {
+                        $queryResult = Invoke-P5PowerBiRest -Method POST -Uri $queryUrl -Body $queryBody -Label 'Validate quality semantic model DAX'
+                        if (@($queryResult.results[0].tables[0].rows).Count -gt 0) {
+                            Write-Host "  ✓ Quality semantic model executes DAX successfully; no manual credential action is required." -ForegroundColor Green
+                            $spnSuccess = $true
+                            break
+                        }
+                        $validationError = 'query returned no rows'
+                    } catch {
+                        $validationError = $_.Exception.Message
                     }
-                } catch {
-                    Write-Host "  Quality semantic model query validation did not pass: $($_.Exception.Message)" -ForegroundColor Yellow
+                    if ((Get-Date) -ge $validationDeadline) { break }
+                    Start-Sleep -Seconds 20
+                }
+                if (-not $spnSuccess) {
+                    Write-Host "  Quality semantic model query validation did not pass within 5 minutes: $validationError" -ForegroundColor Yellow
                 }
             }
 
