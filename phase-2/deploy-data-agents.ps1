@@ -171,6 +171,14 @@ $kqlDbId          = $kqlDb.id
 $kqlDbDisplayName = $kqlDb.displayName
 Write-Host "  ✓ KQL Database: $kqlDbDisplayName ($kqlDbId)" -ForegroundColor Green
 
+# The clinical agents select the agent_* grounding functions in $kqlFunctions. Phase 7 creates the
+# rest of the grounding assets, but a fresh workspace reaches this script first.
+$kustoUri = [string]$kqlDb.properties.queryServiceUri
+if (-not $kustoUri) { throw "KQL database '$kqlDbDisplayName' has no query service URI." }
+$kustoHeaders = @{ Authorization = "Bearer $(Get-AccessTokenForResource -ResourceUrl $kustoUri)"; 'Content-Type' = 'application/json' }
+. (Join-Path $PSScriptRoot '../phase-7/agent-grounding-backfills.ps1')
+Invoke-ClinicalAgentGrounding -KustoUri $kustoUri -DatabaseName $kqlDbDisplayName -KustoHeaders $kustoHeaders
+
 # Find Silver Lakehouse
 $lakehouses = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/lakehouses"
 $silverLh = $lakehouses.value | Where-Object { $_.displayName -match "[Ss]ilver" }

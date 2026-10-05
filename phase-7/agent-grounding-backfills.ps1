@@ -1,6 +1,30 @@
 # Deterministic, provenance-labelled grounding assets used by the HLS Data Agents.
-# Dot-source this file after the base clinical and payer functions exist, then call
-# Invoke-AgentGroundingBackfills with the same parameters used by Invoke-KustoMgmt.
+# Invoke-ImagingAgentGrounding and Invoke-ClinicalAgentGrounding create the objects the imaging and
+# clinical agents select, so their deploy steps run them first. Invoke-AgentGroundingBackfills
+# (Phase 7, after the base clinical and payer functions exist) re-runs both and adds the rest.
+
+function Invoke-GroundingCommands {
+    # Runs .create-or-alter grounding commands in order; any failure stops before an agent that
+    # selects these objects is configured.
+    param(
+        [Parameter(Mandatory)][string]$Purpose,
+        [Parameter(Mandatory)][array]$Commands,
+        [Parameter(Mandatory)][string]$KustoUri,
+        [Parameter(Mandatory)][string]$DatabaseName,
+        [Parameter(Mandatory)][hashtable]$KustoHeaders
+    )
+
+    foreach ($entry in $Commands) {
+        $body = @{ db = $DatabaseName; csl = $entry.Command } | ConvertTo-Json -Depth 4 -Compress
+        try {
+            $null = Invoke-RestMethod -Uri "$KustoUri/v1/rest/mgmt" -Headers $KustoHeaders -Method POST -Body $body -ErrorAction Stop
+        } catch {
+            $detail = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+            throw "$Purpose grounding failed at $($entry.Label): $detail"
+        }
+        Write-Host "  ✓ $($entry.Label)" -ForegroundColor Green
+    }
+}
 
 function Invoke-ImagingAgentGrounding {
     # The imaging Data Agent's Eventhouse contract: agent_imaging_summary plus the agent_Imaging*
@@ -73,19 +97,14 @@ function Invoke-ImagingAgentGrounding {
         }
     )
 
-    foreach ($entry in $commands) {
-        $body = @{ db = $DatabaseName; csl = $entry.Command } | ConvertTo-Json -Depth 4 -Compress
-        try {
-            $null = Invoke-RestMethod -Uri "$KustoUri/v1/rest/mgmt" -Headers $KustoHeaders -Method POST -Body $body -ErrorAction Stop
-        } catch {
-            $detail = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
-            throw "Imaging agent grounding failed at $($entry.Label): $detail"
-        }
-        Write-Host "  ✓ $($entry.Label)" -ForegroundColor Green
-    }
+    Invoke-GroundingCommands -Purpose "Imaging agent" -Commands $commands -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders
 }
 
-function Invoke-AgentGroundingBackfills {
+function Invoke-ClinicalAgentGrounding {
+    # The Patient 360 and Clinical Triage agents' Eventhouse contract: the deterministic functions
+    # they select over AlertHistory and TelemetryRaw. deploy-data-agents.ps1 runs this before
+    # configuring them, because a fresh workspace reaches Phase 4 before Phase 7; Phase 7 re-runs
+    # it with the other backfills.
     param(
         [Parameter(Mandatory)][string]$KustoUri,
         [Parameter(Mandatory)][string]$DatabaseName,
@@ -159,7 +178,20 @@ function Invoke-AgentGroundingBackfills {
               alert_window_minutes=15, oxygen_window_minutes=30, data_source="AlertHistory + TelemetryRaw"
 }
 '@
-        },
+        }
+    )
+
+    Invoke-GroundingCommands -Purpose "Clinical agent" -Commands $commands -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders
+}
+
+function Invoke-AgentGroundingBackfills {
+    param(
+        [Parameter(Mandatory)][string]$KustoUri,
+        [Parameter(Mandatory)][string]$DatabaseName,
+        [Parameter(Mandatory)][hashtable]$KustoHeaders
+    )
+
+    $commands = @(
         @{
             Label = 'agent_cross_domain_context schema'
             Command = @'
@@ -412,6 +444,7 @@ claims_events
     )
 
     Invoke-ImagingAgentGrounding -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders
+    Invoke-ClinicalAgentGrounding -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders
     foreach ($entry in $commands) {
         if (-not (Invoke-KustoMgmt -Command $entry.Command -Label $entry.Label -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders)) {
             throw "Agent grounding deployment failed: $($entry.Label)"
