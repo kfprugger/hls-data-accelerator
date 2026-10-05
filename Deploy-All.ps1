@@ -1136,6 +1136,30 @@ function Remove-EmptyFabricFolders {
 # PHASE 3 DIAGNOSTICS — Query lakehouse tables for row counts at checkpoints
 # ============================================================================
 
+function Sync-FabricSqlEndpointMetadata {
+    # Ask a Lakehouse SQL analytics endpoint to pick up the latest Delta tables and versions; it
+    # otherwise lags freshly materialized tables by many minutes. Best effort: callers still verify.
+    param(
+        [string]$WorkspaceId,
+        [string]$EndpointId,
+        [hashtable]$Headers,
+        [string]$FabricApiBase = "https://api.fabric.microsoft.com/v1"
+    )
+    if (-not $EndpointId) { return }
+    try {
+        $response = Invoke-WebRequest -Method Post -Uri "$FabricApiBase/workspaces/$WorkspaceId/sqlEndpoints/$EndpointId/refreshMetadata" `
+            -Headers $Headers -Body '{}' -ErrorAction Stop
+        $location = [string]($response.Headers['Location'] | Select-Object -First 1)
+        for ($poll = 0; $response.StatusCode -eq 202 -and $location -and $poll -lt 24; $poll++) {
+            Start-Sleep -Seconds 5
+            $status = [string](Invoke-RestMethod -Uri $location -Headers $Headers -ErrorAction Stop).status
+            if ($status -in @('Succeeded', 'Failed', 'Cancelled')) { break }
+        }
+    } catch {
+        Write-Host "  │    SQL endpoint metadata sync did not complete: $($_.Exception.Message)" -ForegroundColor DarkGray
+    }
+}
+
 function Write-Phase3Diagnostics {
     param(
         [string]$Checkpoint,             # e.g. "PRE-VIEWER", "POST-NOTEBOOK"
@@ -1270,6 +1294,8 @@ UNION ALL SELECT 'PatientReporting', COUNT(*) FROM dbo.PatientReporting
                     }
                     $detail = @($rptRows | Where-Object { $_ -and $_ -notmatch '^\s*$' }) -join ' '
                     Write-Host "  │    Reporting SQL metadata not ready (attempt $attempt/$maxAttempts): $detail" -ForegroundColor DarkGray
+                    Sync-FabricSqlEndpointMetadata -WorkspaceId $WorkspaceId -EndpointId ([string]$rptDetail.properties.sqlEndpointProperties.id) `
+                        -Headers $fabH -FabricApiBase $FabricApiBase
                     if ($attempt -lt $maxAttempts) { Start-Sleep -Seconds 15 }
                 }
                 if ($RequireReportingTables -and -not $reportingReady) {
