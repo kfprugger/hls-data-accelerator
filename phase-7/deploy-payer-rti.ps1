@@ -276,96 +276,7 @@ function Publish-DataAgentDefinition {
     throw "DataAgent publish did not complete within 5 minutes"
 }
 
-function Get-DataAgentDefinition {
-    param([string]$WorkspaceId, [string]$DataAgentId)
-    $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
-    $response = Invoke-WebRequest -Method POST `
-        -Uri "$FabricApiBase/workspaces/$WorkspaceId/items/$DataAgentId/getDefinition" `
-        -Headers $headers -Body '{}' -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop
-    if ($response.StatusCode -eq 200) {
-        return $response.Content | ConvertFrom-Json -Depth 100
-    }
-    if ($response.StatusCode -ne 202) { throw "DataAgent getDefinition returned HTTP $($response.StatusCode)" }
-
-    $location = $response.Headers["Location"]
-    if ($location -is [array]) { $location = $location[0] }
-    if (-not $location) { throw "DataAgent getDefinition returned 202 without a Location header" }
-    for ($attempt = 1; $attempt -le 60; $attempt++) {
-        Start-Sleep 2
-        $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
-        $operation = Invoke-RestMethod -Uri $location -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
-        if ($operation.status -eq "Succeeded") {
-            return Invoke-RestMethod -Uri "$location/result" -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
-        }
-        if ($operation.status -eq "Failed") { throw "DataAgent getDefinition failed: $($operation.error.message)" }
-    }
-    throw "DataAgent getDefinition did not complete within 2 minutes"
-}
-
 . (Join-Path $PSScriptRoot '../utilities/data-agent-selection.ps1')
-
-
-function Repair-DataAgentTableSelection {
-    param(
-        [Parameter(Mandatory)][string]$WorkspaceId,
-        [Parameter(Mandatory)][string]$DataAgentId,
-        [Parameter(Mandatory)][string]$DatasourceFolderName,
-        [Parameter(Mandatory)][string[]]$Tables,
-        [string[]]$Functions = @(),
-        [Parameter(Mandatory)][ValidateSet('lakehouse', 'kusto')][string]$SelectionKind
-    )
-    $definition = Get-DataAgentDefinition -WorkspaceId $WorkspaceId -DataAgentId $DataAgentId
-    $targetPath = "Files/Config/draft/$DatasourceFolderName/datasource.json"
-    $parts = @($definition.definition.parts)
-    $targetPart = $parts | Where-Object { $_.path -eq $targetPath } | Select-Object -First 1
-    if (-not $targetPart) { throw "Hydrated DataAgent datasource '$targetPath' was not found" }
-    $datasource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$targetPart.payload)) | ConvertFrom-Json -Depth 100
-    foreach ($element in @($datasource.elements)) {
-        if ($SelectionKind -eq 'lakehouse') {
-            $null = Update-DataAgentLakehouseElementSelection -Node $element -TargetTables $Tables
-        } else {
-            $null = Update-DataAgentKustoElementSelection -Node $element -TargetTables $Tables -TargetFunctions $Functions
-        }
-    }
-    $selected = @(Get-SelectedDataAgentTables -Elements @($datasource.elements) -SelectionKind $SelectionKind)
-    $selectedFunctions = if ($SelectionKind -eq 'kusto') { @(Get-SelectedDataAgentFunctions -Elements @($datasource.elements)) } else { @() }
-    $missing = @($Tables | Where-Object { $_ -notin $selected })
-    $unexpected = @($selected | Where-Object { $_ -notin $Tables })
-    $missingFunctions = @($Functions | Where-Object { $_ -notin $selectedFunctions })
-    $unexpectedFunctions = @($selectedFunctions | Where-Object { $_ -notin $Functions })
-    if ($missing.Count -gt 0 -or $unexpected.Count -gt 0 -or $missingFunctions.Count -gt 0 -or $unexpectedFunctions.Count -gt 0) {
-        throw "Hydrated $SelectionKind selection mismatch. Missing=$($missing -join ','); Unexpected=$($unexpected -join ','); MissingFunctions=$($missingFunctions -join ','); UnexpectedFunctions=$($unexpectedFunctions -join ',')"
-    }
-    $targetPart.payload = ConvertTo-Base64 ($datasource | ConvertTo-Json -Depth 100)
-    $targetPart.payloadType = 'InlineBase64'
-    $writableParts = @($parts | Where-Object { $_.path -eq 'Files/Config/data_agent.json' -or $_.path.StartsWith('Files/Config/draft/') })
-    Update-DataAgentDefinition -WorkspaceId $WorkspaceId -DataAgentId $DataAgentId -Definition @{ parts = $writableParts }
-    Write-Host "  ✓ Hydrated $SelectionKind selections applied: tables=$($selected -join ', '); functions=$($selectedFunctions -join ', ')" -ForegroundColor Green
-}
-
-function Assert-DataAgentTableSelection {
-    param(
-        [Parameter(Mandatory)][string]$WorkspaceId,
-        [Parameter(Mandatory)][string]$DataAgentId,
-        [Parameter(Mandatory)][string]$DatasourceFolderName,
-        [Parameter(Mandatory)][string[]]$Tables,
-        [string[]]$Functions = @(),
-        [Parameter(Mandatory)][ValidateSet('lakehouse', 'kusto')][string]$SelectionKind
-    )
-    $definition = Get-DataAgentDefinition -WorkspaceId $WorkspaceId -DataAgentId $DataAgentId
-    foreach ($scope in @('draft', 'published')) {
-        $path = "Files/Config/$scope/$DatasourceFolderName/datasource.json"
-        $part = @($definition.definition.parts) | Where-Object { $_.path -eq $path } | Select-Object -First 1
-        if (-not $part) { throw "DataAgent datasource '$path' was not found" }
-        $datasource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$part.payload)) | ConvertFrom-Json -Depth 100
-        $selected = @(Get-SelectedDataAgentTables -Elements @($datasource.elements) -SelectionKind $SelectionKind)
-        $selectedFunctions = if ($SelectionKind -eq 'kusto') { @(Get-SelectedDataAgentFunctions -Elements @($datasource.elements)) } else { @() }
-        if (@($Tables | Where-Object { $_ -notin $selected }).Count -gt 0 -or @($selected | Where-Object { $_ -notin $Tables }).Count -gt 0 -or @($Functions | Where-Object { $_ -notin $selectedFunctions }).Count -gt 0 -or @($selectedFunctions | Where-Object { $_ -notin $Functions }).Count -gt 0) {
-            throw "$scope $SelectionKind selections do not match the requested contract: tables=$($selected -join ', '); functions=$($selectedFunctions -join ', ')"
-        }
-    }
-    Write-Host "  ✓ Draft and published $SelectionKind table/function selections verified" -ForegroundColor Green
-}
 
 function Deploy-DataAgent {
     param (
@@ -409,9 +320,14 @@ function Deploy-DataAgent {
         $null = $parts.Add(@{ path = "Files/Config/draft/$($ds.FolderName)/datasource.json"; payload = (ConvertTo-Base64 $ds.DatasourceJson); payloadType = "InlineBase64" })
         $null = $parts.Add(@{ path = "Files/Config/draft/$($ds.FolderName)/fewshots.json"; payload = (ConvertTo-Base64 $ds.FewShotsJson); payloadType = "InlineBase64" })
     }
-    $selectableDataSources = @($DataSources | Where-Object {
-        $_ -is [hashtable] -and $_.ContainsKey('SelectionKind') -and
+    # Datasources are imported reference-only and their tables/functions selected through the
+    # native element API: Fabric rejects an imported kusto.functions element as "invalid JSON".
+    $nativeApi = { param($method, $endpoint, $body) Invoke-FabricApi -Method $method -Endpoint $endpoint -Body $body }
+    $selectionContracts = @($DataSources | Where-Object {
+        $_ -is [hashtable] -and $_.ContainsKey('DatasourceId') -and
         ((@($_.SelectedTables).Count -gt 0) -or (@($_.SelectedFunctions).Count -gt 0))
+    } | ForEach-Object {
+        @{ WorkspaceId = $WorkspaceId; DataAgentId = $agentId; DatasourceId = [string]$_.DatasourceId; Tables = @($_.SelectedTables); Functions = @($_.SelectedFunctions); InvokeApi = $nativeApi }
     })
     try {
         Update-DataAgentDefinition `
@@ -423,17 +339,9 @@ function Deploy-DataAgent {
         throw "DataAgent definition update failed for ${Name}: $(Get-ErrorMessage $_)"
     }
     try {
-        foreach ($ds in $selectableDataSources) {
-            Repair-DataAgentTableSelection `
-                -WorkspaceId $WorkspaceId `
-                -DataAgentId $agentId `
-                -DatasourceFolderName ([string]$ds.FolderName) `
-                -Tables @($ds.SelectedTables) `
-                -Functions @($ds.SelectedFunctions) `
-                -SelectionKind ([string]$ds.SelectionKind)
-        }
+        foreach ($contract in $selectionContracts) { Set-DataAgentNativeSchemaSelection @contract }
     } catch {
-        throw "DataAgent hydrated table selection repair failed for ${Name}: $(Get-ErrorMessage $_)"
+        throw "DataAgent native table selection failed for ${Name}: $(Get-ErrorMessage $_)"
     }
     try {
         $publishDescription = if ([string]::IsNullOrWhiteSpace($Description)) { "$Name production configuration" } else { $Description }
@@ -443,14 +351,9 @@ function Deploy-DataAgent {
         throw "DataAgent publish failed for ${Name}: $(Get-ErrorMessage $_)"
     }
     try {
-        foreach ($ds in $selectableDataSources) {
-            Assert-DataAgentTableSelection `
-                -WorkspaceId $WorkspaceId `
-                -DataAgentId $agentId `
-                -DatasourceFolderName ([string]$ds.FolderName) `
-                -Tables @($ds.SelectedTables) `
-                -Functions @($ds.SelectedFunctions) `
-                -SelectionKind ([string]$ds.SelectionKind)
+        foreach ($contract in $selectionContracts) {
+            Set-DataAgentNativeSchemaSelection @contract -VerifyOnly
+            Set-DataAgentNativeSchemaSelection @contract -VerifyOnly -Published
         }
     } catch {
         throw "DataAgent published table selection verification failed for ${Name}: $(Get-ErrorMessage $_)"
@@ -460,11 +363,7 @@ function Deploy-DataAgent {
 }
 
 function New-KqlDatasource {
-    param([string]$DisplayName, [string]$KqlDbId, [string]$WorkspaceId, [array]$Elements, [array]$FewShots, [string]$Instructions, [string[]]$Functions = @())
-    $datasourceElements = @($Elements)
-    if ($Functions.Count -gt 0) {
-        $datasourceElements += @{ id = [guid]::NewGuid().ToString(); display_name = 'Functions'; type = 'kusto.functions'; is_selected = $true; children = @() }
-    }
+    param([string]$DisplayName, [string]$KqlDbId, [string]$WorkspaceId, [string[]]$Tables, [array]$FewShots, [string]$Instructions, [string[]]$Functions = @())
     $datasourceJson = (@{
         '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
         artifactId = $KqlDbId
@@ -473,18 +372,14 @@ function New-KqlDatasource {
         type = "kusto"
         userDescription = "KQL database with clinical telemetry, payer RTI claim streams, fraud/high-cost/care-gap scoring tables, and operations worklist functions"
         dataSourceInstructions = $Instructions
-        elements = $datasourceElements
+        elements = @()
     } | ConvertTo-Json -Depth 20)
     $fewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
-    $selectedTables = @($Elements | Where-Object { [string]$_.type -eq 'kusto.table' } | ForEach-Object { [string]$_.display_name })
-    return @{ FolderName = "kusto-$DisplayName"; DatasourceId = $KqlDbId; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectionKind = 'kusto'; SelectedTables = $selectedTables; SelectedFunctions = @($Functions) }
+    return @{ FolderName = "kusto-$DisplayName"; DatasourceId = $KqlDbId; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectedTables = @($Tables); SelectedFunctions = @($Functions) }
 }
 
 function New-LakehouseDatasource {
     param([string]$DisplayName, [string]$LakehouseId, [string]$WorkspaceId, [array]$Tables, [string]$Instructions, [array]$FewShots = @())
-    $elements = @(
-        @{ display_name = 'dbo'; type = 'lakehouse_tables.schema'; is_selected = $true; children = @($Tables | ForEach-Object { @{ display_name = $_; type = 'lakehouse_tables.table'; is_selected = $true } }) }
-    )
     $datasourceJson = (@{
         '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
         artifactId = $LakehouseId
@@ -493,11 +388,11 @@ function New-LakehouseDatasource {
         type = "lakehouse_tables"
         userDescription = "Gold Lakehouse tables for claims history, payer dimensions, diagnoses, CMS quality, care gaps, risk adjustment, high-cost cohorts, and readmission risk"
         dataSourceInstructions = $Instructions
-        elements = $elements
+        elements = @()
     } | ConvertTo-Json -Depth 30)
     $fewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = $FewShots } | ConvertTo-Json -Depth 20)
     # Match Fabric's stored folder prefix; the datasource type stays lakehouse_tables.
-    return @{ FolderName = "lakehouse-tables-$DisplayName"; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectionKind = 'lakehouse'; SelectedTables = @($Tables); SelectedFunctions = @() }
+    return @{ FolderName = "lakehouse-tables-$DisplayName"; DatasourceId = $LakehouseId; DatasourceJson = $datasourceJson; FewShotsJson = $fewShotsJson; SelectedTables = @($Tables); SelectedFunctions = @() }
 }
 
 function New-OntologyDatasourceIfAvailable {
@@ -1042,18 +937,10 @@ if (-not $SkipPayerActivator) {
     Write-Host "PayerOpsActivator skipped" -ForegroundColor Yellow
 }
 
-$kqlElements = @(
-    @{ id = [guid]::NewGuid().ToString(); display_name = "TelemetryRaw"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "AlertHistory"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "claims_events"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "fraud_scores"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "highcost_alerts"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "care_gap_alerts"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_cross_domain_context"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_imaging_summary"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_payer_priority_summary"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_high_cost_members"; type = "kusto.table"; is_selected = $true },
-    @{ id = [guid]::NewGuid().ToString(); display_name = "agent_provider_fraud_claims"; type = "kusto.table"; is_selected = $true }
+$kqlTables = @(
+    'TelemetryRaw', 'AlertHistory', 'claims_events', 'fraud_scores', 'highcost_alerts', 'care_gap_alerts',
+    'agent_cross_domain_context', 'agent_imaging_summary', 'agent_payer_priority_summary', 'agent_high_cost_members',
+    'agent_provider_fraud_claims'
 )
 $payerKqlFewShots = @(
     @{ id = [guid]::NewGuid().ToString(); question = "Which providers have the highest active fraud risk, and what evidence supports the score?"; query = "fn_FraudRisk(60) | summarize arg_max(score_timestamp, fraud_score, risk_tier, fraud_flags, claim_id, patient_id) by provider_id | project provider_id, fraud_score, risk_tier, fraud_flags, claim_id, patient_id, score_timestamp | top 10 by fraud_score desc" },
@@ -1107,8 +994,8 @@ $requiredKqlFunctions = @(
     'agent_CrossDomainContext', 'agent_CommonDiagnosesWithRepeatedAlerts', 'agent_CareGapAbnormalTelemetry',
     'agent_PayerPrioritySummary', 'agent_CriticalCareGaps', 'agent_HighUtilizationCareGaps', 'agent_HighestPriorityClaim'
 )
-$payerDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Elements $kqlElements -FewShots $payerKqlFewShots -Instructions $payerKqlInstructions -Functions $requiredKqlFunctions))
-$graphDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Elements $kqlElements -FewShots $graphKqlFewShots -Instructions $graphKqlInstructions -Functions $requiredKqlFunctions))
+$payerDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Tables $kqlTables -FewShots $payerKqlFewShots -Instructions $payerKqlInstructions -Functions $requiredKqlFunctions))
+$graphDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Tables $kqlTables -FewShots $graphKqlFewShots -Instructions $graphKqlInstructions -Functions $requiredKqlFunctions))
 $goldUnavailableInstruction = ""
 if ($goldLh) {
     $goldTables = @('fact_claim','dim_payer','care_gaps','agg_high_cost_claimants','readmission_risk_scores')

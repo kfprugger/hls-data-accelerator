@@ -1,25 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot '../../utilities/data-agent-selection.ps1')
-$scriptPath = Join-Path $PSScriptRoot '../deploy-payer-rti.ps1'
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
-if ($parseErrors -and $parseErrors.Count -gt 0) {
-    throw "deploy-payer-rti.ps1 has parse errors: $($parseErrors[0].Message)"
-}
-
-foreach ($functionName in @(
-    'Assert-DataAgentTableSelection',
-    'New-LakehouseDatasource'
-)) {
-    $functionAst = $ast.Find({
-        param($node)
-        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $functionName
-    }, $true)
-    if (-not $functionAst) { throw "Function '$functionName' was not found in deploy-payer-rti.ps1" }
-    Invoke-Expression $functionAst.Extent.Text
-}
 
 function Assert-True {
     param([bool]$Value, [string]$Message)
@@ -123,42 +104,5 @@ Assert-Equal -Expected (($kustoFunctions | Sort-Object) -join ',') -Actual ($sel
 foreach ($function in @($functionRoot.children)) {
     Assert-Equal -Expected ($kustoFunctions -contains $function.display_name) -Actual $function.is_selected -Message "Kusto function '$($function.display_name)' selection mismatch."
 }
-
-
-
-$goldFewShots = @(
-    @{ id = 'gold-shot'; question = 'Summarize historical claims.'; query = 'SELECT COUNT(*) FROM dbo.fact_claim' }
-)
-$datasource = New-LakehouseDatasource `
-    -DisplayName 'healthcare1_reporting_gold' `
-    -LakehouseId 'lakehouse-id' `
-    -WorkspaceId 'workspace-id' `
-    -Tables $targetTables `
-    -Instructions 'Use the selected Gold tables.' `
-    -FewShots $goldFewShots
-
-# A hydrated definition uses hyphenated folder prefixes. Verify both stages by
-# resolving that native path, rather than pinning the constructor's spelling.
-$selectedPayload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((@{ elements = @($root) } | ConvertTo-Json -Depth 100)))
-$script:HydratedDefinition = [pscustomobject]@{ definition = [pscustomobject]@{ parts = @(
-    [pscustomobject]@{ path = 'Files/Config/draft/lakehouse-tables-healthcare1_reporting_gold/datasource.json'; payload = $selectedPayload },
-    [pscustomobject]@{ path = 'Files/Config/published/lakehouse-tables-healthcare1_reporting_gold/datasource.json'; payload = $selectedPayload }
-) } }
-function Get-DataAgentDefinition {
-    param($WorkspaceId, $DataAgentId)
-    return $script:HydratedDefinition
-}
-Assert-DataAgentTableSelection -WorkspaceId 'workspace-id' -DataAgentId 'agent-id' -DatasourceFolderName $datasource.FolderName -Tables $targetTables -Functions $datasource.SelectedFunctions -SelectionKind 'lakehouse'
-
-$publishedDatasource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($selectedPayload)) | ConvertFrom-Json -Depth 100
-$publishedDatasource.elements[0].children[0].children[0].children[0].is_selected = $false
-$script:HydratedDefinition.definition.parts[1].payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($publishedDatasource | ConvertTo-Json -Depth 100)))
-$rejectedPublishedSelection = $false
-try {
-    Assert-DataAgentTableSelection -WorkspaceId 'workspace-id' -DataAgentId 'agent-id' -DatasourceFolderName $datasource.FolderName -Tables $targetTables -Functions $datasource.SelectedFunctions -SelectionKind 'lakehouse'
-} catch {
-    $rejectedPublishedSelection = $_.Exception.Message -like 'published lakehouse selections do not match*'
-}
-Assert-True $rejectedPublishedSelection 'A missing requested table in the published datasource must fail validation even when draft selections match.'
 
 Write-Host 'Data Agent table selection tests passed.'
