@@ -47,11 +47,22 @@ snapshot intact. A lost response requires reloading the published state before
 deciding whether to retry.
 
 The Sync control is restricted to authorized writers. The SQL boundary rejects
-unenrolled or missing publishers before any snapshot or audit writes. The
-med-1003 deployment requires populated payer categories in Gold before its first
-publication: missing Medicare, Medicaid, or Commercial source values fail closed
-rather than being displayed as zeroes. The previous workspace's snapshots are not
-copied into this deployment.
+unenrolled or missing publishers before any snapshot or audit writes. Version 1
+was published in med-1003 at `2026-10-06T03:56:35.0413897Z` by
+`joey@brakekat.com`: 14 KPIs, 21 series rows, and 15 worklist rows. All 14 KPIs
+and the three payer-segment paid totals reconciled against independent raw-column
+DAX on the two Gold semantic models. The successful SQL audit is
+`6F2669C9-E022-48F6-A9EE-D6B75941B36A`; its counts, version, publisher, and
+timestamp match the singleton snapshot with no integrity violations.
+
+This initial publication ran the shipped `syncFromGold` and canonical function
+publication code through the documented temporary live transport harness; the
+spec was removed afterwards. Native in-app Sync still requires a Fabric-brokered
+browser session. Missing Medicare, Medicaid, or Commercial source values fail
+closed rather than being displayed as zeroes; the Coverage enrichment and Gold
+refresh restored these categories before publication. No previous-workspace
+snapshot was copied.
+
 Managed-hosting Rayfin tokens carry the caller's email as
 `xms_attr.<appId>.rfn_email` rather than a top-level `email` claim; the function
 reads either. When a function runs but cannot decide, `getSyncAccess` returns a
