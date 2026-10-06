@@ -3,7 +3,7 @@
 //
 // One surface, three lenses — Payer, Provider, MedTech — rendered from the
 // app's own database. The database is filled by an in-app sync that reads the
-// Direct Lake semantic models over the med-0906 Gold lakehouses.
+// Direct Lake semantic models over the med-1003 Gold lakehouses.
 //-----------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -67,7 +67,7 @@ export default function App() {
 
     const runSync = useCallback(async () => {
         if (!isAuthenticated) {
-            setSyncError("Fabric sign-in has not completed. Open the app from the med-0906 workspace.");
+            setSyncError("Fabric sign-in has not completed. Open the app from the med-1003 workspace.");
             return;
         }
         setSyncing(true);
@@ -213,7 +213,7 @@ export default function App() {
                             {authError
                                 ? `Fabric sign-in failed: ${authError.message}`
                                 : !isAuthenticated
-                                    ? "Open this app from the med-0906 workspace so Fabric can sign you in and connect the database."
+                                    ? "Open this app from the med-1003 workspace so Fabric can sign you in and connect the database."
                                     : error
                                         ? `The app database could not be refreshed (${error.message}). ${version ? `Still displaying published version ${version}.` : "No publication is available."}`
                                         : syncError

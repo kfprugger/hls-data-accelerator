@@ -2,7 +2,7 @@
 // BrakeKat Health Command Center — DAX query catalog.
 //
 // Every query below is served by a Direct Lake semantic model sitting on a
-// Gold lakehouse in the med-0906 workspace:
+// Gold lakehouse in the med-1003 workspace:
 //
 //   popHealthGold -> "Population Health & Quality Semantic Model"
 //                    (Direct Lake over healthcare1_reporting_gold)

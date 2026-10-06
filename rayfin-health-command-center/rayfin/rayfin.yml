@@ -8,7 +8,8 @@ services:
       enabled: true
     allowedRedirectUris:
       - http://localhost:5173
-      - https://oaken-cove-7a1eb21ad7-westus2.webapp.fabricapps.net
+      - http://127.0.0.1:5173
+      - https://key-light-c976f47909-westus2.webapp.fabricapps.net
   data:
     enabled: true
     dialect: mssql
@@ -25,9 +26,9 @@ services:
     auth:
       type: application
     buildCommand: npm run build
-publishable_key: pk-bq8EbZqob-CgQ-0g-St5
+publishable_key: pk-KrLZyjaeil6IIjvc-cwY
 secrets:
   - name: SQL_SERVER
-    description: "TDS host of the app SQL database used by the trusted publishSnapshot function"
+    description: TDS host of the app SQL database used by the trusted publishSnapshot function
   - name: SQL_DATABASE
-    description: "Name of the app SQL database used by the trusted publishSnapshot function"
+    description: Name of the app SQL database used by the trusted publishSnapshot function

@@ -1,11 +1,11 @@
 # BrakeKat Health Command Center
 
 A Fabric App (Rayfin) that puts payer, provider and medtech operations on one
-surface, reading live from the Gold layer of the `med-0906` workspace.
+surface, reading from a published snapshot of the Gold layer of the `med-1003` workspace.
 
 Deployed item: `rayfin-health-command-center` (`AppBackend`
-`db1f3f55-4e7e-4b35-9c28-16a79410b64a`)
-Hosting URL: https://oaken-cove-7a1eb21ad7-westus2.webapp.fabricapps.net
+`d1905bda-bb40-45ff-88b2-b9939bf4235d`)
+Hosting URL: https://key-light-c976f47909-westus2.webapp.fabricapps.net
 
 ## Why it exists
 
@@ -46,11 +46,12 @@ publishers; denied, conflicting, or failed publication leaves the displayed
 snapshot intact. A lost response requires reloading the published state before
 deciding whether to retry.
 
-The Sync control is restricted to authorized writers. Version 1 was published on
-2026-10-02 through `dbo.PublishHealthSnapshot`; all 14 KPIs matched the Gold
-semantic models. After the Rayfin 1.36.2 application-auth release, in-app Sync
-published version 2 the same day through `publishSnapshot` as the allowlisted
-writer, and the SQL boundary rejects unenrolled or missing publishers live.
+The Sync control is restricted to authorized writers. The SQL boundary rejects
+unenrolled or missing publishers before any snapshot or audit writes. The
+med-1003 deployment requires populated payer categories in Gold before its first
+publication: missing Medicare, Medicaid, or Commercial source values fail closed
+rather than being displayed as zeroes. The previous workspace's snapshots are not
+copied into this deployment.
 Managed-hosting Rayfin tokens carry the caller's email as
 `xms_attr.<appId>.rfn_email` rather than a top-level `email` claim; the function
 reads either. When a function runs but cannot decide, `getSyncAccess` returns a
@@ -61,9 +62,9 @@ non-sensitive cause code such as `writer-lookup-failed`,
 
 | Alias | Item | Backing store |
 |---|---|---|
-| `popHealthGold` | Population Health & Quality Semantic Model (`b7608be3…`) | Direct Lake over `healthcare1_reporting_gold` |
-| `imagingGold` | ImagingReport (`cc801b43…`) | Direct Lake over the Gold imaging projections |
-| `reportingGold` | `healthcare1_reporting_gold` lakehouse (`ddf46a8d…`) | declared for lineage |
+| `popHealthGold` | Population Health & Quality Semantic Model (`e87b8c60-557b-4737-a7ae-889fb3191866`) | Direct Lake over `healthcare1_reporting_gold` |
+| `imagingGold` | ImagingReport (`c679750a-53e2-419f-b6b0-ce43eb7b2246`) | Direct Lake over the Gold imaging projections |
+| `reportingGold` | `healthcare1_reporting_gold` lakehouse (`6bd1ba73-9cbe-491e-b0ee-8f6d166f8e2d`) | declared for lineage |
 
 Connections live in `fabric.yaml` and compile into `src/fabric.generated.ts`
 via `fabric-app-data generate` (run automatically by `npm run build`). The
