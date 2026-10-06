@@ -1,4 +1,4 @@
-"""Apply generated synthetic demo inputs before FHIR export or HDS POA ingestion.
+"""Apply generated synthetic demo inputs around FHIR export and HDS ingestion.
 
 No generated data is stored in the repository. Azure CLI authentication always
 uses the explicitly supplied subscription and inherits AZURE_CONFIG_DIR.
@@ -10,6 +10,7 @@ import base64
 from collections import Counter
 from datetime import date, datetime, timezone
 import json
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -21,7 +22,6 @@ from enrich_demo_cohort import build_resources, transaction_bundles
 from outreach_demo_sources import build_outreach_sources
 
 FABRIC = "https://api.fabric.microsoft.com"
-NOTEBOOK_NAME = "Seed_Outreach_Demo_Sources"
 
 
 def azure_json(subscription: str, *arguments: str):
@@ -158,6 +158,10 @@ for name, rows in rows_by_table.items():
 print("OUTREACH_COUNTS=" + json.dumps(counts, sort_keys=True))
 notebookutils.notebook.exit(json.dumps(counts, sort_keys=True))
 '''
+    return notebook_definition(code, workspace_id, lakehouse)
+
+
+def notebook_definition(code: str, workspace_id: str, lakehouse: dict) -> dict:
     notebook = {
         "nbformat": 4, "nbformat_minor": 5,
         "metadata": {
@@ -170,31 +174,33 @@ notebookutils.notebook.exit(json.dumps(counts, sort_keys=True))
                 "known_lakehouses": [{"id": lakehouse["id"]}],
             }},
         },
-        "cells": [{"id": "seed-outreach", "cell_type": "code", "metadata": {},
+        "cells": [{"id": "seed-demo", "cell_type": "code", "metadata": {},
                    "source": code.splitlines(keepends=True), "outputs": [], "execution_count": None}],
     }
     return {"format": "ipynb", "parts": [{"path": "notebook-content.ipynb", "payloadType": "InlineBase64",
             "payload": base64.b64encode(json.dumps(notebook).encode()).decode()}]}
 
 
-def apply_outreach(client: Client, patients: list[dict], as_of: date, workspace_id: str, bronze_name: str | None):
+def resolve_lakehouse(client: Client, workspace_id: str, name: str | None) -> dict:
     root = f"/v1/workspaces/{workspace_id}"
     _, _, workspace = client.request("GET", root)
     capacities = list(client.items("/v1/capacities"))
     if not any(item["id"] == workspace.get("capacityId") and item.get("state") == "Active" for item in capacities):
         raise RuntimeError("Workspace must be assigned to an active Fabric capacity")
     lakehouses = [item for item in client.items(root + "/lakehouses")
-                  if item["displayName"] == bronze_name] if bronze_name else [
-                      item for item in client.items(root + "/lakehouses") if "bronze" in item["displayName"].lower()]
+                  if item["displayName"] == name or (not name and "bronze" in item["displayName"].lower())]
     if len(lakehouses) != 1:
-        raise RuntimeError(f"Expected exactly one Bronze lakehouse, found {len(lakehouses)}")
+        raise RuntimeError(f"Expected exactly one {name or 'Bronze'} lakehouse, found {len(lakehouses)}")
     lakehouse = lakehouses[0]
-    print(f"Bronze lakehouse: {lakehouse['displayName']} ({lakehouse['id']})", flush=True)
-    rows = build_outreach_sources(patients, as_of)
-    definition = outreach_definition(rows, workspace_id, lakehouse)
-    notebooks = [item for item in client.items(root + "/items?type=Notebook") if item["displayName"] == NOTEBOOK_NAME]
+    print(f"Lakehouse: {lakehouse['displayName']} ({lakehouse['id']})", flush=True)
+    return lakehouse
+
+
+def run_seed_notebook(client: Client, workspace_id: str, lakehouse: dict, name: str, definition: dict):
+    root = f"/v1/workspaces/{workspace_id}"
+    notebooks = [item for item in client.items(root + "/items?type=Notebook") if item["displayName"] == name]
     if len(notebooks) > 1:
-        raise RuntimeError(f"Ambiguous notebook name: {NOTEBOOK_NAME}")
+        raise RuntimeError(f"Ambiguous notebook name: {name}")
     if notebooks:
         notebook_id = notebooks[0]["id"]
         # Do not change the definition or submit a competing job while a prior run is active.
@@ -203,10 +209,10 @@ def apply_outreach(client: Client, patients: list[dict], as_of: date, workspace_
                 client.wait(f"{root}/items/{notebook_id}/jobs/instances/{job['id']}", "Completed")
         client.update(f"{root}/notebooks/{notebook_id}/updateDefinition", {"definition": definition})
     else:
-        client.update(root + "/items", {"displayName": NOTEBOOK_NAME, "type": "Notebook", "definition": definition})
-        notebooks = [item for item in client.items(root + "/items?type=Notebook") if item["displayName"] == NOTEBOOK_NAME]
+        client.update(root + "/items", {"displayName": name, "type": "Notebook", "definition": definition})
+        notebooks = [item for item in client.items(root + "/items?type=Notebook") if item["displayName"] == name]
         if len(notebooks) != 1:
-            raise RuntimeError("Created outreach notebook could not be uniquely resolved")
+            raise RuntimeError(f"Created notebook {name} could not be uniquely resolved")
         notebook_id = notebooks[0]["id"]
     status, headers, result = client.request("POST", f"{root}/items/{notebook_id}/jobs/instances?jobType=RunNotebook", {
         "executionData": {"configuration": {"useStarterPool": True, "defaultLakehouse": {
@@ -215,27 +221,62 @@ def apply_outreach(client: Client, patients: list[dict], as_of: date, workspace_
     if status != 202:
         raise RuntimeError(f"RunNotebook returned HTTP {status}: {result}")
     job_url = headers["Location"]
-    print(f"Outreach notebook {notebook_id}; job {job_url}", flush=True)
-    client.wait(job_url, "Completed")
+    print(f"{name} notebook {notebook_id}; job {job_url}", flush=True)
+    return client.wait(job_url, "Completed")
+
+
+def apply_outreach(client: Client, patients: list[dict], as_of: date, workspace_id: str, bronze_name: str | None):
+    lakehouse = resolve_lakehouse(client, workspace_id, bronze_name)
+    rows = build_outreach_sources(patients, as_of)
+    run_seed_notebook(client, workspace_id, lakehouse, "Seed_Outreach_Demo_Sources",
+                      outreach_definition(rows, workspace_id, lakehouse))
     # Completed implies the notebook's persisted-table count assertions all passed.
     counts = {name: len(values) for name, values in rows.items()}
     print("Outreach table counts verified by notebook: " + json.dumps(counts, sort_keys=True), flush=True)
     return counts
 
 
+def apply_sdoh(client: Client, workspace_id: str):
+    lakehouse = resolve_lakehouse(client, workspace_id, "healthcare1_msft_gold_cma")
+    source = Path(__file__).resolve().parents[1] / "phase-2" / "seed_cma_sdoh.py"
+    # Execute the existing seed source unchanged, then verify its persisted tables.
+    code = source.read_text(encoding="utf-8") + '''
+
+import json
+import notebookutils
+expected_rows = build_sdoh_dimension_rows()
+expected_rows["zip_to_fips_mapping"] = build_zip_to_fips_rows()
+expected_rows["social_determinant"] = build_social_determinant_rows(expected_rows["zip_to_fips_mapping"])
+counts = {name: spark.table(name).count() for name in expected_rows}
+for name, rows in expected_rows.items():
+    if counts[name] != len(rows):
+        raise RuntimeError("CMA SDOH row count mismatch: " + name)
+print("SDOH_COUNTS=" + json.dumps(counts, sort_keys=True))
+notebookutils.notebook.exit(json.dumps(counts, sort_keys=True))
+'''
+    run_seed_notebook(client, workspace_id, lakehouse, "Seed_CMA_SDOH_Demo",
+                      notebook_definition(code, workspace_id, lakehouse))
+    print("CMA SDOH seed completed; all six persisted table counts verified by notebook", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("fhir", "outreach"))
+    parser.add_argument("mode", choices=("fhir", "outreach", "sdoh"))
     parser.add_argument("--subscription", required=True)
-    source = parser.add_mutually_exclusive_group(required=True)
+    source = parser.add_mutually_exclusive_group()
     source.add_argument("--fhir-url")
     source.add_argument("--resource-group", help="Discover the FHIR service; skip only if none exists")
     parser.add_argument("--as-of", type=date.fromisoformat, default=datetime.now(timezone.utc).date())
     parser.add_argument("--workspace-id")
     parser.add_argument("--bronze-lakehouse-name")
     args = parser.parse_args()
-    if args.mode == "outreach" and not args.workspace_id:
-        parser.error("outreach requires --workspace-id")
+    if args.mode in {"outreach", "sdoh"} and not args.workspace_id:
+        parser.error(f"{args.mode} requires --workspace-id")
+    if args.mode == "sdoh":
+        apply_sdoh(Client(FABRIC, args.subscription), args.workspace_id)
+        return
+    if not args.fhir_url and not args.resource_group:
+        parser.error(f"{args.mode} requires --fhir-url or --resource-group")
     fhir_url = args.fhir_url
     if args.resource_group:
         services = azure_json(args.subscription, "resource", "list", "--resource-group", args.resource_group,

@@ -2196,13 +2196,13 @@ if (-not $poaPipeline) {
     throw "POA pipeline requires completed Clinical/Silver readiness"
 } else {
     # POA's native IDM adapter reads these seven Dynamics-style Bronze tables.
-    $outreachPython = $DeploymentPython
-    if (-not $outreachPython) {
+    $demoPython = $DeploymentPython
+    if (-not $demoPython) {
         $runtime = Initialize-PythonVenv -Path (Join-Path $hlsRepoRoot 'orchestrator/.venv') -Windows ($env:OS -eq 'Windows_NT' -or $PSVersionTable.OS -match 'Windows') -CheckOnly
         if (-not $runtime) { throw 'Outreach demo enrichment requires orchestrator/.venv. Run setup-prereqs.ps1.' }
-        $outreachPython = $runtime.executable
+        $demoPython = $runtime.executable
     }
-    & $outreachPython (Join-Path $hlsRepoRoot 'synthea/apply_demo_enrichment.py') outreach `
+    & $demoPython (Join-Path $hlsRepoRoot 'synthea/apply_demo_enrichment.py') outreach `
         --subscription $script:DeploymentSubscriptionId --resource-group $ResourceGroupName `
         --workspace-id $workspaceId --bronze-lakehouse-name $BronzeLakehouseName
     if ($LASTEXITCODE -ne 0) { throw "Outreach demo source seeding failed with exit code $LASTEXITCODE" }
@@ -2550,6 +2550,14 @@ if ($cmaPipeline -and ($cmaInvoked -or $cmaAlreadyRunning)) {
     }
 
     if ($cmaCompleted) {
+        # CMA is a writer of these Gold tables: seed only after its successful
+        # terminal state, never while the non-blocking pipeline is still running.
+        $sdohTimer = [System.Diagnostics.Stopwatch]::StartNew()
+        & $demoPython (Join-Path $hlsRepoRoot 'synthea/apply_demo_enrichment.py') sdoh `
+            --subscription $script:DeploymentSubscriptionId --workspace-id $workspaceId
+        if ($LASTEXITCODE -ne 0) { throw "CMA SDOH demo source seeding failed with exit code $LASTEXITCODE" }
+        $sdohTimer.Stop()
+        Record-Step -Name 'CMA SDOH Demo Sources' -Status 'OK' -Seconds $sdohTimer.Elapsed.TotalSeconds
         $fabricToken = Get-FabricApiAccessToken
         $fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
         Invoke-CmaSemanticModelFinalization -WorkspaceId $workspaceId -WorkspaceName $FabricWorkspaceName -FabricHeaders $fabHeaders
