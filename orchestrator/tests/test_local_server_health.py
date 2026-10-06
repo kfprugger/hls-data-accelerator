@@ -397,6 +397,24 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertTrue(complete.skip_ontology)
         self.assertTrue(complete.skip_quality_measures)
 
+    def test_auto_resume_uses_only_the_newest_deployment_for_the_target(self) -> None:
+        def record(instance_id: str, status: str, created: str) -> dict:
+            return {"instanceId": instance_id, "runtimeStatus": status, "createdTime": created,
+                    "customStatus": {"workspaceName": "med-test", "resourceGroupName": "rg-med-test"}}
+
+        request = self.local_server.DeployRequest(fabric_workspace_name="med-test", resource_group_name="rg-med-test")
+        self.local_server.deployments.clear()
+        self.local_server.deployments["older-failed"] = record("older-failed", "Failed", "2026-10-05T13:42:27Z")
+        self.local_server.deployments["newer-completed"] = record("newer-completed", "Completed", "2026-10-05T14:19:12Z")
+        with patch.object(self.local_server, "_apply_success_skips_from_deployment") as resume:
+            self.local_server._apply_prior_success_skips(request)
+            resume.assert_not_called()
+
+            self.local_server.deployments["newest-failed"] = record("newest-failed", "Failed", "2026-10-05T23:00:00Z")
+            self.local_server._apply_prior_success_skips(request)
+            resume.assert_called_once_with(request, self.local_server.deployments["newest-failed"])
+        self.local_server.deployments.clear()
+
     def test_scaffolding_only_disables_all_data_producers(self) -> None:
         request = self.local_server.DeployRequest(
             fabric_workspace_name="med-test",

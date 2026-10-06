@@ -1648,21 +1648,16 @@ def _apply_live_continuation_skips(req: DeployRequest, prior_deploy: dict, mode:
 
 
 def _apply_prior_success_skips(req: DeployRequest):
-    """Find the most recent failed deployment with the same workspace or RG,
-    and automatically skip all phases that completed successfully in it.
+    """Resume the most recent deployment with the same workspace or RG when it failed,
+    skipping the phases that completed successfully in it. A newer completed run means
+    the estate is whole, so an older failure must not shape a new start.
     """
-    prior_deploy = None
-    # Sort deployments by createdTime to find the most recent one
     for dep in sorted(deployments.values(), key=lambda d: d.get("createdTime", ""), reverse=True):
-        if dep.get("runtimeStatus") not in ["Failed", "Terminated"]:
-            continue
         cs = dep.get("customStatus", {})
         if cs.get("workspaceName") == req.fabric_workspace_name or cs.get("resourceGroupName") == req.resource_group_name:
-            prior_deploy = dep
-            break
-
-    if prior_deploy:
-        _apply_success_skips_from_deployment(req, prior_deploy)
+            if dep.get("runtimeStatus") in ["Failed", "Terminated"]:
+                _apply_success_skips_from_deployment(req, dep)
+            return
 
 
 @app.post("/api/deploy/start")
