@@ -141,9 +141,9 @@ $account = az account show --output json | ConvertFrom-Json
 ## How it works
 
 1. **Preflight and orchestration.** The React UI calls a local FastAPI backend, which builds a deployment plan and invokes the PowerShell/Python activities with structured progress and recovery state.
-2. **Clinical and imaging foundation.** Synthea creates synthetic FHIR R4 bundles; the loaders populate Azure Health Data Services, re-tag public TCIA DICOM studies, create `ImagingStudy` links, and stage FHIR exports and DICOM files in ADLS Gen2.
+2. **Clinical and imaging foundation.** Synthea creates synthetic FHIR R4 bundles; the loaders populate Azure Health Data Services, re-tag public TCIA DICOM studies, and create `ImagingStudy` links. After patients and devices exist, `synthea/apply_demo_enrichment.py fhir` upserts deterministic, provenance-tagged payer Organizations, Coverage, Appointments, Conditions, and MedicationRequests before FHIR exports reach ADLS Gen2. Reuse and continuation runs enrich existing patients too; scaffolding and resource groups without FHIR skip enrichment.
 3. **Live telemetry.** A managed-identity emulator sends device events to Azure Event Hubs. Fabric Eventstream routes them into Eventhouse tables and KQL functions that power live dashboards and alerts.
-4. **Healthcare Data Solutions.** The vendored Microsoft HDS/DTT v1.4.0 source is staged and deployed. OneLake shortcuts expose source files without an unnecessary copy; ordered pipelines produce Bronze, Silver, and Gold data products.
+4. **Healthcare Data Solutions.** The vendored Microsoft HDS/DTT v1.4.0 source is staged and deployed. OneLake shortcuts expose source files without an unnecessary copy; ordered pipelines produce Bronze, Silver, and Gold data products. Immediately before POA ingestion, `synthea/apply_demo_enrichment.py outreach` runs `Seed_Outreach_Demo_Sources` against the Bronze lakehouse to seed seven Dynamics-style outreach tables from the same FHIR patients. It refuses to overwrite populated non-demo tables lacking `scenario_source`; the notebook must complete and verify every row count before POA starts.
 5. **Semantic and visual experiences.** Reporting materialization, Power BI, OHIF, Fabric ontologies, and Data Agents turn the governed data into imaging, cohorting, Patient 360, and triage experiences.
 6. **Population and payer intelligence.** Claims and clinical facts feed quality measures, Star Ratings, HCC risk, readmission prediction, utilization, streaming payer scores, operations agents, and Activator rules.
 7. **Validation and operations.** API-first checks prove item definitions, pipeline outcomes, fresh real-time flow, populated report facts, agent publication, and teardown coverage.
@@ -180,8 +180,9 @@ Historical CLI switch names do not map one-to-one to the conceptual phase number
 
 | Domain | Producer | Landing path | Fabric use |
 |---|---|---|---|
-| Clinical | Synthea + FHIR Loader | Azure FHIR Service → `$export` → ADLS Gen2 | HDS Bronze/Silver, OMOP Gold, quality models, agents |
+| Clinical | Synthea + FHIR Loader + deterministic demo enrichment | Azure FHIR Service → `$export` → ADLS Gen2 | HDS Bronze/Silver, OMOP Gold, quality models, agents |
 | Imaging | TCIA + DICOM Loader | Re-tagged `.dcm` in ADLS Gen2 + FHIR `ImagingStudy` | HDS imaging tables, reporting Gold, Power BI, OHIF |
+| Patient outreach | Generated outreach events linked to FHIR patients | `Seed_Outreach_Demo_Sources` → seven Bronze Delta tables | Required HDS POA ingestion and outreach reports |
 | Device telemetry | Masimo emulator | `telemetry-stream` Event Hub | `MasimoTelemetryStream` → Eventhouse → KQL dashboards/alerts |
 | Payer operations | Claim emulator | `claim-stream` Event Hub | `ClaimsRTIStream` → payer scoring, worklists, agents, Activator |
 

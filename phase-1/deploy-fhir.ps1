@@ -29,7 +29,8 @@ param (
     [hashtable]$Tags = @{},
     [switch]$SkipFhir,
     [switch]$SkipFhirExport,
-    [string]$ExpectedSubscriptionId = ""
+    [string]$ExpectedSubscriptionId = "",
+    [string]$DeploymentPython = ""
 )
 
 # Determine which steps to run
@@ -455,6 +456,23 @@ function Ensure-FhirStorageNetworkAccess {
         Write-Host "  ✓ Storage network rules allow deployment data-plane access" -ForegroundColor Green
     }
 }
+$script:demoEnrichmentApplied = $false
+function Invoke-DemoFhirEnrichment {
+    param([Parameter(Mandatory)][string]$FhirServiceUrl)
+    if ($script:demoEnrichmentApplied) { return }
+    $python = $DeploymentPython
+    if (-not $python) {
+        . (Join-Path $ScriptDir "utilities/python-runtime.ps1")
+        $runtime = Initialize-PythonVenv -Path (Join-Path $ScriptDir "orchestrator/.venv") -Windows ($IsWindows -or $env:OS -eq "Windows_NT") -CheckOnly
+        if (-not $runtime) { throw "Demo enrichment requires orchestrator/.venv. Run setup-prereqs.ps1." }
+        $python = $runtime.executable
+    }
+    & $python (Join-Path $ScriptDir "synthea/apply_demo_enrichment.py") fhir `
+        --subscription $script:DeploymentSubscriptionId --fhir-url $FhirServiceUrl | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "Synthetic FHIR demo enrichment failed with exit code $LASTEXITCODE" }
+    $script:demoEnrichmentApplied = $true
+}
+
 # ── Reusable FHIR $export function ────────────────────────────────────
 # Triggers a bulk FHIR $export to ADLS Gen2, waits for completion, and
 # returns $true on success. Safe to call multiple times — each export
@@ -473,6 +491,8 @@ function Invoke-FhirExport {
     if (-not $FhirServiceUrl) {
         throw "FHIR Service URL not available; cannot run required `$export"
     }
+    # Covers POST-LOADER, POST-DICOM, InfraOnly catch-up, and Step 8 exports.
+    Invoke-DemoFhirEnrichment -FhirServiceUrl $FhirServiceUrl
 
     # Detect storage account
     Use-DeploymentAzSubscription
@@ -1357,6 +1377,9 @@ az container logs --resource-group $ResourceGroupName --name fhir-loader-job 2>$
     # using basic-resource-type|device-assoc code. The standalone create-device-associations.py
     # script is for manual/ad-hoc use only — do NOT run it here as it uses a different code system
     # (v3-RoleCode|ASSIGNED) which overwrites the loader's resources and breaks the DICOM loader.
+
+    # The loader has finished creating patients and device associations.
+    Invoke-DemoFhirEnrichment -FhirServiceUrl $fhirServiceUrl
 
     if ($ReseedData -or $UseCachedSynthea) {
         Write-Host "  Clearing stale FHIR export blobs before authoritative export..." -ForegroundColor DarkGray

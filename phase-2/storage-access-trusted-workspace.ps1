@@ -42,6 +42,8 @@
 param(
     [Parameter(Mandatory)][string]$FabricWorkspaceName,
     [Parameter(Mandatory)][string]$ResourceGroupName,
+    [string]$ExpectedSubscriptionId = "",
+    [string]$DeploymentPython = "",
     [string]$BronzeLakehouseName = "healthcare1_msft_bronze",
     [string]$DicomContainerName = "dicom-output",
     [string]$ShortcutName = "DICOM-HDS",
@@ -1464,10 +1466,10 @@ foreach ($mod in @('Az.Accounts','Az.Storage')) {
     if (-not (Get-Module -Name $mod)) { Import-Module $mod -ErrorAction Stop }
 }
 
-$script:DeploymentSubscriptionId = $null
+$script:DeploymentSubscriptionId = $ExpectedSubscriptionId
 try {
     $azContext = Get-AzContext -ErrorAction SilentlyContinue
-    if ($azContext -and $azContext.Subscription -and $azContext.Subscription.Id) {
+    if (-not $script:DeploymentSubscriptionId -and $azContext -and $azContext.Subscription -and $azContext.Subscription.Id) {
         $script:DeploymentSubscriptionId = $azContext.Subscription.Id
     }
 } catch { }
@@ -2193,6 +2195,18 @@ if (-not $poaPipeline) {
 } elseif (-not $clinicalCompleted) {
     throw "POA pipeline requires completed Clinical/Silver readiness"
 } else {
+    # POA's native IDM adapter reads these seven Dynamics-style Bronze tables.
+    $outreachPython = $DeploymentPython
+    if (-not $outreachPython) {
+        $runtime = Initialize-PythonVenv -Path (Join-Path $hlsRepoRoot 'orchestrator/.venv') -Windows ($env:OS -eq 'Windows_NT' -or $PSVersionTable.OS -match 'Windows') -CheckOnly
+        if (-not $runtime) { throw 'Outreach demo enrichment requires orchestrator/.venv. Run setup-prereqs.ps1.' }
+        $outreachPython = $runtime.executable
+    }
+    & $outreachPython (Join-Path $hlsRepoRoot 'synthea/apply_demo_enrichment.py') outreach `
+        --subscription $script:DeploymentSubscriptionId --resource-group $ResourceGroupName `
+        --workspace-id $workspaceId --bronze-lakehouse-name $BronzeLakehouseName
+    if ($LASTEXITCODE -ne 0) { throw "Outreach demo source seeding failed with exit code $LASTEXITCODE" }
+    $fabHeaders = Get-FabricApiHeaders -AccessToken (Get-FabricApiAccessToken)
     $poaResult = Invoke-OptionalDataPipelineSerialized `
         -WorkspaceId $workspaceId `
         -PipelineName $PoaPipelineName `
