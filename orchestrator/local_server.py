@@ -1236,15 +1236,25 @@ async def _run_teardown(instance_id: str, req: TeardownRequest):
                       f"subscription={spec.subscription_id})")
     result: dict[str, Any] | None = None
     refused = error = ""
+    # Reports reach the loop through call_soon_threadsafe; the coroutine can resume before they
+    # are applied, so a late "running" report overwrote the final status. The worker queues a
+    # sentinel behind its own reports, and the final status waits for it.
+    reports_applied = loop.create_future()
+
+    def run_teardown() -> dict[str, Any]:
+        try:
+            return DeploymentTeardown(spec, AzureCliTokens(spec.subscription_id), _LoopReport()).run()
+        finally:
+            loop.call_soon_threadsafe(reports_applied.set_result, None)
+
     try:
-        # Reports queued by the worker run before this coroutine resumes (FIFO on the loop).
-        result = await loop.run_in_executor(
-            None, lambda: DeploymentTeardown(spec, AzureCliTokens(spec.subscription_id), _LoopReport()).run())
+        result = await loop.run_in_executor(None, run_teardown)
     except TeardownRefused as exc:
         refused = str(exc)
     except Exception as exc:
         logger.error("Teardown %s failed: %s", instance_id, exc, exc_info=True)
         error = str(exc)
+    await reports_applied
 
     duration = time.time() - start
     succeeded = result is not None and result.get("status") == "succeeded"
