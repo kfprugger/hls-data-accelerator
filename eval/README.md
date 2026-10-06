@@ -81,6 +81,36 @@ The ontology graph model still requires a one-time portal action after deploymen
 Data Agent staging publication is automated through the typed Fabric DataAgent API,
 and the harness validates published agents through their documented MCP endpoints.
 
+## Post-deployment test plan
+
+Run these after `Deploy-All.ps1` completes, with the capacity `Active` and the isolated
+BrakeKat Azure CLI profile (`AZURE_CONFIG_DIR=/Users/joey/.azure-isolated/BrakeKat`).
+
+1. **Automated surfaces.** Run the harness with `--json-out`. Every category except
+   `operations_agents` (step 5) and `browser_surfaces` must pass before continuing.
+2. **Seed Clinical Triage test rows.** A fresh deployment has no triage records, so the app
+   shows nothing to triage. Seed one row per device from the live alerts of the last hour:
+   ```bash
+   orchestrator/.venv/bin/python rayfin-clinical-triage-app/scripts/seed_test_triage_rows.py \
+     --subscription <subscription-id> --workspace-id <fabric-workspace-id>
+   ```
+   Expect 12 rows across Critical, Urgent and Warning tiers and Open, Acknowledged and
+   Resolved statuses; a rerun inserts 0. The telemetry producers must be running so
+   `fn_AlertLocationMap` returns alerts. Rows are synthetic test records, marked in
+   `clinicianNotes`, with masked patient aliases.
+3. **Clinical Triage browser check** (Edge Work - Brakekat; the app renders in a
+   cross-origin Fabric iframe, so APIs cannot prove it). Open `rayfin-clinical-triage-app`
+   from the workspace and confirm:
+   - the list shows the seeded rows, and the severity counts match the seed output;
+   - a hospital filter narrows the list;
+   - selecting a row shows its device and hospital;
+   - acknowledging an `Open` row survives a reload.
+4. **Rayfin Command Center.** Publish a snapshot and reconcile it as described in
+   `rayfin-health-command-center/README.md`.
+5. **HealthcareOpsAgent** (portal only). Open the agent, select **Generate Playbook**, then
+   **Start**. Rerun the harness with fresh `--operations-evidence` (older than one hour is
+   rejected) and `--browser-evidence`.
+
 ## Interpreting results
 
 - `reports` FAIL with "Direct Lake data source connection failed" = the semantic
