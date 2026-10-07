@@ -366,6 +366,38 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertFalse(request.skip_ops_agent)
         self.assertFalse(request.skip_graph_agent)
 
+    def _live_continuation(self, cloud_state: dict, counts: dict):
+        request = self.local_server.DeployRequest(fabric_workspace_name="med-test", resource_group_name="rg-med-test")
+        with (
+            patch.object(self.local_server, "_cloud_state_sync", return_value=cloud_state),
+            patch.object(self.local_server, "_live_resume_prerequisites", return_value={"fhirCounts": counts}),
+        ):
+            self.local_server._apply_live_continuation_skips(request, {"instanceId": "prior-run"})
+        return request
+
+    def test_live_continuation_refuses_unverified_estate_instead_of_reseeding(self) -> None:
+        # A failed probe once read a 100-patient estate as empty, which would have loaded new Synthea patients.
+        verified = {"patients": 100, "devices": 100, "exportedFiles": 0, "dicomStudies": 202, "countsVerified": True}
+        rg_found = {"workspace": {"exists": True}, "resourceGroup": {"exists": True}}
+        rg_unknown = {"workspace": {"exists": True}, "resourceGroup": {"exists": None, "status": "unreachable"}}
+        with self.assertRaises(self.local_server.HTTPException) as unknown_rg:
+            self._live_continuation(rg_unknown, verified)
+        self.assertEqual(unknown_rg.exception.status_code, 503)
+        with self.assertRaises(self.local_server.HTTPException) as unverified_counts:
+            self._live_continuation(rg_found, {"patients": 0, "devices": 0, "countsVerified": False})
+        self.assertEqual(unverified_counts.exception.status_code, 503)
+        reused = self._live_continuation(rg_found, verified)
+        self.assertTrue(reused.reuse_patients)
+        self.assertTrue(reused.skip_synthea)
+        self.assertTrue(reused.skip_dicom)
+
+    def test_failed_resource_group_probe_is_unknown_not_deleted(self) -> None:
+        failed = types.SimpleNamespace(returncode=1, stdout="", stderr="connection reset")
+        with patch.object(self.local_server, "_az_run", return_value=failed):
+            state = self.local_server._cloud_state_sync("", "rg-med-test")
+        self.assertIsNone(state["resourceGroup"]["exists"])
+        self.assertEqual(state["resourceGroup"]["status"], "unreachable")
+
     def _ontology_resume(self, phases: list[dict]):
         request = self.local_server.DeployRequest(
             fabric_workspace_name="med-test",

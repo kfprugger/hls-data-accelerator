@@ -237,12 +237,14 @@ class HdsPayloadIntegrityTests(unittest.TestCase):
 
 
 class _EnvironmentFabric:
-    def __init__(self, published, staging=None, retain_old_publish=False, definition_from_staging=False):
+    def __init__(self, published, staging=None, retain_old_publish=False, definition_from_staging=False,
+                 published_runtime=hds.HDS_SPARK_RUNTIME_VERSION):
         self.published = dict(published)
         self.staging = dict(published if staging is None else staging)
         self.retain_old_publish = retain_old_publish
         self.publish_count = 0
         self.definition_from_staging = definition_from_staging
+        self.published_runtime = self.staged_runtime = published_runtime
 
     def find_item(self, workspace_id, display_name, item_type):
         return {"id": "environment", "displayName": display_name, "type": item_type}
@@ -253,7 +255,14 @@ class _EnvironmentFabric:
             for path, content in (self.staging if self.definition_from_staging else self.published).items()
         ]}
 
-    def call(self, method, endpoint):
+    def call(self, method, endpoint, body=None):
+        if endpoint.endswith("/staging/sparkcompute"):
+            if method == "PATCH":
+                self.staged_runtime = body["runtimeVersion"]
+                return None
+            return {"runtimeVersion": self.staged_runtime}
+        if endpoint.endswith("/sparkcompute"):
+            return {"runtimeVersion": self.published_runtime}
         if endpoint.split("?", 1)[0].endswith("/libraries"):
             content = self.staging if "/staging/" in endpoint else self.published
             return {"libraries": [
@@ -279,6 +288,7 @@ class _EnvironmentFabric:
         self.publish_count += 1
         if not self.retain_old_publish:
             self.published = dict(self.staging)
+            self.published_runtime = self.staged_runtime
         return _Response(status_code=200)
 
 
@@ -289,13 +299,13 @@ class _FreshEnvironmentFabric(_EnvironmentFabric):
         super().__init__(published, staging)
         self.error_code = error_code
 
-    def call(self, method, endpoint):
+    def call(self, method, endpoint, body=None):
         if endpoint.split("?", 1)[0].endswith("/libraries"):
             content = self.staging if "/staging/" in endpoint else self.published
             if not any(path.endswith(".whl") for path in content):
-                body = {"errorCode": self.error_code}
-                raise hds.requests.HTTPError(response=SimpleNamespace(status_code=404, json=lambda: body))
-        return super().call(method, endpoint)
+                error_body = {"errorCode": self.error_code}
+                raise hds.requests.HTTPError(response=SimpleNamespace(status_code=404, json=lambda: error_body))
+        return super().call(method, endpoint, body)
 
 
 class HdsEnvironmentIntegrityTests(unittest.TestCase):
@@ -318,6 +328,13 @@ class HdsEnvironmentIntegrityTests(unittest.TestCase):
         self.assertEqual(fabric.publish_count, 0)
         self.assertEqual(fabric.published, self.desired)
         self.assertEqual(fabric.staging, {})
+
+    def test_identical_libraries_on_wrong_runtime_are_restaged_and_published(self):
+        # New tenants default workspaces, and therefore new environments, to Runtime 2.0.
+        fabric = _EnvironmentFabric(self.desired, published_runtime="2.0")
+        hds._deploy_environment(fabric, "workspace", self.root)
+        self.assertEqual(fabric.publish_count, 1)
+        self.assertEqual(fabric.published_runtime, hds.HDS_SPARK_RUNTIME_VERSION)
 
     def test_new_environment_without_libraries_is_staged_and_published(self):
         # A just-created environment reports publish state Success with nothing published.
@@ -398,10 +415,10 @@ class HdsEnvironmentIntegrityTests(unittest.TestCase):
             def find_item(self, workspace_id, display_name, item_type):
                 return {"id": "orphan", "displayName": display_name, "type": item_type}
 
-            def call(self, method, endpoint):
+            def call(self, method, endpoint, body=None):
                 if endpoint.endswith("/environments/orphan"):
                     raise hds.requests.HTTPError(response=SimpleNamespace(status_code=404))
-                return super().call(method, endpoint)
+                return super().call(method, endpoint, body)
 
             def delete_item(self, workspace_id, item_id):
                 self.orphan_exists = False

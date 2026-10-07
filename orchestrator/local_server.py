@@ -893,6 +893,9 @@ def _cloud_state_sync(ws_name: str = "", rg_name: str = "") -> dict:
     if rg_name:
         try:
             exists_proc = _az_run(["az", "group", "exists", "--name", rg_name])
+            if exists_proc.returncode != 0:
+                # A failed probe is unknown, not "deleted": reading it as absent re-seeds a live estate.
+                raise RuntimeError((exists_proc.stderr or exists_proc.stdout or "az group exists failed").strip())
             exists = exists_proc.stdout.strip().lower() == "true"
             state["resourceGroup"]["exists"] = exists
             if exists:
@@ -1591,6 +1594,12 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
 def _apply_live_continuation_skips(req: DeployRequest, prior_deploy: dict, mode: str = "Continue-from-failure") -> bool:
     """Derive safe continuation skips from live cloud state when old run output is missing."""
     cloud_state = _cloud_state_sync(req.fabric_workspace_name, req.resource_group_name)
+    for label, name, state in (
+        ("Fabric workspace", req.fabric_workspace_name, cloud_state.get("workspace") or {}),
+        ("resource group", req.resource_group_name, cloud_state.get("resourceGroup") or {}),
+    ):
+        if name and state.get("exists") is None:
+            raise HTTPException(503, f"{mode}: could not verify {label} '{name}' ({state.get('error') or state.get('status')}); existing data cannot be confirmed, so nothing was started. Retry.")
     workspace_exists = bool((cloud_state.get("workspace") or {}).get("exists"))
     rg_exists = bool((cloud_state.get("resourceGroup") or {}).get("exists"))
     if not workspace_exists and not rg_exists:
@@ -1615,6 +1624,8 @@ def _apply_live_continuation_skips(req: DeployRequest, prior_deploy: dict, mode:
             applied = True
 
     counts = evidence.get("fhirCounts") or {}
+    if rg_exists and not counts.get("countsVerified"):
+        raise HTTPException(503, f"{mode}: could not verify FHIR patient/device counts in '{req.resource_group_name}'; existing data cannot be confirmed, so nothing was started. Retry.")
     patients = int(counts.get("patients") or 0)
     devices = int(counts.get("devices") or 0)
     exported = int(counts.get("exportedFiles") or 0)
@@ -3732,7 +3743,8 @@ def _check_emulator_status(rg_name: str) -> dict:
 
 def _query_fhir_counts(rg_name: str) -> dict:
     """Query FHIR service for actual patient and device counts, plus storage stats."""
-    result = {"patients": 0, "devices": 0, "exportedFiles": 0, "dicomStudies": 0}
+    result = {"patients": 0, "devices": 0, "exportedFiles": 0, "dicomStudies": 0, "countsVerified": False}
+    patients_ok = devices_ok = False
     try:
         # Find FHIR service from the RG using resource list (more reliable)
         proc = _az_run([
@@ -3740,8 +3752,12 @@ def _query_fhir_counts(rg_name: str) -> dict:
             "--resource-type", "Microsoft.HealthcareApis/workspaces/fhirservices",
             "--query", "[0].name", "-o", "tsv",
         ])
-        if proc.returncode != 0 or not proc.stdout.strip():
-            logger.warning("FHIR resource not found in RG '%s' (exit=%d, out='%s')", rg_name, proc.returncode, proc.stdout[:200])
+        if proc.returncode != 0:
+            logger.warning("FHIR resource query failed in RG '%s' (exit=%d)", rg_name, proc.returncode)
+            return result
+        if not proc.stdout.strip():
+            logger.info("No FHIR service in RG '%s'", rg_name)
+            result["countsVerified"] = True
             return result
         fhir_name = proc.stdout.strip()  # e.g. "hdwsXXX/fhirXXX"
         logger.info("FHIR resource name: '%s'", fhir_name)
@@ -3771,6 +3787,7 @@ def _query_fhir_counts(rg_name: str) -> dict:
             patient_resp = _requests.get(f"{fhir_url}/Patient?_summary=count", headers=headers, timeout=30)
             if patient_resp.ok:
                 result["patients"] = patient_resp.json().get("total", 0)
+                patients_ok = True
                 logger.info("FHIR patients: %d", result["patients"])
             else:
                 logger.warning("FHIR Patient query failed: %d %s", patient_resp.status_code, patient_resp.text[:200])
@@ -3782,11 +3799,13 @@ def _query_fhir_counts(rg_name: str) -> dict:
             device_resp = _requests.get(f"{fhir_url}/Device?_summary=count", headers=headers, timeout=30)
             if device_resp.ok:
                 result["devices"] = device_resp.json().get("total", 0)
+                devices_ok = True
                 logger.info("FHIR devices: %d", result["devices"])
             else:
                 logger.warning("FHIR Device query failed: %d %s", device_resp.status_code, device_resp.text[:200])
         except Exception as e:
             logger.warning("FHIR Device query exception: %s", e)
+        result["countsVerified"] = patients_ok and devices_ok
 
         # Count FHIR export files and DICOM studies in storage
         try:

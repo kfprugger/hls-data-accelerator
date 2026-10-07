@@ -1,3 +1,5 @@
+# Same strictness as storage-access-trusted-workspace.ps1, so extracted functions fail here as they would in a deployment.
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $scriptPath = Join-Path $PSScriptRoot "../storage-access-trusted-workspace.ps1"
@@ -37,6 +39,9 @@ foreach ($functionName in @(
     Invoke-Expression $functionAst.Extent.Text
 }
 $ProductionInvokeFabricApiRequest = ${function:Invoke-FabricApiRequest}
+# Script-level constants the extracted functions read (storage-access-trusted-workspace.ps1).
+$FabricManagementEndpoint = 'https://api.fabric.microsoft.com'
+$OneLakeEndpoint = 'https://onelake.dfs.fabric.microsoft.com'
 
 $script:Logs = @()
 function Write-Log {

@@ -26,7 +26,7 @@ Usage:
   python3 eval/deployment_eval_harness.py --workspace med-0719 --skip agents
 """
 from __future__ import annotations
-import argparse, json, os, ssl, subprocess, sys, time, urllib.request, urllib.error
+import argparse, json, os, re, ssl, subprocess, sys, time, urllib.request, urllib.error
 from surface_checks import orchestrator_checks, report_layout_checks, browser_evidence_checks
 from operations_agent_check import validate_operations_agents
 from graph_agent_check import check_graph_agent
@@ -37,8 +37,6 @@ FABRIC_RESOURCE = "https://api.fabric.microsoft.com"
 PBI_RESOURCE = "https://analysis.windows.net/powerbi/api"
 DB_RESOURCE = "https://database.windows.net"
 AGENT_API_VERSION = "2024-05-01-preview"
-CAPACITY_ID = ("/subscriptions/5772d06a-5513-4cc5-ac08-a3805440c60e/resourceGroups/"
-               "rg-fabricskus/providers/Microsoft.Fabric/capacities/fabrjbwu2")
 
 _CTX = ssl.create_default_context()
 
@@ -91,13 +89,28 @@ def http(method: str, url: str, token: str, body=None, timeout=90):
             return e.code, {"_raw": raw[:400]}
 
 
-def ensure_capacity_active(az: Az, log, *, resume: bool = True) -> bool:
+def resolve_capacity_id(az: Az, ws_id: str) -> str | None:
+    """ARM ID of the Fabric capacity backing the workspace, in whichever subscription holds it."""
+    token = az.token(FABRIC_RESOURCE)
+    _, workspace = http("GET", f"{FABRIC_API}/workspaces/{ws_id}", token)
+    _, capacities = http("GET", f"{FABRIC_API}/capacities", token)
+    name = next((c.get("displayName") for c in capacities.get("value", [])
+                 if c.get("id") == workspace.get("capacityId")), None)
+    if not name or not re.fullmatch(r"[a-z0-9]{3,63}", name):
+        return None
+    out = az.run(["az", "graph", "query", "-q",
+                  f"resources | where type =~ 'microsoft.fabric/capacities' and name =~ '{name}' | project id",
+                  "--query", "data[0].id", "-o", "tsv"])
+    return out.stdout.strip() or None
+
+
+def ensure_capacity_active(az: Az, log, capacity_id: str, *, resume: bool = True) -> bool:
     """The F64 capacity backing these workspaces auto-pauses; Direct Lake reads,
     KQL queries, and agent runs all fail when it is Paused. Resume if needed."""
-    out = az.run(["az", "resource", "show", "--ids", CAPACITY_ID,
+    out = az.run(["az", "resource", "show", "--ids", capacity_id,
                   "--query", "properties.state", "-o", "tsv"])
     state = out.stdout.strip()
-    log(f"capacity fabrjbwu2 state: {state or '(unknown)'}")
+    log(f"capacity {capacity_id.rsplit('/', 1)[-1]} state: {state or '(unknown)'}")
     if out.returncode == 0 and state == "Active":
         return True
     if out.returncode or not state:
@@ -108,13 +121,13 @@ def ensure_capacity_active(az: Az, log, *, resume: bool = True) -> bool:
         return False
     log(f"  capacity is {state}; resuming...")
     resumed = az.run(["az", "resource", "invoke-action", "--action", "resume",
-                      "--ids", CAPACITY_ID, "--no-wait"])
+                      "--ids", capacity_id, "--no-wait"])
     if resumed.returncode:
         log(f"  ERROR: capacity resume failed: {resumed.stderr.strip()[:300]}")
         return False
     for _ in range(12):
         time.sleep(20)
-        s = az.run(["az", "resource", "show", "--ids", CAPACITY_ID,
+        s = az.run(["az", "resource", "show", "--ids", capacity_id,
                     "--query", "properties.state", "-o", "tsv"]).stdout.strip()
         if s == "Active":
             log("  capacity resumed -> Active")
@@ -542,6 +555,7 @@ def main() -> int:
     ap.add_argument("--skip", action="append", default=[], choices=["reports", "agents", "rti", "deployment", "browser"],
                     help="skip a category (repeatable)")
     ap.add_argument("--no-capacity-resume", action="store_true", help="do not auto-resume the capacity")
+    ap.add_argument("--capacity-id", help="ARM ID of the workspace's Fabric capacity (default: resolved from the workspace)")
     args = ap.parse_args()
     if args.readiness_timeout <= 0:
         ap.error("--readiness-timeout must be greater than zero")
@@ -550,12 +564,15 @@ def main() -> int:
     az = Az(args.azure_config_dir)
     log(f"=== deployment eval harness :: workspace={args.workspace} :: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} ===")
     try:
-        if not ensure_capacity_active(az, log, resume=not args.no_capacity_resume):
-            log("ABORT: capacity not Active"); return 2
         ws_id = find_workspace(az, args.workspace)
         if not ws_id:
             log(f"ABORT: workspace '{args.workspace}' not found"); return 2
         log(f"workspace id: {ws_id}")
+        capacity_id = args.capacity_id or resolve_capacity_id(az, ws_id)
+        if not capacity_id:
+            log("ABORT: could not resolve the workspace's Fabric capacity; pass --capacity-id"); return 2
+        if not ensure_capacity_active(az, log, capacity_id, resume=not args.no_capacity_resume):
+            log("ABORT: capacity not Active"); return 2
         items = list_items(az, ws_id)
         log(f"items: {len(items)}")
         

@@ -717,46 +717,68 @@ if (-not $pythonPath) {
 & $pythonPath $graphMaterializer --workspace-id $workspaceId --ontology-id $ontologyId --graph-id $graphModelId --if-empty --skip-refresh
 if ($LASTEXITCODE -ne 0) { throw "Graph definition materialization failed (exit $LASTEXITCODE); refresh was not started" }
 
-Write-Host "  Triggering graph hydration for '$OntologyName'..." -ForegroundColor White
-$jobBody = '{"jobType":"RefreshGraph"}'
-Invoke-WebRequest -Method POST `
-    -Uri "$FabricApiBase/workspaces/$workspaceId/items/$graphModelId/jobs/instances?jobType=RefreshGraph" `
-    -Headers @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" } `
-    -Body $jobBody -UseBasicParsing -ErrorAction Stop | Out-Null
-Write-Host "  ✓ Graph refresh invoked" -ForegroundColor Green
+function Invoke-GraphModelRefresh {
+    # Refreshes the GraphModel and waits for the job this call submitted. Fabric answers a refresh
+    # submitted while another is in flight (for example the one it starts for a new graph) with
+    # Deduped; wait for that run to finish, then refresh again so the graph reflects every table
+    # written before this call.
+    param(
+        [Parameter(Mandatory)][string]$JobsUri,
+        [Parameter(Mandatory)][scriptblock]$RequestJob,
+        [int]$TimeoutMinutes = 30,
+        [int]$MaxSubmissions = 3,
+        [int]$PollSeconds = 15
+    )
+    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
+    for ($submission = 1; $submission -le $MaxSubmissions -and (Get-Date) -lt $deadline; $submission++) {
+        $jobUri = & $RequestJob 'POST' "$JobsUri`?jobType=RefreshGraph"
+        Write-Host "  ✓ Graph refresh invoked (submission $submission)" -ForegroundColor Green
+        $job = $null
+        while ((Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds $PollSeconds
+            $job = & $RequestJob 'GET' $jobUri
+            if ($job -and $job.status -in @('Completed', 'Failed', 'Cancelled', 'Canceled', 'Deduped')) { break }
+            $statusStr = if ($job) { $job.status } else { 'Unknown' }
+            Write-Host "    Status: $statusStr..." -ForegroundColor DarkGray
+        }
+        if (-not $job -or $job.status -notin @('Completed', 'Failed', 'Cancelled', 'Canceled', 'Deduped')) { break }
+        if ($job.status -eq 'Completed') { return }
+        if ($job.status -ne 'Deduped') { throw "Graph hydration failed: $($job | ConvertTo-Json -Depth 10)" }
+        Write-Host "    Another graph refresh is already running; waiting for it before refreshing again..." -ForegroundColor Yellow
+        while ((Get-Date) -lt $deadline) {
+            $jobs = & $RequestJob 'GET' $JobsUri
+            if ($jobs -and -not @($jobs.value | Where-Object { $_.status -in @('NotStarted', 'InProgress') })) { break }
+            Start-Sleep -Seconds $PollSeconds
+        }
+    }
+    throw "Graph hydration did not complete within $TimeoutMinutes minutes ($MaxSubmissions submissions)"
+}
 
-$daStart = Get-Date
-$refreshCompleted = $false
-while ((New-TimeSpan -Start $daStart).TotalMinutes -lt 15) {
-    Start-Sleep 15
+$graphJobRequest = {
+    param([string]$Method, [string]$Uri)
+    $headers = @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" }
     try {
-        $remainingRefreshSeconds = [Math]::Max(1, [Math]::Ceiling(900 - (New-TimeSpan -Start $daStart).TotalSeconds))
-        $daJobs = (Invoke-RestMethod -Uri "$FabricApiBase/workspaces/$workspaceId/items/$graphModelId/jobs/instances?limit=1" -Headers @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" } -TimeoutSec ([Math]::Min(30, $remainingRefreshSeconds)) -ErrorAction Stop).value
+        if ($Method -eq 'POST') {
+            $response = Invoke-WebRequest -Method POST -Uri $Uri -Headers $headers -Body '{"jobType":"RefreshGraph"}' -UseBasicParsing -ErrorAction Stop
+            $location = $response.Headers["Location"]; if ($location -is [array]) { $location = $location[0] }
+            if (-not $location) { throw "Graph refresh was accepted without a job instance Location" }
+            return $location
+        }
+        return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec 30 -ErrorAction Stop
     } catch {
         $jobStatusCode = $null
         try { $jobStatusCode = [int]$_.Exception.Response.StatusCode } catch {}
-        $jobErrBody = $_.ErrorDetails.Message
-        if ($jobStatusCode -in @(429, 500, 502, 503, 504) -or ($jobStatusCode -eq 403 -and $jobErrBody -match "RequestDeniedByInboundPolicy")) {
+        if ($Method -eq 'GET' -and ($jobStatusCode -in @(429, 500, 502, 503, 504) -or ($jobStatusCode -eq 403 -and $_.ErrorDetails.Message -match "RequestDeniedByInboundPolicy"))) {
             Write-Host "    Graph refresh status transient HTTP $jobStatusCode — retrying..." -ForegroundColor Yellow
-            continue
+            return $null
         }
-        throw $_
-    }
-    if ($daJobs -and $daJobs[0].status -eq 'Completed') {
-        Write-Host "  ✓ Graph hydration completed successfully" -ForegroundColor Green
-        $refreshCompleted = $true
-        break
-    } elseif ($daJobs -and $daJobs[0].status -in @('Failed', 'Cancelled', 'Canceled', 'Deduped')) {
-        $errJson = $daJobs[0] | ConvertTo-Json -Depth 10
-        throw "Graph hydration failed: $errJson"
-    } else {
-        $statusStr = if ($daJobs) { $daJobs[0].status } else { "Unknown" }
-        Write-Host "    Status: $statusStr..." -ForegroundColor DarkGray
+        throw
     }
 }
-if (-not $refreshCompleted) {
-    throw "Graph hydration did not complete within 15 minutes"
-}
+
+Write-Host "  Triggering graph hydration for '$OntologyName'..." -ForegroundColor White
+Invoke-GraphModelRefresh -JobsUri "$FabricApiBase/workspaces/$workspaceId/items/$graphModelId/jobs/instances" -RequestJob $graphJobRequest
+Write-Host "  ✓ Graph hydration completed successfully" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "  Verifying..." -ForegroundColor White

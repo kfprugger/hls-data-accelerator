@@ -826,11 +826,11 @@ function Assert-SilverFhirReferencesIntact {
 
     $checks = @(
         @{ Label = 'Condition.subject'; Table = 'Condition'; Column = 'subject_string'; JsonPath = '$.reference' },
-        @{ Label = 'Condition.encounter'; Table = 'Condition'; Column = 'encounter_string'; JsonPath = '$.reference' },
+        @{ Label = 'Condition.encounter'; Table = 'Condition'; Column = 'encounter_string'; JsonPath = '$.reference'; Optional = $true },
         @{ Label = 'Observation.subject'; Table = 'Observation'; Column = 'subject_string'; JsonPath = '$.reference' },
-        @{ Label = 'Observation.encounter'; Table = 'Observation'; Column = 'encounter_string'; JsonPath = '$.reference' },
+        @{ Label = 'Observation.encounter'; Table = 'Observation'; Column = 'encounter_string'; JsonPath = '$.reference'; Optional = $true },
         @{ Label = 'Procedure.subject'; Table = 'Procedure'; Column = 'subject_string'; JsonPath = '$.reference' },
-        @{ Label = 'Procedure.encounter'; Table = 'Procedure'; Column = 'encounter_string'; JsonPath = '$.reference' },
+        @{ Label = 'Procedure.encounter'; Table = 'Procedure'; Column = 'encounter_string'; JsonPath = '$.reference'; Optional = $true },
         @{ Label = 'Encounter.subject'; Table = 'Encounter'; Column = 'subject_string'; JsonPath = '$.reference' },
         @{ Label = 'CarePlan.subject'; Table = 'CarePlan'; Column = 'subject_string'; JsonPath = '$.reference' },
         @{ Label = 'MedicationRequest.subject'; Table = 'MedicationRequest'; Column = 'subject_string'; JsonPath = '$.reference' },
@@ -856,7 +856,12 @@ function Assert-SilverFhirReferencesIntact {
     }
 
     foreach ($check in $checks) {
-        $query = "SELECT COUNT_BIG(*) FROM dbo.[$($check.Table)] WHERE [$($check.Column)] IS NOT NULL AND COALESCE(NULLIF(JSON_VALUE([$($check.Column)], '$.reference'), ''), NULLIF(JSON_VALUE([$($check.Column)], '$.msftSourceReference'), ''), NULLIF(JSON_VALUE([$($check.Column)], '$.idOrig'), ''), NULLIF(JSON_VALUE([$($check.Column)], '$.identifier.value'), '')) IS NULL"
+        $column = "[$($check.Column)]"
+        $unresolvable = "COALESCE(NULLIF(JSON_VALUE($column, '$.reference'), ''), NULLIF(JSON_VALUE($column, '$.msftSourceReference'), ''), NULLIF(JSON_VALUE($column, '$.idOrig'), ''), NULLIF(JSON_VALUE($column, '$.identifier.value'), '')) IS NULL"
+        # HDS stores an absent reference as an all-null struct, never SQL NULL. Encounter is 0..1 in
+        # FHIR, so an optional reference is broken only when it carries content but no resolvable id.
+        $present = if ($check['Optional']) { " AND COALESCE(NULLIF(JSON_VALUE($column, '$.display'), ''), NULLIF(JSON_VALUE($column, '$.type'), ''), NULLIF(JSON_VALUE($column, '$.identifier.system'), '')) IS NOT NULL" } else { '' }
+        $query = "SELECT COUNT_BIG(*) FROM dbo.[$($check.Table)] WHERE $column IS NOT NULL AND $unresolvable$present"
         $rawCount = Invoke-LakehouseScalarQuery -Server $server -Database $LakehouseName -Token $sqlToken -Query $query
         $broken = 0L
         if (-not [long]::TryParse($rawCount, [ref]$broken)) {

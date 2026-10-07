@@ -42,6 +42,9 @@ COMPANY_PREFIX = "healthcare1"
 TECHNICAL_PREFIX = "msft"
 DEPLOYMENT_LAKEHOUSE = "deployment_lakehouse"
 ENVIRONMENT_NAME = "healthcare1_msft_environment"
+# HDS 1.4.0 and its pinned environment.yml libraries target Fabric Runtime 1.3 (Spark 3.5).
+# New tenants default workspaces to Runtime 2.0, where the environment's library publish fails.
+HDS_SPARK_RUNTIME_VERSION = "1.3"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VENDOR_ROOT = REPO_ROOT / "vendor" / "microsoft-hds" / HDS_VERSION
 HDS_ROOT = VENDOR_ROOT / "HDS.SourceCode"
@@ -954,13 +957,34 @@ def _managed_wheel_names(names: set[str]) -> set[str]:
     return {name for name in names if name.endswith(".whl") and name.split("-", 1)[0].lower() in {"hds", "dtt"}}
 
 
+def _spark_runtime(compute: dict[str, Any] | None) -> str:
+    return str((compute or {}).get("runtimeVersion") or "")
+
+
+def _ensure_workspace_spark_runtime(fabric: FabricClient, workspace_id: str) -> None:
+    """Default the workspace to the runtime HDS and the accelerator notebooks are built for."""
+    endpoint = f"/workspaces/{workspace_id}/spark/settings"
+    current = _spark_runtime((fabric.call("GET", endpoint) or {}).get("environment"))
+    if current != HDS_SPARK_RUNTIME_VERSION:
+        _event("environment", "running", f"Setting workspace Spark runtime {current or 'unset'} -> {HDS_SPARK_RUNTIME_VERSION}")
+        fabric.call("PATCH", endpoint, {"environment": {"runtimeVersion": HDS_SPARK_RUNTIME_VERSION}})
+
+
+def _ensure_staged_spark_runtime(fabric: FabricClient, base_endpoint: str) -> None:
+    endpoint = f"{base_endpoint}/staging/sparkcompute"
+    current = _spark_runtime(fabric.call("GET", endpoint))
+    if current != HDS_SPARK_RUNTIME_VERSION:
+        _event("environment", "running", f"Staging environment Spark runtime {current or 'unset'} -> {HDS_SPARK_RUNTIME_VERSION}")
+        fabric.call("PATCH", endpoint, {"runtimeVersion": HDS_SPARK_RUNTIME_VERSION})
+
+
 def _environment_payload_matches(
     fabric: FabricClient,
     workspace_id: str,
     environment_id: str,
     desired_hashes: dict[str, str],
 ) -> bool:
-    """Use published content-tagged names and YAML; definition bytes are an extra check."""
+    """Use published content-tagged names, YAML and runtime; definition bytes are an extra check."""
     published_wheels = _environment_custom_libraries(
         fabric, f"/workspaces/{workspace_id}/environments/{environment_id}/libraries",
     )
@@ -971,6 +995,9 @@ def _environment_payload_matches(
         "GET", f"/workspaces/{workspace_id}/environments/{environment_id}/libraries/exportExternalLibraries",
     ).content
     if hashlib.sha256(published_yml).hexdigest() != desired_hashes["Libraries/PublicLibraries/environment.yml"]:
+        return False
+    published_compute = fabric.call("GET", f"/workspaces/{workspace_id}/environments/{environment_id}/sparkcompute")
+    if _spark_runtime(published_compute) != HDS_SPARK_RUNTIME_VERSION:
         return False
     definition = fabric.get_item_definition(workspace_id, environment_id)
     published_hashes = {}
@@ -1050,6 +1077,7 @@ def _deploy_environment(
         _event("environment", "succeeded", f"Environment already published: {environment_id}")
         return details
 
+    _ensure_staged_spark_runtime(fabric, base_endpoint)
     _event("environment", "running", f"Staging {len(wheel_paths)} Microsoft HDS/DTT wheels")
     staged_wheels = _environment_custom_libraries(fabric, f"{base_endpoint}/staging/libraries")
     obsolete_wheels = _managed_wheel_names(staged_wheels) - required_wheels
@@ -1131,6 +1159,7 @@ def _publish_hds_environment(
 ) -> dict[str, Any]:
     _event("environment", "running", "Deploying Microsoft HDS/DTT environment payload")
     try:
+        _ensure_workspace_spark_runtime(fabric, workspace_id)
         return _deploy_environment(fabric, workspace_id, build_root)
     except Exception as exc:
         _event("environment", "failed", str(exc))
