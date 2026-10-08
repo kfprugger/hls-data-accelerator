@@ -133,10 +133,12 @@ function Get-VaultSecret([string]$Name) {
             return Invoke-RestMethod -Uri "https://$vault.vault.azure.net/secrets/${Name}?api-version=7.4" `
                 -Headers @{ Authorization = "Bearer $(Get-PinnedToken 'https://vault.azure.net')" }
         } catch {
-            $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+            $response = $_.Exception.PSObject.Properties['Response']
+            $status = if ($response -and $response.Value) { [int]$response.Value.StatusCode } else { 0 }
             if ($status -eq 404) { return $null }
-            if ($status -ne 403 -or $attempt -eq 17) { throw }
-            Start-Sleep -Seconds 10 # New vault RBAC assignments propagate asynchronously.
+            # 403: new vault RBAC assignments propagate asynchronously; 0: a new vault's DNS/endpoint is not ready yet.
+            if ($status -notin @(0, 403) -or $attempt -eq 17) { throw }
+            Start-Sleep -Seconds 10
         }
     }
 }
