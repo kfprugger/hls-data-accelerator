@@ -32,7 +32,7 @@ RUN test "$TARGETARCH" = amd64 \
  && rm -rf /var/lib/apt/lists/*
 # Only the Az modules the phase scripts use (Accounts, Resources, Storage), at the versions Az 16.4.0 bundles.
 # The full Az rollup took over an hour to install from PSGallery inside ACR Tasks.
-RUN pwsh -NoProfile -NonInteractive -Command "\$ErrorActionPreference='Stop'; Set-PSResourceRepository PSGallery -Trusted; Install-PSResource -Name Az.Accounts -Version 5.5.3 -Scope AllUsers -TrustRepository; Install-PSResource -Name Az.Resources -Version 10.2.1 -Scope AllUsers -TrustRepository; Install-PSResource -Name Az.Storage -Version 9.7.2 -Scope AllUsers -TrustRepository"
+RUN pwsh -NoProfile -NonInteractive -Command "\$ErrorActionPreference='Stop'; foreach (\$m in @(@('Az.Accounts','5.5.3'), @('Az.Resources','10.2.1'), @('Az.Storage','9.7.2'))) { Install-PSResource -Name \$m[0] -Version \$m[1] -Repository PSGallery -Scope AllUsers -TrustRepository -AcceptLicense }; Import-Module Az.Accounts, Az.Resources, Az.Storage"
 RUN az extension add --name authV2 --version 1.0.1 --yes \
  && az extension add --name automation --version 0.2.2 --yes \
  && az extension add --name microsoft-fabric --version 1.0.0b1 --allow-preview true --yes \
