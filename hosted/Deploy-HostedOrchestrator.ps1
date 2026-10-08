@@ -38,6 +38,15 @@ function Invoke-Native([string]$Program, [string[]]$Arguments) {
     & $Program @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$Program failed (exit $LASTEXITCODE)." }
 }
+function Invoke-AcrBuild([string]$Context, [string]$Image, [string]$File, [string[]]$Extra = @()) {
+    # az acr build resolves --file against the current directory first; build from inside the
+    # staged context so a same-named file in the caller's directory is never uploaded instead.
+    Push-Location -LiteralPath $Context
+    try {
+        Invoke-Native az (@('acr', 'build', '--subscription', $SubscriptionId, '--registry', $registry, '--platform', 'linux/amd64',
+            '--image', $Image, '--file', $File) + $Extra + @('.'))
+    } finally { Pop-Location }
+}
 function Get-JwtClaims([string]$Token) {
     $encoded = $Token.Split('.')[1].Replace('-', '+').Replace('_', '/')
     $encoded = $encoded.PadRight($encoded.Length + ((4 - $encoded.Length % 4) % 4), '=')
@@ -264,8 +273,7 @@ function Publish-WardflowBundle([string]$Commit) {
         Set-Content -LiteralPath (Join-Path $context '.pinned-commit') -Value $Commit -NoNewline
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sandbox/wardflow-bundle.Dockerfile') -Destination (Join-Path $context 'Dockerfile')
         Write-Host "Publishing WardFlow bundle $Commit (committed source only)."
-        Invoke-Native az @('acr', 'build', '--subscription', $SubscriptionId, '--registry', $registry, '--platform', 'linux/amd64',
-            '--image', "hls-wardflow-bundle:$Commit", '--file', 'Dockerfile', $context)
+        Invoke-AcrBuild $context "hls-wardflow-bundle:$Commit" 'Dockerfile'
     } finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }
     if ((Get-Command gh -ErrorAction SilentlyContinue) -and ((& gh api user --jq .login 2>$null) -eq 'kfprugger')) {
         Invoke-Native gh @('variable', 'set', 'WARDFLOW_REF', '--repo', $githubRepo, '--body', $Commit)
@@ -376,11 +384,8 @@ if (-not $SkipImages) {
         # ACR must use the sandbox-specific source allowlist, not the root emulator exclusions.
         Copy-Item -LiteralPath (Join-Path $context 'hosted/sandbox/Dockerfile.dockerignore') -Destination (Join-Path $context '.dockerignore') -Force
         Write-Host "Building committed HLS $ImageTag with WardFlow bundle $wardflowCommit (uncommitted changes are not shipped)."
-        Invoke-Native az @('acr', 'build', '--subscription', $SubscriptionId, '--registry', $registry, '--platform', 'linux/amd64',
-            '--build-arg', "WARDFLOW_BUNDLE_IMAGE=$wardflowBundleImage",
-            '--image', "hls-orchestrator-sandbox:$ImageTag", '--file', 'hosted/sandbox/Dockerfile', $context)
-        Invoke-Native az @('acr', 'build', '--subscription', $SubscriptionId, '--registry', $registry, '--platform', 'linux/amd64',
-            '--image', "hls-gateway:$ImageTag", '--file', 'Dockerfile', (Join-Path $context 'hosted/gateway'))
+        Invoke-AcrBuild $context "hls-orchestrator-sandbox:$ImageTag" 'hosted/sandbox/Dockerfile' @('--build-arg', "WARDFLOW_BUNDLE_IMAGE=$wardflowBundleImage")
+        Invoke-AcrBuild (Join-Path $context 'hosted/gateway') "hls-gateway:$ImageTag" 'Dockerfile'
     } finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }
 }
 
