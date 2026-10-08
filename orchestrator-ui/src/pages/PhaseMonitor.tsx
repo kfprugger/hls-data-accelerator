@@ -43,6 +43,7 @@ import {
 import { PhaseCard } from "../components/PhaseCard";
 import { AllLogsStream } from "../components/AllLogsStream";
 import { DeployedResourcesPanel } from "../components/DeployedResourcesPanel";
+import { AddonPanel } from "../components/AddonPanel";
 import { AzureBadge, FabricBadge } from "../components/TypeBadges";
 import {
   getDeploymentStatus,
@@ -2204,6 +2205,10 @@ export function PhaseMonitor() {
           </Card>
         );
       })()}
+
+      {!isMock && !isTeardown && instanceId && status?.instanceId === instanceId && (
+        <AddonPanel key={instanceId} instanceId={instanceId} status={status} onRefresh={poll} />
+      )}
 
       {error && (
         <MessageBar intent="error">

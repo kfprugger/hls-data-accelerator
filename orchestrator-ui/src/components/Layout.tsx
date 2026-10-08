@@ -27,6 +27,7 @@ import {
   YouTubeIcon,
 } from "./BrandIcons";
 import { AnimatedBackground } from "./AnimatedBackground";
+import { HostedSignIn } from "./HostedSignIn";
 
 const useStyles = makeStyles({
   root: {
@@ -431,6 +432,7 @@ export function Layout() {
       </div>
 
       <div className={styles.content}>
+        <HostedSignIn />
         <Outlet />
       </div>
 

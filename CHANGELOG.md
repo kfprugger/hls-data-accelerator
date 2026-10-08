@@ -2,6 +2,16 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Hosted deployer (2026-10-08)
+
+Users can now deploy the accelerator into their own tenant, subscription and Fabric capacity from a hosted portal instead of a local install. See `hosted/README.md`.
+
+- **Added** `hosted/`: a gateway (`hosted/gateway`, multi-tenant Entra sign-in, allowlist of tenant/email or tenant/object-ID pairs, per-user sandbox lifecycle, streaming reverse proxy, idle reaper), the sandbox image (`hosted/sandbox`, today's backend and UI with pinned Azure CLI, Az PowerShell, Bicep, AzCopy, Node and Databricks CLI), infrastructure (`hosted/infra/main.bicep`), `hosted/Deploy-HostedOrchestrator.ps1` and the `hosted-orchestrator` GitHub Actions release over OIDC. WardFlow cardiology source ships as a data-only `hls-wardflow-bundle:<commit>` image published from the operator's machine.
+- **Added** hosted mode to the backend (`HLS_HOSTED=1`): a gateway-key guard, `/api/hosted/activity` and `/api/hosted/whoami`, device-code sign-in to the user's tenant for Azure CLI and Azure PowerShell (`/api/auth/device-login`, Conditional Access blocks explained), and the built UI served from the backend. Credentials stay in the container; history, logs and state ledgers go to `HLS_DATA_DIR`, with SQLite kept on local disk and copied to the share.
+- **Added** Databricks, Rayfin and cardiology add-ons as deploy-form toggles that can also be added to a completed deployment. Databricks reads a manifest-checked copy of the FHIR export (`fhir-export-databricks`, taken before HDS ingestion moves files) and pauses with instructions when it can't assign the regional metastore. Rayfin runs from per-deployment copies with per-command token audiences. Cardiology runs the pinned WardFlow scripts in seed, aggregator, Gold, app order with a selectable chat model.
+- **Changed** deployments to require an explicit tenant and subscription; the BrakeKat defaults are gone from `DeployRequest`, `invoke_powershell.py` and `Deploy-All.ps1`. Linux PowerShell temp-path fixes in the phase scripts.
+- **Removed** the never-used Azure Functions host (`orchestrator/function_app.py`, `host.json`, `bicep/orchestrator-infra.bicep`, the Functions-only activity modules) and the `azure-functions` packages from `requirements.txt`/`requirements.lock`.
+
 ### New-tenant deployment fixes (med-1006, 2026-10-07)
 
 A full deployment into a brand-new Fabric tenant (Caldova, `med-1006`) exposed defaults that the BrakeKat tenant had always supplied.

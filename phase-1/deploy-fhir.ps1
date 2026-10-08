@@ -29,6 +29,8 @@ param (
     [hashtable]$Tags = @{},
     [switch]$SkipFhir,
     [switch]$SkipFhirExport,
+    [switch]$ExportOnly,
+    [ValidatePattern('^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$')][string]$ExportContainerName = "fhir-export",
     [string]$ExpectedSubscriptionId = "",
     [string]$DeploymentPython = ""
 )
@@ -63,10 +65,6 @@ if ($SkipFhir) {
 
 $ErrorActionPreference = "Stop"
 
-# Ensure cross-platform temp directory is populated in $env:TEMP
-if (-not $env:TEMP) {
-    $env:TEMP = [System.IO.Path]::GetTempPath()
-}
 
 # Fix Azure CLI Unicode encoding issue on Windows (az acr build log streaming)
 $env:PYTHONIOENCODING = "utf-8"
@@ -663,10 +661,24 @@ function Invoke-FhirExport {
     return $exportDone
 }
 
+if ($ExportOnly) {
+    $ScriptDir = Split-Path -Parent $PSScriptRoot
+    Use-DeploymentAzSubscription
+    $service = az resource list -g $ResourceGroupName --resource-type 'Microsoft.HealthcareApis/workspaces/fhirservices' --query '[0].id' -o tsv
+    if ($LASTEXITCODE -ne 0 -or -not $service) { throw 'Existing FHIR service not found for export-only operation.' }
+    $url = az resource show --ids $service --query properties.hostName -o tsv
+    if ($LASTEXITCODE -ne 0 -or -not $url) { throw 'FHIR service hostName could not be resolved.' }
+    if ($url -notmatch '^https://') { $url = "https://$url" }
+    if (-not (Invoke-FhirExport -ResourceGroupName $ResourceGroupName -FhirServiceUrl $url -ExportContainerName $ExportContainerName)) {
+        throw 'Export-only operation did not complete.'
+    }
+    return
+}
+
 # Serialize tags for Bicep parameter passing
 # az CLI cannot reliably receive JSON objects inline on Windows
 # Write a temp params file and reference it
-$tagsParamFile = Join-Path $env:TEMP "deploy-tags-$(Get-Random).json"
+$tagsParamFile = Join-Path ([System.IO.Path]::GetTempPath()) "deploy-tags-$(Get-Random).json"
 $tagsParamContent = @{
     '`$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
     contentVersion = '1.0.0.0'
@@ -1014,7 +1026,7 @@ if ($syntheaImageExists -eq "true" -and -not $RebuildContainers) {
     }
     Push-Location synthea
     try {
-        $acrBuildErrLog = Join-Path $env:TEMP "acr-build-synthea-$(Get-Random).log"
+        $acrBuildErrLog = Join-Path ([System.IO.Path]::GetTempPath()) "acr-build-synthea-$(Get-Random).log"
         Write-Host "  Building image: $acrName/synthea-generator:v1" -ForegroundColor DarkGray
         Write-Host "  Context: $(Get-Location)" -ForegroundColor DarkGray
         Write-Host "  Stderr log: $acrBuildErrLog" -ForegroundColor DarkGray
@@ -1254,7 +1266,7 @@ if ($loaderImageExists -eq "true" -and -not $RebuildContainers) {
     }
     Push-Location fhir-loader
     try {
-        $acrBuildErrLog = Join-Path $env:TEMP "acr-build-fhir-loader-$(Get-Random).log"
+        $acrBuildErrLog = Join-Path ([System.IO.Path]::GetTempPath()) "acr-build-fhir-loader-$(Get-Random).log"
         Write-Host "  Building image: $acrName/fhir-loader:v1" -ForegroundColor DarkGray
         Write-Host "  Context: $(Get-Location)" -ForegroundColor DarkGray
         Write-Host "  Stderr log: $acrBuildErrLog" -ForegroundColor DarkGray
@@ -1451,7 +1463,7 @@ if ($dicomImageExists -eq "true" -and -not $RebuildContainers) {
     }
     Push-Location dicom-loader
     try {
-        $acrBuildErrLog = Join-Path $env:TEMP "acr-build-dicom-loader-$(Get-Random).log"
+        $acrBuildErrLog = Join-Path ([System.IO.Path]::GetTempPath()) "acr-build-dicom-loader-$(Get-Random).log"
         Write-Host "  Building image: $acrName/dicom-loader:v1" -ForegroundColor DarkGray
         Write-Host "  Context: $(Get-Location)" -ForegroundColor DarkGray
         Write-Host "  Stderr log: $acrBuildErrLog" -ForegroundColor DarkGray

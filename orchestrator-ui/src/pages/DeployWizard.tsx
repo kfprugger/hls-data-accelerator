@@ -39,6 +39,7 @@ import { HistoryInput } from "../components/HistoryInput";
 import { getTagHistory, addTagToHistory } from "../formHistory";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { AzureIcon, FabricIcon } from "../components/BrandIcons";
+import { AddonFields, getAddonOptions } from "../components/AddonFields";
 
 const useStyles = makeStyles({
   form: {
@@ -265,7 +266,7 @@ export function DeployWizard() {
   const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const navigate = useNavigate();
-  const { selectedSubscription, setSelectedSubscription, subscriptions: ctxSubscriptions, capacities: ctxCapacities } = useAppState();
+  const { selectedSubscription, setSelectedSubscription, subscriptions: ctxSubscriptions, capacities: ctxCapacities, authContext } = useAppState();
   const [subscriptions, setSubscriptions] = useState(getMockSubscriptions());
   const [loading, setLoading] = useState(false);
   const [deploymentStartMessage, setDeploymentStartMessage] = useState("");
@@ -605,6 +606,8 @@ export function DeployWizard() {
 
   const [showJsonEditor, setShowJsonEditor] = useState(false);
   const [config, setConfig] = useState<DeploymentConfig>({
+    expected_tenant_id: "",
+    expected_subscription_id: "",
     resource_group_name: "",
     location: "eastus",
     admin_security_group: "",
@@ -645,7 +648,15 @@ export function DeployWizard() {
     skip_graph_agent: false,
     payer_ops_email: "",
     claim_event_rate_per_minute: 60,
+    ...getAddonOptions(),
   });
+
+  useEffect(() => {
+    const subscriptionId = selectedSubscription || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || "";
+    const tenantId = ctxSubscriptions.find((item) => item.id === subscriptionId)?.tenantId
+      || authContext?.cli.tenantId || authContext?.pwsh.tenantId || "";
+    setConfig((current) => ({ ...current, expected_tenant_id: tenantId, expected_subscription_id: subscriptionId }));
+  }, [authContext, selectedSubscription, ctxSubscriptions]);
 
   const [useNamingConvention, setUseNamingConvention] = useState(true);
   const [useTags, setUseTags] = useState(true);
@@ -1325,6 +1336,9 @@ export function DeployWizard() {
     setError("");
 
     try {
+      if (!config.expected_tenant_id || !config.expected_subscription_id) {
+        throw new Error("Sign in to Azure and select a deployment subscription before deploying.");
+      }
       // Save tags to history before deploying
       if (Object.keys(config.tags).length > 0) {
         addTagToHistory(config.tags);
@@ -1334,6 +1348,7 @@ export function DeployWizard() {
       const fallbackCapacity = getCapacityFallbackParts(selectedCapacity);
       const deployConfig: DeploymentConfig = {
         ...config,
+        ...getAddonOptions(config),
         patient_count: config.use_cached_synthea ? 100 : config.patient_count,
         reseed_data: !config.scaffolding_only && config.reseed_data,
         reuse_patients: !config.scaffolding_only && !config.reseed_data && config.reuse_patients,
@@ -2640,6 +2655,21 @@ export function DeployWizard() {
               </div>
             </div>
 
+            <Card className={`${styles.section} ${styles.cardOptional}`}>
+              <CardHeader
+                header={<Subtitle1>Optional add-ons</Subtitle1>}
+                description="Run these after the base deployment, or add them later from a completed deployment's monitor."
+              />
+              <div className={styles.fieldGroup}>
+                <AddonFields
+                  value={config}
+                  onChange={(patch) => setConfig((previous) => ({ ...previous, ...patch }))}
+                  disabled={loading}
+                  adminGroup={config.admin_security_group}
+                />
+              </div>
+            </Card>
+
             {error && <div className={styles.error} ref={(el) => el?.scrollIntoView({ behavior: "smooth" })}>{error}</div>}
           </div>
         )}
@@ -2721,7 +2751,7 @@ export function DeployWizard() {
                     if (parsed.use_cached_synthea) {
                       parsed.patient_count = 100;
                     }
-                    setConfig(parsed);
+                    setConfig({ ...parsed, ...getAddonOptions(parsed) });
                   } catch {
                     // Keep typing, don't crash on invalid JSON.
                   }

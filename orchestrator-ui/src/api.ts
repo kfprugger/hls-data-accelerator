@@ -1,5 +1,5 @@
 /**
- * API client for the Durable Functions backend.
+ * API client for the hosted and local orchestrator backend.
  */
 
 const API_BASE = "/api";
@@ -55,7 +55,7 @@ function errorMessageFromBody(body: unknown, fallback: string) {
         ? [detail]
         : [];
     const message = record.error || record.message || record.title;
-    return [typeof message === "string" ? message : fallback, ...issues, ...detailMessages]
+    return [typeof message === "string" ? message : fallback, typeof record.error_hint === "string" ? record.error_hint : "", ...issues, ...detailMessages]
       .filter(Boolean)
       .join(" ");
   }
@@ -109,7 +109,35 @@ export async function requestVoid(input: string, options: ApiRequestOptions = {}
   await requestJson<unknown>(input, options);
 }
 
-export interface DeploymentConfig {
+export type AddonName = "databricks" | "rayfin" | "cardiology";
+
+export interface AddonOptions {
+  deploy_databricks: boolean;
+  databricks_environment: string;
+  databricks_admin_group: string;
+  deploy_rayfin_apps: boolean;
+  deploy_cardiology: boolean;
+  cardiology_location: string;
+  cardiology_prefix: string;
+  cardiology_app_users: string[];
+  cardiology_reviewer_users: string[];
+  cardiology_chat_model: string;
+  cardiology_chat_model_version: string;
+}
+
+export interface AddonRequest extends AddonOptions {
+  addons: AddonName[];
+}
+
+export interface AddonStatus {
+  status: "pending" | "running" | "paused" | "succeeded" | "failed";
+  detail?: string;
+  resources?: Record<string, string>;
+}
+
+export interface DeploymentConfig extends Partial<AddonOptions> {
+  expected_tenant_id: string;
+  expected_subscription_id: string;
   resource_group_name: string;
   location: string;
   admin_security_group: string;
@@ -195,6 +223,7 @@ export interface DeploymentStatus {
     logs?: Array<{ timestamp: string; level: string; message: string; phase?: string | number }>;
     subStepsByPhase?: Record<string, PhaseSubStep[]>;
     durationSeconds?: number;
+    addons?: Record<string, AddonStatus>;
   } | null;
   createdTime: string | null;
   lastUpdatedTime: string | null;
@@ -270,6 +299,22 @@ export async function startDeployment(
   });
 }
 
+export async function startAddons(instanceId: string, options: AddonRequest): Promise<void> {
+  await requestJson<unknown>(`${API_BASE}/deploy/${encodeURIComponent(instanceId)}/addons`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+    timeoutMs: 30000,
+  });
+}
+
+export async function continueDatabricksAddon(instanceId: string): Promise<void> {
+  await requestJson<unknown>(`${API_BASE}/deploy/${encodeURIComponent(instanceId)}/addons/databricks/continue`, {
+    method: "POST",
+    timeoutMs: 30000,
+  });
+}
+
 export async function continueFailedDeployment(
   instanceId: string
 ): Promise<{ instanceId: string; statusUrl: string }> {
@@ -280,7 +325,7 @@ export async function continueFailedDeployment(
 }
 
 export async function getAuthContext(force = false): Promise<AuthContext> {
-  return requestJson(`${API_BASE}/auth/context${force ? "?force=1" : ""}`, { timeoutMs: 8000, retry: 1 });
+  return requestJson(`${API_BASE}/auth/context${force ? "?force=1" : ""}`, { timeoutMs: 60000 });
 }
 
 export async function getDeploymentStatus(

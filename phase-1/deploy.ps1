@@ -37,10 +37,6 @@ if ($FabricWorkspaceName) {
 }
 Write-Host "  Using base resource name prefix: '$appNamePrefix'" -ForegroundColor Gray
 
-# Ensure cross-platform temp directory is populated in $env:TEMP
-if (-not $env:TEMP) {
-    $env:TEMP = [System.IO.Path]::GetTempPath()
-}
 
 # Resolve repo root (one level up from phase-1/) so relative paths work
 $RepoRoot = Split-Path -Parent $PSScriptRoot
@@ -236,7 +232,7 @@ function Invoke-ArmGroupDeployment {
 }
 
 # Serialize tags for Bicep parameter passing
-$tagsParamFile = Join-Path $env:TEMP "deploy-tags-$(Get-Random).json"
+$tagsParamFile = Join-Path ([System.IO.Path]::GetTempPath()) "deploy-tags-$(Get-Random).json"
 $tagsParamContent = @{
     '`$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
     contentVersion = '1.0.0.0'
@@ -571,14 +567,14 @@ if (-not $skipEmulatorAndBuild -and -not $SkipTelemetry) {
     # Build from a clean staging directory containing ONLY the files the Dockerfile needs.
     # `az acr build` ignores `.dockerignore` reliably on Windows, which historically caused
     # 40+ minute hangs uploading the entire 1+ GB repo. Staging keeps the upload to ~5 KB.
-    $emulatorStaging = Join-Path $env:TEMP ("masimo-emulator-build-" + [Guid]::NewGuid().ToString())
+    $emulatorStaging = Join-Path ([System.IO.Path]::GetTempPath()) ("masimo-emulator-build-" + [Guid]::NewGuid().ToString())
     New-Item -ItemType Directory -Path $emulatorStaging -Force | Out-Null
     Copy-Item -Path (Join-Path $RepoRoot "Dockerfile")   -Destination $emulatorStaging -Force
     Copy-Item -Path (Join-Path $RepoRoot "emulator.py")  -Destination $emulatorStaging -Force
     Copy-Item -Path (Join-Path $RepoRoot "emulator-requirements.lock") -Destination $emulatorStaging -Force
     Write-Host "  Build context: $emulatorStaging (Dockerfile + emulator.py + locked dependencies)" -ForegroundColor DarkGray
 
-    $acrBuildErrLog = Join-Path $env:TEMP ("acr-build-" + [Guid]::NewGuid().ToString() + ".log")
+    $acrBuildErrLog = Join-Path ([System.IO.Path]::GetTempPath()) ("acr-build-" + [Guid]::NewGuid().ToString() + ".log")
     Push-Location $emulatorStaging
     try {
         $acrBuildOutput = az acr build --registry $acrName --image "masimo-emulator:$imageTag" . --no-logs 2>$acrBuildErrLog

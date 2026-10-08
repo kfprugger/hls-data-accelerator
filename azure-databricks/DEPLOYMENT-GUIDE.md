@@ -10,12 +10,12 @@ The current repository does not yet expose a runnable `-Destination Databricks` 
 
 - `Deploy-All.ps1` provisions and calls Fabric throughout the seven phases.
 - `Preflight-Check.ps1` requires Fabric workspace/capacity checks.
-- `orchestrator/shared/models.py` and the local/Durable orchestrators carry Fabric-specific configuration and resource IDs.
+- `orchestrator/local_server.py` request models carry Fabric-specific configuration and resource IDs in local and hosted modes.
 - `eval/deployment_eval_harness.py` proves Fabric items and Fabric runtime behavior.
 
 A real implementation must introduce a destination adapter and migrate every caller. Do not hide Fabric calls behind runtime `try/except` branches or report this blueprint as deployed.
 
-Teardown already uses one shared implementation, `orchestrator/shared/full_teardown.py`, from the local/Durable APIs and `Teardown-All.ps1`. It pins tokens to the supplied subscription, checks `--expected-tenant` when supplied, discovers deployment-owned front ends, and runs a **Databricks Unity Catalog** phase for catalogs, external locations and storage credentials tied to the deployment's Access Connector. This does not implement the remaining Databricks deployment adapter.
+Teardown already uses one shared implementation, `orchestrator/shared/full_teardown.py`, from the local/hosted FastAPI APIs and `Teardown-All.ps1`. It pins tokens to the supplied subscription, checks `--expected-tenant` when supplied, discovers deployment-owned front ends, and runs a **Databricks Unity Catalog** phase for catalogs, external locations and storage credentials tied to the deployment's Access Connector. This does not implement the remaining Databricks deployment adapter.
 
 ## Target invariants
 
@@ -294,7 +294,7 @@ Run the fail-closed checks in [VALIDATION-AND-OPERATIONS.md](VALIDATION-AND-OPER
 
 ## Orchestrator implementation contract
 
-The existing UI and FastAPI/Durable layers can remain the control plane only after platform-specific code is separated.
+The existing UI and local/hosted FastAPI layers can remain the control plane only after platform-specific code is separated.
 
 Required clean cutover:
 

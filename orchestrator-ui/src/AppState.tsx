@@ -176,10 +176,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const [liveResult, context] = await Promise.all([getLive(), getAuthContext(true)]);
       setLiveStatus(liveResult);
       setAuthContext(context);
-      const preferredSubscriptionId = context?.cli.subscriptionId || context?.pwsh.subscriptionId || "";
-      if (preferredSubscriptionId && subscriptions.some((subscription) => subscription.id === preferredSubscriptionId)) {
-        setSelectedSubscription(preferredSubscriptionId);
-      }
+      const subs = context.cli.loggedIn ? await listSubscriptions() : [];
+      setSubscriptions(subs);
+      const preferredSubscriptionId = context.cli.subscriptionId || context.pwsh.subscriptionId || "";
+      setSelectedSubscription(preferredSubscriptionId);
+      setCapacities(context.ready ? await listCapacities() : []);
     } finally {
       setLiveStatusLoading(false);
       setAuthContextLoading(false);

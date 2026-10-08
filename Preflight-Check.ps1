@@ -40,18 +40,8 @@ $DicomToolkitRepoUrl = "https://github.com/kfprugger/FabricDicomCohortingToolkit
 
 function Resolve-DicomToolkitPath {
     param([string]$RequestedPath)
-
-    if (-not [string]::IsNullOrWhiteSpace($RequestedPath) -and $RequestedPath -ne "C:\git\FabricDicomCohortingToolkit") {
-        return $RequestedPath
-    }
-
-    if ($IsMacOS -or $IsLinux) {
-        $siblingPath = Join-Path (Split-Path -Parent $ScriptDir) "FabricDicomCohortingToolkit"
-        if (Test-Path $siblingPath) { return $siblingPath }
-        return $siblingPath
-    }
-
-    return "C:\git\FabricDicomCohortingToolkit"
+    if (-not [string]::IsNullOrWhiteSpace($RequestedPath)) { return $RequestedPath }
+    return Join-Path (Split-Path -Parent $ScriptDir) "FabricDicomCohortingToolkit"
 }
 
 function Ensure-DicomToolkitRepo {

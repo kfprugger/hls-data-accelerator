@@ -83,9 +83,10 @@ param (
     [switch]$ReseedData,            # Authoritatively replace FHIR data with a freshly loaded patient set
     [switch]$UseCachedSynthea,       # Generate the canonical 100-patient fixture locally
     [hashtable]$Tags = @{},            # Resource tags (e.g. @{SecurityControl='Ignore'})
-    [string]$ExpectedTenantId = "8d038e6a-9b7d-4cb8-bbcf-e84dff156478",
-    [string]$ExpectedSubscriptionId = "9bbee190-dc61-4c58-ab47-1275cb04018f",
+    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][guid]$ExpectedTenantId,
+    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][guid]$ExpectedSubscriptionId,
     [switch]$SkipFhirExport,         # Skip FHIR $export step in Fabric Phase 1
+    [switch]$SnapshotFhirExportForDatabricks, # Preserve export before HDS moves source blobs
 
     # ── Granular component skips ──
     [switch]$SkipSynthea,            # Skip Synthea patient generation (implies SkipDeviceAssoc)
@@ -104,7 +105,7 @@ param (
     [switch]$RunEval,                   # After deploy, run eval/deployment_eval_harness.py (reports/agents/RTI validation)
 
     # ── Phase 3 (FabricDicomCohortingToolkit) ──
-    [string]$DicomToolkitPath = "C:\git\FabricDicomCohortingToolkit",
+    [string]$DicomToolkitPath = "",
     [string]$DicomViewerResourceGroup = "rg-hds-dicom-viewer",
 
     # ── Phase 4 (Activator) ──
@@ -213,24 +214,32 @@ $DicomToolkitRepoUrl = "https://github.com/kfprugger/FabricDicomCohortingToolkit
 
 function Resolve-DicomToolkitPath {
     param([string]$RequestedPath)
+    if (-not [string]::IsNullOrWhiteSpace($RequestedPath)) { return $RequestedPath }
+    return Join-Path (Split-Path -Parent $ScriptDir) "FabricDicomCohortingToolkit"
+}
 
-    if (-not [string]::IsNullOrWhiteSpace($RequestedPath) -and $RequestedPath -ne "C:\git\FabricDicomCohortingToolkit") {
-        return $RequestedPath
+function Initialize-ToolkitStateDirectory {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not $env:HLS_DATA_DIR) { return }
+    $target = Join-Path $env:HLS_DATA_DIR "state-tracking/dicom-viewer"
+    $link = Join-Path $Path "dicom-viewer/state-tracking"
+    if (Test-Path -LiteralPath $link) {
+        $existing = Get-Item -LiteralPath $link -Force
+        if ($existing.LinkType -eq 'SymbolicLink' -and $existing.Target -eq $target) { return }
+        if (Test-Path -LiteralPath $target) { throw "Move the existing DICOM viewer state from '$link' into '$target' before using HLS_DATA_DIR." }
+        New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+        Move-Item -LiteralPath $link -Destination $target
+    } else {
+        New-Item -ItemType Directory -Path $target -Force | Out-Null
     }
-
-    if ($IsMacOS -or $IsLinux) {
-        $siblingPath = Join-Path (Split-Path -Parent $ScriptDir) "FabricDicomCohortingToolkit"
-        if (Test-Path $siblingPath) { return $siblingPath }
-        if ([string]::IsNullOrWhiteSpace($RequestedPath) -or $RequestedPath -eq "C:\git\FabricDicomCohortingToolkit") { return $siblingPath }
-    }
-
-    return $RequestedPath
+    New-Item -ItemType SymbolicLink -Path $link -Target $target | Out-Null
 }
 
 function Ensure-DicomToolkitRepo {
     param([Parameter(Mandatory)][string]$Path)
 
     if (Test-Path (Join-Path $Path "Deploy-DataAgent.ps1")) {
+        Initialize-ToolkitStateDirectory -Path $Path
         return @{ Success = $true; Cloned = $false; Message = "DICOM Toolkit found at $Path" }
     }
 
@@ -255,11 +264,12 @@ function Ensure-DicomToolkitRepo {
         return @{ Success = $false; Cloned = $false; Message = "Failed to clone DICOM Toolkit from $DicomToolkitRepoUrl to '$Path'." }
     }
 
+    Initialize-ToolkitStateDirectory -Path $Path
     return @{ Success = $true; Cloned = $true; Message = "DICOM Toolkit cloned to $Path" }
 }
 
 $DicomToolkitPath = Resolve-DicomToolkitPath -RequestedPath $DicomToolkitPath
-if ($DicomToolkitPath -ne "C:\git\FabricDicomCohortingToolkit") {
+if ($DicomToolkitPath) {
     Write-Host "  [PATH] DICOM Toolkit path: $DicomToolkitPath" -ForegroundColor DarkGray
 }
 
@@ -608,11 +618,14 @@ function Test-Prerequisites {
     Write-Host ""
 }
 
-if (-not $Teardown -and -not [string]::IsNullOrWhiteSpace($ExpectedSubscriptionId)) {
-    Set-AzContext -SubscriptionId $ExpectedSubscriptionId -ErrorAction Stop | Out-Null
+if (-not $Teardown) {
+    $selectedContext = Set-AzContext -TenantId $ExpectedTenantId -SubscriptionId $ExpectedSubscriptionId -ErrorAction Stop
+    if ($selectedContext.Tenant.Id -ne $ExpectedTenantId) { throw "Az PowerShell selected an unexpected tenant." }
     az account set --subscription $ExpectedSubscriptionId --only-show-errors
-    if ($LASTEXITCODE -ne 0) {
-        throw "Azure CLI could not select expected subscription $ExpectedSubscriptionId before preflight."
+    if ($LASTEXITCODE -ne 0) { throw "Azure CLI could not select expected subscription $ExpectedSubscriptionId before preflight." }
+    $selectedAccount = az account show --output json | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or $selectedAccount.tenantId -ne $ExpectedTenantId -or $selectedAccount.id -ne $ExpectedSubscriptionId) {
+        throw "Azure CLI context does not match the explicitly requested tenant and subscription."
     }
 }
 
@@ -633,7 +646,7 @@ if (-not $Teardown) {
 # the orchestrator persists resources to SQLite as primary store).
 # ============================================================================
 
-$stateDir = Join-Path $ScriptDir "state-tracking"
+$stateDir = if ($env:HLS_STATE_DIR) { $env:HLS_STATE_DIR } elseif ($env:HLS_DATA_DIR) { Join-Path $env:HLS_DATA_DIR "state-tracking" } else { Join-Path $ScriptDir "state-tracking" }
 if (-not (Test-Path $stateDir)) { New-Item -ItemType Directory -Path $stateDir -Force | Out-Null }
 $stateFile = Join-Path $stateDir ".deployment-state-$FabricWorkspaceName.json"
 
@@ -2127,6 +2140,18 @@ if (-not $Phase3 -and -not $Phase4 -and -not $Phase5 -and -not $Phase7 -and -not
 } else {
     $skipReason = if ($ReuseFabricRti) { "-ReuseFabricRti; live RTI resources retained" } else { "-SkipFabric" }
     Write-Host "  >>  Skipping Fabric RTI deployment ($skipReason)" -ForegroundColor DarkGray
+}
+
+# HDS source provisioning above is parallel but does not run ingestion. RTI
+# enrichment creates shortcuts; storage-access-trusted-workspace.ps1 below starts
+# the first clinical pipeline. Gate both after the final Phase 2 export.
+if ($SnapshotFhirExportForDatabricks -and -not $Phase3 -and -not $Phase4 -and -not $Phase5 -and -not $Phase7) {
+    Invoke-Step -StepName "Databricks: Preserve FHIR export" `
+        -Description "Server-side snapshot of FHIR export before HDS ingestion" -Action {
+        & "$ScriptDir/utilities/snapshot-fhir-export.ps1" -ResourceGroupName $ResourceGroupName `
+            -SubscriptionId $ExpectedSubscriptionId -ReuseSnapshot:$SkipFhirExport
+        Assert-LastExternalCommandSucceeded "Databricks FHIR export snapshot"
+    }
 }
 
 if ($ScaffoldingOnly -and -not $SkipPhase7 -and -not $Teardown -and -not $Phase7 -and (-not $SkipFabric -or $ReuseFabricRti)) {
