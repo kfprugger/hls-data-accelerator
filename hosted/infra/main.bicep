@@ -33,15 +33,24 @@ resource sandboxIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   location: location
 }
 
+// MCAPSGov "Deploy and Modify" policies in the jbatl.dev tenant disable public network access and
+// shared-key access unless a resource carries SecurityControl=Ignore (Joey's decision, 2026-10-08).
+// The Container Apps environment reaches Azure Files over SMB with the account key and the gateway
+// reaches Table storage and Key Vault without a VNet, so both resources opt out explicitly.
+var mcapsPolicyExemption = { SecurityControl: 'Ignore' }
+
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: 'sthlsdeployer'
   location: location
+  tags: mcapsPolicyExemption
   kind: 'StorageV2'
   sku: { name: 'Standard_LRS' }
   properties: {
     supportsHttpsTrafficOnly: true
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
+    allowSharedKeyAccess: true
+    publicNetworkAccess: 'Enabled'
   }
 }
 resource files 'Microsoft.Storage/storageAccounts/fileServices@2023-05-01' = {
@@ -68,6 +77,7 @@ resource sandboxTable 'Microsoft.Storage/storageAccounts/tableServices/tables@20
 resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: 'kv-hls-deployer'
   location: location
+  tags: mcapsPolicyExemption
   properties: {
     tenantId: tenant().tenantId
     sku: { family: 'A', name: 'standard' }
@@ -75,6 +85,8 @@ resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableSoftDelete: true
     softDeleteRetentionInDays: 90
     enablePurgeProtection: true
+    publicNetworkAccess: 'Enabled'
+    networkAcls: { defaultAction: 'Allow', bypass: 'AzureServices' }
   }
 }
 
