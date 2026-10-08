@@ -30,8 +30,10 @@ RUN test "$TARGETARCH" = amd64 \
  && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/azure-cli.gpg] https://packages.microsoft.com/repos/azure-cli/ bookworm main' > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update && ACCEPT_EULA=Y apt-get install -y --no-install-recommends powershell=7.6.6-1.deb azure-cli=2.91.0-1~bookworm msodbcsql18 \
  && rm -rf /var/lib/apt/lists/*
-RUN pwsh -NoProfile -NonInteractive -Command "Set-PSRepository PSGallery -InstallationPolicy Trusted; Install-Module Az -RequiredVersion 16.4.0 -Scope AllUsers -Force -AllowClobber -ErrorAction Stop" \
- && az extension add --name authV2 --version 1.0.1 --yes \
+# Only the Az modules the phase scripts use (Accounts, Resources, Storage), at the versions Az 16.4.0 bundles.
+# The full Az rollup took over an hour to install from PSGallery inside ACR Tasks.
+RUN pwsh -NoProfile -NonInteractive -Command "\$ErrorActionPreference='Stop'; Set-PSResourceRepository PSGallery -Trusted; Install-PSResource -Name Az.Accounts -Version 5.5.3 -Scope AllUsers -TrustRepository; Install-PSResource -Name Az.Resources -Version 10.2.1 -Scope AllUsers -TrustRepository; Install-PSResource -Name Az.Storage -Version 9.7.2 -Scope AllUsers -TrustRepository"
+RUN az extension add --name authV2 --version 1.0.1 --yes \
  && az extension add --name automation --version 0.2.2 --yes \
  && az extension add --name microsoft-fabric --version 1.0.0b1 --allow-preview true --yes \
  && az extension add --name resource-graph --version 2.1.1 --yes \
