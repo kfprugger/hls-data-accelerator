@@ -46,8 +46,13 @@ function Get-JwtClaims([string]$Token) {
 function Get-PinnedToken([string]$Resource) {
     $result = Invoke-AzJson @('account', 'get-access-token', '--resource', $Resource)
     $claims = Get-JwtClaims $result.accessToken
-    $audiences = @($Resource.TrimEnd('/'))
-    if ($Resource -eq 'https://graph.microsoft.com/') { $audiences += '00000003-0000-0000-c000-000000000000' }
+    # Entra may issue the audience as the resource URI or as the resource's first-party application ID.
+    $aliases = @{
+        'https://graph.microsoft.com'    = @('00000003-0000-0000-c000-000000000000')
+        'https://vault.azure.net'        = @('cfa8b339-82a2-471a-a3c9-0fc0be7a4093')
+        'https://management.azure.com'   = @('797f4846-ba00-4fd7-ba43-dac1f8f63013', 'https://management.core.windows.net')
+    }
+    $audiences = @($Resource.TrimEnd('/')) + @($aliases[$Resource.TrimEnd('/')] | Where-Object { $_ })
     if ($claims.tid -ne $TenantId -or $claims.aud.TrimEnd('/') -notin $audiences) {
         throw 'Refusing a token from an unexpected tenant or audience. No Graph or Key Vault write was sent.'
     }
