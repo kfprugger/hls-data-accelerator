@@ -97,7 +97,7 @@ function Assert-BootstrapPermissions {
     $scope = "/subscriptions/$SubscriptionId"
     try {
         $roles = @(Invoke-AzJson @('role', 'assignment', 'list', '--assignee', $claims.oid,
-            '--scope', $scope, '--include-inherited', '--include-groups', '--all'))
+            '--scope', $scope, '--include-inherited', '--include-groups'))
     } catch { throw 'Cannot inspect subscription role assignments for the signed-in user. Bootstrap requires verifiable Owner or User Access Administrator access; no resources have been created.' }
     $permitted = @($roles | Where-Object {
         $_.roleDefinitionName -in @('Owner', 'User Access Administrator') -and -not $_.condition -and
@@ -122,7 +122,7 @@ function Ensure-ServicePrincipal([string]$AppId) {
     return Invoke-Graph POST 'servicePrincipals' @{ appId = $AppId }
 }
 function Ensure-Role([string]$PrincipalId, [string]$Role, [string]$Scope, [string]$PrincipalType = 'ServicePrincipal') {
-    $assignments = @(Invoke-AzJson @('role', 'assignment', 'list', '--scope', $Scope, '--all'))
+    $assignments = @(Invoke-AzJson @('role', 'assignment', 'list', '--scope', $Scope))
     if ($assignments | Where-Object { $_.principalId -eq $PrincipalId -and $_.roleDefinitionName -eq $Role -and $_.scope -ieq $Scope }) { return }
     $null = Invoke-AzJson @('role', 'assignment', 'create', '--assignee-object-id', $PrincipalId,
         '--assignee-principal-type', $PrincipalType, '--role', $Role, '--scope', $Scope)
