@@ -66,38 +66,24 @@ class AddonContractTests(unittest.TestCase):
 
 
 class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
-    async def test_fresh_export_resets_destination_before_export(self):
-        for remaining in ([], ["stale.ndjson"]):
-            with self.subTest(remaining=remaining):
-                runner = object.__new__(addons.AddonRunner)
-                runner.config = {"resource_group_name": "rg", "expected_subscription_id": "subscription"}
-                runner.env = {}
-                runner.working_copy = Mock(return_value=Path("unused"))
-                runner.resource = Mock(return_value={"id": "fhir-id"})
-                events = []
-                def azure(_config, *args):
-                    events.append(args)
-                    if args[:2] == ("resource", "show"):
-                        return {"properties": {"exportConfiguration": {"storageAccountName": "exports"}}}
-                    if args[:3] == ("storage", "blob", "list"):
-                        return remaining
-                    return {}
-                async def command(_title, args, **kwargs):
-                    events.append(tuple(args))
-                    self.assertEqual(kwargs["env"]["AZCOPY_AUTO_LOGIN_TYPE"], "AZCLI")
-                async def export(*args):
-                    events.append(("export",))
-                    raise RuntimeError("export reached")
-                runner.command = AsyncMock(side_effect=command)
-                runner.ps = AsyncMock(side_effect=export)
-                # This reset-only test stops at export, before the optional YAML bundle work.
-                with patch.object(addons, "az_json", side_effect=azure), patch.dict(sys.modules, {"yaml": Mock()}):
-                    with self.assertRaisesRegex(RuntimeError, "not empty" if remaining else "export reached"):
-                        await runner.databricks(fresh_export=True)
-                self.assertEqual(events[1][:3], ("storage", "container", "create"))
-                self.assertEqual(events[2][:3], ("azcopy", "remove", "https://exports.blob.core.windows.net/fhir-export-databricks/*"))
-                self.assertEqual(events[3][:3], ("storage", "blob", "list"))
-                self.assertEqual(runner.ps.await_count, 0 if remaining else 1)
+    async def test_fresh_export_does_not_run_when_snapshot_cleanup_fails(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.config = {"resource_group_name": "rg", "expected_subscription_id": "subscription"}
+        runner.env = {}
+        runner.working_copy = Mock(return_value=Path("unused"))
+        runner.resource = Mock(return_value={"id": "fhir-id"})
+        exported = False
+        async def step(title, *_args, **_kwargs):
+            nonlocal exported
+            if title == "Empty previous Databricks export":
+                raise RuntimeError("Snapshot directory deletion denied")
+            exported = True
+        runner.ps = AsyncMock(side_effect=step)
+        with patch.object(addons, "az_json", return_value={"properties": {"exportConfiguration": {"storageAccountName": "exports"}}}), \
+             patch.dict(sys.modules, {"yaml": Mock()}):
+            with self.assertRaisesRegex(RuntimeError, "Snapshot directory deletion denied"):
+                await runner.databricks(fresh_export=True)
+        self.assertFalse(exported, "An export must not mix new files into a snapshot that failed cleanup")
 
 
 if __name__ == "__main__":
