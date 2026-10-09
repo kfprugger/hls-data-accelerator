@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { requestJson } from './api';
+import { requestJson, type AuthContext } from './api';
 import { useAppState } from './AppState';
 import { setHostedHistoryMode } from './formHistory';
 
@@ -54,29 +54,35 @@ export function AuthenticationProvider({ children }: {
         let timer: ReturnType<typeof setTimeout>;
         const clock = setInterval(() => setRemaining(Math.max(0, Math.ceil((deadline - Date.now()) / 1000))), 1000);
         async function poll() {
+            let result: Status;
             try {
-                const result = await requestJson<Status>(`/api/auth/device-login/${code!.session_id}`, { signal: controller.signal });
-                if (controller.signal.aborted)
-                    return;
-                if (result.status === 'pending' && Date.now() < deadline) {
-                    timer = setTimeout(poll, 2500);
+                result = await requestJson<Status>(`/api/auth/device-login/${code!.session_id}`, { signal: controller.signal });
+            } catch (cause) {
+                if (controller.signal.aborted) return;
+                const detail = cause instanceof Error ? cause.message : 'Unable to check sign-in';
+                if (Date.now() < deadline) {
+                    setError(`Status temporarily unavailable: ${detail}. Your existing sign-in is still active; retrying without creating another code.`);
+                    timer = setTimeout(poll, 5000);
                     return;
                 }
-                if (result.status === 'succeeded') {
-                    setMessage(`${tool === 'az' ? 'Azure CLI' : 'Az PowerShell'} sign-in complete.`);
-                    await refresh.current();
-                }
-                else
-                    setError([result.error_hint, result.error || 'Device code expired. Start a new sign-in.'].filter(Boolean).join(' '));
+                setError('Device code expired while status was unavailable. Start a new sign-in.');
+                setCode(null); setBusy(false); reservation.current = false;
+                return;
             }
-            catch (cause) {
-                if (controller.signal.aborted)
-                    return;
-                setError(cause instanceof Error ? cause.message : 'Unable to check sign-in');
+            if (controller.signal.aborted) return;
+            setError('');
+            if (result.status === 'pending' && Date.now() < deadline) {
+                timer = setTimeout(poll, 2500);
+                return;
             }
-            setCode(null);
-            setBusy(false);
-            reservation.current = false;
+            setCode(null); setBusy(false); reservation.current = false;
+            if (result.status === 'succeeded') {
+                setMessage(`${tool === 'az' ? 'Azure CLI' : 'Az PowerShell'} sign-in complete.`);
+                try { await refresh.current(); }
+                catch (cause) { setError(`Sign-in succeeded, but the account context could not be refreshed. Use Refresh sign-in status. ${cause instanceof Error ? cause.message : ''}`); }
+            } else {
+                setError([result.error_hint, result.error || 'Device code expired. Start a new sign-in.'].filter(Boolean).join(' '));
+            }
         }
         void poll();
         return () => { controller.abort(); clearTimeout(timer); clearInterval(clock); };
@@ -90,6 +96,14 @@ export function AuthenticationProvider({ children }: {
         setError('');
         setMessage('');
         try {
+            const cached = await requestJson<AuthContext>('/api/auth/context?force=true');
+            const context = selected === 'az' ? cached.cli : cached.pwsh;
+            if (context.loggedIn) {
+                setMessage(`${selected === 'az' ? 'Azure CLI' : 'Az PowerShell'} is already signed in as ${context.user}. Sign out first if you need to change that account or tenant.`);
+                try { await refresh.current(); }
+                finally { setBusy(false); reservation.current = false; }
+                return;
+            }
             const next = await requestJson<Code>('/api/auth/device-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeoutMs: 60000,
                 body: JSON.stringify({ tenant_id: tenant.trim(), subscription_id: subscription.trim(), tool: selected }) });
             setRemaining(next.expires_in);

@@ -16,6 +16,7 @@ export function HostedSignIn() {
     <Box><Typography variant="overline">Deployment account</Typography><Typography sx={{
         overflowWrap: 'anywhere'
     }}>{authContext?.cli.user || authContext?.pwsh.user || 'Not signed in'}</Typography></Box>
+    {authContext?.issues.map((issue, index) => <Alert key={`${issue}-${index}`} severity="warning">{issue}</Alert>)}
     <Divider />
     <TextField label="Deployment tenant ID" value={auth.tenant} disabled={disabled} onChange={event => auth.setTenant(event.target.value)} fullWidth/>
     <TextField label="Deployment subscription ID" value={auth.subscription} disabled={disabled} onChange={event => auth.setSubscription(event.target.value)} fullWidth/>
@@ -32,6 +33,7 @@ export function HostedSignIn() {
         <Typography variant="body2" sx={{
                 overflowWrap: 'anywhere'
             }}>{context?.user || 'Separate credential cache'}</Typography>
+        <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>Tenant: {context?.tenantId || 'not signed in'} · Subscription: {context?.subscriptionName || context?.subscriptionId || 'not selected'}</Typography>
         {!context?.loggedIn && <Button variant="contained" disabled={disabled || !auth.tenant.trim() || !auth.subscription.trim()} onClick={() => void auth.begin(tool)}>Sign in to {label}</Button>}
       </Stack>;
         })}
