@@ -46,10 +46,37 @@ class GatewayGuard:
         await self.app(scope, receive, send)
 
 
-class DeviceLoginRequest(BaseModel):
+class DeploymentTarget(BaseModel):
     tenant_id: uuid.UUID
     subscription_id: uuid.UUID
+
+
+class DeviceLoginRequest(DeploymentTarget):
     tool: Literal["az", "azps"]
+
+
+def _save_target(target: DeploymentTarget) -> dict:
+    from .database import add_form_history
+    value = {"tenant_id": str(target.tenant_id), "subscription_id": str(target.subscription_id)}
+    add_form_history("deployment-auth-target", json.dumps(value, sort_keys=True))
+    return value
+
+
+def _saved_target() -> dict | None:
+    from .database import get_form_history
+    values = get_form_history("deployment-auth-target", limit=1)
+    if not values:
+        return None
+    try:
+        return DeploymentTarget.model_validate_json(values[0]).model_dump(mode="json")
+    except ValueError:
+        return None
+
+
+def _login_snapshot(session_id: str, session: dict) -> dict:
+    return {"session_id": session_id, "tool": session["tool"], **session["target"],
+            "user_code": session.get("user_code"), "verification_uri": session.get("verification_uri"),
+            "expires_in": max(0, 900 - int(time.monotonic() - session["created"]))}
 
 
 def _error(output: str) -> dict:
@@ -135,6 +162,25 @@ def install_hosted_routes(app, active_runs, invalidate):
         return {"hosted": HOSTED, "email": request.headers.get("X-HLS-User-Email", "") if HOSTED else "",
                 "oid": request.headers.get("X-HLS-User-Oid", "") if HOSTED else "",
                 "tid": request.headers.get("X-HLS-User-Tid", "") if HOSTED else "", "notice": _NOTICE}
+    @app.get("/api/auth/state")
+    async def auth_state():
+        pending = None
+        for session_id, session in _sessions.items():
+            if session["status"] == "pending":
+                pending = _login_snapshot(session_id, session)
+                if pending["expires_in"] == 0:
+                    await shutdown_auth()
+                    session.update(status="failed", **_error("Device code expired; start a new sign-in"))
+                    pending = None
+                break
+        return {"target": _saved_target(), "pending": pending}
+
+    @app.put("/api/auth/target")
+    async def save_target(target: DeploymentTarget):
+        if active_runs() or any(s["status"] == "pending" for s in _sessions.values()):
+            raise HTTPException(409, "Deployment target cannot change during an active run or sign-in")
+        return _save_target(target)
+
 
     @app.post("/api/auth/device-login")
     async def login(req: DeviceLoginRequest):
@@ -145,7 +191,8 @@ def install_hosted_routes(app, active_runs, invalidate):
         # No device codes or credentials are persisted to the history volume.
         _sessions.clear()
         session_id = uuid.uuid4().hex
-        session = {"status": "pending", "ready": asyncio.Event(), "created": time.monotonic()}
+        session = {"status": "pending", "ready": asyncio.Event(), "created": time.monotonic(),
+                   "tool": req.tool, "target": _save_target(req)}
         _sessions[session_id] = session
         task = asyncio.create_task(_device_login(session, req, invalidate))
         _tasks.add(task)
@@ -158,7 +205,7 @@ def install_hosted_routes(app, active_runs, invalidate):
             return JSONResponse(_error("Azure did not issue a device code within 45 seconds"), status_code=502)
         if not session.get("user_code"):
             return JSONResponse({k: v for k, v in session.items() if k in {"error", "error_hint"}}, status_code=400)
-        return {"session_id": session_id, "user_code": session["user_code"], "verification_uri": session["verification_uri"], "expires_in": max(0, 900 - int(time.monotonic() - session["created"]))}
+        return _login_snapshot(session_id, session)
 
     @app.get("/api/auth/device-login/{session_id}")
     async def status(session_id: str):
