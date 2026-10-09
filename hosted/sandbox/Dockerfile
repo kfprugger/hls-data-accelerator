@@ -56,6 +56,13 @@ RUN curl -fsSL https://github.com/Azure/azure-storage-azcopy/releases/download/v
 RUN useradd --create-home --uid 10001 --shell /bin/bash hls \
  && mkdir -p /app/hls-data-accelerator /app/wardflow /data \
  && chown -R hls:hls /app /data
+# Keep the viewer deployer and its compatible OHIF pin reproducible; don't bootstrap moving toolkit main.
+RUN git init /app/FabricDicomCohortingToolkit \
+ && git -C /app/FabricDicomCohortingToolkit remote add origin https://github.com/kfprugger/FabricDicomCohortingToolkit.git \
+ && git -C /app/FabricDicomCohortingToolkit fetch --depth 1 origin a7b04c54b8c799676371a36f603d83dcdec932b0 \
+ && git -C /app/FabricDicomCohortingToolkit checkout --detach FETCH_HEAD \
+ && test "$(git -C /app/FabricDicomCohortingToolkit rev-parse HEAD)" = a7b04c54b8c799676371a36f603d83dcdec932b0 \
+ && chown -R hls:hls /app/FabricDicomCohortingToolkit
 WORKDIR /app/hls-data-accelerator
 COPY orchestrator/requirements.lock hosted/sandbox/addon-requirements.txt /tmp/requirements/
 RUN python -m venv orchestrator/.venv \

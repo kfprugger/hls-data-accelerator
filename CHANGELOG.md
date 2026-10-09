@@ -25,6 +25,7 @@ Users can now deploy the accelerator into their own tenant, subscription and Fab
 - **Added** automatic flyout scrolling when Azure CLI/PowerShell sign-in or code reissuance is requested, and again when its code or outcome arrives. Only the flyout moves; reduced-motion users receive instant scrolling.
 - **Fixed** the hosted imaging viewer build failing because `/usr/local/bin/yarn` pointed to an uncopied `/opt/yarn-v1.22.22` directory. The image includes that pinned runtime directory and fails its build if Yarn cannot execute inside a PowerShell pipeline.
 - **Fixed** continuation failing to clear a previous Databricks snapshot when AzCopy deleted parent folders concurrently with their files. Cleanup now deletes top-level ADLS directories recursively and drains root batches before verifying emptiness; initial snapshots and add-later exports use the same helper, without suppressing storage errors or weakening manifest checks.
+- **Pinned** the hosted DICOM toolkit to its corrected revision `a7b04c54b8c799676371a36f603d83dcdec932b0`, whose Yarn/Webpack viewer build uses the previously proven OHIF revision `9a2d2c3d136725b2b322a47340ecf684e55dd253`. Moving OHIF master and the latest stable release have migrated to Node 24/pnpm and a different build layout; they are not compatible with this deployer. Dependency caches are marked ready only after successful frozen-lockfile installation.
 
 ### New-tenant deployment fixes (med-1006, 2026-10-07)
 
