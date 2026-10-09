@@ -47,6 +47,8 @@ export function HostedSignIn() {
         }}>{auth.code.user_code}</Typography>
       <Button variant="outlined" onClick={() => { void navigator.clipboard.writeText(auth.code!.user_code).catch(() => setCopyError('Unable to copy. Select the code and copy it manually.')); }}>Copy code</Button>
       <Link href={auth.code.verification_uri} target="_blank" rel="noopener noreferrer">Open Microsoft device sign-in</Link>
+      <Button variant="outlined" onClick={() => void auth.reissue()}>Get a new code</Button>
+      <Typography variant="caption">Use this if Microsoft rejects the code. It replaces only this pending sign-in and keeps the other tool’s login.</Typography>
       <Typography variant="body2">Expires in {Math.floor(auth.remaining / 60)}:{String(auth.remaining % 60).padStart(2, '0')}. You may hide this panel; sign-in continues.</Typography>
     </Stack></Alert>}
     {copyError && <Alert severity="warning">{copyError}</Alert>}

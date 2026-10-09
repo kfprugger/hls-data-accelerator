@@ -21,6 +21,7 @@ Users can now deploy the accelerator into their own tenant, subscription and Fab
 - **Fixed** Databricks preflight rejecting a valid subscription because Azure CLI 2.91's `account list-locations` does not accept `--subscription`. Region availability now comes from the tenant-checked ARM endpoint for the deployment's explicit subscription; unsupported provider regions still fail preflight.
 - **Fixed** preflight validating an unrelated capacity rather than the user's selected capacity. It now validates the requested capacity name/resource group/subscription and requested deployment tenant/subscription. Hosted CLI profiles also enable noninteractive extension installation at startup.
 - **Fixed** hosted sign-in losing the deployment tenant/subscription after refresh. Non-secret target IDs are saved together in sandbox-backed history and a portal-identity-scoped tab draft; an in-progress device-code flow restores its existing code and remaining lifetime. Expired flows release the sign-in controls. Recovery stays in the authentication state owner without changing sign-in presentation.
+- **Added** **Get a new code** in the pending sandbox sign-in panel. It cancels only that device-code session, checks cached credentials, then requests another code for the same tool and target. It does not sign out either Azure tool or clear their token caches; cancellation is refused for completed sign-ins and active deployments.
 
 ### New-tenant deployment fixes (med-1006, 2026-10-07)
 

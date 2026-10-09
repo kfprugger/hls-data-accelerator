@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from shared import hosted
@@ -32,7 +32,7 @@ class HostedGuardTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_only_get_health_bypasses_gateway_key(self):
         self.assertEqual(await self.response("/api/health"), 204)
-        for path, method in [("/", "GET"), ("/api/hosted/whoami", "GET"), ("/api/auth/state", "GET"), ("/api/auth/target", "PUT"), ("/api/health", "POST"), ("/api/deploy/a/logs/stream", "GET")]:
+        for path, method in [("/", "GET"), ("/api/hosted/whoami", "GET"), ("/api/auth/state", "GET"), ("/api/auth/target", "PUT"), ("/api/auth/device-login/flow/cancel", "POST"), ("/api/health", "POST"), ("/api/deploy/a/logs/stream", "GET")]:
             self.assertEqual(await self.response(path, method), 403)
             self.assertEqual(await self.response(path, method, "wrong-key"), 403)
             self.assertEqual(await self.response(path, method, "private-key"), 204)
@@ -161,6 +161,34 @@ class AuthenticationRefreshTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(state["pending"])
         self.assertEqual(hosted._sessions["flow"]["status"], "failed")
         self.assertEqual(await self.endpoint("/api/auth/target")(hosted.DeploymentTarget(**self.target)), self.target)
+    async def test_cancel_stops_only_pending_task_without_touching_other_tool_cache(self):
+        cache = self.directory / "other-tool-token-cache"
+        cache.write_text("existing-authenticated-session")
+        task = asyncio.create_task(asyncio.Event().wait())
+        await asyncio.sleep(0)
+        hosted._sessions["flow"] = {"status": "pending", "task": task, "tool": "az", "target": self.target}
+        with patch.object(hosted, "_run", side_effect=AssertionError("Cancellation must not clear Azure account caches")):
+            result = await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow")
+        self.assertEqual(result, {"status": "cancelled"})
+        self.assertTrue(task.cancelled())
+        self.assertEqual(hosted._sessions["flow"]["status"], "failed")
+        self.assertEqual(cache.read_text(), "existing-authenticated-session")
+        self.assertEqual(await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow"), result)
+
+    async def test_cancel_cannot_invalidate_completed_sign_in(self):
+        hosted._sessions["flow"] = {"status": "succeeded", "account": {"tenantId": self.target["tenant_id"]}}
+        with self.assertRaises(HTTPException) as error:
+            await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow")
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(hosted._sessions["flow"]["status"], "succeeded")
+
+    async def test_cancel_refuses_when_deployment_is_active(self):
+        self.active = 1
+        hosted._sessions["flow"] = {"status": "pending"}
+        with self.assertRaises(HTTPException) as error:
+            await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow")
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(hosted._sessions["flow"]["status"], "pending")
 
 
 class PersistentDatabaseTests(unittest.TestCase):

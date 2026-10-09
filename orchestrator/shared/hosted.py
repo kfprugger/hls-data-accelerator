@@ -195,6 +195,7 @@ def install_hosted_routes(app, active_runs, invalidate):
                    "tool": req.tool, "target": _save_target(req)}
         _sessions[session_id] = session
         task = asyncio.create_task(_device_login(session, req, invalidate))
+        session["task"] = task
         _tasks.add(task)
         task.add_done_callback(_tasks.discard)
         try:
@@ -213,6 +214,22 @@ def install_hosted_routes(app, active_runs, invalidate):
         if not session:
             raise HTTPException(404, "Sign-in session not found; start a new sign-in")
         return {key: value for key, value in session.items() if key in {"status", "account", "error", "error_hint"}}
+    @app.post("/api/auth/device-login/{session_id}/cancel")
+    async def cancel(session_id: str):
+        if active_runs():
+            raise HTTPException(409, "Cannot cancel sign-in during an active run")
+        session = _sessions.get(session_id)
+        if not session:
+            raise HTTPException(404, "Sign-in session not found")
+        if session["status"] == "succeeded":
+            raise HTTPException(409, "Sign-in already completed; refresh sign-in status")
+        task = session.get("task")
+        if task and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        session.update(status="failed", **_error("Sign-in cancelled; request a new code"))
+        return {"status": "cancelled"}
+
 
     @app.post("/api/auth/logout")
     async def logout():

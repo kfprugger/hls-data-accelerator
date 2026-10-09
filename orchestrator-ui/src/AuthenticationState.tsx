@@ -23,7 +23,7 @@ function readDraft(identity: Identity): Target | null {
 interface Authentication {
   identity: Identity | null; tenant: string; subscription: string; setTenant: (value: string) => void; setSubscription: (value: string) => void;
   code: Code | null; tool: Tool | null; busy: boolean; error: string; message: string; remaining: number;
-  begin: (tool: Tool) => Promise<void>; logout: () => Promise<void>;
+  begin: (tool: Tool) => Promise<void>; reissue: () => Promise<void>; logout: () => Promise<void>;
 }
 const Context = createContext<Authentication | null>(null);
 export function useAuthentication() {
@@ -48,6 +48,7 @@ export function AuthenticationProvider({ children }: {
     const [message, setMessage] = useState('');
     const [remaining, setRemaining] = useState(0);
     const reservation = useRef(false);
+    const reissueReservation = useRef(false);
     function applyTarget(value: Target, remember = false) {
         const pair = { tenant_id: value.tenant_id, subscription_id: value.subscription_id };
         target.current = pair;
@@ -181,6 +182,22 @@ export function AuthenticationProvider({ children }: {
             reservation.current = false;
         }
     }
+    async function reissue() {
+        if (!code || !tool || reissueReservation.current) return;
+        reissueReservation.current = true;
+        const previous = code;
+        const selected = tool;
+        setCode(null); // Stop old polling before replacing the session.
+        setBusy(true); setError(''); setMessage('');
+        try {
+            await requestJson(`/api/auth/device-login/${previous.session_id}/cancel`, { method: 'POST', timeoutMs: 30000 });
+            reservation.current = false;
+            await begin(selected); // Checks cached credentials; never clears either tool's login.
+        } catch (cause) {
+            setError(cause instanceof Error ? cause.message : 'Unable to replace the device code');
+            setCode(previous); // Resume the old session if cancellation was rejected or unavailable.
+        } finally { reissueReservation.current = false; }
+    }
     async function logout() {
         if (reservation.current)
             return;
@@ -201,5 +218,5 @@ export function AuthenticationProvider({ children }: {
             reservation.current = false;
         }
     }
-    return <Context.Provider value={{ identity, tenant, subscription, setTenant, setSubscription, code, tool, busy, error, message, remaining, begin, logout }}>{children}</Context.Provider>;
+    return <Context.Provider value={{ identity, tenant, subscription, setTenant, setSubscription, code, tool, busy, error, message, remaining, begin, reissue, logout }}>{children}</Context.Provider>;
 }

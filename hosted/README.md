@@ -88,6 +88,8 @@ az containerapp update --subscription 0525a464-e087-4084-a24e-a90396a83c15 `
 
 Do not use `--replace-env-vars`: it would erase required runtime settings. User sign-in does not grant access to their Azure tenant. Each user authenticates Azure CLI and Azure PowerShell from the sandbox's device-code UI. A Conditional Access policy that blocks device code must be fixed by the user's tenant administrator, or the user must run locally; there is no service-principal fallback.
 
+If Microsoft rejects the displayed device code, choose **Get a new code** in **Sandbox & sign-in**. This replaces only the pending attempt for the selected Azure tool and reuses the same target IDs. It preserves any completed login for the other tool. If the flow has already completed, refresh sign-in status instead; if it expired and disappeared, use that tool's normal sign-in button. Codes last 15 minutes and are not login credentials.
+
 ## Security and persistence
 
 - Portal authentication and deployment authorization are separate. The host identity cannot deploy into users' tenants. Azure credentials are never retained on the share: device-code tokens and CLI/PowerShell caches live only in the container's writable home and vanish when the sandbox is deleted or restarted. Use logout to clear both caches without deleting history. A recreated or restarted sandbox requires new device-code logins. Restrict access to deployment history and logs even though the share is not a credential store.
