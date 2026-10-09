@@ -384,7 +384,18 @@ if (-not $SkipImages) {
         # ACR must use the sandbox-specific source allowlist, not the root emulator exclusions.
         Copy-Item -LiteralPath (Join-Path $context 'hosted/sandbox/Dockerfile.dockerignore') -Destination (Join-Path $context '.dockerignore') -Force
         Write-Host "Building committed HLS $ImageTag with WardFlow bundle $wardflowCommit (uncommitted changes are not shipped)."
-        Invoke-AcrBuild $context "hls-orchestrator-sandbox:$ImageTag" 'hosted/sandbox/Dockerfile' @('--build-arg', "WARDFLOW_BUNDLE_IMAGE=$wardflowBundleImage")
+        # Compile the pinned viewer once in ACR, not in the user's credential-bearing 4 GiB sandbox.
+        $ohifTag = '9a2d2c3d1367'
+        $ohifImage = "$registry.azurecr.io/hls-ohif-static:$ohifTag"
+        $repositories = @(Invoke-AzJson @('acr', 'repository', 'list', '--name', $registry))
+        $ohifTags = @()
+        if ($repositories -contains 'hls-ohif-static') {
+            $ohifTags = @(Invoke-AzJson @('acr', 'repository', 'show-tags', '--name', $registry, '--repository', 'hls-ohif-static'))
+        }
+        if ($ohifTags -notcontains $ohifTag) {
+            Invoke-AcrBuild (Join-Path $context 'hosted/sandbox') "hls-ohif-static:$ohifTag" 'ohif.Dockerfile'
+        }
+        Invoke-AcrBuild $context "hls-orchestrator-sandbox:$ImageTag" 'hosted/sandbox/Dockerfile' @('--build-arg', "WARDFLOW_BUNDLE_IMAGE=$wardflowBundleImage", '--build-arg', "OHIF_VIEWER_IMAGE=$ohifImage")
         Invoke-AcrBuild (Join-Path $context 'hosted/gateway') "hls-gateway:$ImageTag" 'Dockerfile'
     } finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }
 }

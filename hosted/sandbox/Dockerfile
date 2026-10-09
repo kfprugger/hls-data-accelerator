@@ -4,7 +4,9 @@
 # Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle (hosted/sandbox/wardflow-bundle.Dockerfile).
 # Example: docker build --platform linux/amd64 --build-arg WARDFLOW_BUNDLE_IMAGE=<acr>/hls-wardflow-bundle:<commit> -f hosted/sandbox/Dockerfile .
 ARG WARDFLOW_BUNDLE_IMAGE
+ARG OHIF_VIEWER_IMAGE=acrhlsdeployer.azurecr.io/hls-ohif-static:9a2d2c3d1367
 FROM ${WARDFLOW_BUNDLE_IMAGE} AS wardflow
+FROM ${OHIF_VIEWER_IMAGE} AS ohif
 FROM node:20-bookworm-slim AS node
 FROM node AS ui
 WORKDIR /ui
@@ -59,9 +61,9 @@ RUN useradd --create-home --uid 10001 --shell /bin/bash hls \
 # Keep the viewer deployer and its compatible OHIF pin reproducible; don't bootstrap moving toolkit main.
 RUN git init /app/FabricDicomCohortingToolkit \
  && git -C /app/FabricDicomCohortingToolkit remote add origin https://github.com/kfprugger/FabricDicomCohortingToolkit.git \
- && git -C /app/FabricDicomCohortingToolkit fetch --depth 1 origin a7b04c54b8c799676371a36f603d83dcdec932b0 \
+ && git -C /app/FabricDicomCohortingToolkit fetch --depth 1 origin 9b70dec8a8ad5a29cb7255f0c0c54b7cb4204e38 \
  && git -C /app/FabricDicomCohortingToolkit checkout --detach FETCH_HEAD \
- && test "$(git -C /app/FabricDicomCohortingToolkit rev-parse HEAD)" = a7b04c54b8c799676371a36f603d83dcdec932b0 \
+ && test "$(git -C /app/FabricDicomCohortingToolkit rev-parse HEAD)" = 9b70dec8a8ad5a29cb7255f0c0c54b7cb4204e38 \
  && chown -R hls:hls /app/FabricDicomCohortingToolkit
 WORKDIR /app/hls-data-accelerator
 COPY orchestrator/requirements.lock hosted/sandbox/addon-requirements.txt /tmp/requirements/
@@ -77,6 +79,7 @@ RUN test -s /app/wardflow/.pinned-commit \
  && chown -R hls:hls orchestrator/.venv \
  && chown hls:hls /app/hls-data-accelerator/orchestrator
 COPY --from=ui --chown=hls:hls /ui/dist /app/hls-data-accelerator/orchestrator-ui/dist
+COPY --from=ohif --chown=hls:hls /viewer/ /app/FabricDicomCohortingToolkit/dicom-viewer/ohif-build/platform/app/dist/
 ENV HOME=/home/hls AZURE_CONFIG_DIR=/home/hls/.azure HLS_DATA_DIR=/data \
     PATH=/app/hls-data-accelerator/orchestrator/.venv/bin:$PATH
 USER hls

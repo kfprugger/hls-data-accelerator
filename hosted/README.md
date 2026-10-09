@@ -107,6 +107,8 @@ If Microsoft rejects the displayed device code, choose **Get a new code** in **S
 
 The gateway remains warm (0.5 vCPU / 1 GiB, one replica); each sandbox remains at 2 vCPU / 4 GiB while allocated. The maximum five concurrent sandboxes means up to 10 vCPU / 20 GiB in addition to the gateway. Idle eviction limits sandbox runtime, but active deployments are not killed to reduce costs. Additional charges are ACR Basic and builds, Azure Files used capacity/transactions, table operations, Key Vault calls, Log Analytics ingestion/30-day retention, and networking. ACA managed certificates have no separate certificate purchase. Consult current westus2 prices and observed duty cycle before budgeting; this is not a zero-cost service. Set RG budgets and monitor persistent Files and log growth.
 
+OHIF's full pinned static viewer is compiled once by `hosted/sandbox/ohif.Dockerfile` in ACR, not inside each user's sandbox. The operator/CI image build publishes `hls-ohif-static:9a2d2c3d1367` when missing, then copies its complete output into the sandbox. The toolkit verifies its source-revision marker and configures the current deployment's proxy before publishing. Runtime memory remains 4 GiB and Azure token caches remain local to that runtime.
+
 Local static checks (no login or deployment required):
 
 ```powershell
