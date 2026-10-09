@@ -286,15 +286,9 @@ class AddonRunner:
         if not storage:
             raise RuntimeError("FHIR export storage account is not configured")
         if fresh_export:
-            await asyncio.to_thread(az_json, cfg, "storage", "container", "create", "--account-name", storage,
-                                    "--name", "fhir-export-databricks", "--auth-mode", "login")
-            await self.command("Empty previous Databricks export", ["azcopy", "remove",
-                f"https://{storage}.blob.core.windows.net/fhir-export-databricks/*", "--recursive=true", "--output-level=essential"],
-                env={**self.env, "AZCOPY_AUTO_LOGIN_TYPE": "AZCLI"})
-            remaining = await asyncio.to_thread(az_json, cfg, "storage", "blob", "list", "--account-name", storage,
-                "--container-name", "fhir-export-databricks", "--auth-mode", "login", "--num-results", "*", "--query", "[].name")
-            if remaining:
-                raise RuntimeError("Databricks export container is not empty; refusing a mixed snapshot")
+            await self.ps("Empty previous Databricks export", ROOT / "utilities/snapshot-fhir-export.ps1", {
+                "ResourceGroupName": cfg["resource_group_name"], "SubscriptionId": cfg["expected_subscription_id"],
+                "ClearSnapshotOnly": True})
             await self.ps("Fresh FHIR export for Databricks", ROOT / "phase-1/deploy-fhir.ps1", {
                 "ResourceGroupName": cfg["resource_group_name"], "ExpectedSubscriptionId": cfg["expected_subscription_id"],
                 "ExportOnly": True, "ExportContainerName": "fhir-export-databricks", "DeploymentPython": sys.executable})

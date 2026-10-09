@@ -24,6 +24,7 @@ Users can now deploy the accelerator into their own tenant, subscription and Fab
 - **Added** **Get a new code** in the pending sandbox sign-in panel. It cancels only that device-code session, checks cached credentials, then requests another code for the same tool and target. It does not sign out either Azure tool or clear their token caches; cancellation is refused for completed sign-ins and active deployments.
 - **Added** automatic flyout scrolling when Azure CLI/PowerShell sign-in or code reissuance is requested, and again when its code or outcome arrives. Only the flyout moves; reduced-motion users receive instant scrolling.
 - **Fixed** the hosted imaging viewer build failing because `/usr/local/bin/yarn` pointed to an uncopied `/opt/yarn-v1.22.22` directory. The image includes that pinned runtime directory and fails its build if Yarn cannot execute inside a PowerShell pipeline.
+- **Fixed** continuation failing to clear a previous Databricks snapshot when AzCopy deleted parent folders concurrently with their files. Cleanup now deletes top-level ADLS directories recursively and drains root batches before verifying emptiness; initial snapshots and add-later exports use the same helper, without suppressing storage errors or weakening manifest checks.
 
 ### New-tenant deployment fixes (med-1006, 2026-10-07)
 
