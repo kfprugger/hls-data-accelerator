@@ -124,5 +124,5 @@ Record results for the exact gateway/sandbox image tags before any full deployme
 - Public custom-domain HTTPS health passed; the gateway is hosted in the approved jbatl.dev subscription.
 - A real `joey@brakekat.com` portal sign-in created an internal sandbox and served the deployment UI.
 - In that sandbox, UID 10001 successfully wrote, renamed, read and deleted a file on `/data`.
-- Azure CLI 2.91 changed its device-verification URL to `https://login.microsoft.com/device`; the parser now accepts it, with a regression test. The deployment wizard no longer substitutes mock subscriptions or capacities for missing Azure credentials.
+- Azure CLI 2.91 uses `https://login.microsoft.com/device`; the corrected live sandbox API issued a device code. A regression test covers this URL. Logout was reproduced failing on an already-empty PowerShell context, then verified returning `signed_out` in the Linux image after disconnecting before clearing the context. The deployment wizard no longer substitutes mock subscriptions or capacities for missing Azure credentials.
 - **Pending:** completing both user device-code sign-ins, preflight, the cross-tenant deployment with all add-ons, deployment evaluation, teardown, and the main-branch GitHub OIDC release. Do not treat gateway health or static checks as proof of those paths.

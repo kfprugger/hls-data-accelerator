@@ -173,7 +173,7 @@ def install_hosted_routes(app, active_runs, invalidate):
             raise HTTPException(409, "Cannot sign out during an active run")
         await shutdown_auth()
         errors = []
-        for args in [("az", "account", "clear"), ("pwsh", "-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; Clear-AzContext -Scope CurrentUser -Force; Disconnect-AzAccount -Scope CurrentUser -ErrorAction SilentlyContinue | Out-Null")]:
+        for args in [("az", "account", "clear"), ("pwsh", "-NoProfile", "-NonInteractive", "-Command", "$ErrorActionPreference='Stop'; if (Get-AzContext) { Disconnect-AzAccount -Scope CurrentUser | Out-Null }; Clear-AzContext -Scope CurrentUser -Force")]:
             try:
                 await _run(*args)
             except Exception as exc:
