@@ -1,6 +1,6 @@
 """Ownership-aware teardown of one HLS deployment and every front end tied to it.
 
-Shared by the local orchestrator API, the Durable Functions activity and ``Teardown-All.ps1``
+Shared by the local and hosted orchestrator API and ``Teardown-All.ps1``
 (``python -m shared.full_teardown``). Every Azure, Graph, Fabric and Databricks token is minted for
 one explicit subscription and checked against the expected tenant before anything is deleted, so an
 Azure CLI default that points at another tenant can never become the target.
@@ -148,18 +148,6 @@ class AzureCliTokens:
         return data["accessToken"]
 
 
-class CredentialTokens:
-    """Tokens from an azure-identity credential, pinned to one tenant (Durable Functions)."""
-
-    def __init__(self, credential: Any, tenant_id: str) -> None:
-        if not tenant_id:
-            raise TeardownRefused("expected_tenant_id is required for credential-based teardown")
-        self.credential = credential
-        self.tenant_id = tenant_id
-
-    def token(self, resource: str) -> str:
-        scope = resource.rstrip("/") + "/.default"
-        return self.credential.get_token(scope, tenant_id=self.tenant_id).token
 
 
 # --------------------------------------------------------------------------- HTTP
@@ -401,14 +389,9 @@ class DeploymentTeardown:
         kinds = {r["type"].lower() for r in resources}
         if kinds & PROTECTED_TYPES:
             raise TeardownRefused(f"resource group '{group}' contains a Fabric capacity; it is never deleted by teardown")
-        names = {r["name"].lower() for r in resources}
-        orchestrator = any(r["type"].lower() == "microsoft.web/sites" and r["name"].lower().endswith("-func")
-                           and r["name"].lower()[:-5] + "-swa" in names for r in resources)
-        if orchestrator:
-            front_end.kind = "orchestrator"
         tagged = any(t.startswith("tag ") for t in ties)
         if explicit:
-            if not ties and not orchestrator:
+            if not ties:
                 raise TeardownRefused(f"explicit front-end resource group '{group}' has nothing tied to this deployment "
                                       "(no app referencing its FHIR, Fabric, Event Hubs or storage endpoints and no "
                                       f"'{DEPLOYMENT_TAG}' tag); refusing")

@@ -6,6 +6,8 @@ import time
 import subprocess
 import shutil
 import argparse
+import os
+from pathlib import Path
 
 def get_fabric_token():
     az = shutil.which("az") or "az"
@@ -236,7 +238,9 @@ def main():
     if not nodeTypes or not nodeTables:
         raise RuntimeError("Ontology has no materializable Lakehouse nodes; refusing an empty graph definition")
         
-    with open(f".graph_backup_{graph_id}.json", "w") as f:
+    backup_dir = Path(os.environ.get("HLS_DATA_DIR") or ".")
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    with (backup_dir / f".graph_backup_{graph_id}.json").open("w") as f:
         json.dump(graph_def_orig, f, indent=2)
 
     parts = graph_def_orig['definition']['parts']

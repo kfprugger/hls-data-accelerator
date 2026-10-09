@@ -12,23 +12,91 @@ Tables:
 - form_history: per-field input history for the deploy wizard
 """
 
+import atexit
+import os
+import shutil
+import tempfile
 import json
 import logging
 import sqlite3
 import threading
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent / "orchestrator.db"
+_persistent_dir = os.environ.get("HLS_DATA_DIR")
+BACKUP_PATH = Path(_persistent_dir) / "orchestrator.db" if _persistent_dir else None
+# Never open the live WAL database on the Azure Files SMB mount.
+DB_PATH = Path(tempfile.mkdtemp(prefix="hls-orch-")) / "orchestrator.db" if BACKUP_PATH else Path(__file__).parent / "orchestrator.db"
+_backup_dirty = threading.Event()
+_backup_stop = threading.Event()
+_backup_lock = threading.Lock()
+
+if BACKUP_PATH:
+    BACKUP_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if BACKUP_PATH.exists():
+        shutil.copyfile(BACKUP_PATH, DB_PATH)
 
 
+class _PersistentConnection(sqlite3.Connection):
+    def commit(self):
+        super().commit()
+        if BACKUP_PATH:
+            _backup_dirty.set()
+
+
+def backup_database() -> None:
+    """Snapshot a committed local database atomically; no WAL lives on SMB."""
+    if not BACKUP_PATH or not _backup_dirty.is_set():
+        return
+    with _backup_lock:
+        _backup_dirty.clear()
+        snapshot = DB_PATH.with_suffix(".snapshot.db")
+        shared_snapshot = BACKUP_PATH.with_suffix(".db.tmp")
+        try:
+            with closing(sqlite3.connect(str(DB_PATH), timeout=30)) as source, closing(sqlite3.connect(str(snapshot))) as target:
+                source.backup(target)
+                target.execute("PRAGMA journal_mode=DELETE")
+            shutil.copyfile(snapshot, shared_snapshot)
+            os.replace(shared_snapshot, BACKUP_PATH)
+        except Exception:
+            _backup_dirty.set()
+            logger.exception("Persistent SQLite backup failed")
+            raise
+        finally:
+            snapshot.unlink(missing_ok=True)
+            shared_snapshot.unlink(missing_ok=True)
+
+
+def _backup_worker() -> None:
+    # A dirty commit is backed up within ten seconds (well below the 30s limit).
+    while not _backup_stop.wait(10):
+        try:
+            backup_database()
+        except Exception:
+            pass  # Keep dirty state and retry; the error is logged above.
+
+
+_backup_thread = threading.Thread(target=_backup_worker, name="sqlite-backup", daemon=True) if BACKUP_PATH else None
+if _backup_thread:
+    _backup_thread.start()
+
+
+def shutdown_database() -> None:
+    _backup_stop.set()
+    if _backup_thread:
+        _backup_thread.join()
+    backup_database()
+
+
+atexit.register(shutdown_database)
 
 
 def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False, timeout=30)
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False, timeout=30, factory=_PersistentConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -158,19 +226,29 @@ def clear_all_deployments() -> int:
 
 
 def mark_stale_as_terminated():
-    """Mark any Running deployments as Terminated (server restart recovery)."""
+    """Recover interrupted active runs, retaining completed estates for add-on retries."""
     db = get_db()
     with _write_lock:
         rows = db.execute(
-            "SELECT instance_id, custom_status, output, created_time FROM deployments WHERE runtime_status = 'Running'"
+            "SELECT instance_id, custom_status, output, created_time FROM deployments WHERE runtime_status IN ('Running', 'Pending')"
         ).fetchall()
         for row in rows:
             cs = json.loads(row["custom_status"])
-            cs["status"] = "terminated"
-            cs["detail"] = "Server restarted — deployment was interrupted"
+            addon_only = bool(cs.get("addonRunBaseCompleted"))
+            runtime_status = "Completed" if addon_only else "Terminated"
+            cs["status"] = "succeeded" if addon_only else "terminated"
+            cs["detail"] = "Server restarted — add-on interrupted; completed base deployment retained" if addon_only else "Server restarted — deployment was interrupted"
+            if addon_only:
+                cs["currentPhase"] = "Deployment Complete"
+            for addon in cs.get("addons", {}).values():
+                if addon.get("status") in {"pending", "running", "paused"}:
+                    addon.update(status="failed", detail="Server restarted — restart this add-on", finishedAt=datetime.now(timezone.utc).isoformat())
             # Try to compute actual duration from phase data or last update
             output = json.loads(row["output"]) if row["output"] else None
             if output and "phases" in output:
+                for phase in output["phases"]:
+                    if phase.get("phase", "").startswith("Add-on:") and phase.get("status") in {"pending", "running", "paused"}:
+                        phase.update(status="failed", detail="Server restarted — restart this add-on")
                 phase_duration = sum(
                     p.get("duration", 0) for p in output["phases"]
                     if isinstance(p.get("duration"), (int, float))
@@ -179,12 +257,14 @@ def mark_stale_as_terminated():
                     cs["durationSeconds"] = round(phase_duration, 1)
             db.execute("""
                 UPDATE deployments
-                SET runtime_status = 'Terminated',
+                SET runtime_status = ?,
                     custom_status = ?,
+                    output = ?,
                     last_updated_time = ?
                 WHERE instance_id = ?
-            """, (json.dumps(cs, default=str), datetime.now(timezone.utc).isoformat(), row["instance_id"]))
-            logger.warning("Marked stale deployment %s as Terminated", row["instance_id"])
+            """, (runtime_status, json.dumps(cs, default=str), json.dumps(output, default=str) if output else None,
+                  datetime.now(timezone.utc).isoformat(), row["instance_id"]))
+            logger.warning("Recovered interrupted deployment %s as %s", row["instance_id"], runtime_status)
         db.commit()
 
 

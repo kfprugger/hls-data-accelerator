@@ -1,0 +1,5 @@
+# Install alongside orchestrator/requirements.lock, not instead of it.
+# Cardiology seed/deploy/refresh CLIs use the Python standard library when
+# refresh is passed --since; mssql-python is deliberately not required.
+# Rayfin add-on runner edits fabric.yaml and rayfin.yml.
+PyYAML==6.0.2

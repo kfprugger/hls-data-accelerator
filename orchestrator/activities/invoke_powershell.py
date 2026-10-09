@@ -215,6 +215,13 @@ def run_preflight(config: dict[str, Any]) -> dict[str, Any]:
         args += ["-AdminSecurityGroup", config["admin_security_group"]]
     if config.get("dicom_toolkit_path"):
         args += ["-DicomToolkitPath", config["dicom_toolkit_path"]]
+    for key, parameter in (("expected_tenant_id", "-ExpectedTenantId"),
+                           ("expected_subscription_id", "-ExpectedSubscriptionId"),
+                           ("capacity_subscription_id", "-CapacitySubscriptionId"),
+                           ("capacity_resource_group", "-CapacityResourceGroup"),
+                           ("capacity_name", "-CapacityName")):
+        if config.get(key):
+            args += [parameter, config[key]]
     if config.get("phase2_only"):
         args.append("-Phase2")
     if config.get("phase3_only"):
@@ -285,8 +292,8 @@ def _build_deploy_args(config: dict[str, Any]) -> list[str]:
         params = [
             f"-FabricWorkspaceName {_ps_single_quoted(config['fabric_workspace_name'])}",
             f"-Location {_ps_single_quoted(config.get('location', 'eastus'))}",
-            f"-ExpectedTenantId {_ps_single_quoted(config.get('expected_tenant_id', '8d038e6a-9b7d-4cb8-bbcf-e84dff156478'))}",
-            f"-ExpectedSubscriptionId {_ps_single_quoted(config.get('expected_subscription_id', '9bbee190-dc61-4c58-ab47-1275cb04018f'))}",
+            f"-ExpectedTenantId {_ps_single_quoted(config['expected_tenant_id'])}",
+            f"-ExpectedSubscriptionId {_ps_single_quoted(config['expected_subscription_id'])}",
         ]
         if config.get("resource_group_name"):
             params.append(f"-ResourceGroupName {_ps_single_quoted(config['resource_group_name'])}")
@@ -334,6 +341,8 @@ def _build_deploy_args(config: dict[str, Any]) -> list[str]:
             params.append("-SkipDeviceAssoc")
         if config.get("skip_fhir_export"):
             params.append("-SkipFhirExport")
+        if config.get("deploy_databricks"):
+            params.append("-SnapshotFhirExportForDatabricks")
         if config.get("skip_rti_phase2"):
             params.append("-SkipRtiPhase2")
         if config.get("skip_hds_pipelines"):
@@ -383,8 +392,8 @@ def _build_deploy_args(config: dict[str, Any]) -> list[str]:
         "pwsh", "-NoProfile", "-NonInteractive", "-File",
         str(DEPLOY_SCRIPT),
         "-FabricWorkspaceName", config["fabric_workspace_name"],
-        "-ExpectedTenantId", config.get("expected_tenant_id", "8d038e6a-9b7d-4cb8-bbcf-e84dff156478"),
-        "-ExpectedSubscriptionId", config.get("expected_subscription_id", "9bbee190-dc61-4c58-ab47-1275cb04018f"),
+        "-ExpectedTenantId", config["expected_tenant_id"],
+        "-ExpectedSubscriptionId", config["expected_subscription_id"],
         "-Location", config.get("location", "eastus"),
     ]
 
@@ -429,6 +438,8 @@ def _build_deploy_args(config: dict[str, Any]) -> list[str]:
         args += ["-SourceResourceGroup", config["source_resource_group"]]
     if config.get("skip_fhir_export"):
         args.append("-SkipFhirExport")
+    if config.get("deploy_databricks"):
+        args.append("-SnapshotFhirExportForDatabricks")
     if config.get("use_cached_synthea"):
         args.append("-UseCachedSynthea")
     if config.get("skip_synthea"):

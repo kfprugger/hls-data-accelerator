@@ -170,6 +170,19 @@ class FullTeardownSafetyTests(unittest.TestCase):
             teardown.run()
         self.assertEqual(cloud.deletes(), [])
 
+    def test_old_function_and_static_site_names_do_not_establish_ownership(self) -> None:
+        cloud = FakeCloud({
+            "rg-main": MAIN_GROUP,
+            "rg-old-host": [
+                {"type": "Microsoft.Web/sites", "name": "medorch-func", "id": _rid("rg-old-host", "Microsoft.Web/sites", "medorch-func")},
+                {"type": "Microsoft.Web/staticSites", "name": "medorch-swa", "id": _rid("rg-old-host", "Microsoft.Web/staticSites", "medorch-swa")},
+            ],
+        })
+        teardown, _ = _teardown(cloud, front_end_resource_groups=["rg-old-host"])
+        with self.assertRaises(TeardownRefused):
+            teardown.run()
+        self.assertEqual(cloud.deletes(), [])
+
     def test_owned_front_end_is_deleted_and_shared_group_is_kept_with_reason(self) -> None:
         tie = "https://stmain.blob.core.windows.net/data"
         cloud = FakeCloud(
@@ -275,14 +288,6 @@ class AzureCliTokenTests(unittest.TestCase):
             tokens.token("https://graph.microsoft.com")
 
 
-class DurableTeardownActivityTests(unittest.TestCase):
-    def test_request_without_expected_tenant_is_refused(self) -> None:
-        from activities.teardown import run
-
-        result = run({"fabric_workspace_name": "ws", "resource_group_name": "rg", "subscription_id": SUB,
-                      "delete_workspace": True, "delete_azure_rg": True})
-
-        self.assertEqual(result["status"], "refused")
 
 
 if __name__ == "__main__":

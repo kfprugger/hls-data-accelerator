@@ -28,12 +28,14 @@ Healthcare prototypes often stop at one workload: a FHIR server, a streaming das
 - **Four healthcare data domains:** synthetic FHIR R4, re-tagged TCIA DICOM, simulated Masimo device telemetry, and synthetic payer events.
 - **Batch and real time together:** Healthcare Data Solutions lakehouses and OneLake shortcuts sit beside Eventstreams, Eventhouse, and KQL.
 - **Usable experiences, not empty scaffolding:** Power BI reports, real-time dashboards, OHIF imaging, Fabric Data Agents, ontologies, and Activator rules consume the deployed data estate.
-- **One control plane:** the local React/FastAPI orchestrator and `Deploy-All.ps1` expose preflight, deployment presets, progress, recovery, validation, and teardown.
+- **One control plane:** the local or [hosted React/FastAPI orchestrator](hosted/README.md) and `Deploy-All.ps1` expose preflight, deployment presets, progress, recovery, validation, and teardown.
 - **Fail-closed gates:** required pipelines, row counts, Eventstream topology, report facts, and published agent definitions are validated instead of treating resource creation as success.
 
 ## Quickstart
 
 The browser orchestrator is the recommended path for a first deployment. The CLI uses the same deployment engine and is useful for automation and recovery.
+
+For hosted access, use the Entra-authenticated portal at **https://hls.jbatl.dev** and sign into the deployment tenant through the in-UI device-code flow. Operators provisioning the shared host should follow the [hosted bootstrap and release guide](hosted/README.md). The steps below run the same orchestrator locally.
 
 ### 1. Confirm cloud prerequisites
 
@@ -137,6 +139,54 @@ $account = az account show --output json | ConvertFrom-Json
 ```
 
 `-RunEval` runs the end-to-end evaluation harness after deployment. Omit it only when you intentionally plan to validate later.
+
+### Optional add-ons
+
+The deploy form's **Add-ons** section selects Databricks, both Rayfin Fabric apps,
+and/or the Caldova cardiology stack. They run after the base deployment passes its
+live checks and appear as phases with logs and substeps. On a completed deployment,
+the monitor's **Add-ons** panel can add or retry them without rerunning Deploy-All.
+
+- **Databricks:** preflight checks the provider, region and CLI tools. A full run
+  passes `-SnapshotFhirExportForDatabricks`; after the last FHIR export and before
+  HDS ingestion, AzCopy copies `fhir-export` server-side to
+  `fhir-export-databricks` and verifies matching blob counts. The deploying user
+  needs Storage Blob Data Contributor (Phase 1 grants it to the admin group).
+  Adding it later uses the existing FHIR export helper with the dedicated container.
+  Scripts 01–07 run in a per-deployment copy with `DATABRICKS_AUTH_TYPE=azure-cli`
+  and `HLS_NONINTERACTIVE=1`; the chosen admin group must be available in Unity
+  Catalog. Metastore assignment is attempted automatically. If account-admin
+  action is needed, the panel explains the account-console assignment and offers
+  **Continue**, which rechecks assignment; the pause expires after 24 hours.
+- **Rayfin:** each app gets its own deployment working copy and rewritten Fabric
+  item IDs. Node/npm install, build and `rayfin up` run without login prompts.
+  Management commands receive a Fabric-audience token; semantic-model/DB probes
+  receive a Power BI-audience token, and SQL provisioning receives a SQL token.
+  The new hosting origin is registered, not the checked-in demo origin. The command
+  center installs its publication procedures, configures the app database secrets,
+  and enrolls the deploying user as a writer; its first signed-in Gold sync publishes
+  the snapshot. The triage app remains a workflow surface, not an automatic alert writer.
+- **Cardiology:** supply operator/reviewer UPNs (reviewers must also be operators),
+  location, optional resource prefix, and optional paired model name/version.
+  Empty model fields use the built-in candidate list; preflight requires an offered
+  DataZoneStandard version with at least 50K TPM free and app-registration permission.
+  `WARDFLOW_ROOT` must point to the private `jb-dev` checkout/image snapshot. The
+  runner seeds dry-run then apply, deploys the Masimo aggregator into the main RG,
+  deploys Gold projection, waits for HDS ingestion to finish, refreshes Gold from
+  the pre-seed UTC watermark, then deploys the app into `rg-<workspace>-cardio`.
+
+The APIs are `POST /api/deploy/{id}/addons` with an `addons` list (`databricks`,
+`rayfin`, `cardiology`) plus the form's option fields, and
+`POST /api/deploy/{id}/addons/databricks/continue`. An active or paused add-on keeps
+the sandbox active. Add-on failures on an already-completed deployment preserve
+that base deployment and are shown separately. Work copies and JSONL logs live
+under `HLS_DATA_DIR`; no access tokens are written to their configuration.
+
+Full teardown already removes the Rayfin AppBackends and companion items, bound
+Databricks Unity Catalog objects before the workspace, and the ownership-tagged
+cardiology RG/app registration. The dedicated export container lives in the main
+RG's storage account and is removed with that RG. Shared metastores and Fabric
+capacity are not deleted.
 
 ## How it works
 
@@ -260,7 +310,7 @@ If an existing Data Agent shows stale or inaccessible schema selections, use the
 
 Remove `-Plan` to execute after typing `yes`; add `-Force` to skip that prompt. Every execution prints a read-only plan first, waits for Azure deletion, and reports deleted items, skipped front ends with reasons, and failures. Local deployment state is removed only after a successful non-plan run.
 
-The shared teardown includes Rayfin apps, deployment-bound Fabric connections and Databricks Unity Catalog objects, and owned cardiology, DICOM viewer and Azure-hosted orchestrator front ends. Discovery checks deployment ties and skips shared or unrelated groups. Supply `-FrontEndResourceGroup @("<front-end-rg>")` for explicit groups (ownership checks still apply); `-DicomViewerResourceGroup` is an optional explicit group with no default. `-NoFrontEndDiscovery` disables automatic front-end group discovery.
+The shared teardown includes Rayfin apps, deployment-bound Fabric connections and Databricks Unity Catalog objects, and owned cardiology and DICOM viewer front ends. It does not target the shared hosted deployer. Discovery checks deployment ties and skips shared or unrelated groups. Supply `-FrontEndResourceGroup @("<front-end-rg>")` for explicit groups (ownership checks still apply); `-DicomViewerResourceGroup` is an optional explicit group with no default. `-NoFrontEndDiscovery` disables automatic front-end group discovery.
 
 If preflight warns that lakehouse or Eventhouse endpoints could not be read (for example, while capacity is paused), SQL/Eventhouse-only front ends may not be discovered. Do not treat that as an empty inventory: investigate the warning and supply known front-end resource groups explicitly for ownership validation.
 
