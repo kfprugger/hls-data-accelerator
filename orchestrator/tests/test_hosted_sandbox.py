@@ -66,6 +66,12 @@ class DeviceCodeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("--allow-no-subscriptions", args)
         self.assertEqual(run.call_args_list[1].args[:3], ("az", "account", "set"))
 
+    async def test_current_cli_device_url_exposes_code_to_user(self):
+        session, _, _ = await self.login("az", "To sign in, use a web browser to open the page https://login.microsoft.com/device and enter the code E4AAFX9VN to authenticate.")
+        self.assertTrue(session["ready"].is_set())
+        self.assertEqual(session["verification_uri"], "https://login.microsoft.com/device")
+        self.assertEqual(session["user_code"], "E4AAFX9VN")
+
     async def test_azps_parses_warning_and_persists_context(self):
         session, args, _ = await self.login("azps", "WARNING: To sign in, use https://microsoft.com/devicelogin and enter the code XYZA12345 to authenticate.")
         self.assertEqual(session["status"], "succeeded")

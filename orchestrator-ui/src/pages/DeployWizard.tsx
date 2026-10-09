@@ -32,9 +32,8 @@ import {
 } from "@fluentui/react-components";
 import { RocketRegular, BeakerRegular, AddRegular, DismissRegular, ArrowSyncRegular, PlayRegular, ChevronDownRegular, ChevronUpRegular, CheckmarkCircleRegular, CircleRegular, SettingsRegular, ClipboardRegular, FlashRegular } from "@fluentui/react-icons";
 import { startDeployment, listCapacities, checkExistingDeployment, resumeCapacity, pauseCapacity, listFhirRegions, listSubscriptions, type DeploymentConfig, type FabricCapacity, type ExistingDeploymentInfo } from "../api";
-import { startMockDeployment, getMockSubscriptions, getMockCapacities } from "../mockDeployment";
+import { startMockDeployment } from "../mockDeployment";
 import { useAppState } from "../AppState";
-import { MockDataBanner } from "../components/MockDataBanner";
 import { HistoryInput } from "../components/HistoryInput";
 import { getTagHistory, addTagToHistory } from "../formHistory";
 import { useReducedMotion } from "../hooks/useReducedMotion";
@@ -267,11 +266,10 @@ export function DeployWizard() {
   const reducedMotion = useReducedMotion();
   const navigate = useNavigate();
   const { selectedSubscription, setSelectedSubscription, subscriptions: ctxSubscriptions, capacities: ctxCapacities, authContext } = useAppState();
-  const [subscriptions, setSubscriptions] = useState(getMockSubscriptions());
+  const [subscriptions, setSubscriptions] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [deploymentStartMessage, setDeploymentStartMessage] = useState("");
   const [error, setError] = useState("");
-  const [usingMock, setUsingMock] = useState(true);
   const [capacities, setCapacities] = useState<FabricCapacity[]>([]);
   const [selectedCapacity, setSelectedCapacity] = useState<string>("");
   const [pauseAfterDeploy, setPauseAfterDeploy] = useState(false);
@@ -469,14 +467,6 @@ export function DeployWizard() {
 
   const refreshCapacities = () => {
     if (subscriptions.length === 0) return;
-    if (usingMock) {
-      // In mock mode, simulate resume completing after a few refreshes
-      setCapacities((prev) => prev.map((c) =>
-        c.state === "Resuming" ? { ...c, state: "Active" } : c
-      ));
-      setLoadWarning("");
-      return;
-    }
     setCapacityRefreshing(true);
     listCapacities()
       .then((allCaps) => {
@@ -515,7 +505,6 @@ export function DeployWizard() {
   useEffect(() => {
     if (ctxSubscriptions.length > 0) {
       setSubscriptions(ctxSubscriptions);
-      setUsingMock(false);
       if (!selectedSubscription) setSelectedSubscription(ctxSubscriptions[0].id);
       return;
     }
@@ -523,30 +512,26 @@ export function DeployWizard() {
       .then((subs: Array<{ id: string; name: string }>) => {
         if (subs.length > 0) {
           setSubscriptions(subs);
-          setUsingMock(false);
           setLoadWarning("");
           if (!selectedSubscription) {
             setSelectedSubscription(subs[0].id);
           }
+        } else {
+          setSubscriptions([]);
+          setLoadWarning("Sign in to Azure to load your accessible subscriptions.");
+          setInitializing(false);
         }
       })
       .catch(() => {
-        setUsingMock(true);
-        setLoadWarning("Live Azure subscription scan unavailable. Using mock data.");
+        setSubscriptions([]);
+        setLoadWarning("Live Azure subscription scan unavailable. Sign in and refresh to retry.");
+        setInitializing(false);
       });
   }, [ctxSubscriptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch Fabric capacities across all subscriptions
   useEffect(() => {
     if (subscriptions.length === 0) return;
-    if (usingMock) {
-      // Use mock capacities in mock mode — leave selection blank so the user picks explicitly.
-      const mockCaps = getMockCapacities() as FabricCapacity[];
-      setCapacities(mockCaps);
-      setLoadWarning("");
-      setInitializing(false);
-      return;
-    }
     // Seed from the app-wide prefetch if available, then refresh in background.
     // Do NOT auto-select a capacity — the user must choose one explicitly so this
     // UI is safe to use across multiple users / tenants without leaking a default.
@@ -577,7 +562,7 @@ export function DeployWizard() {
         setCapacityRefreshing(false);
         setInitializing(false);
       });
-  }, [subscriptions, usingMock]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [subscriptions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch AHDS FHIR-supported regions once on mount (independent of mock mode).
   // Falls back to the currently published FHIR service region list when the
@@ -1461,7 +1446,6 @@ export function DeployWizard() {
     <div style={{ display: "flex", flexWrap: "wrap", gap: tokens.spacingHorizontalXXL, position: "relative" }}>
       {/* Main content area */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        {usingMock && <MockDataBanner />}
         {loadWarning && (
           <div style={{
             marginBottom: tokens.spacingVerticalS,
@@ -1858,19 +1842,6 @@ export function DeployWizard() {
                                       setResumingCapacity(true);
                                       setError("");
                                       try {
-                                        if (usingMock) {
-                                          // Mock: set state to Resuming, then Active after a delay
-                                          setCapacities((prev) => prev.map((c) =>
-                                            c.name === cap.name ? { ...c, state: "Resuming" } : c
-                                          ));
-                                          setTimeout(() => {
-                                            setCapacities((prev) => prev.map((c) =>
-                                              c.name === cap.name ? { ...c, state: "Active" } : c
-                                            ));
-                                            setResumingCapacity(false);
-                                          }, 5000);
-                                          return;
-                                        }
                                         await resumeCapacity(cap.subscription, cap.resourceGroup, cap.name);
                                         // Poll capacity status until Active (max 3 min)
                                         let elapsed = 0;

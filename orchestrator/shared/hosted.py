@@ -94,7 +94,7 @@ async def _device_login(session: dict, req: DeviceLoginRequest, invalidate) -> N
                 output = (output + chunk.decode("utf-8", errors="replace"))[-16000:]
                 plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
                 code = re.search(r"\bcode\s+([A-Z0-9-]{6,20})\b", plain)
-                uri = re.search(r"https://(?:www\.)?(?:microsoft\.com/devicelogin|aka\.ms/devicelogin|login\.microsoftonline\.com/common/oauth2/deviceauth)", plain, re.I)
+                uri = re.search(r"https://(?:www\.)?(?:microsoft\.com/devicelogin|login\.microsoft\.com/device|aka\.ms/devicelogin|login\.microsoftonline\.com/common/oauth2/deviceauth)", plain, re.I)
                 if code and uri and not session.get("user_code"):
                     session.update(user_code=code.group(1), verification_uri=uri.group(0))
                     session["ready"].set()
