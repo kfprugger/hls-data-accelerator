@@ -118,3 +118,11 @@ Record results for the exact gateway/sandbox image tags before any full deployme
 5. **Rayfin audiences:** locally decode the ephemeral `RAYFIN_TOKEN` JWT used by each command without logging the token. Verify the expected tenant and Fabric audience (`https://api.fabric.microsoft.com`) for management/up, and Power BI audience (`https://analysis.windows.net/powerbi/api`) for build/semantic-model probes. Confirm real commands accept those audiences.
 6. **Idle-only image rollover:** publish a new image while a smoke run is active; confirm that sandbox retains its existing image. After `active_runs` becomes zero, confirm the new image is applied, history remains and credentials require reauthentication after restart.
 7. **Custom-domain HTTPS:** verify `https://hls.jbatl.dev/healthz` returns HTTP 200 with a trusted certificate, sign-in returns through the custom-domain callback, DNS remains unproxied, and the gateway's latest revision is healthy.
+
+### Current deployment verification (2026-10-08)
+
+- Public custom-domain HTTPS health passed; the gateway is hosted in the approved jbatl.dev subscription.
+- A real `joey@brakekat.com` portal sign-in created an internal sandbox and served the deployment UI.
+- In that sandbox, UID 10001 successfully wrote, renamed, read and deleted a file on `/data`.
+- Azure CLI 2.91 changed its device-verification URL to `https://login.microsoft.com/device`; the parser now accepts it, with a regression test. The deployment wizard no longer substitutes mock subscriptions or capacities for missing Azure credentials.
+- **Pending:** completing both user device-code sign-ins, preflight, the cross-tenant deployment with all add-ons, deployment evaluation, teardown, and the main-branch GitHub OIDC release. Do not treat gateway health or static checks as proof of those paths.
