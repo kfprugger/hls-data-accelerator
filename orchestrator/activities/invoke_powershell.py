@@ -215,6 +215,13 @@ def run_preflight(config: dict[str, Any]) -> dict[str, Any]:
         args += ["-AdminSecurityGroup", config["admin_security_group"]]
     if config.get("dicom_toolkit_path"):
         args += ["-DicomToolkitPath", config["dicom_toolkit_path"]]
+    for key, parameter in (("expected_tenant_id", "-ExpectedTenantId"),
+                           ("expected_subscription_id", "-ExpectedSubscriptionId"),
+                           ("capacity_subscription_id", "-CapacitySubscriptionId"),
+                           ("capacity_resource_group", "-CapacityResourceGroup"),
+                           ("capacity_name", "-CapacityName")):
+        if config.get(key):
+            args += [parameter, config[key]]
     if config.get("phase2_only"):
         args.append("-Phase2")
     if config.get("phase3_only"):

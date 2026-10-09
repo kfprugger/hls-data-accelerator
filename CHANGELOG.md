@@ -12,6 +12,7 @@ Users can now deploy the accelerator into their own tenant, subscription and Fab
 - **Changed** deployments to require an explicit tenant and subscription; the BrakeKat defaults are gone from `DeployRequest`, `invoke_powershell.py` and `Deploy-All.ps1`. Linux PowerShell temp-path fixes in the phase scripts.
 - **Removed** the never-used Azure Functions host (`orchestrator/function_app.py`, `host.json`, `bicep/orchestrator-infra.bicep`, the Functions-only activity modules) and the `azure-functions` packages from `requirements.txt`/`requirements.lock`.
 - **Fixed** Databricks preflight rejecting a valid subscription because Azure CLI 2.91's `account list-locations` does not accept `--subscription`. Region availability now comes from the tenant-checked ARM endpoint for the deployment's explicit subscription; unsupported provider regions still fail preflight.
+- **Fixed** preflight validating an unrelated capacity rather than the user's selected capacity. It now validates the requested capacity name/resource group/subscription and requested deployment tenant/subscription. Hosted CLI profiles also enable noninteractive extension installation at startup.
 
 ### New-tenant deployment fixes (med-1006, 2026-10-07)
 

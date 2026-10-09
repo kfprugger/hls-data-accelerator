@@ -10,6 +10,11 @@ param (
     [string]$Location = "eastus",
     [string]$AdminSecurityGroup = "",
     [string]$DicomToolkitPath = "",
+    [string]$ExpectedTenantId = "",
+    [string]$ExpectedSubscriptionId = "",
+    [string]$CapacitySubscriptionId = "",
+    [string]$CapacityResourceGroup = "",
+    [string]$CapacityName = "",
     [switch]$Phase2,
     [switch]$Phase3,
     [switch]$Phase4,
@@ -221,6 +226,13 @@ if ($azCliAccount -and $azCliAccount.id -and $azPsContext -and $azPsContext.Subs
     $cliTenant = "$($azCliAccount.tenantId)".Trim().ToLower()
     $psTenant = "$($azPsContext.Tenant.Id)".Trim().ToLower()
 
+    if (($ExpectedTenantId -and $cliTenant -ne $ExpectedTenantId) -or
+        ($ExpectedSubscriptionId -and $cliSub -ne $ExpectedSubscriptionId)) {
+        $checks += @{ name = "Deployment Target"; status = "fail"; detail = "Current context differs from the requested tenant/subscription" }
+        $failures += "Sign in to the requested deployment tenant '$ExpectedTenantId' and subscription '$ExpectedSubscriptionId'."
+    } elseif ($ExpectedTenantId -or $ExpectedSubscriptionId) {
+        $checks += @{ name = "Deployment Target"; status = "pass"; detail = "Requested tenant and subscription match the signed-in context" }
+    }
     if ($cliSub -eq $psSub -and $cliTenant -eq $psTenant) {
         $checks += @{ name = "Azure Context"; status = "pass"; detail = "Subscription and tenant aligned" }
         Write-Host "  ✓ Azure context aligned (CLI + Az PowerShell)" -ForegroundColor Green
@@ -371,12 +383,26 @@ try {
         try { $fabToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
         finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
     }
-    $fabHeaders = @{ "Authorization" = "Bearer $fabToken" }
+    $fabHeaders = @{ "Authorization" = "Bearer $fabToken"; "x-ms-fabric-skill" = "e2e-medallion-architecture" }
     $caps = Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/capacities" -Headers $fabHeaders
-    $allPaidCaps = $caps.value | Where-Object { $_.sku -like "F*" -and $_.sku -ne "FT1" -and $_.sku -ne "PP3" }
+    $candidateCaps = @($caps.value)
+    if ($CapacityName) {
+        if ($CapacitySubscriptionId -and $CapacityResourceGroup) {
+            $capacityTenant = az account show --subscription $CapacitySubscriptionId --query tenantId -o tsv 2>$null
+            if ($LASTEXITCODE -ne 0 -or $capacityTenant -ne $azCliAccount.tenantId) {
+                throw "Selected capacity subscription is not accessible in the deployment tenant."
+            }
+            $capacityId = "/subscriptions/$CapacitySubscriptionId/resourceGroups/$CapacityResourceGroup/providers/Microsoft.Fabric/capacities/$CapacityName"
+            $capacityResource = az resource show --ids $capacityId --subscription $CapacitySubscriptionId -o json 2>$null | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or -not $capacityResource.id) { throw "Selected capacity '$capacityId' is not accessible." }
+        }
+        $candidateCaps = @($candidateCaps | Where-Object { $_.displayName -eq $CapacityName })
+        if ($candidateCaps.Count -ne 1) { throw "Selected capacity '$CapacityName' is missing or ambiguous for the authenticated user." }
+    }
+    $allPaidCaps = @($candidateCaps | Where-Object { $_.sku -like "F*" -and $_.sku -ne "FT1" -and $_.sku -ne "PP3" })
 
     if ($allPaidCaps.Count -gt 0) {
-        $activePaidCaps = $allPaidCaps | Where-Object { $_.state -eq "Active" }
+        $activePaidCaps = @($allPaidCaps | Where-Object { $_.state -eq "Active" })
         if ($activePaidCaps.Count -gt 0) {
             $cap = $activePaidCaps | Select-Object -First 1
             $checks += @{ name = "Fabric Capacity"; status = "pass"; detail = "$($cap.displayName) (SKU: $($cap.sku))" }
@@ -388,7 +414,7 @@ try {
             Write-Host "  ✗ Fabric capacity: $($cap.displayName) ($($cap.sku)) — currently paused ($($cap.state))" -ForegroundColor Red
         }
     } else {
-        $activeTrialCaps = $caps.value | Where-Object { $_.sku -eq "FT1" -and $_.state -eq "Active" }
+        $activeTrialCaps = @($candidateCaps | Where-Object { $_.sku -eq "FT1" -and $_.state -eq "Active" })
         if ($activeTrialCaps.Count -gt 0) {
             $cap = $activeTrialCaps | Select-Object -First 1
             $checks += @{ name = "Fabric Capacity"; status = "fail"; detail = "$($cap.displayName) (SKU: $($cap.sku)) — trial not supported" }
@@ -401,9 +427,9 @@ try {
         }
     }
 } catch {
-    $checks += @{ name = "Fabric Capacity"; status = "fail"; detail = "API unreachable" }
-    $failures += "Cannot access Fabric API. Ensure Az login has Fabric permissions."
-    Write-Host "  ✗ Fabric API unreachable" -ForegroundColor Red
+    $checks += @{ name = "Fabric Capacity"; status = "fail"; detail = $_.Exception.Message }
+    $failures += "Fabric capacity validation failed: $($_.Exception.Message)"
+    Write-Host "  ✗ Fabric capacity validation failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 
 # 12. DICOM Cohorting Toolkit repo

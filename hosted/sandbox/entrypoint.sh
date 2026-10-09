@@ -7,6 +7,8 @@ if [[ "${HLS_HOSTED:-0}" == 1 ]]; then
   : "${HLS_SANDBOX_USER_TID:?Hosted sandbox requires its portal tenant ID}"
 fi
 mkdir -p "${HLS_DATA_DIR:-/data}" "${AZURE_CONFIG_DIR}" "${HOME}/.Azure"
+# Configure this ephemeral CLI profile before any noninteractive phase invokes an extension.
+az config set extension.use_dynamic_install=yes_without_prompt --only-show-errors
 export HLS_STATE_DIR="${HLS_DATA_DIR:-/data}/state-tracking"
 mkdir -p "$HLS_STATE_DIR"
 # Same backend launch used by Start-WebUI.ps1; exec preserves SIGTERM delivery.
