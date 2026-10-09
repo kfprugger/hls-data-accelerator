@@ -22,6 +22,8 @@ ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PYTHONUTF8=1 PYTHONIOENCOD
     AZURE_CORE_LOGIN_EXPERIENCE_V2=off AZURE_BICEP_USE_BINARY_FROM_PATH=true \
     DATABRICKS_AUTH_TYPE=azure-cli WARDFLOW_ROOT=/app/wardflow
 COPY --from=node /usr/local/ /usr/local/
+# Node's yarn executable is a symlink into /opt, which /usr/local alone does not include.
+COPY --from=node /opt/yarn-v1.22.22/ /opt/yarn-v1.22.22/
 RUN test "$TARGETARCH" = amd64 \
  && apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg git bash jq unzip tar libicu72 libssl3 libgssapi-krb5-2 unixodbc \
  && curl -fsSL https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o /tmp/microsoft.deb \
@@ -30,6 +32,8 @@ RUN test "$TARGETARCH" = amd64 \
  && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/azure-cli.gpg] https://packages.microsoft.com/repos/azure-cli/ bookworm main' > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update && ACCEPT_EULA=Y apt-get install -y --no-install-recommends powershell=7.6.6-1.deb azure-cli=2.91.0-1~bookworm msodbcsql18 \
  && rm -rf /var/lib/apt/lists/*
+RUN yarn --version \
+ && pwsh -NoProfile -NonInteractive -Command "\$ErrorActionPreference='Stop'; & yarn --version | Out-Null; if (\$LASTEXITCODE -ne 0) { throw 'Yarn cannot run in the viewer build pipeline' }"
 # Only the Az modules the phase scripts use (Accounts, Resources, Storage), at the versions Az 16.4.0 bundles.
 # The full Az rollup took over an hour to install from PSGallery inside ACR Tasks.
 RUN pwsh -NoProfile -NonInteractive -Command "\$ErrorActionPreference='Stop'; foreach (\$m in @(@('Az.Accounts','5.5.3'), @('Az.Resources','10.2.1'), @('Az.Storage','9.7.2'))) { Install-PSResource -Name \$m[0] -Version \$m[1] -Repository PSGallery -Scope AllUsers -TrustRepository -AcceptLicense }; Import-Module Az.Accounts, Az.Resources, Az.Storage"

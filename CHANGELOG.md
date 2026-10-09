@@ -23,6 +23,7 @@ Users can now deploy the accelerator into their own tenant, subscription and Fab
 - **Fixed** hosted sign-in losing the deployment tenant/subscription after refresh. Non-secret target IDs are saved together in sandbox-backed history and a portal-identity-scoped tab draft; an in-progress device-code flow restores its existing code and remaining lifetime. Expired flows release the sign-in controls. Recovery stays in the authentication state owner without changing sign-in presentation.
 - **Added** **Get a new code** in the pending sandbox sign-in panel. It cancels only that device-code session, checks cached credentials, then requests another code for the same tool and target. It does not sign out either Azure tool or clear their token caches; cancellation is refused for completed sign-ins and active deployments.
 - **Added** automatic flyout scrolling when Azure CLI/PowerShell sign-in or code reissuance is requested, and again when its code or outcome arrives. Only the flyout moves; reduced-motion users receive instant scrolling.
+- **Fixed** the hosted imaging viewer build failing because `/usr/local/bin/yarn` pointed to an uncopied `/opt/yarn-v1.22.22` directory. The image includes that pinned runtime directory and fails its build if Yarn cannot execute inside a PowerShell pipeline.
 
 ### New-tenant deployment fixes (med-1006, 2026-10-07)
 
