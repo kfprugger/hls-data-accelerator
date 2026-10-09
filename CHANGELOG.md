@@ -2,6 +2,13 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Material 3 frontend redesign (2026-10-09)
+
+- Replaced Fluent UI components and icons with current MUI components, a restrained Material 3 Expressive theme, and platform-neutral **HLS Data Accelerator** branding. The standalone Griffel styling engine remains for feature layouts; no Fluent component dependency remains.
+- Added an obvious **Sandbox & sign-in** flyout: right drawer on larger screens and full-screen sheet on phones. Authentication polling and device codes belong to a persistent provider, so hiding the flyout or changing routes does not cancel sign-in or issue duplicate login requests. Deployment tenant/subscription stays visible in the shell.
+- Added **Connect → Configure → Validate → Review → Deploy**, with actual prerequisite requests, in-memory configuration drafts across navigation, explicit target review, and mandatory revalidation after configuration changes. Existing deployment APIs and payloads are retained.
+- Separated run **Progress**, **Resources**, and **Logs**; log-following is optional and scrolling up preserves manual inspection. Added responsive navigation, stacked phone configuration, desktop review panels, foldable viewport-segment styling, labelled form controls, dark/light modes and reduced-motion support.
+
 ### Hosted deployer (2026-10-08)
 
 Users can now deploy the accelerator into their own tenant, subscription and Fabric capacity from a hosted portal instead of a local install. See `hosted/README.md`.

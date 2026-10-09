@@ -1,461 +1,96 @@
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import {
-  Badge,
-  Button,
-  Tab,
-  TabList,
-  Text,
-  makeStyles,
-  tokens,
-} from "@fluentui/react-components";
-import {
-  RocketRegular,
-  HistoryRegular,
-  DeleteRegular,
-  ShieldTaskRegular,
-  WeatherMoonRegular,
-  WeatherSunnyRegular,
-  EyeRegular,
-} from "@fluentui/react-icons";
-import { spacing } from "../theme";
-import { useAppState } from "../AppState";
-import {
-  AzureIcon,
-  FabricIcon,
-  HdsIcon,
-  GitHubIcon,
-  YouTubeIcon,
-} from "./BrandIcons";
-import { AnimatedBackground } from "./AnimatedBackground";
-import { HostedSignIn } from "./HostedSignIn";
+import { useEffect, useState } from 'react';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { AppBar, Alert, Box, Button, Chip, Drawer, IconButton, Stack, Toolbar, Typography, useMediaQuery } from '@mui/material';
+import { Close, DarkMode, LightMode, Login, RocketLaunch, History, DeleteOutlined, FactCheck, MonitorHeart } from '@mui/icons-material';
+import { useAppState } from '../AppState';
+import { useAuthentication } from '../AuthenticationState';
+import { HostedSignIn } from './HostedSignIn';
 
-const useStyles = makeStyles({
-  root: {
-    display: "flex",
-    flexDirection: "column",
-    minHeight: "100vh",
-    backgroundImage: "url('/bg-dataflow.svg')",
-    backgroundSize: "cover",
-    backgroundPosition: "center",
-    backgroundRepeat: "no-repeat",
-    backgroundAttachment: "fixed",
-    backgroundColor: tokens.colorNeutralBackground2,
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.l,
-    paddingTop: spacing.m,
-    paddingBottom: spacing.m,
-    paddingLeft: spacing.xxl,
-    paddingRight: spacing.xxl,
-    backgroundColor: tokens.colorNeutralBackground1,
-    borderBottom: `2px solid ${tokens.colorBrandForeground1}`,
-  },
-  headerLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: spacing.s,
-    flex: 1,
-  },
-  headerLogo: {
-    width: "28px",
-    height: "28px",
-    flexShrink: 0,
-    filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.3))",
-  },
-  headerTitle: {
-    color: tokens.colorNeutralForeground1,
-    fontWeight: tokens.fontWeightSemibold,
-    fontSize: tokens.fontSizeBase500,
-    lineHeight: tokens.lineHeightBase500,
-  },
-  brandAccent: {
-    color: tokens.colorBrandForeground1,
-    fontWeight: tokens.fontWeightBold,
-    fontSize: tokens.fontSizeBase500,
-    lineHeight: tokens.lineHeightBase500,
-  },
-  headerIcons: {
-    display: "flex",
-    alignItems: "center",
-    gap: spacing.s,
-    position: "relative",
-  },
-  resourcesMenu: {
-    position: "relative",
-  },
-  resourcesSummary: {
-    listStyleType: "none",
-    "::-webkit-details-marker": { display: "none" },
-  },
-  resourcesPanel: {
-    position: "absolute",
-    top: "calc(100% + 6px)",
-    right: 0,
-    zIndex: 50,
-    minWidth: "180px",
-    display: "grid",
-    gap: tokens.spacingVerticalXS,
-    padding: tokens.spacingHorizontalS,
-    borderRadius: tokens.borderRadiusMedium,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground1,
-    boxShadow: tokens.shadow16,
-  },
-  iconPill: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: tokens.spacingHorizontalXS,
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-    borderRadius: tokens.borderRadiusMedium,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground1,
-    fontSize: tokens.fontSizeBase200,
-    fontWeight: tokens.fontWeightSemibold,
-    color: tokens.colorNeutralForeground2,
-    textDecoration: "none",
-    transition: "all 0.15s ease",
-    cursor: "pointer",
-    ":hover": {
-      backgroundColor: tokens.colorNeutralBackground1Hover,
-      border: `1px solid ${tokens.colorBrandForeground1}`,
-      color: tokens.colorBrandForeground1,
-      boxShadow: tokens.shadow4,
-      transform: "translateY(-1px)",
-    },
-  },
-  iconDivider: {
-    width: "1px",
-    height: "24px",
-    backgroundColor: tokens.colorNeutralStroke2,
-    marginLeft: tokens.spacingHorizontalXS,
-    marginRight: tokens.spacingHorizontalXS,
-  },
-  nav: {
-    paddingLeft: spacing.xxl,
-    paddingRight: spacing.xxl,
-    backgroundColor: tokens.colorNeutralBackground1,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
-  },
-  navInner: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.s,
-    flexWrap: "wrap",
-    minHeight: "48px",
-  },
-  contextStrip: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: tokens.spacingHorizontalXS,
-    flexWrap: "wrap",
-    paddingTop: tokens.spacingVerticalXXS,
-    paddingBottom: tokens.spacingVerticalXXS,
-  },
-  contextPill: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "1px",
-    minWidth: "124px",
-    maxWidth: "220px",
-    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalS}`,
-    borderRadius: tokens.borderRadiusSmall,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground2,
-  },
-  contextTitle: {
-    color: tokens.colorNeutralForeground3,
-    fontSize: tokens.fontSizeBase100,
-    textTransform: "uppercase",
-    letterSpacing: "0.04em",
-    lineHeight: "12px",
-  },
-  contextValue: {
-    color: tokens.colorNeutralForeground1,
-    fontSize: tokens.fontSizeBase100,
-    fontWeight: tokens.fontWeightSemibold,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    display: "-webkit-box",
-    WebkitLineClamp: "1",
-    WebkitBoxOrient: "vertical",
-    lineHeight: "14px",
-    maxHeight: "14px",
-  },
-  contextSubtext: {
-    color: tokens.colorNeutralForeground2,
-    fontSize: "11px",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    display: "-webkit-box",
-    WebkitLineClamp: "1",
-    WebkitBoxOrient: "vertical",
-    lineHeight: "13px",
-    maxHeight: "13px",
-  },
-  content: {
-    flex: 1,
-    padding: spacing.xxl,
-    maxWidth: "1200px",
-    margin: "0 auto",
-    width: "100%",
-  },
-  footer: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.m,
-    padding: `${spacing.s} ${spacing.xxl}`,
-    backgroundColor: tokens.colorNeutralBackground1,
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
-    fontSize: tokens.fontSizeBase200,
-    color: tokens.colorNeutralForeground3,
-  },
-  footerLink: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: tokens.spacingHorizontalXS,
-    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalS}`,
-    borderRadius: tokens.borderRadiusMedium,
-    color: tokens.colorNeutralForeground2,
-    textDecoration: "none",
-    fontWeight: tokens.fontWeightSemibold,
-    transition: "all 0.15s ease",
-    ":hover": {
-      color: tokens.colorBrandForeground1,
-      backgroundColor: tokens.colorNeutralBackground1Hover,
-    },
-  },
-});
-
+const destinations = [
+    { path: '/deploy', label: 'Deploy', icon: <RocketLaunch /> },
+    { path: '/preflight', label: 'Validate', icon: <FactCheck /> },
+    { path: '/history', label: 'History', icon: <History /> },
+    { path: '/teardown', label: 'Teardown', icon: <DeleteOutlined /> },
+];
 export function Layout() {
-  const styles = useStyles();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { selectedSubscription, subscriptions, capacities, authContext, authContextLoading, liveStatus, liveStatusLoading } = useAppState();
-
-  const selectedSubscriptionInfo = subscriptions.find((subscription) => subscription.id === selectedSubscription);
-  const selectedSubscriptionLabel =
-    selectedSubscriptionInfo?.name || authContext?.cli.subscriptionName || authContext?.pwsh.subscriptionName || "Not selected";
-  const selectedSubscriptionId =
-    selectedSubscriptionInfo?.id || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || "";
-  const selectedSubscriptionShortId = selectedSubscriptionId ? selectedSubscriptionId.slice(0, 8) : "";
-  const cliLabel = authContextLoading
-    ? "Checking Azure CLI..."
-    : authContext?.cli.loggedIn
-      ? authContext.cli.user
-      : authContext?.cli.error || "Not logged in";
-  const pwshLabel = authContextLoading
-    ? "Checking Az PowerShell..."
-    : authContext?.pwsh.loggedIn
-      ? authContext.pwsh.user
-      : authContext?.pwsh.error || "Not logged in";
-  const backendOnline = liveStatus?.backend === "online";
-  const databaseOk = liveStatus?.database === "ok";
-  const contextReady = !!authContext?.ready;
-  const contextAligned = !!authContext?.aligned.subscription && !!authContext?.aligned.tenant;
-  const activeCapacityCount = capacities.filter((capacity) => capacity.state === "Active").length;
-  const healthText = liveStatusLoading
-    ? "Checking backend liveness"
-    : backendOnline && databaseOk && contextReady && contextAligned
-      ? `Backend live · DB ok · ${activeCapacityCount} active capacit${activeCapacityCount === 1 ? "y" : "ies"}`
-      : backendOnline && databaseOk
-        ? "Backend live · auth/capacity need attention"
-        : "Backend or DB needs attention";
-  const isDarkTheme = typeof window !== "undefined" && window.localStorage.getItem("orchestrator-theme") === "dark";
-  const toggleTheme = () => {
-    if (typeof window === "undefined") return;
-    const current = window.localStorage.getItem("orchestrator-theme");
-    window.localStorage.setItem("orchestrator-theme", current === "dark" ? "light" : "dark");
-    window.dispatchEvent(new Event("orchestrator-theme-change"));
-  };
-
-  const currentTab =
-    location.pathname.startsWith("/monitor")
-      ? location.pathname
-      : location.pathname.startsWith("/preflight")
-        ? "/preflight"
-        : location.pathname.startsWith("/deploy")
-        ? "/deploy"
-        : location.pathname.startsWith("/history")
-          ? "/history"
-          : location.pathname.startsWith("/teardown")
-            ? "/teardown"
-            : "/deploy";
-
-  return (
-    <div className={styles.root}>
-      <AnimatedBackground />
-      <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <img src="/favicon.svg" alt="" className={styles.headerLogo} />
-          <Text className={styles.brandAccent}>Fabric</Text>
-          <Text className={styles.headerTitle}>
-            HLS Data Accelerator — Deployment Orchestrator
-          </Text>
-        </div>
-        <div className={styles.headerIcons}>
-          <Button
-            appearance="subtle"
-            size="small"
-            icon={isDarkTheme ? <WeatherSunnyRegular /> : <WeatherMoonRegular />}
-            onClick={toggleTheme}
-          >
-            {isDarkTheme ? "Light" : "Dark"}
-          </Button>
-          <details className={styles.resourcesMenu}>
-            <summary className={`${styles.iconPill} ${styles.resourcesSummary}`}>Resources</summary>
-            <div className={styles.resourcesPanel}>
-              <a
-                href="https://learn.microsoft.com/en-us/industry/healthcare/healthcare-data-solutions/overview"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.iconPill}
-                title="Healthcare Data Solutions"
-              >
-                <HdsIcon size={18} /> HDS docs
-              </a>
-              <a
-                href="https://portal.azure.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.iconPill}
-                title="Azure Portal"
-                style={{ color: tokens.colorPaletteBlueForeground2, borderColor: tokens.colorPaletteBlueBorderActive }}
-              >
-                <AzureIcon size={18} /> Azure Portal
-              </a>
-              <a
-                href="https://app.fabric.microsoft.com/home?experience=fabric-developer"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.iconPill}
-                title="Microsoft Fabric"
-              >
-                <FabricIcon size={18} /> Fabric Portal
-              </a>
-              <a
-                href="https://github.com/kfprugger/hls-data-accelerator"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.iconPill}
-                title="View source on GitHub"
-              >
-                <GitHubIcon size={16} /> GitHub
-              </a>
-              <a
-                href="https://aka.ms/fabrichlsrti"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.iconPill}
-                title="Watch demo video"
-              >
-                <YouTubeIcon size={16} /> Demo
-              </a>
-            </div>
-          </details>
-        </div>
-      </div>
-
-      <div className={styles.nav}>
-        <div className={styles.navInner}>
-          <TabList
-            selectedValue={currentTab}
-            onTabSelect={(_, data) => navigate(data.value as string)}
-          >
-            <Tab value="/preflight" icon={<ShieldTaskRegular />}>
-              Preflight
-            </Tab>
-            <Tab value="/deploy" icon={<RocketRegular />}>
-              Deploy
-            </Tab>
-            <Tab value="/history" icon={<HistoryRegular />}>
-              History
-            </Tab>
-            {location.pathname.startsWith("/monitor") && (
-              <Tab value={location.pathname} icon={<EyeRegular />}>
-                Run Detail
-              </Tab>
-            )}
-            <Tab value="/teardown" icon={<DeleteRegular />}>
-              Teardown
-            </Tab>
-          </TabList>
-
-          <div className={styles.contextStrip}>
-            <div className={styles.contextPill}>
-              <Text className={styles.contextTitle}>Selected Subscription</Text>
-              <Text className={styles.contextValue} title={selectedSubscriptionLabel}>{selectedSubscriptionLabel}</Text>
-              <Text className={styles.contextSubtext} title={selectedSubscriptionId}>
-                {selectedSubscriptionShortId ? `Sub ${selectedSubscriptionShortId}` : selectedSubscriptionId || "No subscription selected"}
-              </Text>
-            </div>
-
-            <div className={styles.contextPill}>
-              <Text className={styles.contextTitle}>Azure CLI</Text>
-              <Text className={styles.contextValue}>{cliLabel}</Text>
-              <Text className={styles.contextSubtext}>
-                {authContext?.cli.subscriptionName || (selectedSubscriptionShortId ? `Sub ${selectedSubscriptionShortId}` : "No active context")}
-              </Text>
-            </div>
-
-            <div className={styles.contextPill}>
-              <Text className={styles.contextTitle}>Az PowerShell</Text>
-              <Text className={styles.contextValue}>{pwshLabel}</Text>
-              <Text className={styles.contextSubtext}>
-                {authContext?.pwsh.subscriptionName || (selectedSubscriptionShortId ? `Sub ${selectedSubscriptionShortId}` : "No active context")}
-              </Text>
-            </div>
-
-            <details title="Open app health details">
-              <summary style={{ cursor: "pointer", listStyle: "none" }}>
-                <Badge size="small" color={backendOnline && databaseOk && contextReady && contextAligned ? "success" : liveStatusLoading ? "informative" : "warning"}>
-                  {healthText}
-                </Badge>
-              </summary>
-              <div style={{ position: "absolute", right: 24, marginTop: 8, padding: 12, background: tokens.colorNeutralBackground1, border: `1px solid ${tokens.colorNeutralStroke2}`, borderRadius: tokens.borderRadiusMedium, boxShadow: tokens.shadow16, zIndex: 50, display: "grid", gap: 4, minWidth: 280 }}>
-                <Text size={200}>Frontend: online</Text>
-                <Text size={200}>Backend liveness: {liveStatusLoading ? "checking" : backendOnline ? "online" : "not confirmed"}</Text>
-                <Text size={200}>Database: {liveStatusLoading ? "checking" : liveStatus?.database || "unknown"}</Text>
-                <Text size={200}>Auth readiness: {authContextLoading ? "checking" : contextReady && contextAligned ? "ready" : "needs attention"}</Text>
-                <Text size={200}>Azure CLI: {cliLabel}</Text>
-                <Text size={200}>Az PowerShell: {pwshLabel}</Text>
-                <Text size={200}>Fabric capacities active: {activeCapacityCount}</Text>
-              </div>
-            </details>
-          </div>
-        </div>
-      </div>
-
-      <div className={styles.content}>
-        <HostedSignIn />
+    const navigate = useNavigate();
+    const location = useLocation();
+    const state = useAppState();
+    const auth = useAuthentication();
+    const [open, setOpen] = useState(false);
+    useEffect(() => {
+      const show = () => setOpen(true);
+      window.addEventListener('hls-open-authentication', show);
+      return () => window.removeEventListener('hls-open-authentication', show);
+    }, []);
+    const phone = useMediaQuery('(max-width:599px)');
+    const large = useMediaQuery('(min-width:1200px)');
+    const ready = Boolean(state.authContext?.ready);
+    const partial = Boolean(state.authContext?.cli.loggedIn || state.authContext?.pwsh.loggedIn);
+    const status = auth.busy ? 'Signing in' : auth.error || (state.authContext?.cli.loggedIn && state.authContext?.pwsh.loggedIn && !ready) ? 'Needs attention' : ready ? 'Ready' : partial ? 'Partially connected' : 'Sign-in required';
+    const subscription = state.subscriptions.find(item => item.id === state.selectedSubscription);
+    const subscriptionName = subscription?.name || state.authContext?.cli.subscriptionName || 'No subscription selected';
+    const subscriptionId = subscription?.id || state.authContext?.cli.subscriptionId || '';
+    const tenant = subscription?.tenantId || state.authContext?.cli.tenantId || auth.tenant;
+    const dark = localStorage.getItem('orchestrator-theme') === 'dark' || (!localStorage.getItem('orchestrator-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    function toggleTheme() { localStorage.setItem('orchestrator-theme', dark ? 'light' : 'dark'); window.dispatchEvent(new Event('orchestrator-theme-change')); }
+    const links = [...destinations];
+    if (location.pathname.startsWith('/monitor/'))
+        links.splice(2, 0, { path: location.pathname, label: 'Run detail', icon: <MonitorHeart /> });
+    return <Box sx={{
+        minHeight: '100dvh', bgcolor: 'background.default', color: 'text.primary'
+    }}>
+    <AppBar position="sticky" color="inherit" elevation={0} sx={{
+        borderBottom: 1, borderColor: 'divider'
+    }}>
+      <Toolbar sx={{
+        gap: 1.5, flexWrap: 'wrap', py: 1
+    }}>
+        <Typography component="h1" variant="h6" sx={{
+        flexGrow: 1, fontSize: { xs: 18, md: 24 }
+    }}>HLS Data Accelerator</Typography>
+        <IconButton aria-label={dark ? 'Use light theme' : 'Use dark theme'} onClick={toggleTheme}>{dark ? <LightMode /> : <DarkMode />}</IconButton>
+        <Button variant="contained" startIcon={<Login />} onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open} sx={{
+        minWidth: { xs: '100%', sm: 'auto' }
+    }}>Sandbox & sign-in · {status}</Button>
+      </Toolbar>
+      <Stack direction="row" spacing={1} sx={{
+        px: { xs: 2, md: 3 }, pb: 1.5, flexWrap: 'wrap', rowGap: 1
+    }}>
+        <Chip variant="outlined" label={`Target: ${subscriptionName}`} onClick={() => setOpen(true)} sx={{
+        maxWidth: '100%'
+    }}/>
+        <Typography variant="caption" sx={{
+        alignSelf: 'center', overflowWrap: 'anywhere'
+    }}>Tenant {tenant || 'not selected'} · Subscription {subscriptionId || 'not selected'}</Typography>
+      </Stack>
+    </AppBar>
+    <Box sx={{
+        display: 'flex', maxWidth: 1920, mx: 'auto'
+    }}>
+      <Box component="nav" aria-label="Main navigation" sx={{
+        ...large ? { width: 160, flexShrink: 0, p: 2, position: 'sticky', top: 125, alignSelf: 'flex-start' } : { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1100, bgcolor: 'background.paper', borderTop: 1, borderColor: 'divider', display: 'flex', overflowX: 'auto', px: 1, pt: 1, pb: 'max(8px, env(safe-area-inset-bottom))' }
+    }}>
+        {links.map(item => <Button key={item.path} startIcon={large ? item.icon : undefined} variant={location.pathname.startsWith(item.path) ? 'contained' : 'text'} aria-current={location.pathname.startsWith(item.path) ? 'page' : undefined} onClick={() => navigate(item.path)} sx={{
+        mb: large ? 1 : 0, width: large ? '100%' : 'auto', flex: large ? undefined : '1 0 auto', px: 1.5
+    }}>{item.label}</Button>)}
+      </Box>
+      <Box component="main" sx={{
+        flex: 1, minWidth: 0, p: { xs: 2, sm: 3, lg: 4 }, pb: large ? 4 : 12
+    }}>
+        {!ready && <Alert severity="warning" action={<Button onClick={() => setOpen(true)}>Connect</Button>} sx={{
+        mb: 3
+    }}>Connect your deployment credentials before validating or deploying. Your form remains available.</Alert>}
         <Outlet />
-      </div>
-
-      <div className={styles.footer}>
-        <Text size={200}>HLS Data Accelerator</Text>
-        <span className={styles.iconDivider} />
-        <a
-          href="https://github.com/kfprugger/hls-data-accelerator"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={styles.footerLink}
-        >
-          <GitHubIcon size={14} /> Source
-        </a>
-        <a
-          href="https://aka.ms/fabrichlsrti"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={styles.footerLink}
-        >
-          <YouTubeIcon size={14} /> Demo
-        </a>
-      </div>
-    </div>
-  );
+      </Box>
+    </Box>
+    <Drawer anchor="right" open={open} onClose={() => setOpen(false)} ModalProps={{ keepMounted: true }} slotProps={{ paper: { role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'sandbox-flyout-title', sx: { width: phone ? '100%' : 480, maxWidth: '100vw', p: { xs: 2, sm: 3 }, paddingBottom: 'max(24px, env(safe-area-inset-bottom))' } } }}>
+      <Stack direction="row" sx={{
+        alignItems: "center",
+        justifyContent: "space-between",
+        mb: 3
+    }}><Typography id="sandbox-flyout-title" variant="h6">Sandbox & sign-in</Typography><IconButton aria-label="Hide sign-in flyout" onClick={() => setOpen(false)}><Close /></IconButton></Stack>
+      <HostedSignIn />
+    </Drawer>
+  </Box>;
 }

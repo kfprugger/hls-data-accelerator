@@ -2,6 +2,15 @@
 
 The hosted portal at **https://hls.jbatl.dev** runs the same FastAPI backend, React UI and deployment scripts as the local orchestrator. It replaces the former Azure Functions / Static Web App host; it does not replace the HDS Functions used for healthcare data export.
 
+## Frontend interaction
+
+- **HLS Data Accelerator** uses current MUI components with an explicit Material 3 Expressive theme, not the obsolete Material UI v3 package. Fabric/Databricks resource names remain accurate.
+- The labelled **Sandbox & sign-in** button is always visible. It opens a right flyout, or a full-screen phone sheet. Hiding it and navigating elsewhere keeps an active device-code request polling; reopening restores the code and expiry countdown.
+- Portal identity, deployment identity, CLI status and PowerShell status are separate. Target tenant/subscription remains visible even with the flyout hidden. Tokens never enter browser storage.
+- The deployment flow retains draft configuration while navigating, validates the exact submission payload through `/api/deploy/preflight`, and blocks submission until a successful preflight and explicit target review. Editing the configuration invalidates that validation.
+- Phone/folded layouts stack configuration and review. Wider layouts expose desktop navigation and review panels; viewport-segment CSS avoids the hinge where supported. Light/dark and reduced-motion preferences are respected. Run tabs separate progress, resources and readable logs.
+- Browser verification uses deterministic API responses for sign-in/routing and prerequisite interactions without creating resources. Responsive widths checked: 360, 390, 673, 900, 1440 and 1920 pixels. This is viewport verification, not proof on physical foldable hardware or proof of backend deployment completion.
+
 ## Architecture
 
 - `hls-gateway` is the only external Container App. Entra organizations sign-in identifies a user; tenant-and-user pairs authorize access, with whole-tenant access only by explicit opt-in. The gateway proxies UI, API and streaming logs to that user's internal sandbox without buffering SSE.
