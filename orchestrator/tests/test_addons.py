@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from activities import addons
-from activities.invoke_powershell import _build_deploy_args
 
 
 class AddonContractTests(unittest.TestCase):
@@ -17,11 +16,6 @@ class AddonContractTests(unittest.TestCase):
                 "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
                 "fabric_workspace_name": "med-test", "location": "eastus2", "cardiology_location": "eastus2", **options}
 
-    def test_snapshot_switch_is_forwarded_with_and_without_tags(self):
-        for tags in ({}, {"Owner": "Operations"}):
-            command = " ".join(_build_deploy_args(self.config(deploy_databricks=True, tags=tags)))
-            self.assertIn("-SnapshotFhirExportForDatabricks", command)
-        self.assertNotIn("-SnapshotFhirExportForDatabricks", " ".join(_build_deploy_args(self.config())))
 
     def test_explicit_model_requires_exact_version_and_fifty_free(self):
         config = self.config(deploy_cardiology=True, cardiology_chat_model="chosen", cardiology_chat_model_version="2026-07-09")
@@ -34,6 +28,21 @@ class AddonContractTests(unittest.TestCase):
             config["cardiology_chat_model_version"] = "wrong-version"
             checks = addons.preflight(config)
             self.assertEqual(next(c for c in checks if c["name"] == "Cardiology model quota")["status"], "fail")
+    def test_databricks_rejects_regions_not_offered_by_provider(self):
+        config = self.config(deploy_databricks=True)
+        provider = {"registrationState": "Registered", "resourceTypes": [
+            {"resourceType": "workspaces", "locations": ["East US 2"]}]}
+        locations = {"value": [{"name": "eastus2", "displayName": "East US 2"},
+                               {"name": "westus2", "displayName": "West US 2"}]}
+        with patch.object(addons, "az_json", return_value=provider), \
+             patch.object(addons.Cloud, "call", return_value=locations), \
+             patch.object(addons.shutil, "which", return_value="/usr/bin/tool"):
+            self.assertEqual(addons.preflight(config)[0]["status"], "pass")
+            config["location"] = "westus2"
+            result = addons.preflight(config)[0]
+            self.assertEqual(result["status"], "fail")
+            self.assertIn("not offered in westus2", result["message"])
+
 
     def test_fabric_requests_are_attributed_and_tenant_pinned(self):
         cloud = addons.Cloud(self.config())

@@ -87,7 +87,7 @@ def preflight(config: dict) -> list[dict]:
             provider = az_json(config, "provider", "show", "--namespace", "Microsoft.Databricks")
             if provider.get("registrationState") != "Registered":
                 raise RuntimeError("Register Microsoft.Databricks in the deployment subscription first")
-            locations = az_json(config, "account", "list-locations")
+            locations = Cloud(config).call("GET", f"{ARM}/subscriptions/{config['expected_subscription_id']}/locations?api-version=2022-12-01", ARM)["value"]
             region = next((x for x in locations if x["name"] == config["location"]), None)
             available = next((x.get("locations", []) for x in provider.get("resourceTypes", []) if x["resourceType"].lower() == "workspaces"), [])
             if not region or region["displayName"] not in available:
