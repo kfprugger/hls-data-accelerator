@@ -10,11 +10,13 @@ interface Status { status: 'pending' | 'succeeded' | 'failed'; error?: string; e
 interface Target { tenant_id: string; subscription_id: string }
 interface Pending extends Target { session_id: string; tool: Tool; user_code: string | null; verification_uri: string | null; expires_in: number }
 interface SavedState { target: Target | null; pending: Pending | null }
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function draftKey(identity: Identity) { return `hls-auth-target:${identity.tid}:${identity.oid}`; }
 function readDraft(identity: Identity): Target | null {
     try {
         const value = JSON.parse(sessionStorage.getItem(draftKey(identity)) || 'null');
         return value && typeof value.tenant_id === 'string' && typeof value.subscription_id === 'string'
+            && uuid.test(value.tenant_id.trim()) && uuid.test(value.subscription_id.trim())
             ? { tenant_id: value.tenant_id, subscription_id: value.subscription_id } : null;
     } catch { return null; }
 }
@@ -49,7 +51,7 @@ export function AuthenticationProvider({ children }: {
     function applyTarget(value: Target, remember = false) {
         const pair = { tenant_id: value.tenant_id, subscription_id: value.subscription_id };
         target.current = pair;
-        if (remember && identity?.hosted) {
+        if (remember && identity?.hosted && uuid.test(pair.tenant_id.trim()) && uuid.test(pair.subscription_id.trim())) {
             try { sessionStorage.setItem(draftKey(identity), JSON.stringify(pair)); }
             catch { setError('This browser blocks temporary target recovery. Wait for the fields to save before refreshing.'); }
         }
@@ -100,7 +102,6 @@ export function AuthenticationProvider({ children }: {
             subscription_id: target.current.subscription_id || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || '' });
     }, [authContext]);
     useEffect(() => {
-        const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (!identity?.hosted || busy || !uuid.test(tenant.trim()) || !uuid.test(subscription.trim())) return;
         const controller = new AbortController();
         const timer = setTimeout(() => {
