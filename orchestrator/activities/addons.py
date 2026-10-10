@@ -337,12 +337,32 @@ class AddonRunner:
         env.update(variables)
         save_env()
         await self.ensure_metastore(env, root)
+        await self.ensure_admin_group(env, root, variables["ADMIN_GROUP_OBJECT_ID"], variables["DATABRICKS_ADMIN_GROUP"])
         for step in ("03-configure-eventhubs-access.sh", "04-unity-catalog-bootstrap.sh", "05-deploy-bundle.sh", "06-run-and-gate.sh"):
             await self.command(step, ["bash", scripts / step], root, env)
             if step == "04-unity-catalog-bootstrap.sh":
                 env["WAREHOUSE_ID"] = json.loads((root / f".state/warehouse-{variables['ENVIRONMENT']}.json").read_text())["warehouse_id"]
         await self.command("07 Databricks deployment validation", [sys.executable, scripts / "07-validate-deployment.py", "--environment", variables["ENVIRONMENT"]], root, env)
         return {"workspaceUrl": variables["DATABRICKS_HOST"], "fhirExportUrl": variables["FHIR_EXPORT_URL"]}
+
+    async def ensure_admin_group(self, env, root, object_id, name):
+        """Provision the Entra admin group into the Databricks account so Unity Catalog grants can name it.
+
+        Uses the supported external-group API. It needs Automatic Identity Management, which Databricks
+        enables by default only for accounts created after 2025-08-01 and exposes no public setting API.
+        """
+        try:
+            await self.command(f"Provision Entra group {name} into Databricks",
+                               ["databricks", "workspace-iam-v2", "resolve-group-proxy", object_id, "-o", "json"],
+                               root, env, capture=True)
+        except RuntimeError as exc:
+            if "Automatic Identity Management is not enabled" in str(exc):
+                raise RuntimeError(
+                    f"Entra group {name} cannot be provisioned: Automatic Identity Management is off for this Databricks "
+                    "account. An account admin must turn on Security -> Identity provider setup -> Automatic Identity "
+                    "Management in https://accounts.azuredatabricks.net (takes 5-10 minutes), then add the Databricks add-on again. "
+                    "The completed base deployment is unaffected.") from exc
+            raise
 
     async def ensure_metastore(self, env, root):
         async def assigned():

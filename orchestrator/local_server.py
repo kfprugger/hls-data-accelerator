@@ -1373,12 +1373,22 @@ _ADDON_OPTIONS = {
 }
 
 
-async def _run_later_addons(instance_id: str, config: dict, names: list[str]) -> None:
+async def _run_later_addons(
+    instance_id: str, config: dict, names: list[str], fresh_export: bool = True,
+    pause_capacity: tuple[str, str, str] | None = None,
+) -> None:
+    """Run add-ons after the base deployment is already Completed.
+
+    Add-ons never gate the base deployment: Databricks identity and metastore propagation can take
+    minutes to hours, so the base estate is reported complete first and add-on state is tracked in
+    ``customStatus.addons``. ``pause_capacity`` is applied last because Rayfin and cardiology need an
+    active Fabric capacity.
+    """
     from activities.addons import AddonRunner
     deployment = deployments[instance_id]
     cs = deployment["customStatus"]
     try:
-        await AddonRunner(instance_id, config, deployment, save_state, active_processes).run(names, fresh_export=True)
+        await AddonRunner(instance_id, config, deployment, save_state, active_processes).run(names, fresh_export=fresh_export)
         cs["detail"] = "Requested add-ons completed."
     except Exception as exc:
         cs["detail"] = f"Add-on failed: {exc}. The completed base deployment is retained."
@@ -1391,6 +1401,13 @@ async def _run_later_addons(instance_id: str, config: dict, names: list[str]) ->
             deployment["runtimeStatus"] = "Completed"
             cs["status"] = "succeeded"
             cs["currentPhase"] = "Deployment Complete"
+        if pause_capacity and deployment.get("runtimeStatus") == "Completed":
+            try:
+                await asyncio.get_running_loop().run_in_executor(None, _pause_capacity_sync, *pause_capacity)
+                cs["capacityPaused"] = True
+            except Exception as exc:
+                logger.warning("Failed to auto-pause capacity '%s' after add-ons: %s", pause_capacity[2], exc)
+                cs["capacityPauseError"] = str(exc)
         deployment["lastUpdatedTime"] = now_iso()
         _addon_tasks.pop(instance_id, None)
         save_state()
@@ -2366,13 +2383,12 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
             raise RuntimeError("Post-deployment live validation failed: " + "; ".join(failures))
         deployment["customStatus"]["validatedAt"] = validation.get("checkedAt")
         deployment["customStatus"]["detail"] = f"Live validation passed: {len(validation.get('checks') or [])} checks."
-        from activities.addons import AddonRunner, selected
+        from activities.addons import selected
         requested_addons = selected(config)
         if requested_addons:
             deployment["customStatus"]["addons"] = {name: {"status": "pending"} for name in requested_addons}
-            deployment["customStatus"]["totalPhases"] += len(requested_addons)
+            deployment["customStatus"]["detail"] += " Requested add-ons run next without gating this deployment."
             deployment["output"] = {"status": "running", "phases": phases, "resources": result.get("resources", {})}
-            await AddonRunner(instance_id, config, deployment, save_state, active_processes).run(requested_addons)
         deployment["runtimeStatus"] = "Completed"
         deployment["customStatus"]["status"] = "succeeded"
         deployment["customStatus"]["currentPhase"] = "Deployment Complete"
@@ -2408,8 +2424,13 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
                 deployment["output"]["resources"]["ohif_viewer_url"] = final_links["ohifViewer"]
         logger.info("Deployment %s completed (%.1fs)", instance_id, duration)
 
-        # Auto-pause Fabric capacity if requested
-        if req.pause_capacity_after_deploy and req.capacity_name:
+        if requested_addons:
+            # Add-ons start after the base is Completed; they pause the capacity when they finish.
+            _addon_tasks[instance_id] = asyncio.create_task(_run_later_addons(
+                instance_id, config, requested_addons, fresh_export=False,
+                pause_capacity=(req.capacity_subscription_id, req.capacity_resource_group, req.capacity_name)
+                if req.pause_capacity_after_deploy and req.capacity_name else None))
+        elif req.pause_capacity_after_deploy and req.capacity_name:
             try:
                 _pause_capacity_sync(
                     req.capacity_subscription_id,
@@ -4029,7 +4050,8 @@ def _query_fhir_counts(rg_name: str) -> dict:
 def _active_hosted_runs() -> int:
     return sum(dep.get("runtimeStatus") in {"Running", "Pending"}
                for dep in deployments.values()
-               if (dep.get("customStatus") or {}).get("runType") != "teardownBatch")
+               if (dep.get("customStatus") or {}).get("runType") != "teardownBatch") + sum(
+        not task.done() for task in _addon_tasks.values())
 
 
 def _invalidate_auth_caches() -> None:

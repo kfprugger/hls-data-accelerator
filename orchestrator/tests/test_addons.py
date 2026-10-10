@@ -98,6 +98,21 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
                 await runner.databricks(fresh_export=True)
         self.assertFalse(exported, "An export must not mix new files into a snapshot that failed cleanup")
 
+    async def test_disabled_automatic_identity_management_is_an_actionable_failure(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.command = AsyncMock(side_effect=RuntimeError(
+            "Provision Entra group g: Error: Automatic Identity Management is not enabled for account 1."))
+        with self.assertRaisesRegex(RuntimeError, "Automatic Identity Management is off .* base deployment is unaffected"):
+            await runner.ensure_admin_group({}, Path("unused"), "object-id", "g")
+        runner.command.assert_awaited_once()
+        self.assertEqual(runner.command.await_args.args[1][:3], ["databricks", "workspace-iam-v2", "resolve-group-proxy"])
+
+    async def test_other_group_provisioning_errors_are_not_rewritten(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.command = AsyncMock(side_effect=RuntimeError("Provision Entra group g: permission denied"))
+        with self.assertRaisesRegex(RuntimeError, "permission denied"):
+            await runner.ensure_admin_group({}, Path("unused"), "object-id", "g")
+
 
 if __name__ == "__main__":
     unittest.main()
