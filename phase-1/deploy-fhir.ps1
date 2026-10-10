@@ -666,9 +666,8 @@ if ($ExportOnly) {
     Use-DeploymentAzSubscription
     $service = az resource list -g $ResourceGroupName --resource-type 'Microsoft.HealthcareApis/workspaces/fhirservices' --query '[0].id' -o tsv
     if ($LASTEXITCODE -ne 0 -or -not $service) { throw 'Existing FHIR service not found for export-only operation.' }
-    $url = az resource show --ids $service --query properties.hostName -o tsv
-    if ($LASTEXITCODE -ne 0 -or -not $url) { throw 'FHIR service hostName could not be resolved.' }
-    if ($url -notmatch '^https://') { $url = "https://$url" }
+    $url = az resource show --ids $service --api-version 2022-06-01 --query properties.authenticationConfiguration.audience -o tsv
+    if ($LASTEXITCODE -ne 0 -or $url -notmatch '^https://[^/]+\.fhir\.azurehealthcareapis\.com/?$') { throw 'Existing AHDS FHIR service endpoint could not be resolved from authenticationConfiguration.audience.' }
     if (-not (Invoke-FhirExport -ResourceGroupName $ResourceGroupName -FhirServiceUrl $url -ExportContainerName $ExportContainerName)) {
         throw 'Export-only operation did not complete.'
     }

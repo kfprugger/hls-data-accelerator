@@ -58,7 +58,12 @@ class Cloud:
                                      data=json.dumps(body).encode() if body is not None else None)
         with urllib.request.urlopen(req, timeout=120) as response:
             raw = response.read()
-            return json.loads(raw) if raw else {}
+            if not raw:
+                return {}
+            try:
+                return json.loads(raw)
+            except (ValueError, UnicodeDecodeError) as exc:
+                raise RuntimeError(f"{urllib.parse.urlsplit(url).hostname} returned a non-JSON API response") from exc
 
     def items(self, url: str, resource=FABRIC, skill="search-consumption-cli") -> list[dict]:
         values = []
@@ -136,6 +141,19 @@ def require_one(values, description):
     if len(values) != 1:
         raise RuntimeError(f"Expected exactly one {description}, found {len(values)}")
     return values[0]
+
+
+def prepare_bundle(bundle: dict, user: str) -> dict:
+    """Adapt the Databricks bundle to deploy as the signed-in user instead of a service principal.
+
+    Production targets refuse to validate without ``workspace.root_path`` once ``run_as`` is gone, so each
+    gets the per-user path the Databricks CLI itself recommends.
+    """
+    for target in bundle["targets"].values():
+        target.pop("run_as", None)
+        if target.get("mode") == "production":
+            target.setdefault("workspace", {})["root_path"] = f"/Workspace/Users/{user}/.bundle/" + "${bundle.name}/${bundle.target}"
+    return bundle
 
 
 class AddonRunner:
@@ -244,8 +262,10 @@ class AddonRunner:
         return gold, sql
 
     async def run(self, addons, fresh_export=False):
+        """Run each add-on independently: one failing add-on never prevents the others from running."""
         cs = self.deployment["customStatus"]
         await self.discover()
+        failures = []
         for name in addons:
             self.name = name
             self.phase = {"phase": f"Add-on: {name.title()}", "status": "running", "subSteps": []}
@@ -266,9 +286,13 @@ class AddonRunner:
                 state.update(status="failed", detail=str(exc), finishedAt=now())
                 self.phase.update(status="failed", detail=str(exc))
                 self.log(str(exc), "error")
-                raise
+                if not isinstance(exc, Exception) or self.deployment.get("runtimeStatus") == "Terminated":
+                    raise
+                failures.append(f"{name}: {exc}")
             finally:
                 self.persist()
+        if failures:
+            raise RuntimeError("; ".join(failures))
 
     def working_copy(self, source, name):
         target = self.work / name
@@ -286,20 +310,17 @@ class AddonRunner:
         if not storage:
             raise RuntimeError("FHIR export storage account is not configured")
         if fresh_export:
-            await asyncio.to_thread(az_json, cfg, "storage", "container", "create", "--account-name", storage,
-                                    "--name", "fhir-export-databricks", "--auth-mode", "login")
-            await self.command("Empty previous Databricks export", ["azcopy", "remove",
-                f"https://{storage}.blob.core.windows.net/fhir-export-databricks/*", "--recursive=true", "--output-level=essential"],
-                env={**self.env, "AZCOPY_AUTO_LOGIN_TYPE": "AZCLI"})
-            remaining = await asyncio.to_thread(az_json, cfg, "storage", "blob", "list", "--account-name", storage,
-                "--container-name", "fhir-export-databricks", "--auth-mode", "login", "--num-results", "*", "--query", "[].name")
-            if remaining:
-                raise RuntimeError("Databricks export container is not empty; refusing a mixed snapshot")
+            await self.ps("Empty previous Databricks export", ROOT / "utilities/snapshot-fhir-export.ps1", {
+                "ResourceGroupName": cfg["resource_group_name"], "SubscriptionId": cfg["expected_subscription_id"],
+                "ClearSnapshotOnly": True})
             await self.ps("Fresh FHIR export for Databricks", ROOT / "phase-1/deploy-fhir.ps1", {
                 "ResourceGroupName": cfg["resource_group_name"], "ExpectedSubscriptionId": cfg["expected_subscription_id"],
                 "ExportOnly": True, "ExportContainerName": "fhir-export-databricks", "DeploymentPython": sys.executable})
         group = cfg.get("databricks_admin_group") or cfg["admin_security_group"]
-        group_info = await asyncio.to_thread(az_json, cfg, "ad", "group", "show", "--group", group)
+        escaped_group = group.replace("'", "''")
+        query = urllib.parse.urlencode({"$filter": f"displayName eq '{escaped_group}'", "$select": "id,displayName"})
+        groups = await asyncio.to_thread(self.cloud.items, "https://graph.microsoft.com/v1.0/groups?" + query, "https://graph.microsoft.com")
+        group_info = require_one(groups, "Databricks admin group in the deployment tenant")
         account = await asyncio.to_thread(az_json, cfg, "account", "show")
         variables = {
             "AZ_TENANT_ID": cfg["expected_tenant_id"], "AZ_SUBSCRIPTION_ID": cfg["expected_subscription_id"],
@@ -316,8 +337,7 @@ class AddonRunner:
         # Hosted jobs use the authenticated deployer, not an unrelated service principal.
         bundle_path = root / "bundle/databricks.yml"
         bundle = yaml.safe_load(bundle_path.read_text())
-        for target in bundle["targets"].values():
-            target.pop("run_as", None)
+        prepare_bundle(bundle, account["user"]["name"])
         bundle_path.write_text(yaml.safe_dump(bundle, sort_keys=False))
         def save_env():
             path = root / "env.sh"
@@ -335,12 +355,52 @@ class AddonRunner:
         env.update(variables)
         save_env()
         await self.ensure_metastore(env, root)
+        await self.ensure_admin_group(env, root, variables["ADMIN_GROUP_OBJECT_ID"], variables["DATABRICKS_ADMIN_GROUP"])
+        env["ALERT_EMAIL"] = variables["ALERT_EMAIL"] = await self.databricks_alert_recipient(env, root, variables["ALERT_EMAIL"])
+        save_env()
         for step in ("03-configure-eventhubs-access.sh", "04-unity-catalog-bootstrap.sh", "05-deploy-bundle.sh", "06-run-and-gate.sh"):
             await self.command(step, ["bash", scripts / step], root, env)
             if step == "04-unity-catalog-bootstrap.sh":
                 env["WAREHOUSE_ID"] = json.loads((root / f".state/warehouse-{variables['ENVIRONMENT']}.json").read_text())["warehouse_id"]
         await self.command("07 Databricks deployment validation", [sys.executable, scripts / "07-validate-deployment.py", "--environment", variables["ENVIRONMENT"]], root, env)
         return {"workspaceUrl": variables["DATABRICKS_HOST"], "fhirExportUrl": variables["FHIR_EXPORT_URL"]}
+
+    async def databricks_alert_recipient(self, env, root, email):
+        """Return ``email`` only if it is a user of the Databricks workspace, else an empty string.
+
+        The deployment's alert recipient is also the Fabric Activator recipient and may be any mailbox, but a
+        Databricks alert subscription must name a workspace user: otherwise the bundle fails with "Failed to get
+        user id for email". Empty keeps the alert PAUSED with no recipient, which the scripts already support.
+        """
+        if not email:
+            return ""
+        escaped = email.replace('"', "")
+        found = json.loads(await self.command("Check Databricks alert recipient",
+                                              ["databricks", "users", "list", "--filter", f'userName eq "{escaped}"', "-o", "json"],
+                                              root, env, capture=True) or "[]")
+        if found:
+            return email
+        self.log(f"{email} is not a Databricks workspace user, so the Databricks clinical alert is deployed paused with no recipient.", "warning")
+        return ""
+
+    async def ensure_admin_group(self, env, root, object_id, name):
+        """Provision the Entra admin group into the Databricks account so Unity Catalog grants can name it.
+
+        Uses the supported external-group API. It needs Automatic Identity Management, which Databricks
+        enables by default only for accounts created after 2025-08-01 and exposes no public setting API.
+        """
+        try:
+            await self.command(f"Provision Entra group {name} into Databricks",
+                               ["databricks", "workspace-iam-v2", "resolve-group-proxy", object_id, "-o", "json"],
+                               root, env, capture=True)
+        except RuntimeError as exc:
+            if "Automatic Identity Management is not enabled" in str(exc):
+                raise RuntimeError(
+                    f"Entra group {name} cannot be provisioned: Automatic Identity Management is off for this Databricks "
+                    "account. An account admin must turn on Security -> Identity provider setup -> Automatic Identity "
+                    "Management in https://accounts.azuredatabricks.net (takes 5-10 minutes), then add the Databricks add-on again. "
+                    "The completed base deployment is unaffected.") from exc
+            raise
 
     async def ensure_metastore(self, env, root):
         async def assigned():
@@ -353,24 +413,16 @@ class AddonRunner:
             return
         explanation = ""
         try:
-            endpoint = "https://accounts.azuredatabricks.net/api/2.0"
-            accounts = await asyncio.to_thread(self.cloud.call, "GET", endpoint + "/accounts", DATABRICKS)
-            candidates = accounts if isinstance(accounts, list) else accounts.get("accounts", [])
-            matches = []
-            for account in candidates:
-                account_id = account.get("account_id") or account.get("id")
-                data = await asyncio.to_thread(self.cloud.call, "GET", f"{endpoint}/accounts/{account_id}/metastores", DATABRICKS)
-                for metastore in data.get("metastores", []):
-                    if metastore.get("region", "").replace(" ", "").lower() == self.config["location"].lower():
-                        matches.append((account_id, metastore["metastore_id"]))
-            account_id, metastore_id = require_one(matches, "regional Databricks account metastore")
+            data = json.loads(await self.command("List available Unity Catalog metastores", ["databricks", "metastores", "list", "-o", "json"], root, env, capture=True))
+            candidates = data if isinstance(data, list) else data.get("metastores", [])
+            metastore = require_one([m for m in candidates if m.get("region", "").replace(" ", "").lower() == self.config["location"].lower()], "regional Databricks metastore")
+            metastore_id = metastore["metastore_id"]
             dbx = self.resource("Microsoft.Databricks/workspaces") if any(r["type"].lower() == "microsoft.databricks/workspaces" for r in self.azure) else require_one(await asyncio.to_thread(az_json, self.config, "databricks", "workspace", "list", "-g", self.config["resource_group_name"]), "Databricks workspace")
             workspace_id = dbx.get("workspaceId") or dbx.get("properties", {}).get("workspaceId")
             if not workspace_id:
                 detail = await asyncio.to_thread(az_json, self.config, "databricks", "workspace", "show", "--ids", dbx["id"])
                 workspace_id = detail["workspaceId"]
-            await asyncio.to_thread(self.cloud.call, "PUT", f"{endpoint}/accounts/{account_id}/workspaces/{workspace_id}/metastore", DATABRICKS,
-                                    {"metastore_id": metastore_id, "default_catalog_name": "hive_metastore"})
+            await self.command("Assign regional Unity Catalog metastore", ["databricks", "metastores", "assign", str(workspace_id), metastore_id, "hive_metastore", "-o", "json"], root, env)
             if await assigned():
                 return
             explanation = "Assignment is not yet visible."
@@ -477,9 +529,10 @@ class AddonRunner:
         gold, sql = await self.gold()
         fhir = self.resource("Microsoft.HealthcareApis/workspaces/fhirservices")
         detail = await asyncio.to_thread(az_json, cfg, "resource", "show", "--ids", fhir["id"])
-        fhir_url = detail["properties"]["hostName"]
-        if not fhir_url.startswith("https://"):
-            fhir_url = "https://" + fhir_url
+        fhir_url = detail["properties"]["authenticationConfiguration"]["audience"]
+        parsed = urllib.parse.urlsplit(fhir_url)
+        if parsed.scheme != "https" or not (parsed.hostname or "").endswith(".fhir.azurehealthcareapis.com"):
+            raise RuntimeError("Existing AHDS FHIR service endpoint is invalid")
         kql = self.item("KQLDatabase", "MasimoEventhouse")
         kql_detail = await asyncio.to_thread(self.cloud.call, "GET", f"{FABRIC}/v1/workspaces/{self.ws}/kqlDatabases/{kql['id']}", FABRIC, None, "eventhouse-cli")
         query_uri = kql_detail["properties"]["queryServiceUri"]

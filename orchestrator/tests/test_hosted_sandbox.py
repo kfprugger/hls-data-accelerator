@@ -1,6 +1,7 @@
 """Offline checks for the hosted sandbox trust boundary and device-code contract."""
 import asyncio
 import importlib.util
+import json
 import os
 import sqlite3
 import sys
@@ -8,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from fastapi import FastAPI, HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from shared import hosted
@@ -30,7 +32,7 @@ class HostedGuardTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_only_get_health_bypasses_gateway_key(self):
         self.assertEqual(await self.response("/api/health"), 204)
-        for path, method in [("/", "GET"), ("/api/hosted/whoami", "GET"), ("/api/health", "POST"), ("/api/deploy/a/logs/stream", "GET")]:
+        for path, method in [("/", "GET"), ("/api/hosted/whoami", "GET"), ("/api/auth/state", "GET"), ("/api/auth/target", "PUT"), ("/api/auth/device-login/flow/cancel", "POST"), ("/api/health", "POST"), ("/api/deploy/a/logs/stream", "GET")]:
             self.assertEqual(await self.response(path, method), 403)
             self.assertEqual(await self.response(path, method, "wrong-key"), 403)
             self.assertEqual(await self.response(path, method, "private-key"), 204)
@@ -85,6 +87,108 @@ class DeviceCodeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(session["status"], "failed")
             self.assertIn("tenant blocks device-code", session["error_hint"])
             self.assertIn("run the deployer locally", session["error_hint"])
+
+
+class AuthenticationRefreshTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.directory = Path(directory.name)
+        environment = patch.dict(os.environ, {"HLS_DATA_DIR": directory.name})
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.store = self.load_store()
+        modules = patch.dict(sys.modules, {"shared.database": self.store})
+        modules.start()
+        self.addCleanup(modules.stop)
+        sessions = patch.dict(hosted._sessions, {}, clear=True)
+        sessions.start()
+        self.addCleanup(sessions.stop)
+        self.target = {"tenant_id": "11111111-1111-1111-1111-111111111111",
+                       "subscription_id": "22222222-2222-2222-2222-222222222222"}
+        self.active = 0
+        self.app = FastAPI()
+        hosted.install_hosted_routes(self.app, lambda: self.active, lambda: None)
+
+    def load_store(self):
+        path = Path(__file__).resolve().parents[1] / "shared" / "database.py"
+        spec = importlib.util.spec_from_file_location("refresh_database_test", path)
+        module = importlib.util.module_from_spec(spec)
+        with patch("atexit.register"):
+            spec.loader.exec_module(module)
+        self.addCleanup(module.shutdown_database)
+        self.addCleanup(module.get_db().close)
+        return module
+
+    def endpoint(self, path):
+        return next(route.endpoint for route in self.app.routes if route.path == path)
+
+    async def test_target_survives_restart_without_persisting_device_codes(self):
+        await self.endpoint("/api/auth/target")(hosted.DeploymentTarget(**self.target))
+        self.store.backup_database()
+        self.store.shutdown_database()
+        restored = self.load_store()
+        with patch.dict(sys.modules, {"shared.database": restored}):
+            state = await self.endpoint("/api/auth/state")()
+        self.assertEqual(state, {"target": self.target, "pending": None})
+        with sqlite3.connect(self.directory / "orchestrator.db") as db:
+            saved = db.execute("SELECT value FROM form_history WHERE field='deployment-auth-target'").fetchone()[0]
+        db.close()
+        self.assertEqual(json.loads(saved), self.target)
+
+    async def test_refresh_resumes_same_code_with_original_expiration(self):
+        await self.endpoint("/api/auth/target")(hosted.DeploymentTarget(**self.target))
+        hosted._sessions["flow"] = {"status": "pending", "tool": "azps", "target": self.target,
+            "created": 100, "user_code": "RESTORE123", "verification_uri": "https://login.microsoft.com/device",
+            "process": object(), "token": "must-not-be-returned"}
+        with patch.object(hosted.time, "monotonic", return_value=160):
+            first = await self.endpoint("/api/auth/state")()
+        with patch.object(hosted.time, "monotonic", return_value=190):
+            second = await self.endpoint("/api/auth/state")()
+        self.assertEqual(first["pending"]["session_id"], "flow")
+        self.assertEqual(first["pending"]["user_code"], "RESTORE123")
+        self.assertEqual(second["pending"]["user_code"], "RESTORE123")
+        self.assertEqual(first["pending"]["expires_in"], 840)
+        self.assertEqual(second["pending"]["expires_in"], 810)
+        self.assertNotIn("token", second["pending"])
+        self.assertNotIn("process", second["pending"])
+
+    async def test_expired_code_no_longer_blocks_target_selection(self):
+        hosted._sessions["flow"] = {"status": "pending", "tool": "az", "target": self.target,
+                                   "created": 100, "user_code": "EXPIRED123"}
+        with patch.object(hosted.time, "monotonic", return_value=1000):
+            state = await self.endpoint("/api/auth/state")()
+        self.assertIsNone(state["pending"])
+        self.assertEqual(hosted._sessions["flow"]["status"], "failed")
+        self.assertEqual(await self.endpoint("/api/auth/target")(hosted.DeploymentTarget(**self.target)), self.target)
+    async def test_cancel_stops_only_pending_task_without_touching_other_tool_cache(self):
+        cache = self.directory / "other-tool-token-cache"
+        cache.write_text("existing-authenticated-session")
+        task = asyncio.create_task(asyncio.Event().wait())
+        await asyncio.sleep(0)
+        hosted._sessions["flow"] = {"status": "pending", "task": task, "tool": "az", "target": self.target}
+        with patch.object(hosted, "_run", side_effect=AssertionError("Cancellation must not clear Azure account caches")):
+            result = await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow")
+        self.assertEqual(result, {"status": "cancelled"})
+        self.assertTrue(task.cancelled())
+        self.assertEqual(hosted._sessions["flow"]["status"], "failed")
+        self.assertEqual(cache.read_text(), "existing-authenticated-session")
+        self.assertEqual(await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow"), result)
+
+    async def test_cancel_cannot_invalidate_completed_sign_in(self):
+        hosted._sessions["flow"] = {"status": "succeeded", "account": {"tenantId": self.target["tenant_id"]}}
+        with self.assertRaises(HTTPException) as error:
+            await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow")
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(hosted._sessions["flow"]["status"], "succeeded")
+
+    async def test_cancel_refuses_when_deployment_is_active(self):
+        self.active = 1
+        hosted._sessions["flow"] = {"status": "pending"}
+        with self.assertRaises(HTTPException) as error:
+            await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow")
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(hosted._sessions["flow"]["status"], "pending")
 
 
 class PersistentDatabaseTests(unittest.TestCase):

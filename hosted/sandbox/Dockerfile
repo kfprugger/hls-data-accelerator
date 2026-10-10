@@ -4,7 +4,9 @@
 # Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle (hosted/sandbox/wardflow-bundle.Dockerfile).
 # Example: docker build --platform linux/amd64 --build-arg WARDFLOW_BUNDLE_IMAGE=<acr>/hls-wardflow-bundle:<commit> -f hosted/sandbox/Dockerfile .
 ARG WARDFLOW_BUNDLE_IMAGE
+ARG OHIF_VIEWER_IMAGE=acrhlsdeployer.azurecr.io/hls-ohif-static:9a2d2c3d1367-manifest-v1
 FROM ${WARDFLOW_BUNDLE_IMAGE} AS wardflow
+FROM ${OHIF_VIEWER_IMAGE} AS ohif
 FROM node:20-bookworm-slim AS node
 FROM node AS ui
 WORKDIR /ui
@@ -15,21 +17,27 @@ RUN npm run build
 
 FROM python:3.13-slim-bookworm
 ARG TARGETARCH=amd64
-ARG DATABRICKS_CLI_VERSION=0.278.0
+ARG DATABRICKS_CLI_VERSION=1.17.0
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 \
     AZURE_EXTENSION_DIR=/opt/azure-cli-extensions AZURE_CORE_COLLECT_TELEMETRY=no \
     AZURE_CORE_LOGIN_EXPERIENCE_V2=off AZURE_BICEP_USE_BINARY_FROM_PATH=true \
     DATABRICKS_AUTH_TYPE=azure-cli WARDFLOW_ROOT=/app/wardflow
 COPY --from=node /usr/local/ /usr/local/
+# Node's yarn executable is a symlink into /opt, which /usr/local alone does not include.
+COPY --from=node /opt/yarn-v1.22.22/ /opt/yarn-v1.22.22/
+# build-essential, pkg-config and libsecret-1-dev: Rayfin apps' npm ci compiles the native keytar module
+# (a transitive dev dependency of @azure/msal-node-extensions), which node-gyp cannot build without them.
 RUN test "$TARGETARCH" = amd64 \
- && apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg git bash jq unzip tar libicu72 libssl3 libgssapi-krb5-2 unixodbc \
+ && apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg git bash jq unzip tar libicu72 libssl3 libgssapi-krb5-2 unixodbc build-essential pkg-config libsecret-1-dev \
  && curl -fsSL https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o /tmp/microsoft.deb \
  && dpkg -i /tmp/microsoft.deb && rm /tmp/microsoft.deb \
  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/azure-cli.gpg \
  && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/azure-cli.gpg] https://packages.microsoft.com/repos/azure-cli/ bookworm main' > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update && ACCEPT_EULA=Y apt-get install -y --no-install-recommends powershell=7.6.6-1.deb azure-cli=2.91.0-1~bookworm msodbcsql18 \
  && rm -rf /var/lib/apt/lists/*
+RUN yarn --version \
+ && pwsh -NoProfile -NonInteractive -Command "\$ErrorActionPreference='Stop'; & yarn --version | Out-Null; if (\$LASTEXITCODE -ne 0) { throw 'Yarn cannot run in the viewer build pipeline' }"
 # Only the Az modules the phase scripts use (Accounts, Resources, Storage), at the versions Az 16.4.0 bundles.
 # The full Az rollup took over an hour to install from PSGallery inside ACR Tasks.
 RUN pwsh -NoProfile -NonInteractive -Command "\$ErrorActionPreference='Stop'; foreach (\$m in @(@('Az.Accounts','5.5.3'), @('Az.Resources','10.2.1'), @('Az.Storage','9.7.2'))) { Install-PSResource -Name \$m[0] -Version \$m[1] -Repository PSGallery -Scope AllUsers -TrustRepository -AcceptLicense }; Import-Module Az.Accounts, Az.Resources, Az.Storage"
@@ -52,6 +60,13 @@ RUN curl -fsSL https://github.com/Azure/azure-storage-azcopy/releases/download/v
 RUN useradd --create-home --uid 10001 --shell /bin/bash hls \
  && mkdir -p /app/hls-data-accelerator /app/wardflow /data \
  && chown -R hls:hls /app /data
+# Keep the viewer deployer and its compatible OHIF pin reproducible; don't bootstrap moving toolkit main.
+RUN git init /app/FabricDicomCohortingToolkit \
+ && git -C /app/FabricDicomCohortingToolkit remote add origin https://github.com/kfprugger/FabricDicomCohortingToolkit.git \
+ && git -C /app/FabricDicomCohortingToolkit fetch --depth 1 origin 7307b697c9ae8a460432af060af90f9fc6ac33f5 \
+ && git -C /app/FabricDicomCohortingToolkit checkout --detach FETCH_HEAD \
+ && test "$(git -C /app/FabricDicomCohortingToolkit rev-parse HEAD)" = 7307b697c9ae8a460432af060af90f9fc6ac33f5 \
+ && chown -R hls:hls /app/FabricDicomCohortingToolkit
 WORKDIR /app/hls-data-accelerator
 COPY orchestrator/requirements.lock hosted/sandbox/addon-requirements.txt /tmp/requirements/
 RUN python -m venv orchestrator/.venv \
@@ -66,6 +81,7 @@ RUN test -s /app/wardflow/.pinned-commit \
  && chown -R hls:hls orchestrator/.venv \
  && chown hls:hls /app/hls-data-accelerator/orchestrator
 COPY --from=ui --chown=hls:hls /ui/dist /app/hls-data-accelerator/orchestrator-ui/dist
+COPY --from=ohif --chown=hls:hls /viewer/ /app/FabricDicomCohortingToolkit/dicom-viewer/ohif-build/platform/app/dist/
 ENV HOME=/home/hls AZURE_CONFIG_DIR=/home/hls/.azure HLS_DATA_DIR=/data \
     PATH=/app/hls-data-accelerator/orchestrator/.venv/bin:$PATH
 USER hls

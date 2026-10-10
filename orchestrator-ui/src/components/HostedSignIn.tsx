@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Divider, Link, Stack, TextField, Typography } from '@mui/material';
 import { useAuthentication } from '../AuthenticationState';
 import { useAppState } from '../AppState';
@@ -7,6 +7,13 @@ export function HostedSignIn() {
     const auth = useAuthentication();
     const { authContext, refreshAuthContext } = useAppState();
     const [copyError, setCopyError] = useState('');
+    const bottom = useRef<HTMLDivElement>(null);
+    const followSignIn = useRef(false);
+    useEffect(() => {
+        if (!followSignIn.current) return;
+        bottom.current?.scrollIntoView({ block: 'end', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        if (!auth.busy) followSignIn.current = false;
+    }, [auth.busy, auth.code?.session_id, auth.error, auth.message]);
     const disabled = auth.busy;
     return <Stack spacing={3}>
     <Box><Typography variant="overline">Portal account</Typography><Typography sx={{
@@ -34,7 +41,7 @@ export function HostedSignIn() {
                 overflowWrap: 'anywhere'
             }}>{context?.user || 'Separate credential cache'}</Typography>
         <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>Tenant: {context?.tenantId || 'not signed in'} · Subscription: {context?.subscriptionName || context?.subscriptionId || 'not selected'}</Typography>
-        {!context?.loggedIn && <Button variant="contained" disabled={disabled || !auth.tenant.trim() || !auth.subscription.trim()} onClick={() => void auth.begin(tool)}>Sign in to {label}</Button>}
+        {!context?.loggedIn && <Button variant="contained" disabled={disabled || !auth.tenant.trim() || !auth.subscription.trim()} onClick={() => { followSignIn.current = true; void auth.begin(tool); }}>Sign in to {label}</Button>}
       </Stack>;
         })}
     {auth.busy && <Stack direction="row" spacing={1} sx={{
@@ -47,6 +54,8 @@ export function HostedSignIn() {
         }}>{auth.code.user_code}</Typography>
       <Button variant="outlined" onClick={() => { void navigator.clipboard.writeText(auth.code!.user_code).catch(() => setCopyError('Unable to copy. Select the code and copy it manually.')); }}>Copy code</Button>
       <Link href={auth.code.verification_uri} target="_blank" rel="noopener noreferrer">Open Microsoft device sign-in</Link>
+      <Button variant="outlined" onClick={() => { followSignIn.current = true; void auth.reissue(); }}>Get a new code</Button>
+      <Typography variant="caption">Use this if Microsoft rejects the code. It replaces only this pending sign-in and keeps the other tool’s login.</Typography>
       <Typography variant="body2">Expires in {Math.floor(auth.remaining / 60)}:{String(auth.remaining % 60).padStart(2, '0')}. You may hide this panel; sign-in continues.</Typography>
     </Stack></Alert>}
     {copyError && <Alert severity="warning">{copyError}</Alert>}
@@ -55,5 +64,6 @@ export function HostedSignIn() {
     <Button variant="outlined" disabled={disabled} onClick={() => void refreshAuthContext()}>Refresh sign-in status</Button>
     <Button color="error" disabled={disabled} onClick={() => void auth.logout()}>Sign out of Azure tools</Button>
     {auth.identity?.hosted && <Link href="/gateway/me">Manage private sandbox</Link>}
+    <Box ref={bottom} aria-hidden="true" />
   </Stack>;
 }
