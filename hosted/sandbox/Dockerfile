@@ -4,7 +4,7 @@
 # Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle (hosted/sandbox/wardflow-bundle.Dockerfile).
 # Example: docker build --platform linux/amd64 --build-arg WARDFLOW_BUNDLE_IMAGE=<acr>/hls-wardflow-bundle:<commit> -f hosted/sandbox/Dockerfile .
 ARG WARDFLOW_BUNDLE_IMAGE
-ARG OHIF_VIEWER_IMAGE=acrhlsdeployer.azurecr.io/hls-ohif-static:9a2d2c3d1367
+ARG OHIF_VIEWER_IMAGE=acrhlsdeployer.azurecr.io/hls-ohif-static:9a2d2c3d1367-manifest-v1
 FROM ${WARDFLOW_BUNDLE_IMAGE} AS wardflow
 FROM ${OHIF_VIEWER_IMAGE} AS ohif
 FROM node:20-bookworm-slim AS node
@@ -61,9 +61,9 @@ RUN useradd --create-home --uid 10001 --shell /bin/bash hls \
 # Keep the viewer deployer and its compatible OHIF pin reproducible; don't bootstrap moving toolkit main.
 RUN git init /app/FabricDicomCohortingToolkit \
  && git -C /app/FabricDicomCohortingToolkit remote add origin https://github.com/kfprugger/FabricDicomCohortingToolkit.git \
- && git -C /app/FabricDicomCohortingToolkit fetch --depth 1 origin 9b70dec8a8ad5a29cb7255f0c0c54b7cb4204e38 \
+ && git -C /app/FabricDicomCohortingToolkit fetch --depth 1 origin 7307b697c9ae8a460432af060af90f9fc6ac33f5 \
  && git -C /app/FabricDicomCohortingToolkit checkout --detach FETCH_HEAD \
- && test "$(git -C /app/FabricDicomCohortingToolkit rev-parse HEAD)" = 9b70dec8a8ad5a29cb7255f0c0c54b7cb4204e38 \
+ && test "$(git -C /app/FabricDicomCohortingToolkit rev-parse HEAD)" = 7307b697c9ae8a460432af060af90f9fc6ac33f5 \
  && chown -R hls:hls /app/FabricDicomCohortingToolkit
 WORKDIR /app/hls-data-accelerator
 COPY orchestrator/requirements.lock hosted/sandbox/addon-requirements.txt /tmp/requirements/

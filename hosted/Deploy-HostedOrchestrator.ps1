@@ -385,7 +385,7 @@ if (-not $SkipImages) {
         Copy-Item -LiteralPath (Join-Path $context 'hosted/sandbox/Dockerfile.dockerignore') -Destination (Join-Path $context '.dockerignore') -Force
         Write-Host "Building committed HLS $ImageTag with WardFlow bundle $wardflowCommit (uncommitted changes are not shipped)."
         # Compile the pinned viewer once in ACR, not in the user's credential-bearing 4 GiB sandbox.
-        $ohifTag = '9a2d2c3d1367'
+        $ohifTag = '9a2d2c3d1367-manifest-v1'
         $ohifImage = "$registry.azurecr.io/hls-ohif-static:$ohifTag"
         $repositories = @(Invoke-AzJson @('acr', 'repository', 'list', '--name', $registry))
         $ohifTags = @()

@@ -18,6 +18,8 @@ RUN NODE_ENV=production node --max_old_space_size=8096 ../../node_modules/webpac
  && test -s dist/index.html \
  && printf '%s' 9a2d2c3d136725b2b322a47340ecf684e55dd253 > dist/.source-revision \
  && cp /toolkit/dicom-viewer/ohif/staticwebapp.config.json dist/staticwebapp.config.json
+# The runtime config is deployment-specific; all immutable bundles/workers/WASM are hash-verified.
+RUN node -e "const fs=require('fs'),path=require('path'),crypto=require('crypto'),files={}; function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);if(e.isDirectory())walk(p);else{const n=path.relative('dist',p).split(path.sep).join('/');if(!['app-config.js','.asset-manifest.json'].includes(n))files[n]=crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');}}} walk('dist');fs.writeFileSync('dist/.asset-manifest.json',JSON.stringify({sourceRevision:'9a2d2c3d136725b2b322a47340ecf684e55dd253',files}));"
 FROM scratch
 COPY --from=build /viewer/platform/app/dist/ /viewer/
 LABEL org.opencontainers.image.source="https://github.com/OHIF/Viewers" \
