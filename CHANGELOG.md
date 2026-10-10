@@ -26,6 +26,7 @@ Users can now deploy the accelerator into their own tenant, subscription and Fab
 - **Fixed** the hosted imaging viewer build failing because `/usr/local/bin/yarn` pointed to an uncopied `/opt/yarn-v1.22.22` directory. The image includes that pinned runtime directory and fails its build if Yarn cannot execute inside a PowerShell pipeline.
 - **Fixed** continuation failing to clear a previous Databricks snapshot when AzCopy deleted parent folders concurrently with their files. Cleanup now deletes top-level ADLS directories recursively and drains root batches before verifying emptiness; initial snapshots and add-later exports use the same helper, without suppressing storage errors or weakening manifest checks.
 - **Pinned** the hosted DICOM toolkit to corrected revision `9b70dec8a8ad5a29cb7255f0c0c54b7cb4204e38`, whose Yarn/Webpack viewer build uses the previously proven OHIF revision `9a2d2c3d136725b2b322a47340ecf684e55dd253`. Moving master/latest stable now use incompatible Node 24/pnpm tooling. Full viewer assets are compiled in ACR and packaged with provenance for deployment-time proxy configuration, avoiding an 8 GiB compiler heap in the 4 GiB authenticated sandbox; no viewer feature is disabled.
+- **Fixed** Databricks add-later FHIR export resolving a nonexistent `properties.hostName`. The export-only path reads the AHDS service's `authenticationConfiguration.audience` using its explicit ARM API version and validates the service endpoint before exporting.
 
 ### New-tenant deployment fixes (med-1006, 2026-10-07)
 
