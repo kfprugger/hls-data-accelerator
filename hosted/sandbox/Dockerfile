@@ -26,8 +26,10 @@ ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PYTHONUTF8=1 PYTHONIOENCOD
 COPY --from=node /usr/local/ /usr/local/
 # Node's yarn executable is a symlink into /opt, which /usr/local alone does not include.
 COPY --from=node /opt/yarn-v1.22.22/ /opt/yarn-v1.22.22/
+# build-essential, pkg-config and libsecret-1-dev: Rayfin apps' npm ci compiles the native keytar module
+# (a transitive dev dependency of @azure/msal-node-extensions), which node-gyp cannot build without them.
 RUN test "$TARGETARCH" = amd64 \
- && apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg git bash jq unzip tar libicu72 libssl3 libgssapi-krb5-2 unixodbc \
+ && apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg git bash jq unzip tar libicu72 libssl3 libgssapi-krb5-2 unixodbc build-essential pkg-config libsecret-1-dev \
  && curl -fsSL https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -o /tmp/microsoft.deb \
  && dpkg -i /tmp/microsoft.deb && rm /tmp/microsoft.deb \
  && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/azure-cli.gpg \

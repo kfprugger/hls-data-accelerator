@@ -356,12 +356,32 @@ class AddonRunner:
         save_env()
         await self.ensure_metastore(env, root)
         await self.ensure_admin_group(env, root, variables["ADMIN_GROUP_OBJECT_ID"], variables["DATABRICKS_ADMIN_GROUP"])
+        env["ALERT_EMAIL"] = variables["ALERT_EMAIL"] = await self.databricks_alert_recipient(env, root, variables["ALERT_EMAIL"])
+        save_env()
         for step in ("03-configure-eventhubs-access.sh", "04-unity-catalog-bootstrap.sh", "05-deploy-bundle.sh", "06-run-and-gate.sh"):
             await self.command(step, ["bash", scripts / step], root, env)
             if step == "04-unity-catalog-bootstrap.sh":
                 env["WAREHOUSE_ID"] = json.loads((root / f".state/warehouse-{variables['ENVIRONMENT']}.json").read_text())["warehouse_id"]
         await self.command("07 Databricks deployment validation", [sys.executable, scripts / "07-validate-deployment.py", "--environment", variables["ENVIRONMENT"]], root, env)
         return {"workspaceUrl": variables["DATABRICKS_HOST"], "fhirExportUrl": variables["FHIR_EXPORT_URL"]}
+
+    async def databricks_alert_recipient(self, env, root, email):
+        """Return ``email`` only if it is a user of the Databricks workspace, else an empty string.
+
+        The deployment's alert recipient is also the Fabric Activator recipient and may be any mailbox, but a
+        Databricks alert subscription must name a workspace user: otherwise the bundle fails with "Failed to get
+        user id for email". Empty keeps the alert PAUSED with no recipient, which the scripts already support.
+        """
+        if not email:
+            return ""
+        escaped = email.replace('"', "")
+        found = json.loads(await self.command("Check Databricks alert recipient",
+                                              ["databricks", "users", "list", "--filter", f'userName eq "{escaped}"', "-o", "json"],
+                                              root, env, capture=True) or "[]")
+        if found:
+            return email
+        self.log(f"{email} is not a Databricks workspace user, so the Databricks clinical alert is deployed paused with no recipient.", "warning")
+        return ""
 
     async def ensure_admin_group(self, env, root, object_id, name):
         """Provision the Entra admin group into the Databricks account so Unity Catalog grants can name it.

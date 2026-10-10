@@ -113,6 +113,26 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(RuntimeError, "permission denied"):
             await runner.ensure_admin_group({}, Path("unused"), "object-id", "g")
 
+    async def test_alert_recipient_that_is_not_a_workspace_user_is_dropped_not_passed_to_the_bundle(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.log = Mock()
+        runner.command = AsyncMock(return_value="[]")
+        self.assertEqual(await runner.databricks_alert_recipient({}, Path("unused"), "alerts@example.com"), "")
+        runner.log.assert_called_once()
+        self.assertIn('userName eq "alerts@example.com"', runner.command.await_args.args[1])
+
+    async def test_alert_recipient_that_is_a_workspace_user_is_kept(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.log = Mock()
+        runner.command = AsyncMock(return_value='[{"userName": "joey@example.com"}]')
+        self.assertEqual(await runner.databricks_alert_recipient({}, Path("unused"), "joey@example.com"), "joey@example.com")
+
+    async def test_empty_alert_recipient_makes_no_lookup(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.command = AsyncMock()
+        self.assertEqual(await runner.databricks_alert_recipient({}, Path("unused"), ""), "")
+        runner.command.assert_not_awaited()
+
     async def test_a_failing_addon_does_not_prevent_the_others_from_running(self):
         runner = object.__new__(addons.AddonRunner)
         runner.deployment = {"customStatus": {}, "output": {"phases": [], "resources": {}}}
