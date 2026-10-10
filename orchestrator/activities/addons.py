@@ -143,6 +143,19 @@ def require_one(values, description):
     return values[0]
 
 
+def prepare_bundle(bundle: dict, user: str) -> dict:
+    """Adapt the Databricks bundle to deploy as the signed-in user instead of a service principal.
+
+    Production targets refuse to validate without ``workspace.root_path`` once ``run_as`` is gone, so each
+    gets the per-user path the Databricks CLI itself recommends.
+    """
+    for target in bundle["targets"].values():
+        target.pop("run_as", None)
+        if target.get("mode") == "production":
+            target.setdefault("workspace", {})["root_path"] = f"/Workspace/Users/{user}/.bundle/" + "${bundle.name}/${bundle.target}"
+    return bundle
+
+
 class AddonRunner:
     def __init__(self, instance_id, config, deployment, save, pids):
         self.id, self.config, self.deployment = instance_id, config, deployment
@@ -249,8 +262,10 @@ class AddonRunner:
         return gold, sql
 
     async def run(self, addons, fresh_export=False):
+        """Run each add-on independently: one failing add-on never prevents the others from running."""
         cs = self.deployment["customStatus"]
         await self.discover()
+        failures = []
         for name in addons:
             self.name = name
             self.phase = {"phase": f"Add-on: {name.title()}", "status": "running", "subSteps": []}
@@ -271,9 +286,13 @@ class AddonRunner:
                 state.update(status="failed", detail=str(exc), finishedAt=now())
                 self.phase.update(status="failed", detail=str(exc))
                 self.log(str(exc), "error")
-                raise
+                if not isinstance(exc, Exception) or self.deployment.get("runtimeStatus") == "Terminated":
+                    raise
+                failures.append(f"{name}: {exc}")
             finally:
                 self.persist()
+        if failures:
+            raise RuntimeError("; ".join(failures))
 
     def working_copy(self, source, name):
         target = self.work / name
@@ -318,8 +337,7 @@ class AddonRunner:
         # Hosted jobs use the authenticated deployer, not an unrelated service principal.
         bundle_path = root / "bundle/databricks.yml"
         bundle = yaml.safe_load(bundle_path.read_text())
-        for target in bundle["targets"].values():
-            target.pop("run_as", None)
+        prepare_bundle(bundle, account["user"]["name"])
         bundle_path.write_text(yaml.safe_dump(bundle, sort_keys=False))
         def save_env():
             path = root / "env.sh"

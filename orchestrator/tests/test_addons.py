@@ -113,6 +113,44 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(RuntimeError, "permission denied"):
             await runner.ensure_admin_group({}, Path("unused"), "object-id", "g")
 
+    async def test_a_failing_addon_does_not_prevent_the_others_from_running(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.deployment = {"customStatus": {}, "output": {"phases": [], "resources": {}}}
+        runner.discover, runner.persist, runner.log = AsyncMock(), Mock(), Mock()
+        ran = []
+        async def databricks(fresh_export=False): raise RuntimeError("bundle invalid")
+        async def rayfin(fresh_export=False): ran.append("rayfin"); return {"ok": 1}
+        async def cardiology(fresh_export=False): ran.append("cardiology"); return {"ok": 2}
+        runner.databricks, runner.rayfin, runner.cardiology = databricks, rayfin, cardiology
+        with self.assertRaisesRegex(RuntimeError, "databricks: bundle invalid"):
+            await runner.run(["databricks", "rayfin", "cardiology"])
+        self.assertEqual(ran, ["rayfin", "cardiology"])
+        states = {k: v["status"] for k, v in runner.deployment["customStatus"]["addons"].items()}
+        self.assertEqual(states, {"databricks": "failed", "rayfin": "succeeded", "cardiology": "succeeded"})
+
+    async def test_cancelling_the_deployment_stops_remaining_addons(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.deployment = {"customStatus": {}, "output": {"phases": [], "resources": {}}, "runtimeStatus": "Terminated"}
+        runner.discover, runner.persist, runner.log = AsyncMock(), Mock(), Mock()
+        async def databricks(fresh_export=False): raise RuntimeError("Add-on cancelled")
+        runner.databricks, runner.rayfin = databricks, AsyncMock()
+        with self.assertRaisesRegex(RuntimeError, "cancelled"):
+            await runner.run(["databricks", "rayfin"])
+        runner.rayfin.assert_not_awaited()
+
+
+class BundlePreparationTests(unittest.TestCase):
+    def test_every_production_target_of_the_real_bundle_gets_a_user_root_path_and_no_service_principal(self):
+        import yaml
+        bundle = yaml.safe_load((addons.ROOT / "azure-databricks/implementation/bundle/databricks.yml").read_text())
+        production = [n for n, t in bundle["targets"].items() if t.get("mode") == "production"]
+        self.assertTrue(production, "the bundle must still have production targets for this test to mean anything")
+        addons.prepare_bundle(bundle, "joey@example.com")
+        for name, target in bundle["targets"].items():
+            self.assertNotIn("run_as", target)
+            expected = "/Workspace/Users/joey@example.com/.bundle/${bundle.name}/${bundle.target}"
+            self.assertEqual(target.get("workspace", {}).get("root_path"), expected if name in production else None)
+
 
 if __name__ == "__main__":
     unittest.main()
