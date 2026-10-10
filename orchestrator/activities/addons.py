@@ -58,7 +58,12 @@ class Cloud:
                                      data=json.dumps(body).encode() if body is not None else None)
         with urllib.request.urlopen(req, timeout=120) as response:
             raw = response.read()
-            return json.loads(raw) if raw else {}
+            if not raw:
+                return {}
+            try:
+                return json.loads(raw)
+            except (ValueError, UnicodeDecodeError) as exc:
+                raise RuntimeError(f"{urllib.parse.urlsplit(url).hostname} returned a non-JSON API response") from exc
 
     def items(self, url: str, resource=FABRIC, skill="search-consumption-cli") -> list[dict]:
         values = []
@@ -293,7 +298,10 @@ class AddonRunner:
                 "ResourceGroupName": cfg["resource_group_name"], "ExpectedSubscriptionId": cfg["expected_subscription_id"],
                 "ExportOnly": True, "ExportContainerName": "fhir-export-databricks", "DeploymentPython": sys.executable})
         group = cfg.get("databricks_admin_group") or cfg["admin_security_group"]
-        group_info = await asyncio.to_thread(az_json, cfg, "ad", "group", "show", "--group", group)
+        escaped_group = group.replace("'", "''")
+        query = urllib.parse.urlencode({"$filter": f"displayName eq '{escaped_group}'", "$select": "id,displayName"})
+        groups = await asyncio.to_thread(self.cloud.items, "https://graph.microsoft.com/v1.0/groups?" + query, "https://graph.microsoft.com")
+        group_info = require_one(groups, "Databricks admin group in the deployment tenant")
         account = await asyncio.to_thread(az_json, cfg, "account", "show")
         variables = {
             "AZ_TENANT_ID": cfg["expected_tenant_id"], "AZ_SUBSCRIPTION_ID": cfg["expected_subscription_id"],
@@ -347,24 +355,16 @@ class AddonRunner:
             return
         explanation = ""
         try:
-            endpoint = "https://accounts.azuredatabricks.net/api/2.0"
-            accounts = await asyncio.to_thread(self.cloud.call, "GET", endpoint + "/accounts", DATABRICKS)
-            candidates = accounts if isinstance(accounts, list) else accounts.get("accounts", [])
-            matches = []
-            for account in candidates:
-                account_id = account.get("account_id") or account.get("id")
-                data = await asyncio.to_thread(self.cloud.call, "GET", f"{endpoint}/accounts/{account_id}/metastores", DATABRICKS)
-                for metastore in data.get("metastores", []):
-                    if metastore.get("region", "").replace(" ", "").lower() == self.config["location"].lower():
-                        matches.append((account_id, metastore["metastore_id"]))
-            account_id, metastore_id = require_one(matches, "regional Databricks account metastore")
+            data = json.loads(await self.command("List available Unity Catalog metastores", ["databricks", "metastores", "list", "-o", "json"], root, env, capture=True))
+            candidates = data if isinstance(data, list) else data.get("metastores", [])
+            metastore = require_one([m for m in candidates if m.get("region", "").replace(" ", "").lower() == self.config["location"].lower()], "regional Databricks metastore")
+            metastore_id = metastore["metastore_id"]
             dbx = self.resource("Microsoft.Databricks/workspaces") if any(r["type"].lower() == "microsoft.databricks/workspaces" for r in self.azure) else require_one(await asyncio.to_thread(az_json, self.config, "databricks", "workspace", "list", "-g", self.config["resource_group_name"]), "Databricks workspace")
             workspace_id = dbx.get("workspaceId") or dbx.get("properties", {}).get("workspaceId")
             if not workspace_id:
                 detail = await asyncio.to_thread(az_json, self.config, "databricks", "workspace", "show", "--ids", dbx["id"])
                 workspace_id = detail["workspaceId"]
-            await asyncio.to_thread(self.cloud.call, "PUT", f"{endpoint}/accounts/{account_id}/workspaces/{workspace_id}/metastore", DATABRICKS,
-                                    {"metastore_id": metastore_id, "default_catalog_name": "hive_metastore"})
+            await self.command("Assign regional Unity Catalog metastore", ["databricks", "metastores", "assign", str(workspace_id), metastore_id, "hive_metastore", "-o", "json"], root, env)
             if await assigned():
                 return
             explanation = "Assignment is not yet visible."
@@ -471,9 +471,10 @@ class AddonRunner:
         gold, sql = await self.gold()
         fhir = self.resource("Microsoft.HealthcareApis/workspaces/fhirservices")
         detail = await asyncio.to_thread(az_json, cfg, "resource", "show", "--ids", fhir["id"])
-        fhir_url = detail["properties"]["hostName"]
-        if not fhir_url.startswith("https://"):
-            fhir_url = "https://" + fhir_url
+        fhir_url = detail["properties"]["authenticationConfiguration"]["audience"]
+        parsed = urllib.parse.urlsplit(fhir_url)
+        if parsed.scheme != "https" or not (parsed.hostname or "").endswith(".fhir.azurehealthcareapis.com"):
+            raise RuntimeError("Existing AHDS FHIR service endpoint is invalid")
         kql = self.item("KQLDatabase", "MasimoEventhouse")
         kql_detail = await asyncio.to_thread(self.cloud.call, "GET", f"{FABRIC}/v1/workspaces/{self.ws}/kqlDatabases/{kql['id']}", FABRIC, None, "eventhouse-cli")
         query_uri = kql_detail["properties"]["queryServiceUri"]

@@ -59,6 +59,19 @@ class AddonContractTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "tenant differs"):
                 cloud.call("GET", addons.FABRIC + "/v1/workspaces")
             self.assertEqual(opening.call_count, 1)
+    def test_non_json_api_response_is_an_actionable_failure(self):
+        cloud = addons.Cloud(self.config())
+        cloud.tokens.tenant_id = self.config()["expected_tenant_id"]
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_): return False
+            def read(self): return b"<html>private login redirect content</html>"
+        with patch.object(cloud.tokens, "token", return_value="not-a-real-token"), \
+             patch.object(addons.urllib.request, "urlopen", return_value=Response()):
+            with self.assertRaisesRegex(RuntimeError, "accounts.azuredatabricks.net returned a non-JSON API response") as error:
+                cloud.call("GET", "https://accounts.azuredatabricks.net/api/2.0/accounts", addons.DATABRICKS)
+        self.assertNotIn("private login", str(error.exception))
+
 
     def test_selection_does_not_add_unrequested_services(self):
         self.assertEqual(addons.selected({"deploy_rayfin_apps": True}), ["rayfin"])
