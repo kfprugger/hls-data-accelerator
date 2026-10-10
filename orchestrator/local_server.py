@@ -2052,6 +2052,16 @@ async def get_auth_context(force: bool = False):
     return result
 
 
+@app.get("/api/auth/live")
+async def get_live_credentials(subscription_id: str = ""):
+    """Mint a real token per deployment audience through Azure CLI and Az PowerShell and call each service once.
+
+    Unlike ``/api/auth/context`` this never trusts cached login state. Tokens are never returned.
+    """
+    from shared.live_credentials import LiveCredentialProbe
+    return await asyncio.get_event_loop().run_in_executor(None, LiveCredentialProbe().probe, subscription_id)
+
+
 def _get_live_status() -> dict:
     database_status = "ok"
     try:
