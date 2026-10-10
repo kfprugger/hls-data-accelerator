@@ -44,12 +44,14 @@ echo "== Scheduled stream-to-Gold workflow =="
 databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_stream_freshness_gate
 
 echo
-echo "== Genie spaces =="
-# They query the Gold and Silver tables the gates just verified, so a fresh workspace can
-# only create them now. Idempotent when they already exist.
+echo "== Genie spaces and stream schedule =="
+# Genie spaces query the Gold and Silver tables the gates just verified, so a fresh workspace can
+# only create them now. The 5-minute stream job schedule is also enabled only now: until the batch
+# medallion has run it fails on missing silver tables, burning serverless compute and blocking
+# deploys (--fail-on-active-runs). Idempotent when they already exist.
 deploy_flags=()
 [[ "${HLS_NONINTERACTIVE:-0}" != "1" ]] || deploy_flags+=(--auto-approve)
-databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" "${deploy_flags[@]}"
+databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" --var "stream_schedule_pause_status=UNPAUSED" "${deploy_flags[@]}"
 
 
 echo

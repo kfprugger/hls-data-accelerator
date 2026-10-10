@@ -40,6 +40,9 @@ variables:
   workload_principal:
     description: Service principal application ID that owns bundle deploys and workload runs
     default: ""
+  stream_schedule_pause_status:
+    description: The 5-minute stream job reads silver tables only the batch medallion creates, so it deploys PAUSED and 06-run-and-gate.sh unpauses it after the gates pass
+    default: PAUSED
 
 include:
   - resources/*.yml
