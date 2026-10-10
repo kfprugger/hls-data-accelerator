@@ -226,11 +226,15 @@ def main() -> int:
             record("clinical_alert", "skip", "alert not deployed (no reviewed recipient supplied)")
         else:
             subs = clinical[0].get("evaluation", {}).get("notification", {}).get("subscriptions") or []
-            record(
-                "clinical_alert",
-                "pass" if subs else "fail",
-                f"recipients={len(subs)}",
-            )
+            paused = (clinical[0].get("schedule") or {}).get("pause_status") == "PAUSED"
+            if subs:
+                record("clinical_alert", "pass", f"recipients={len(subs)}")
+            elif paused and not os.environ.get("ALERT_EMAIL"):
+                # The bundle always deploys this alert; without a reviewed workspace-user recipient it stays
+                # paused and silent by design (05-deploy-bundle.sh). That is a skip, never a pass.
+                record("clinical_alert", "skip", "deployed paused with no recipient (no reviewed workspace-user recipient supplied)")
+            else:
+                record("clinical_alert", "fail", f"recipients=0 paused={paused} recipient_supplied={bool(os.environ.get('ALERT_EMAIL'))}")
     except Exception as exc:
         record("clinical_alert", "skip", f"alert API unavailable: {exc}")
 
