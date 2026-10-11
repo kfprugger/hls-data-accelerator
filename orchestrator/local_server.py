@@ -1425,6 +1425,8 @@ async def start_addons(instance_id: str, body: dict):
     names = body.get("addons")
     if not isinstance(names, list) or not names or any(not isinstance(n, str) or n not in ADDON_FLAGS for n in names) or len(set(names)) != len(names):
         raise HTTPException(422, "addons must be a nonempty, unique list of databricks, rayfin or cardiology")
+    # Serialize add-ons to protect the shared CLI token caches, but never make cardiology wait on optional peers.
+    names = [name for name in ADDON_FLAGS if name in names]
     if set(body) - _ADDON_OPTIONS - {"addons"}:
         raise HTTPException(422, "Only add-on options can be changed by this endpoint")
     cs = deployment.get("customStatus") or {}

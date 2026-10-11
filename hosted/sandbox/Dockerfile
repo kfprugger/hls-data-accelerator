@@ -68,11 +68,10 @@ RUN git init /app/FabricDicomCohortingToolkit \
  && test "$(git -C /app/FabricDicomCohortingToolkit rev-parse HEAD)" = 7307b697c9ae8a460432af060af90f9fc6ac33f5 \
  && chown -R hls:hls /app/FabricDicomCohortingToolkit
 WORKDIR /app/hls-data-accelerator
-COPY orchestrator/requirements.lock hosted/sandbox/addon-requirements.txt /tmp/requirements/
+COPY orchestrator/requirements.lock /tmp/orchestrator-requirements.lock
 RUN python -m venv orchestrator/.venv \
- && orchestrator/.venv/bin/pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/requirements/requirements.lock \
- && orchestrator/.venv/bin/pip install --no-cache-dir -r /tmp/requirements/addon-requirements.txt \
- && rm -rf /tmp/requirements
+ && orchestrator/.venv/bin/pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/orchestrator-requirements.lock \
+ && rm -f /tmp/orchestrator-requirements.lock
 # Copy only allowlisted runtime inputs.
 COPY --chown=hls:hls . /app/hls-data-accelerator/
 COPY --from=wardflow --chown=hls:hls /wardflow/ /app/wardflow/
@@ -83,6 +82,7 @@ RUN test -s /app/wardflow/.pinned-commit \
 COPY --from=ui --chown=hls:hls /ui/dist /app/hls-data-accelerator/orchestrator-ui/dist
 COPY --from=ohif --chown=hls:hls /viewer/ /app/FabricDicomCohortingToolkit/dicom-viewer/ohif-build/platform/app/dist/
 ENV HOME=/home/hls AZURE_CONFIG_DIR=/home/hls/.azure HLS_DATA_DIR=/data \
+    HLS_ADDON_WORK_DIR=/tmp/hls-addons \
     PATH=/app/hls-data-accelerator/orchestrator/.venv/bin:$PATH
 USER hls
 WORKDIR /app/hls-data-accelerator/orchestrator

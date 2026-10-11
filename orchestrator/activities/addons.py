@@ -21,7 +21,7 @@ from shared.full_teardown import AzureCliTokens, ARM, FABRIC, GRAPH, DATABRICKS
 from shared.runtime_paths import DATA_DIR
 
 ROOT = Path(__file__).resolve().parents[2]
-ADDON_FLAGS = {"databricks": "deploy_databricks", "rayfin": "deploy_rayfin_apps", "cardiology": "deploy_cardiology"}
+ADDON_FLAGS = {"cardiology": "deploy_cardiology", "rayfin": "deploy_rayfin_apps", "databricks": "deploy_databricks"}
 MODEL_CANDIDATES = [("gpt-5.6-luna", "2026-07-09"), ("gpt-5.5", "2026-04-24")]
 CONTINUATIONS: dict[str, asyncio.Event] = {}
 
@@ -56,7 +56,12 @@ class Cloud:
             headers["x-ms-fabric-skill"] = skill
         req = urllib.request.Request(url, method=method, headers=headers,
                                      data=json.dumps(body).encode() if body is not None else None)
-        with urllib.request.urlopen(req, timeout=120) as response:
+        try:
+            response = urllib.request.urlopen(req, timeout=120)
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")[:800]
+            raise RuntimeError(f"{method} {url.split('?', 1)[0]} -> HTTP {error.code}: {detail}") from None
+        with response:
             raw = response.read()
             if not raw:
                 return {}
@@ -71,9 +76,10 @@ class Cloud:
         while url:
             body = self.call("GET", url, resource, skill=skill)
             values.extend(body.get("value", []))
-            url = body.get("continuationUri") or body.get("nextLink") or body.get("@odata.nextLink")
-            if url and urllib.parse.urlsplit(url).netloc != origin:
+            continuation = body.get("continuationUri") or body.get("nextLink") or body.get("@odata.nextLink")
+            if continuation and urllib.parse.urlsplit(continuation).netloc not in {"", origin}:
                 raise RuntimeError("Cross-origin API continuation refused")
+            url = urllib.parse.urljoin(url, continuation) if continuation else ""
         return values
 
 
@@ -142,6 +148,19 @@ def require_one(values, description):
         raise RuntimeError(f"Expected exactly one {description}, found {len(values)}")
     return values[0]
 
+def parse_cli_json(output: str, description: str) -> dict:
+    """Extract a JSON object from a CLI stream that may prefix informational lines."""
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"(?m)^[ \t]*\{", output):
+        try:
+            value, _ = decoder.raw_decode(output[match.start():].lstrip())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise RuntimeError(f"{description} returned no JSON object")
+
+
 
 def prepare_bundle(bundle: dict, user: str) -> dict:
     """Adapt the Databricks bundle to deploy as the signed-in user instead of a service principal.
@@ -161,7 +180,8 @@ class AddonRunner:
         self.id, self.config, self.deployment = instance_id, config, deployment
         self.save, self.pids = save, pids
         self.cloud = Cloud(config)
-        self.work = DATA_DIR / "addons" / instance_id
+        work_root = Path(os.environ.get("HLS_ADDON_WORK_DIR") or DATA_DIR / "addons")
+        self.work = work_root / instance_id
         self.work.mkdir(parents=True, exist_ok=True)
         self.env = {**os.environ, "CI": "true", "HLS_NONINTERACTIVE": "1", "PYTHONUNBUFFERED": "1"}
         self.phase = None
@@ -260,6 +280,52 @@ class AddonRunner:
         if not sql.get("connectionString") or not sql.get("id"):
             raise RuntimeError("Gold SQL endpoint is not provisioned")
         return gold, sql
+
+    async def ensure_eventstream_running(self, display_name: str) -> None:
+        """Resume a paused base-deployment Eventstream before an add-on consumes it."""
+        eventstream = self.item("Eventstream", display_name)
+        url = f"{FABRIC}/v1/workspaces/{self.ws}/eventstreams/{eventstream['id']}"
+
+        async def topology() -> dict:
+            return await asyncio.to_thread(
+                self.cloud.call, "GET", url + "/topology", FABRIC, None, "eventstream-cli",
+            )
+
+        def states(value: dict) -> list[dict]:
+            nodes = [*(value.get("sources") or []), *(value.get("destinations") or [])]
+            if not nodes:
+                raise RuntimeError(f"{display_name} has no source or destination nodes")
+            return nodes
+
+        current = await topology()
+        nodes = states(current)
+        if all(node.get("status") == "Running" for node in nodes):
+            return
+        if any(node.get("status") == "Paused" for node in nodes):
+            self.substep(f"Resume {display_name}", "running")
+            await asyncio.to_thread(
+                self.cloud.call, "POST", url + "/resume", FABRIC,
+                {"startType": "WhenLastStopped"}, "eventstream-cli",
+            )
+
+        deadline = time.monotonic() + 600
+        while True:
+            current = await topology()
+            nodes = states(current)
+            if all(node.get("status") == "Running" for node in nodes):
+                self.substep(f"Resume {display_name}", "succeeded")
+                return
+            failed = [node for node in nodes if node.get("status") in {"Failed", "Error"}]
+            if failed:
+                detail = "; ".join(
+                    f"{node.get('name', 'node')}: {node.get('error') or node.get('status')}" for node in failed
+                )
+                raise RuntimeError(f"{display_name} failed to resume: {detail}")
+            if time.monotonic() >= deadline:
+                waiting = ", ".join(f"{node.get('name')}: {node.get('status')}" for node in nodes)
+                raise RuntimeError(f"{display_name} did not resume within 10 minutes ({waiting})")
+            await asyncio.sleep(10)
+
 
     async def run(self, addons, fresh_export=False):
         """Run each add-on independently: one failing add-on never prevents the others from running."""
@@ -502,7 +568,10 @@ class AddonRunner:
                 await self.command(f"{app}: configure publication boundary", ["node", root / "scripts/configure-publication.mjs"], root, sql_env)
             await self.command(f"{app}: build", ["npm", "run", "build"], root, await rayfin_env("https://analysis.windows.net/powerbi/api"))
             await self.command(f"{app}: deploy", up, root, await rayfin_env())
-            status = json.loads(await self.command(f"{app}: hosting details", cli + ["up", "status", "--json"], root, await rayfin_env(), capture=True))
+            status = parse_cli_json(
+                await self.command(f"{app}: hosting details", cli + ["up", "status", "--json"], root, await rayfin_env(), capture=True),
+                f"{app} hosting status",
+            )
             deployment = status.get("deployment", {})
             hosting = deployment.get("hostingUrl")
             if not hosting:
@@ -526,6 +595,7 @@ class AddonRunner:
         backend = wardflow / "caldova-cardio/hds-backend"
         if not backend.is_dir():
             raise RuntimeError("WARDFLOW_ROOT must contain the pinned jb-dev caldova-cardio/hds-backend")
+        await self.ensure_eventstream_running("MasimoTelemetryStream")
         gold, sql = await self.gold()
         fhir = self.resource("Microsoft.HealthcareApis/workspaces/fhirservices")
         detail = await asyncio.to_thread(az_json, cfg, "resource", "show", "--ids", fhir["id"])

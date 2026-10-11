@@ -39,6 +39,40 @@ common_vars=(
   --var "warehouse_id=${WAREHOUSE_ID}"
 )
 
+pause_existing_stream_job() {
+  local jobs job_id job schedule update active_count deadline
+  jobs="$(databricks api get '/api/2.1/jobs/list?name=hls-stream-to-gold&limit=100')"
+  job_id="$(jq -r '
+    [.jobs[]? | select(.settings.name == "hls-stream-to-gold") | .job_id]
+    | if length > 1 then error("multiple hls-stream-to-gold jobs found")
+      elif length == 1 then .[0]
+      else empty end
+  ' <<<"$jobs")"
+  [[ -n "$job_id" ]] || return 0
+
+  job="$(databricks api get "/api/2.1/jobs/get?job_id=${job_id}")"
+  schedule="$(jq -c '.settings.schedule // empty' <<<"$job")"
+  if [[ -n "$schedule" && "$(jq -r '.pause_status // empty' <<<"$schedule")" != "PAUSED" ]]; then
+    echo "Pausing the existing hls-stream-to-gold schedule before bundle deploy."
+    update="$(jq -c '{job_id: .job_id, new_settings: {schedule: (.settings.schedule + {pause_status: "PAUSED"})}}' <<<"$job")"
+    databricks api post /api/2.1/jobs/update --json "$update" >/dev/null
+  fi
+
+  deadline=$((SECONDS + 1800))
+  while true; do
+    active_count="$(databricks api get "/api/2.1/jobs/runs/list?job_id=${job_id}&active_only=true&limit=25" |
+      jq -r '(.runs // []) | length')"
+    (( active_count > 0 )) || break
+    (( SECONDS < deadline )) || {
+      echo "FAIL: hls-stream-to-gold still has ${active_count} active run(s) after 30 minutes" >&2
+      return 1
+    }
+    echo "Waiting for ${active_count} active hls-stream-to-gold run(s) to finish..."
+    sleep 15
+  done
+}
+
+
 echo "Step 1 of 3: validate configuration against the pinned CLI schema."
 databricks bundle validate -t "$ENVIRONMENT" "${common_vars[@]}"
 
@@ -52,6 +86,8 @@ if [[ "${HLS_NONINTERACTIVE:-0}" != "1" ]]; then
   read -r -p "Deploy these resources to target '$ENVIRONMENT'? [y/N] " confirm
   [[ "$confirm" == "y" || "$confirm" == "Y" ]] || { echo "Aborted. Nothing deployed."; exit 1; }
 fi
+
+pause_existing_stream_job
 
 echo
 echo "Step 3 of 3: deploy."

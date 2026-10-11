@@ -16,6 +16,17 @@ class AddonContractTests(unittest.TestCase):
                 "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
                 "fabric_workspace_name": "med-test", "location": "eastus2", "cardiology_location": "eastus2", **options}
 
+    def test_cli_json_parser_ignores_informational_prefix(self):
+        output = '[rayfin] using ambient token from RAYFIN_TOKEN\n{"deployment":{"hostingUrl":"https://app.example"}}\n'
+        self.assertEqual(
+            addons.parse_cli_json(output, "Rayfin status")["deployment"]["hostingUrl"],
+            "https://app.example",
+        )
+
+    def test_cli_json_parser_rejects_output_without_an_object(self):
+        with self.assertRaisesRegex(RuntimeError, "returned no JSON object"):
+            addons.parse_cli_json("[rayfin] no status available\n", "Rayfin status")
+
 
     def test_explicit_model_requires_exact_version_and_fifty_free(self):
         config = self.config(deploy_cardiology=True, cardiology_chat_model="chosen", cardiology_chat_model_version="2026-07-09")
@@ -72,10 +83,30 @@ class AddonContractTests(unittest.TestCase):
                 cloud.call("GET", "https://accounts.azuredatabricks.net/api/2.0/accounts", addons.DATABRICKS)
         self.assertNotIn("private login", str(error.exception))
 
+    def test_relative_fabric_continuation_stays_on_the_original_origin(self):
+        cloud = object.__new__(addons.Cloud)
+        cloud.call = Mock(side_effect=[
+            {"value": [{"id": "first"}], "continuationUri": "/v1/workspaces?continuationToken=next"},
+            {"value": [{"id": "second"}]},
+        ])
+        self.assertEqual(
+            [item["id"] for item in cloud.items(addons.FABRIC + "/v1/workspaces")],
+            ["first", "second"],
+        )
+        self.assertEqual(
+            cloud.call.call_args_list[1].args[1],
+            addons.FABRIC + "/v1/workspaces?continuationToken=next",
+        )
+
 
     def test_selection_does_not_add_unrequested_services(self):
         self.assertEqual(addons.selected({"deploy_rayfin_apps": True}), ["rayfin"])
         self.assertEqual(addons.selected({}), [])
+        self.assertEqual(addons.selected({
+            "deploy_databricks": True,
+            "deploy_rayfin_apps": True,
+            "deploy_cardiology": True,
+        }), ["cardiology", "rayfin", "databricks"])
 
 
 class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
@@ -147,6 +178,36 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ran, ["rayfin", "cardiology"])
         states = {k: v["status"] for k, v in runner.deployment["customStatus"]["addons"].items()}
         self.assertEqual(states, {"databricks": "failed", "rayfin": "succeeded", "cardiology": "succeeded"})
+
+    async def test_cardiology_base_eventstream_is_resumed_before_use(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.ws = "workspace"
+        runner.items = [{"type": "Eventstream", "displayName": "MasimoTelemetryStream", "id": "stream"}]
+        runner.substep = Mock()
+        runner.cloud = Mock()
+        runner.cloud.call = Mock(side_effect=[
+            {"sources": [{"name": "source", "status": "Paused"}],
+             "destinations": [{"name": "destination", "status": "Paused"}]},
+            {},
+            {"sources": [{"name": "source", "status": "Resuming"}],
+             "destinations": [{"name": "destination", "status": "Running"}]},
+            {"sources": [{"name": "source", "status": "Running"}],
+             "destinations": [{"name": "destination", "status": "Running"}]},
+        ])
+
+        with patch.object(addons.asyncio, "sleep", new=AsyncMock()) as sleep:
+            await runner.ensure_eventstream_running("MasimoTelemetryStream")
+
+        resume = runner.cloud.call.call_args_list[1].args
+        self.assertEqual(resume[:5], (
+            "POST",
+            addons.FABRIC + "/v1/workspaces/workspace/eventstreams/stream/resume",
+            addons.FABRIC,
+            {"startType": "WhenLastStopped"},
+            "eventstream-cli",
+        ))
+        sleep.assert_awaited_once_with(10)
+        runner.substep.assert_any_call("Resume MasimoTelemetryStream", "succeeded")
 
     async def test_cancelling_the_deployment_stops_remaining_addons(self):
         runner = object.__new__(addons.AddonRunner)

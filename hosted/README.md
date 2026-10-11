@@ -90,6 +90,10 @@ Do not use `--replace-env-vars`: it would erase required runtime settings. User 
 
 If Microsoft rejects the displayed device code, choose **Get a new code** in **Sandbox & sign-in**. This replaces only the pending attempt for the selected Azure tool and reuses the same target IDs. It preserves any completed login for the other tool. If the flow has already completed, refresh sign-in status instead; if it expired and disappeared, use that tool's normal sign-in button. Codes last 15 minutes and are not login credentials.
 
+## Add-on execution
+
+Add-ons require a completed phases 1–7 Fabric deployment and do not gate that base estate. When several are requested together they run serially as cardiology, Rayfin, then Databricks; serialization protects the shared Azure CLI and Az PowerShell token caches, not a data dependency between add-ons. Cardiology consumes only base Fabric/Azure resources and resumes `MasimoTelemetryStream` after a capacity restart before deploying its front end. A Databricks rerun pauses the existing `hls-stream-to-gold` schedule and drains active runs before bundle deployment; step 06 restores the schedule only after its gates pass.
+
 ## Security and persistence
 
 - Portal authentication and deployment authorization are separate. The host identity cannot deploy into users' tenants. Azure credentials are never retained on the share: device-code tokens and CLI/PowerShell caches live only in the container's writable home and vanish when the sandbox is deleted or restarted. Use logout to clear both caches without deleting history. A recreated or restarted sandbox requires new device-code logins. Restrict access to deployment history and logs even though the share is not a credential store.

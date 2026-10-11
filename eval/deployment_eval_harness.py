@@ -26,7 +26,7 @@ Usage:
   python3 eval/deployment_eval_harness.py --workspace med-0719 --skip agents
 """
 from __future__ import annotations
-import argparse, json, os, re, ssl, subprocess, sys, time, urllib.request, urllib.error
+import argparse, json, os, re, ssl, subprocess, sys, time, urllib.request, urllib.error, urllib.parse
 from surface_checks import orchestrator_checks, report_layout_checks, browser_evidence_checks
 from operations_agent_check import validate_operations_agents
 from graph_agent_check import check_graph_agent
@@ -37,6 +37,20 @@ FABRIC_RESOURCE = "https://api.fabric.microsoft.com"
 PBI_RESOURCE = "https://analysis.windows.net/powerbi/api"
 DB_RESOURCE = "https://database.windows.net"
 AGENT_API_VERSION = "2024-05-01-preview"
+
+def fabric_skill(url: str) -> str:
+    """Return the owning official Fabric skill for telemetry attribution."""
+    path = urllib.parse.urlsplit(url).path.lower()
+    if "/eventstreams" in path:
+        return "eventstream-cli"
+    if "/eventhouses" in path or "/kqldatabases" in path:
+        return "eventhouse-cli"
+    if "/reports" in path:
+        return "powerbi-report-cli"
+    if "/mcp/" in path or "/dataagents" in path:
+        return "fabriciq"
+    return "eventstream-cli"
+
 
 _CTX = ssl.create_default_context()
 
@@ -68,15 +82,16 @@ class Az:
         return subprocess.run(args, capture_output=True, text=True, env=self.env, timeout=120)
 
 
-def http(method: str, url: str, token: str, body=None, timeout=90):
+def http(method: str, url: str, token: str, body=None, timeout=90, skill: str | None = None):
     data = None
     if body is not None:
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
     elif method == "POST":
         data = b""
-    req = urllib.request.Request(url, data=data, method=method,
-                                 headers={"Authorization": f"Bearer {token}",
-                                          "Content-Type": "application/json"})
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    if url.lower().startswith(FABRIC_RESOURCE):
+        headers["x-ms-fabric-skill"] = skill or fabric_skill(url)
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
         r = urllib.request.urlopen(req, context=_CTX, timeout=timeout)
         raw = r.read()
@@ -224,6 +239,7 @@ def mcp_jsonrpc(url: str, token: str, payload: dict, timeout: int = 300) -> dict
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            "x-ms-fabric-skill": "fabriciq",
         },
     )
     with urllib.request.urlopen(request, context=_CTX, timeout=timeout) as response:
