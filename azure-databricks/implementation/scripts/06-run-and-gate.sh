@@ -44,8 +44,19 @@ databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_batch_medallion
 
 echo
 echo "== Scheduled stream-to-Gold workflow =="
-databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_stream_freshness_gate
-
+stream_log="$(mktemp)"
+trap 'rm -f "$stream_log"' EXIT
+if ! databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_stream_freshness_gate 2>&1 | tee "$stream_log"; then
+  if grep -q 'no Bronze events ingested' "$stream_log" &&
+     ! grep -Eq 'newest Bronze event|Bronze has rows but Silver is empty|deduplication failed' "$stream_log"; then
+    echo "The first triggered run established latest-offset checkpoints before new events arrived."
+    echo "Waiting 30 seconds for the dedicated consumer groups, then retrying once..."
+    sleep 30
+    databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_stream_freshness_gate
+  else
+    exit 1
+  fi
+fi
 echo
 echo "== Genie spaces and stream schedule =="
 # Genie spaces query the Gold and Silver tables the gates just verified, so a fresh workspace can
