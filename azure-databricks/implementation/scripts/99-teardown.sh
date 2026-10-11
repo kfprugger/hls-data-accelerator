@@ -7,6 +7,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 BUNDLE_DIR="$ROOT_DIR/bundle"
 : "${ENVIRONMENT:?}" "${AZ_RESOURCE_GROUP:?}"
+NAMESPACE="${DATABRICKS_NAMESPACE:-${STORAGE_ACCOUNT_NAME:-$ENVIRONMENT}}"
+[[ "$NAMESPACE" =~ ^[a-z][a-z0-9_]{0,120}$ ]] || { echo "FAIL: DATABRICKS_NAMESPACE must be a lowercase SQL identifier" >&2; exit 1; }
+CATALOG="hls_${NAMESPACE}"
 
 STATE_FILE="$ROOT_DIR/.state/foundation-${ENVIRONMENT}.json"
 WAREHOUSE_STATE="$ROOT_DIR/.state/warehouse-${ENVIRONMENT}.json"
@@ -20,13 +23,13 @@ if [[ -z "$WAREHOUSE_ID" && -f "$WAREHOUSE_STATE" ]]; then
 fi
 
 common_vars=(
-  --var "catalog=hls_${ENVIRONMENT}"
+  --var "catalog=${CATALOG}"
   --var "eventhub_namespace=${EVENTHUB_NAMESPACE:?}"
   --var "warehouse_id=${WAREHOUSE_ID}"
 )
 echo "Scope of this teardown:"
 echo "  bundle target      : $ENVIRONMENT"
-echo "  catalog            : hls_${ENVIRONMENT} (deleted: $DELETE_CATALOG)"
+echo "  catalog            : ${CATALOG} (deleted: $DELETE_CATALOG)"
 echo "  bootstrap warehouse: ${WAREHOUSE_ID:-none} (deleted: $DELETE_WAREHOUSE)"
 echo "  Databricks workspace/connector deleted: $DELETE_FOUNDATION"
 echo "  Azure source estate: PRESERVED (FHIR, ADLS source containers, Event Hubs, ACR, Key Vault)"
@@ -37,7 +40,7 @@ echo "1. Bundle destroy removes the active schedule and triggered workload resou
 
 echo "2. Exporting final validation evidence before destruction..."
 mkdir -p "$ROOT_DIR/.state"
-python3 "$SCRIPT_DIR/07-validate-deployment.py" --environment "$ENVIRONMENT" --json \
+python3 "$SCRIPT_DIR/07-validate-deployment.py" --environment "$ENVIRONMENT" --namespace "$NAMESPACE" --json \
   > "$ROOT_DIR/.state/final-validation-${ENVIRONMENT}.json" || \
   echo "   validation reported failures; evidence retained anyway"
 
@@ -47,14 +50,14 @@ databricks bundle destroy -t "$ENVIRONMENT" "${common_vars[@]}" --auto-approve
 if [[ "$DELETE_CATALOG" == "true" ]]; then
   [[ -n "$WAREHOUSE_ID" ]] || { echo "FAIL: no warehouse id available for catalog deletion" >&2; exit 1; }
   echo "4. Dropping the environment catalog and API-managed governance objects..."
-  statement="DROP CATALOG IF EXISTS hls_${ENVIRONMENT} CASCADE"
+  statement="DROP CATALOG IF EXISTS ${CATALOG} CASCADE"
   databricks api post /api/2.0/sql/statements --json "$(jq -n \
     --arg s "$statement" --arg w "$WAREHOUSE_ID" \
     '{statement: $s, warehouse_id: $w, wait_timeout: "50s", on_wait_timeout: "CANCEL"}')" >/dev/null
-  for location in "hls_${ENVIRONMENT}_managed" "hls_${ENVIRONMENT}_fhir_export" "hls_${ENVIRONMENT}_dicom_output"; do
+  for location in "hls_${NAMESPACE}_managed" "hls_${NAMESPACE}_fhir_export" "hls_${NAMESPACE}_dicom_output"; do
     databricks external-locations delete "$location" --force 2>/dev/null || true
   done
-  databricks storage-credentials delete "hls_${ENVIRONMENT}_connector" --force 2>/dev/null || true
+  databricks storage-credentials delete "hls_${NAMESPACE}_connector" --force 2>/dev/null || true
 else
   echo "4. Catalog and Unity Catalog governance objects retained (DELETE_CATALOG=false)."
 fi

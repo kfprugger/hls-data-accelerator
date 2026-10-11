@@ -397,7 +397,8 @@ class AddonRunner:
             "TELEMETRY_HUB": "telemetry-stream", "CLAIMS_HUB": "claim-stream",
             "TELEMETRY_CONSUMER_GROUP": "hls-dbx-telemetry", "CLAIMS_CONSUMER_GROUP": "hls-dbx-claims",
             "DATABRICKS_LISTEN_POLICY": "hls-databricks-listen", "EVENTHUB_SECRET_SCOPE": "hls-eventhubs", "EVENTHUB_SECRET_KEY": "listen-key",
-            "ENVIRONMENT": cfg["databricks_environment"], "DATABRICKS_AUTH_TYPE": "azure-cli", "HLS_NONINTERACTIVE": "1",
+            "ENVIRONMENT": cfg["databricks_environment"], "DATABRICKS_NAMESPACE": storage.lower(),
+            "DATABRICKS_AUTH_TYPE": "azure-cli", "HLS_NONINTERACTIVE": "1",
             "FHIR_EXPORT_CONTAINER": "fhir-export-databricks", "FHIR_EXPORT_URL": f"abfss://fhir-export-databricks@{storage}.dfs.core.windows.net",
             "WORKLOAD_PRINCIPAL": account["user"]["name"], "ALERT_EMAIL": cfg.get("alert_email", "")}
         # Hosted jobs use the authenticated deployer, not an unrelated service principal.
@@ -428,7 +429,7 @@ class AddonRunner:
             await self.command(step, ["bash", scripts / step], root, env)
             if step == "04-unity-catalog-bootstrap.sh":
                 env["WAREHOUSE_ID"] = json.loads((root / f".state/warehouse-{variables['ENVIRONMENT']}.json").read_text())["warehouse_id"]
-        await self.command("07 Databricks deployment validation", [sys.executable, scripts / "07-validate-deployment.py", "--environment", variables["ENVIRONMENT"]], root, env)
+        await self.command("07 Databricks deployment validation", [sys.executable, scripts / "07-validate-deployment.py", "--environment", variables["ENVIRONMENT"], "--namespace", variables["DATABRICKS_NAMESPACE"]], root, env)
         return {"workspaceUrl": variables["DATABRICKS_HOST"], "fhirExportUrl": variables["FHIR_EXPORT_URL"]}
 
     async def databricks_alert_recipient(self, env, root, email):
@@ -483,11 +484,13 @@ class AddonRunner:
             candidates = data if isinstance(data, list) else data.get("metastores", [])
             metastore = require_one([m for m in candidates if m.get("region", "").replace(" ", "").lower() == self.config["location"].lower()], "regional Databricks metastore")
             metastore_id = metastore["metastore_id"]
-            dbx = self.resource("Microsoft.Databricks/workspaces") if any(r["type"].lower() == "microsoft.databricks/workspaces" for r in self.azure) else require_one(await asyncio.to_thread(az_json, self.config, "databricks", "workspace", "list", "-g", self.config["resource_group_name"]), "Databricks workspace")
+            dbx = self.resource("Microsoft.Databricks/workspaces") if any(r["type"].lower() == "microsoft.databricks/workspaces" for r in self.azure) else require_one(await asyncio.to_thread(
+                az_json, self.config, "resource", "list", "-g", self.config["resource_group_name"],
+                "--resource-type", "Microsoft.Databricks/workspaces"), "Databricks workspace")
             workspace_id = dbx.get("workspaceId") or dbx.get("properties", {}).get("workspaceId")
             if not workspace_id:
-                detail = await asyncio.to_thread(az_json, self.config, "databricks", "workspace", "show", "--ids", dbx["id"])
-                workspace_id = detail["workspaceId"]
+                detail = await asyncio.to_thread(az_json, self.config, "resource", "show", "--ids", dbx["id"])
+                workspace_id = detail["properties"]["workspaceId"]
             await self.command("Assign regional Unity Catalog metastore", ["databricks", "metastores", "assign", str(workspace_id), metastore_id, "hive_metastore", "-o", "json"], root, env)
             if await assigned():
                 return

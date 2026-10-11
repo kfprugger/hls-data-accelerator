@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -88,12 +89,16 @@ def resolve_warehouse(explicit: str | None) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", default=os.environ.get("ENVIRONMENT", "dev"))
+    parser.add_argument("--namespace", default=os.environ.get("DATABRICKS_NAMESPACE") or os.environ.get("STORAGE_ACCOUNT_NAME"))
     parser.add_argument("--warehouse-id", default=os.environ.get("WAREHOUSE_ID"))
     parser.add_argument("--max-stream-age-minutes", type=int, default=15)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    namespace = args.namespace or args.environment
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,120}", namespace):
+        parser.error("--namespace must be a lowercase SQL identifier")
 
-    catalog = f"hls_{args.environment}"
+    catalog = f"hls_{namespace}"
     checks: list[dict] = []
 
     def record(name: str, status: str, detail: str) -> None:
@@ -110,11 +115,11 @@ def main() -> int:
     try:
         rows = sql(
             "SELECT external_location_name, read_only FROM system.information_schema.external_locations "
-            f"WHERE external_location_name LIKE 'hls_{args.environment}_%'",
+            f"WHERE external_location_name LIKE 'hls_{namespace}_%'",
             warehouse_id,
         )
         readonly = {row[0]: row[1] for row in rows}
-        expected_readonly = [f"hls_{args.environment}_fhir_export", f"hls_{args.environment}_dicom_output"]
+        expected_readonly = [f"hls_{namespace}_fhir_export", f"hls_{namespace}_dicom_output"]
         bad = [n for n in expected_readonly if str(readonly.get(n, "")).lower() not in {"true", "yes"}]
         if bad:
             record("source_locations_read_only", "fail", f"writable source locations: {bad}")

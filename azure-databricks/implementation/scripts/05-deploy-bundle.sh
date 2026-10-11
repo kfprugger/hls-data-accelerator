@@ -10,6 +10,9 @@ BUNDLE_DIR="$(dirname "$SCRIPT_DIR")/bundle"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 : "${ENVIRONMENT:?}" "${EVENTHUB_NAMESPACE:?}"
+NAMESPACE="${DATABRICKS_NAMESPACE:-${STORAGE_ACCOUNT_NAME:-$ENVIRONMENT}}"
+[[ "$NAMESPACE" =~ ^[a-z][a-z0-9_]{0,120}$ ]] || { echo "FAIL: DATABRICKS_NAMESPACE must be a lowercase SQL identifier" >&2; exit 1; }
+CATALOG="hls_${NAMESPACE}"
 WORKLOAD_PRINCIPAL="${WORKLOAD_PRINCIPAL:-}"
 WAREHOUSE_ID="${WAREHOUSE_ID:-}"
 if [[ -z "$WAREHOUSE_ID" && -f "$ROOT_DIR/.state/warehouse-${ENVIRONMENT}.json" ]]; then
@@ -24,7 +27,7 @@ fi
 cd "$BUNDLE_DIR"
 
 common_vars=(
-  --var "catalog=hls_${ENVIRONMENT}"
+  --var "catalog=${CATALOG}"
   --var "eventhub_namespace=${EVENTHUB_NAMESPACE}"
   --var "telemetry_hub=${TELEMETRY_HUB:-telemetry-stream}"
   --var "claims_hub=${CLAIMS_HUB:-claim-stream}"
@@ -32,8 +35,8 @@ common_vars=(
   --var "claims_consumer_group=${CLAIMS_CONSUMER_GROUP:-hls-dbx-claims}"
   --var "eventhub_secret_scope=${EVENTHUB_SECRET_SCOPE:-hls-eventhubs}"
   --var "eventhub_secret_key=${EVENTHUB_SECRET_KEY:-listen-key}"
-  --var "fhir_export_volume=/Volumes/hls_${ENVIRONMENT}/bronze/fhir_export"
-  --var "dicom_volume=/Volumes/hls_${ENVIRONMENT}/bronze/dicom_source"
+  --var "fhir_export_volume=/Volumes/${CATALOG}/bronze/fhir_export"
+  --var "dicom_volume=/Volumes/${CATALOG}/bronze/dicom_source"
   --var "workload_principal=${WORKLOAD_PRINCIPAL}"
   --var "alert_email=${ALERT_EMAIL:-}"
   --var "warehouse_id=${WAREHOUSE_ID}"

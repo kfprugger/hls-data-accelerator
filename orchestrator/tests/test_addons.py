@@ -164,6 +164,30 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await runner.databricks_alert_recipient({}, Path("unused"), ""), "")
         runner.command.assert_not_awaited()
 
+    async def test_new_databricks_workspace_is_assigned_without_the_optional_azure_cli_extension(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.config = {"resource_group_name": "rg", "expected_subscription_id": "subscription", "location": "westus2"}
+        runner.azure = []
+        runner.command = AsyncMock(side_effect=[
+            RuntimeError("No metastore assigned"),
+            '[{"metastore_id":"metastore","region":"westus2"}]',
+            "",
+            '{"metastore_id":"metastore"}',
+        ])
+
+        def az(_config, *args):
+            if args[:2] == ("resource", "list"):
+                return [{"id": "/subscriptions/subscription/resourceGroups/rg/providers/Microsoft.Databricks/workspaces/new"}]
+            if args[:2] == ("resource", "show"):
+                return {"properties": {"workspaceId": "7405609633265528"}}
+            raise AssertionError(args)
+
+        with patch.object(addons, "az_json", side_effect=az):
+            await runner.ensure_metastore({}, Path("unused"))
+
+        assignment = runner.command.await_args_list[2].args[1]
+        self.assertEqual(assignment[:5], ["databricks", "metastores", "assign", "7405609633265528", "metastore"])
+
     async def test_a_failing_addon_does_not_prevent_the_others_from_running(self):
         runner = object.__new__(addons.AddonRunner)
         runner.deployment = {"customStatus": {}, "output": {"phases": [], "resources": {}}}

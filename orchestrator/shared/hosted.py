@@ -177,7 +177,11 @@ def install_hosted_routes(app, active_runs, invalidate):
 
     @app.put("/api/auth/target")
     async def save_target(target: DeploymentTarget):
+        value = target.model_dump(mode="json")
+        saved = _saved_target()
         if active_runs() or any(s["status"] == "pending" for s in _sessions.values()):
+            if saved == value:
+                return saved
             raise HTTPException(409, "Deployment target cannot change during an active run or sign-in")
         return _save_target(target)
 

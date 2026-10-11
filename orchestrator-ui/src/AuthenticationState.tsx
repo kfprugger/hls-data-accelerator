@@ -11,6 +11,7 @@ interface Target { tenant_id: string; subscription_id: string }
 interface Pending extends Target { session_id: string; tool: Tool; user_code: string | null; verification_uri: string | null; expires_in: number }
 interface SavedState { target: Target | null; pending: Pending | null }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function targetKey(value: Target) { return `${value.tenant_id.trim().toLowerCase()}:${value.subscription_id.trim().toLowerCase()}`; }
 function draftKey(identity: Identity) { return `hls-auth-target:${identity.tid}:${identity.oid}`; }
 function readDraft(identity: Identity): Target | null {
     try {
@@ -41,6 +42,7 @@ export function AuthenticationProvider({ children }: {
     const [tenant, setTenantValue] = useState('');
     const [subscription, setSubscriptionValue] = useState('');
     const target = useRef<Target>({ tenant_id: '', subscription_id: '' });
+    const persistedTarget = useRef('');
     const [code, setCode] = useState<Code | null>(null);
     const [tool, setTool] = useState<Tool | null>(null);
     const [busy, setBusy] = useState(true);
@@ -67,8 +69,12 @@ export function AuthenticationProvider({ children }: {
         const restore = async (owner: Identity) => {
             const state = await requestJson<SavedState>('/api/auth/state', { signal: controller.signal });
             if (controller.signal.aborted) return;
+            const serverTarget = state.pending || state.target;
             const saved = state.pending || readDraft(owner) || state.target;
-            if (saved) applyTarget(saved);
+            if (saved) {
+                applyTarget(saved);
+                if (serverTarget && targetKey(saved) === targetKey(serverTarget)) persistedTarget.current = targetKey(serverTarget);
+            }
             if (state.pending) {
                 reservation.current = true;
                 setBusy(true); setTool(state.pending.tool);
@@ -104,12 +110,15 @@ export function AuthenticationProvider({ children }: {
     }, [authContext]);
     useEffect(() => {
         if (!identity?.hosted || busy || !uuid.test(tenant.trim()) || !uuid.test(subscription.trim())) return;
+        const pair = { tenant_id: tenant.trim(), subscription_id: subscription.trim() };
+        const key = targetKey(pair);
+        if (key === persistedTarget.current) return;
         const controller = new AbortController();
         const timer = setTimeout(() => {
             void requestJson('/api/auth/target', { method: 'PUT', signal: controller.signal,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tenant_id: tenant.trim(), subscription_id: subscription.trim() }),
-            }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Unable to remember deployment target'); });
+                headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pair),
+            }).then(() => { persistedTarget.current = key; setError(''); })
+                .catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Unable to remember deployment target'); });
         }, 250);
         return () => { controller.abort(); clearTimeout(timer); };
     }, [identity?.hosted, busy, tenant, subscription]);
@@ -171,8 +180,10 @@ export function AuthenticationProvider({ children }: {
                 finally { setBusy(false); reservation.current = false; }
                 return;
             }
+            const pair = { tenant_id: tenant.trim(), subscription_id: subscription.trim() };
             const next = await requestJson<Code>('/api/auth/device-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, timeoutMs: 60000,
-                body: JSON.stringify({ tenant_id: tenant.trim(), subscription_id: subscription.trim(), tool: selected }) });
+                body: JSON.stringify({ ...pair, tool: selected }) });
+            persistedTarget.current = targetKey(pair);
             setRemaining(next.expires_in);
             setCode(next);
         }

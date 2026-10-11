@@ -161,6 +161,18 @@ class AuthenticationRefreshTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(state["pending"])
         self.assertEqual(hosted._sessions["flow"]["status"], "failed")
         self.assertEqual(await self.endpoint("/api/auth/target")(hosted.DeploymentTarget(**self.target)), self.target)
+
+    async def test_active_run_accepts_the_saved_target_but_rejects_a_change(self):
+        endpoint = self.endpoint("/api/auth/target")
+        target = hosted.DeploymentTarget(**self.target)
+        await endpoint(target)
+        self.active = 1
+        self.assertEqual(await endpoint(target), self.target)
+        changed = hosted.DeploymentTarget(**{**self.target, "subscription_id": "33333333-3333-3333-3333-333333333333"})
+        with self.assertRaises(HTTPException) as error:
+            await endpoint(changed)
+        self.assertEqual(error.exception.status_code, 409)
+
     async def test_cancel_stops_only_pending_task_without_touching_other_tool_cache(self):
         cache = self.directory / "other-tool-token-cache"
         cache.write_text("existing-authenticated-session")
