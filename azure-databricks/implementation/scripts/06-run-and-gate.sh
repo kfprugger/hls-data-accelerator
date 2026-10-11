@@ -11,6 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(dirname "$SCRIPT_DIR")/bundle"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 : "${ENVIRONMENT:?}" "${EVENTHUB_NAMESPACE:?}"
+NAMESPACE="${DATABRICKS_NAMESPACE:-${STORAGE_ACCOUNT_NAME:-$ENVIRONMENT}}"
+[[ "$NAMESPACE" =~ ^[a-z][a-z0-9_]{0,120}$ ]] || { echo "FAIL: DATABRICKS_NAMESPACE must be a lowercase SQL identifier" >&2; exit 1; }
+CATALOG="hls_${NAMESPACE}"
 WAREHOUSE_ID="${WAREHOUSE_ID:-}"
 if [[ -z "$WAREHOUSE_ID" && -f "$ROOT_DIR/.state/warehouse-${ENVIRONMENT}.json" ]]; then
   WAREHOUSE_ID="$(jq -r '.warehouse_id // empty' "$ROOT_DIR/.state/warehouse-${ENVIRONMENT}.json")"
@@ -18,7 +21,7 @@ fi
 [[ -n "$WAREHOUSE_ID" ]] || { echo "FAIL: no serverless warehouse id found" >&2; exit 1; }
 
 common_vars=(
-  --var "catalog=hls_${ENVIRONMENT}"
+  --var "catalog=${CATALOG}"
   --var "eventhub_namespace=${EVENTHUB_NAMESPACE}"
   --var "telemetry_hub=${TELEMETRY_HUB:-telemetry-stream}"
   --var "claims_hub=${CLAIMS_HUB:-claim-stream}"
@@ -26,9 +29,9 @@ common_vars=(
   --var "claims_consumer_group=${CLAIMS_CONSUMER_GROUP:-hls-dbx-claims}"
   --var "eventhub_secret_scope=${EVENTHUB_SECRET_SCOPE:-hls-eventhubs}"
   --var "eventhub_secret_key=${EVENTHUB_SECRET_KEY:-listen-key}"
-  --var "fhir_export_volume=/Volumes/hls_${ENVIRONMENT}/bronze/fhir_export"
-  --var "dicom_volume=/Volumes/hls_${ENVIRONMENT}/bronze/dicom_source"
-  --var "state_volume=/Volumes/hls_${ENVIRONMENT}/meta/ingestion_state"
+  --var "fhir_export_volume=/Volumes/${CATALOG}/bronze/fhir_export"
+  --var "dicom_volume=/Volumes/${CATALOG}/bronze/dicom_source"
+  --var "state_volume=/Volumes/${CATALOG}/meta/ingestion_state"
   --var "workload_principal=${WORKLOAD_PRINCIPAL:-}"
   --var "alert_email=${ALERT_EMAIL:-}"
   --var "warehouse_id=${WAREHOUSE_ID}"
@@ -41,15 +44,28 @@ databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_batch_medallion
 
 echo
 echo "== Scheduled stream-to-Gold workflow =="
-databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_stream_freshness_gate
-
+stream_log="$(mktemp)"
+trap 'rm -f "$stream_log"' EXIT
+if ! databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_stream_freshness_gate 2>&1 | tee "$stream_log"; then
+  if grep -q 'no Bronze events ingested' "$stream_log" &&
+     ! grep -Eq 'newest Bronze event|Bronze has rows but Silver is empty|deduplication failed' "$stream_log"; then
+    echo "The first triggered run established latest-offset checkpoints before new events arrived."
+    echo "Waiting 30 seconds for the dedicated consumer groups, then retrying once..."
+    sleep 30
+    databricks bundle run -t "$ENVIRONMENT" "${common_vars[@]}" hls_stream_freshness_gate
+  else
+    exit 1
+  fi
+fi
 echo
-echo "== Genie spaces =="
-# They query the Gold and Silver tables the gates just verified, so a fresh workspace can
-# only create them now. Idempotent when they already exist.
+echo "== Genie spaces and stream schedule =="
+# Genie spaces query the Gold and Silver tables the gates just verified, so a fresh workspace can
+# only create them now. The 5-minute stream job schedule is also enabled only now: until the batch
+# medallion has run it fails on missing silver tables, burning serverless compute and blocking
+# deploys (--fail-on-active-runs). Idempotent when they already exist.
 deploy_flags=()
 [[ "${HLS_NONINTERACTIVE:-0}" != "1" ]] || deploy_flags+=(--auto-approve)
-databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" "${deploy_flags[@]}"
+databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" --var "stream_schedule_pause_status=UNPAUSED" "${deploy_flags[@]}"
 
 
 echo

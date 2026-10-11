@@ -13,6 +13,9 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 : "${ENVIRONMENT:?}" "${ACCESS_CONNECTOR_ID:?}" "${MANAGED_LOCATION_URL:?}" \
   "${FHIR_EXPORT_URL:?}" "${DICOM_OUTPUT_URL:?}" "${DATABRICKS_ADMIN_GROUP:?}" "${WORKLOAD_PRINCIPAL:?}"
+NAMESPACE="${DATABRICKS_NAMESPACE:-${STORAGE_ACCOUNT_NAME:-$ENVIRONMENT}}"
+[[ "$NAMESPACE" =~ ^[a-z][a-z0-9_]{0,120}$ ]] || { echo "FAIL: DATABRICKS_NAMESPACE must be a lowercase SQL identifier" >&2; exit 1; }
+CATALOG="hls_${NAMESPACE}"
 
 WAREHOUSE_NAME="hls-${ENVIRONMENT}-serving"
 WAREHOUSE_STATE="$ROOT_DIR/.state/warehouse-${ENVIRONMENT}.json"
@@ -40,13 +43,13 @@ jq -n --arg id "$WAREHOUSE_ID" --arg name "$WAREHOUSE_NAME" --argjson created "$
 export WAREHOUSE_ID
 echo "Using serverless SQL warehouse $WAREHOUSE_ID ($WAREHOUSE_NAME)"
 
-CREDENTIAL_NAME="hls_${ENVIRONMENT}_connector"
+CREDENTIAL_NAME="hls_${NAMESPACE}_connector"
 if ! databricks storage-credentials get "$CREDENTIAL_NAME" -o json >/dev/null 2>&1; then
   echo "Creating Unity Catalog storage credential $CREDENTIAL_NAME..."
   databricks storage-credentials create --json "$(jq -n \
     --arg name "$CREDENTIAL_NAME" \
     --arg id "$ACCESS_CONNECTOR_ID" \
-    --arg comment "HLS ${ENVIRONMENT} Unity Catalog identity for ADLS Gen2" \
+    --arg comment "HLS ${NAMESPACE} Unity Catalog identity for ADLS Gen2" \
     '{name: $name, azure_managed_identity: {access_connector_id: $id}, comment: $comment}')" \
     -o json >/dev/null
 fi
@@ -67,14 +70,14 @@ ensure_external_location() {
   fi
 }
 
-ensure_external_location "hls_${ENVIRONMENT}_fhir_export" "${FHIR_EXPORT_URL}/" \
+ensure_external_location "hls_${NAMESPACE}_fhir_export" "${FHIR_EXPORT_URL}/" \
   'FHIR export NDJSON source; read-only' read-only
-ensure_external_location "hls_${ENVIRONMENT}_dicom_output" "${DICOM_OUTPUT_URL}/" \
+ensure_external_location "hls_${NAMESPACE}_dicom_output" "${DICOM_OUTPUT_URL}/" \
   'Re-tagged DICOM source; read-only' read-only
-ensure_external_location "hls_${ENVIRONMENT}_managed" "${MANAGED_LOCATION_URL}/${ENVIRONMENT}/" \
-  "Managed Delta storage for HLS ${ENVIRONMENT}" writable
+ensure_external_location "hls_${NAMESPACE}_managed" "${MANAGED_LOCATION_URL}/${NAMESPACE}/" \
+  "Managed Delta storage for HLS ${NAMESPACE}" writable
 
-for source_location in "hls_${ENVIRONMENT}_fhir_export" "hls_${ENVIRONMENT}_dicom_output"; do
+for source_location in "hls_${NAMESPACE}_fhir_export" "hls_${NAMESPACE}_dicom_output"; do
   databricks external-locations get "$source_location" -o json | jq -e '.read_only == true' >/dev/null \
     || { echo "FAIL: $source_location is not read-only" >&2; exit 1; }
 done
@@ -83,7 +86,8 @@ echo "Unity Catalog external locations are present; source locations are read-on
 rendered="$(mktemp)"
 trap 'rm -f "$rendered"' EXIT
 sed \
-  -e "s|\${ENVIRONMENT}|$ENVIRONMENT|g" \
+  -e "s|\${CATALOG}|$CATALOG|g" \
+  -e "s|\${NAMESPACE}|$NAMESPACE|g" \
   -e "s|\${ACCESS_CONNECTOR_ID}|$ACCESS_CONNECTOR_ID|g" \
   -e "s|\${MANAGED_LOCATION_URL}|$MANAGED_LOCATION_URL|g" \
   -e "s|\${FHIR_EXPORT_URL}|$FHIR_EXPORT_URL|g" \
@@ -118,10 +122,10 @@ verify() {
   [[ "$result" == "SUCCEEDED" ]]
 }
 
-verify "catalog schemas present" "SHOW SCHEMAS IN hls_${ENVIRONMENT}"
+verify "catalog schemas present" "SHOW SCHEMAS IN ${CATALOG}"
 verify "FHIR source readable" "LIST '${FHIR_EXPORT_URL}/'"
 verify "DICOM source readable" "LIST '${DICOM_OUTPUT_URL}/'"
-verify "managed write works" "CREATE TABLE IF NOT EXISTS hls_${ENVIRONMENT}.meta._bootstrap_probe (checked_at TIMESTAMP)"
-verify "managed cleanup works" "DROP TABLE IF EXISTS hls_${ENVIRONMENT}.meta._bootstrap_probe"
+verify "managed write works" "CREATE TABLE IF NOT EXISTS ${CATALOG}.meta._bootstrap_probe (checked_at TIMESTAMP)"
+verify "managed cleanup works" "DROP TABLE IF EXISTS ${CATALOG}.meta._bootstrap_probe"
 
-echo "Unity Catalog bootstrap complete for hls_${ENVIRONMENT}."
+echo "Unity Catalog bootstrap complete for ${CATALOG}."

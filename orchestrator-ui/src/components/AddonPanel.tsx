@@ -13,9 +13,9 @@ import {
 import { AddonFields, getAddonOptions } from "./AddonFields";
 
 const ADDONS: Array<{ name: AddonName; label: string; field: "deploy_databricks" | "deploy_rayfin_apps" | "deploy_cardiology" }> = [
-  { name: "databricks", label: "Azure Databricks", field: "deploy_databricks" },
-  { name: "rayfin", label: "Rayfin apps", field: "deploy_rayfin_apps" },
   { name: "cardiology", label: "Cardiology app", field: "deploy_cardiology" },
+  { name: "rayfin", label: "Rayfin apps", field: "deploy_rayfin_apps" },
+  { name: "databricks", label: "Azure Databricks", field: "deploy_databricks" },
 ];
 
 const STATUS_COLORS = {

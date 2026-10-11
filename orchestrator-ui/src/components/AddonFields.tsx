@@ -96,8 +96,8 @@ export function AddonFields({ value, onChange, disabled = false, unavailable = [
                 return onChange({ deploy_cardiology: !!data.checked });
             }} disabled={cardiologyDisabled}/>} disabled={cardiologyDisabled}/>
         <Typography className={styles.help} component="span" variant="caption">
-          Deploys the cardiology application against this deployment's healthcare data. Model preflight requires
-          DataZoneStandard availability and at least 50K TPM of free quota in the selected cardiology region.
+          Requires only a completed phases 1–7 Fabric deployment; Rayfin and Databricks are independent. Model preflight
+          requires DataZoneStandard availability and at least 50K TPM of free quota in the selected cardiology region.
         </Typography>
         {value.deploy_cardiology && (<div className={styles.options}>
             <FormControl><FormLabel id="field-addonfields-3-label" htmlFor="field-addonfields-3">{"Cardiology Azure location"}</FormLabel>

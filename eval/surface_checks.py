@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -18,9 +19,13 @@ def orchestrator_checks(base_url, workspace, resource_group):
     results = []
 
     def request(path, body=None):
+        headers = {"Content-Type": "application/json"}
+        gateway_key = os.environ.get("HLS_GATEWAY_KEY", "")
+        if gateway_key:
+            headers["X-HLS-Gateway-Key"] = gateway_key
         req = urllib.request.Request(base_url.rstrip("/") + path,
                                      data=json.dumps(body).encode() if body is not None else None,
-                                     headers={"Content-Type": "application/json"})
+                                     headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=240) as response:
                 return json.load(response)
@@ -47,8 +52,11 @@ def orchestrator_checks(base_url, workspace, resource_group):
         completed = latest.get("runtimeStatus") == "Completed" and all(r.get("runtimeStatus") == "Completed" for r in evaluated_runs)
         results.append({"check": "Latest deployment or teardown", "status": "PASS" if completed and not errors else "FAIL",
                         "instanceId": latest["instanceId"], "runtimeStatus": latest.get("runtimeStatus"), "errorLogs": errors})
+        cli = auth.get("cli") or {}
         preflight = request("/api/deploy/preflight", {"fabric_workspace_name": workspace,
-                            "resource_group_name": resource_group, "location": "westus2"})
+                            "resource_group_name": resource_group, "location": "westus2",
+                            "expected_tenant_id": cli.get("tenantId", ""),
+                            "expected_subscription_id": cli.get("subscriptionId", "")})
         checks = preflight.get("checks") or []
         passed = preflight.get("passed") and checks and all(c.get("status") == "pass" for c in checks)
         passed = passed and not preflight.get("failures") and not preflight.get("warnings")
@@ -67,7 +75,10 @@ def report_layout_checks(az, workspace_id, items, http, fabric_api):
         try:
             token = az.token("https://api.fabric.microsoft.com")
             url = f"{fabric_api}/workspaces/{workspace_id}/reports/{item['id']}/getDefinition"
-            request = urllib.request.Request(url, data=b"", method="POST", headers={"Authorization": "Bearer " + token})
+            request = urllib.request.Request(url, data=b"", method="POST", headers={
+                "Authorization": "Bearer " + token,
+                "x-ms-fabric-skill": "powerbi-report-cli",
+            })
             with urllib.request.urlopen(request, timeout=90) as response:
                 raw = response.read()
                 payload = json.loads(raw) if raw else {}
@@ -77,11 +88,11 @@ def report_layout_checks(az, workspace_id, items, http, fabric_api):
                     raise RuntimeError("Definition response omitted operation Location")
                 deadline = time.monotonic() + 120
                 while time.monotonic() < deadline:
-                    code, operation = http("GET", location, token)
+                    code, operation = http("GET", location, token, skill="powerbi-report-cli")
                     if code != 200 or operation.get("status") in ("Failed", "Cancelled"):
                         raise RuntimeError(f"Definition operation failed: {operation}")
                     if operation.get("status") == "Succeeded":
-                        code, payload = http("GET", location + "/result", token)
+                        code, payload = http("GET", location + "/result", token, skill="powerbi-report-cli")
                         if code != 200:
                             raise RuntimeError(f"Definition result HTTP {code}")
                         break

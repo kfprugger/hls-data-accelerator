@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -143,12 +144,16 @@ def list_spaces() -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", default=os.environ.get("ENVIRONMENT", "dev"))
+    parser.add_argument("--namespace", default=os.environ.get("DATABRICKS_NAMESPACE") or os.environ.get("STORAGE_ACCOUNT_NAME"))
     parser.add_argument("--warehouse-id", default=os.environ.get("WAREHOUSE_ID", "65dfcdb514144f5d"))
-    parser.add_argument("--ask", action="store_true", help="Run one live question per Genie Agent")
+    parser.add_argument("--ask", action="store_true", help="Run one grounded acceptance question per Genie Agent")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    namespace = args.namespace or args.environment
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,120}", namespace):
+        parser.error("--namespace must be a lowercase SQL identifier")
 
-    catalog = f"hls_{args.environment}"
+    catalog = f"hls_{namespace}"
     spaces = list_spaces()
     checks: list[dict] = []
 
