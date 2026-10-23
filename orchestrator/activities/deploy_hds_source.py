@@ -1452,7 +1452,7 @@ def run(
     fabric: FabricClient | None = None,
     onelake: OneLakeClient | None = None,
 ) -> dict[str, Any]:
-    """Activity entry point used by local PowerShell and Durable Functions."""
+    """HDS source deployment entry point used by local and hosted PowerShell."""
     _reset_event_timings()
     _event("payload", "running", "Building and validating Microsoft HDS v1.4.0 payload")
     try:

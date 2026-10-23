@@ -130,6 +130,16 @@ configuration. Verify permissions and the published audit with
 app-identity, viewer, and observer tokens, an enrolled `SQL_PUBLISHER_EMAIL`, and
 an actual Gold snapshot.
 
+The hosted orchestrator's Rayfin add-on automates that setup in an isolated app
+copy. `scripts/configure-publication.mjs` uses the pinned Functions `tedious`
+dependency after `npm ci` in `rayfin/functions`; it applies the three shipped SQL
+files and enrolls the deploying app owner. It requires process-scoped
+`SQL_SERVER`, `SQL_DATABASE`, `SQL_ACCESS_TOKEN` (SQL audience), and
+`SQL_DEPLOYER_UPN`. These target the **app-owned SQL database**, not the Gold
+lakehouse. The add-on separately rewrites `fabric.yaml` to the new Gold models,
+sets the two function secrets through stdin, and registers the new hosting origin.
+Tokens are never written to app configuration or deployment files.
+
 Both the app database and the semantic models require a Fabric session, so a
 standalone browser sees an empty dashboard and a banner that names the reason
 rather than zeroes that read like real business results.

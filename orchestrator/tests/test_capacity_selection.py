@@ -29,6 +29,8 @@ class DeployCapacitySelectionTests(unittest.TestCase):
 
     def base_deploy_config(self, **overrides: Any) -> dict[str, Any]:
         config: dict[str, Any] = {
+            "expected_tenant_id": "11111111-1111-1111-1111-111111111111",
+            "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
             "fabric_workspace_name": "clinical-fabric-ws",
             "resource_group_name": "rg-clinical-deploy",
             "location": "eastus",

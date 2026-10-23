@@ -177,69 +177,75 @@ def generate_claim(counter: int) -> dict:
 
 
 def run():
-    try:
-        if EventHubProducerClient is None or ManagedIdentityCredential is None or EventData is None:
-            raise RuntimeError("Azure SDK packages azure-eventhub and azure-identity are required when running the sender loop")
-        print("Connecting to Event Hub using Managed Identity...", flush=True)
-        credential = ManagedIdentityCredential()
+    if EventHubProducerClient is None or ManagedIdentityCredential is None or EventData is None:
+        raise RuntimeError("Azure SDK packages azure-eventhub and azure-identity are required when running the sender loop")
+    print("Connecting to Event Hub using Managed Identity...", flush=True)
+    credential = ManagedIdentityCredential()
+    fully_qualified_namespace = f"{EVENT_HUB_NAMESPACE}.servicebus.windows.net"
+    print(f"FQNS: {fully_qualified_namespace}", flush=True)
 
-        fully_qualified_namespace = f"{EVENT_HUB_NAMESPACE}.servicebus.windows.net"
-        print(f"FQNS: {fully_qualified_namespace}", flush=True)
+    events_per_second = CLAIM_EVENT_RATE_PER_MINUTE / 60.0
+    accumulator = 0.0
+    # Seed starting counter from current UTC epoch seconds so container restarts
+    # never re-emit duplicate event_id or claim_id keys from counter=1..N.
+    counter = int(os.getenv("CLAIM_START_COUNTER", str(int(time.time()))))
+    cycle = 0
+    attempt = 0
+    last_payload = None
 
-        print("Creating producer...", flush=True)
-        producer = EventHubProducerClient(
-            fully_qualified_namespace=fully_qualified_namespace,
-            eventhub_name=EVENT_HUB_NAME,
-            credential=credential,
-        )
+    while True:
+        try:
+            print("Creating producer...", flush=True)
+            producer = EventHubProducerClient(
+                fully_qualified_namespace=fully_qualified_namespace,
+                eventhub_name=EVENT_HUB_NAME,
+                credential=credential,
+            )
+            print("Entering producer context...", flush=True)
+            with producer:
+                attempt = 0
+                print(f"Starting claim event loop (starting counter={counter})...", flush=True)
+                while True:
+                    accumulator += events_per_second
+                    count = int(accumulator)
+                    if count <= 0:
+                        time.sleep(1)
+                        continue
+                    accumulator -= count
 
-        events_per_second = CLAIM_EVENT_RATE_PER_MINUTE / 60.0
-        accumulator = 0.0
-        counter = 0
-        cycle = 0
-        last_payload = None
+                    batch = producer.create_batch()
+                    sent = 0
+                    for _ in range(count):
+                        counter += 1
+                        payload = generate_claim(counter)
+                        last_payload = payload
+                        try:
+                            batch.add(EventData(json.dumps(payload)))
+                        except ValueError:
+                            producer.send_batch(batch)
+                            batch = producer.create_batch()
+                            batch.add(EventData(json.dumps(payload)))
+                        sent += 1
 
-        print("Entering producer context...", flush=True)
-        with producer:
-            print("Starting claim event loop...", flush=True)
-            while True:
-                accumulator += events_per_second
-                count = int(accumulator)
-                if count <= 0:
+                    producer.send_batch(batch)
+                    cycle += 1
+
+                    if cycle % 10 == 0 and last_payload is not None:
+                        print(
+                            f"Cycle {cycle}: sent {sent} claim events to {EVENT_HUB_NAMESPACE}/{EVENT_HUB_NAME}; "
+                            f"last_provider={last_payload['provider_id']}; last_flags={last_payload['injected_fraud_flags']}",
+                            flush=True,
+                        )
+
                     time.sleep(1)
-                    continue
-                accumulator -= count
-
-                batch = producer.create_batch()
-                sent = 0
-                for _ in range(count):
-                    counter += 1
-                    payload = generate_claim(counter)
-                    last_payload = payload
-                    try:
-                        batch.add(EventData(json.dumps(payload)))
-                    except ValueError:
-                        producer.send_batch(batch)
-                        batch = producer.create_batch()
-                        batch.add(EventData(json.dumps(payload)))
-                    sent += 1
-
-                producer.send_batch(batch)
-                cycle += 1
-
-                if cycle % 10 == 0 and last_payload is not None:
-                    print(
-                        f"Cycle {cycle}: sent {sent} claim events to {EVENT_HUB_NAMESPACE}/{EVENT_HUB_NAME}; "
-                        f"last_provider={last_payload['provider_id']}; last_flags={last_payload['injected_fraud_flags']}",
-                        flush=True,
-                    )
-
-                time.sleep(1)
-    except Exception as e:
-        print(f"!!! Fatal Error: {e}", flush=True)
-        traceback.print_exc()
-        time.sleep(60)
-        raise
+        except Exception as e:
+            attempt += 1
+            delay = min(30, 2 ** min(attempt, 5))
+            print(f"!!! Transient Claim Producer Error (attempt {attempt}, reconnecting in {delay}s): {e}", flush=True)
+            traceback.print_exc()
+            sys.stdout.flush()
+            sys.stderr.flush()
+            time.sleep(delay)
 
 
 if __name__ == "__main__":

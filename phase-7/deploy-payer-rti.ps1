@@ -14,8 +14,8 @@ param (
     [switch]$SkipPayerActivator,
     [switch]$SkipOpsAgent,
     [switch]$SkipGraphAgent,
-    [string]$ExpectedTenantId = "8d038e6a-9b7d-4cb8-bbcf-e84dff156478",
-    [string]$ExpectedSubscriptionId = "9bbee190-dc61-4c58-ab47-1275cb04018f"
+    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][guid]$ExpectedTenantId,
+    [Parameter(Mandatory)][ValidateNotNullOrEmpty()][guid]$ExpectedSubscriptionId
 )
 
 Set-StrictMode -Version Latest
@@ -1167,7 +1167,7 @@ ONTOLOGY-FIRST ROUTING — HIGHEST PRIORITY:
         '5. Confirm `DevicePayerOntology` is attached and the published agent exposes its MCP server.',
         '6. Validate with: `For patient <patient_id>, trace device, diagnoses, clinical alerts, claims, payer category, RAF risk, high-cost profile, and open care gaps.`'
     ) -join [Environment]::NewLine
-    $manualDirectory = Join-Path (Split-Path -Parent $ScriptRoot) "state-tracking"
+    $manualDirectory = if ($env:HLS_STATE_DIR) { $env:HLS_STATE_DIR } elseif ($env:HLS_DATA_DIR) { Join-Path $env:HLS_DATA_DIR "state-tracking" } else { Join-Path (Split-Path -Parent $ScriptRoot) "state-tracking" }
     New-Item -ItemType Directory -Path $manualDirectory -Force | Out-Null
     $manualPath = Join-Path $manualDirectory ".graph-agent-manual-steps-$FabricWorkspaceName.txt"
     Set-Content -Path $manualPath -Value $manualSteps -Encoding UTF8

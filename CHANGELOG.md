@@ -2,6 +2,25 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Material 3 frontend redesign (2026-10-09)
+
+- Replaced Fluent UI components and icons with current MUI components, a restrained Material 3 Expressive theme, and platform-neutral **HLS Data Accelerator** branding. The standalone Griffel styling engine remains for feature layouts; no Fluent component dependency remains.
+- Added an obvious **Sandbox & sign-in** flyout: right drawer on larger screens and full-screen sheet on phones. Authentication polling and device codes belong to a persistent provider, so hiding the flyout or changing routes does not cancel sign-in or issue duplicate login requests. Deployment tenant/subscription stays visible in the shell.
+- Added **Connect → Configure → Validate → Review → Deploy**, with actual prerequisite requests, in-memory configuration drafts across navigation, explicit target review, and mandatory revalidation after configuration or deployment-account changes. Transient device-status errors retain the original session and retry rather than permit overlapping sign-ins. Aggregate prerequisite failures remain visible even without individual check rows. Existing deployment APIs and payloads are retained.
+- Separated run **Progress**, **Resources**, and **Logs**; log-following is optional and scrolling up preserves manual inspection. Added responsive navigation, stacked phone configuration, desktop review panels, foldable viewport-segment styling, labelled form controls, dark/light modes and reduced-motion support.
+
+### Hosted deployer (2026-10-08)
+
+Users can now deploy the accelerator into their own tenant, subscription and Fabric capacity from a hosted portal instead of a local install. See `hosted/README.md`.
+
+- **Added** `hosted/`: a gateway (`hosted/gateway`, multi-tenant Entra sign-in, allowlist of tenant/email or tenant/object-ID pairs, per-user sandbox lifecycle, streaming reverse proxy, idle reaper), the sandbox image (`hosted/sandbox`, today's backend and UI with pinned Azure CLI, Az PowerShell, Bicep, AzCopy, Node and Databricks CLI), infrastructure (`hosted/infra/main.bicep`), `hosted/Deploy-HostedOrchestrator.ps1` and the `hosted-orchestrator` GitHub Actions release over OIDC. WardFlow cardiology source ships as a data-only `hls-wardflow-bundle:<commit>` image published from the operator's machine.
+- **Added** hosted mode to the backend (`HLS_HOSTED=1`): a gateway-key guard, `/api/hosted/activity` and `/api/hosted/whoami`, device-code sign-in to the user's tenant for Azure CLI and Azure PowerShell (`/api/auth/device-login`, Conditional Access blocks explained), and the built UI served from the backend. Credentials stay in the container; history, logs and state ledgers go to `HLS_DATA_DIR`, with SQLite kept on local disk and copied to the share.
+- **Added** Databricks, Rayfin and cardiology add-ons as deploy-form toggles that can also be added to a completed deployment. Databricks reads a manifest-checked copy of the FHIR export (`fhir-export-databricks`, taken before HDS ingestion moves files) and pauses with instructions when it can't assign the regional metastore. Rayfin runs from per-deployment copies with per-command token audiences. Cardiology runs the pinned WardFlow scripts in seed, aggregator, Gold, app order with a selectable chat model.
+- **Changed** deployments to require an explicit tenant and subscription; the BrakeKat defaults are gone from `DeployRequest`, `invoke_powershell.py` and `Deploy-All.ps1`. Linux PowerShell temp-path fixes in the phase scripts.
+- **Removed** the never-used Azure Functions host (`orchestrator/function_app.py`, `host.json`, `bicep/orchestrator-infra.bicep`, the Functions-only activity modules) and the `azure-functions` packages from `requirements.txt`/`requirements.lock`.
+- **Fixed** Databricks preflight rejecting a valid subscription because Azure CLI 2.91's `account list-locations` does not accept `--subscription`. Region availability now comes from the tenant-checked ARM endpoint for the deployment's explicit subscription; unsupported provider regions still fail preflight.
+- **Fixed** preflight validating an unrelated capacity rather than the user's selected capacity. It now validates the requested capacity name/resource group/subscription and requested deployment tenant/subscription. Hosted CLI profiles also enable noninteractive extension installation at startup.
+
 ### New-tenant deployment fixes (med-1006, 2026-10-07)
 
 A full deployment into a brand-new Fabric tenant (Caldova, `med-1006`) exposed defaults that the BrakeKat tenant had always supplied.

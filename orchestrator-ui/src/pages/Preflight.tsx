@@ -1,74 +1,58 @@
+import { Alert, Box, Button, Card, CardHeader, Chip, Typography } from "@mui/material";
+import { CancelOutlined, CheckCircleOutlined, ContentPaste, OpenInNew, Sync, WarningAmber } from "@mui/icons-material";
+import { makeStyles } from "@griffel/react";
 import { useMemo, useState } from "react";
-import {
-  Badge,
-  Button,
-  Card,
-  CardHeader,
-  MessageBar,
-  MessageBarBody,
-  Subtitle1,
-  Text,
-  Title2,
-  makeStyles,
-  tokens,
-} from "@fluentui/react-components";
-import {
-  ArrowSyncRegular,
-  CheckmarkCircleRegular,
-  ClipboardRegular,
-  DismissCircleRegular,
-  OpenRegular,
-  WarningRegular,
-} from "@fluentui/react-icons";
+
+
 import { useAppState } from "../AppState";
 
 const useStyles = makeStyles({
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: tokens.spacingHorizontalL,
-    marginBottom: tokens.spacingVerticalL,
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-    gap: tokens.spacingHorizontalL,
-  },
-  cardBody: {
-    padding: `0 ${tokens.spacingHorizontalL} ${tokens.spacingVerticalL}`,
-    display: "grid",
-    gap: tokens.spacingVerticalS,
-  },
-  kv: {
-    display: "grid",
-    gridTemplateColumns: "112px 1fr",
-    gap: tokens.spacingHorizontalS,
-    fontSize: tokens.fontSizeBase200,
-  },
-  label: {
-    color: tokens.colorNeutralForeground3,
-    fontWeight: tokens.fontWeightSemibold,
-  },
-  value: {
-    overflowWrap: "anywhere",
-    fontFamily: "'Cascadia Code', 'Consolas', monospace",
-  },
-  command: {
-    padding: tokens.spacingHorizontalM,
-    borderRadius: tokens.borderRadiusMedium,
-    backgroundColor: tokens.colorNeutralBackground3,
-    border: `1px solid ${tokens.colorNeutralStroke2}`,
-    fontFamily: "'Cascadia Code', 'Consolas', monospace",
-    fontSize: tokens.fontSizeBase200,
-    whiteSpace: "pre-wrap",
-  },
-  actionRow: {
-    display: "flex",
-    gap: tokens.spacingHorizontalS,
-    flexWrap: "wrap",
-    alignItems: "center",
-  },
+    header: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: "24px",
+        marginBottom: "24px",
+    },
+    grid: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+        gap: "24px",
+    },
+    cardBody: {
+        padding: `0 ${"24px"} ${"24px"}`,
+        display: "grid",
+        gap: "12px",
+    },
+    kv: {
+        display: "grid",
+        gridTemplateColumns: "112px 1fr",
+        gap: "12px",
+        fontSize: "12px",
+    },
+    label: {
+        color: "var(--m3-colorNeutralForeground3)",
+        fontWeight: 600,
+    },
+    value: {
+        overflowWrap: "anywhere",
+        fontFamily: "'Cascadia Code', 'Consolas', monospace",
+    },
+    command: {
+        padding: "16px",
+        borderRadius: "16px",
+        backgroundColor: "var(--m3-colorNeutralBackground3)",
+        border: `1px solid ${"var(--m3-colorNeutralStroke2)"}`,
+        fontFamily: "'Cascadia Code', 'Consolas', monospace",
+        fontSize: "12px",
+        whiteSpace: "pre-wrap",
+    },
+    actionRow: {
+        display: "flex",
+        gap: "12px",
+        flexWrap: "wrap",
+        alignItems: "center",
+    },
 });
 
 const PREFLIGHT_ANIMATION_CSS = `
@@ -90,39 +74,23 @@ const PREFLIGHT_ANIMATION_CSS = `
 `;
 
 function statusBadge(ok: boolean, pending = false) {
-  if (pending) {
-    return (
-      <Badge
-        color="informative"
-        icon={<ArrowSyncRegular className="preflight-loading-icon" />}
-        className="preflight-card-pulse"
-        size="large"
-        style={{ padding: "6px 12px", fontSize: tokens.fontSizeBase300 }}
-      >
+    if (pending) {
+        return (<Chip className="preflight-card-pulse" style={{ padding: "6px 12px", fontSize: "14px" }} component="span" size="small" variant="filled" color="default" icon={<Sync className="preflight-loading-icon"/>} label={<>
         Validating context...
-      </Badge>
-    );
-  }
-  return ok
-    ? <Badge color="success" icon={<CheckmarkCircleRegular />} size="large" style={{ padding: "6px 12px", fontSize: tokens.fontSizeBase300 }}>Ready for Deployment</Badge>
-    : <Badge color="danger" icon={<DismissCircleRegular />} size="large" style={{ padding: "6px 12px", fontSize: tokens.fontSizeBase300 }}>Needs attention</Badge>;
+      </>}/>);
+    }
+    return ok
+        ? <Chip style={{ padding: "6px 12px", fontSize: "14px" }} component="span" size="small" variant="filled" color="success" icon={<CheckCircleOutlined />} label={<>Ready for Deployment</>}/> : <Chip style={{ padding: "6px 12px", fontSize: "14px" }} component="span" size="small" variant="filled" color="error" icon={<CancelOutlined />} label={<>Needs attention</>}/>;
 }
 
 function checkBadge(ok: boolean, pending = false) {
-  if (pending) {
-    return (
-      <Badge
-        color="informative"
-        icon={<ArrowSyncRegular className="preflight-loading-icon" />}
-        className="preflight-card-pulse"
-      >
+    if (pending) {
+        return (<Chip className="preflight-card-pulse" component="span" size="small" variant="filled" color="default" icon={<Sync className="preflight-loading-icon"/>} label={<>
         Checking
-      </Badge>
-    );
-  }
-  return ok
-    ? <Badge color="success" icon={<CheckmarkCircleRegular />}>Pass</Badge>
-    : <Badge color="warning" icon={<WarningRegular />}>Fix</Badge>;
+      </>}/>);
+    }
+    return ok
+        ? <Chip component="span" size="small" variant="filled" color="success" icon={<CheckCircleOutlined />} label={<>Pass</>}/> : <Chip component="span" size="small" variant="filled" color="warning" icon={<WarningAmber />} label={<>Fix</>}/>;
 }
 
 function copy(text: string) {
@@ -130,73 +98,62 @@ function copy(text: string) {
 }
 
 export function Preflight() {
-  const styles = useStyles();
-  const {
-    authContext,
-    authContextLoading,
-    refreshAuthContext,
-    subscriptions,
-    capacities,
-    selectedSubscription,
-  } = useAppState();
-  const [refreshing, setRefreshing] = useState(false);
-
-  const cliOk = !!authContext?.cli.installed && !!authContext?.cli.loggedIn;
-  const pwshOk = !!authContext?.pwsh.installed && !!authContext?.pwsh.loggedIn;
-  const aligned = !!authContext?.aligned.subscription && !!authContext?.aligned.tenant;
-  const targetSubscriptionId = selectedSubscription || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || "<subscription-id>";
-  const targetTenantId = authContext?.cli.tenantId || authContext?.pwsh.tenantId || "<tenant-id>";
-  const targetContextReady = cliOk && pwshOk && aligned && !!selectedSubscription;
-  const allReady = !!authContext?.ready && aligned && !!selectedSubscription;
-
-  const selectedSubName = subscriptions.find((s) => s.id === selectedSubscription)?.name || authContext?.cli.subscriptionName || "Not selected";
-  const readinessChecks = useMemo(() => [
-    { label: "Azure CLI installed and logged in", ok: cliOk, detail: authContext?.cli.error || authContext?.cli.user || "" },
-    { label: "Az PowerShell installed and logged in", ok: pwshOk, detail: authContext?.pwsh.error || authContext?.pwsh.user || "" },
-    { label: "CLI and PowerShell tenant aligned", ok: aligned, detail: authContext?.cli.tenantId || authContext?.pwsh.tenantId || "" },
-    { label: "Target subscription selected", ok: !!selectedSubscription, detail: selectedSubName },
-    { label: "Selected context ready for deployment", ok: targetContextReady, detail: targetSubscriptionId },
-    { label: "Subscriptions loaded", ok: subscriptions.length > 0, detail: `${subscriptions.length} subscription(s)` },
-    { label: "Fabric capacities discoverable", ok: capacities.length > 0, detail: `${capacities.length} capacity candidate(s)` },
-  ], [aligned, authContext, capacities.length, cliOk, pwshOk, selectedSubName, selectedSubscription, subscriptions.length, targetContextReady, targetSubscriptionId]);
-
-  const isolationCommand = `# Run from the repository root. Optional: isolate Azure CLI state for this project.\ncd /path/to/hls-data-accelerator\nexport AZURE_CONFIG_DIR="$PWD/.pi-run/azure-profile"\nmkdir -p "$AZURE_CONFIG_DIR"\n\n# Sign in or reuse cached credentials for your tenant/subscription.\naz login --tenant ${targetTenantId}\naz account set --subscription ${targetSubscriptionId}\n\n# Align Az PowerShell to the same tenant/subscription used by Azure CLI.\npwsh -NoProfile -Command 'Connect-AzAccount -Tenant ${targetTenantId} -Subscription ${targetSubscriptionId}'`;
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    try { await refreshAuthContext(); }
-    finally { setRefreshing(false); }
-  };
-
-  return (
-    <div>
+    const styles = useStyles();
+    const { authContext, authContextLoading, refreshAuthContext, subscriptions, capacities, selectedSubscription, } = useAppState();
+    const [refreshing, setRefreshing] = useState(false);
+    const cliOk = !!authContext?.cli.installed && !!authContext?.cli.loggedIn;
+    const pwshOk = !!authContext?.pwsh.installed && !!authContext?.pwsh.loggedIn;
+    const aligned = !!authContext?.aligned.subscription && !!authContext?.aligned.tenant;
+    const targetSubscriptionId = selectedSubscription || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || "<subscription-id>";
+    const targetTenantId = authContext?.cli.tenantId || authContext?.pwsh.tenantId || "<tenant-id>";
+    const targetContextReady = cliOk && pwshOk && aligned && !!selectedSubscription;
+    const allReady = !!authContext?.ready && aligned && !!selectedSubscription;
+    const selectedSubName = subscriptions.find((s) => s.id === selectedSubscription)?.name || authContext?.cli.subscriptionName || "Not selected";
+    const readinessChecks = useMemo(() => [
+        { label: "Azure CLI installed and logged in", ok: cliOk, detail: authContext?.cli.error || authContext?.cli.user || "" },
+        { label: "Az PowerShell installed and logged in", ok: pwshOk, detail: authContext?.pwsh.error || authContext?.pwsh.user || "" },
+        { label: "CLI and PowerShell tenant aligned", ok: aligned, detail: authContext?.cli.tenantId || authContext?.pwsh.tenantId || "" },
+        { label: "Target subscription selected", ok: !!selectedSubscription, detail: selectedSubName },
+        { label: "Selected context ready for deployment", ok: targetContextReady, detail: targetSubscriptionId },
+        { label: "Subscriptions loaded", ok: subscriptions.length > 0, detail: `${subscriptions.length} subscription(s)` },
+        { label: "Fabric capacities discoverable", ok: capacities.length > 0, detail: `${capacities.length} capacity candidate(s)` },
+    ], [aligned, authContext, capacities.length, cliOk, pwshOk, selectedSubName, selectedSubscription, subscriptions.length, targetContextReady, targetSubscriptionId]);
+    const isolationCommand = `# Run from the repository root. Optional: isolate Azure CLI state for this project.\ncd /path/to/hls-data-accelerator\nexport AZURE_CONFIG_DIR="$PWD/.pi-run/azure-profile"\nmkdir -p "$AZURE_CONFIG_DIR"\n\n# Sign in or reuse cached credentials for your tenant/subscription.\naz login --tenant ${targetTenantId}\naz account set --subscription ${targetSubscriptionId}\n\n# Align Az PowerShell to the same tenant/subscription used by Azure CLI.\npwsh -NoProfile -Command 'Connect-AzAccount -Tenant ${targetTenantId} -Subscription ${targetSubscriptionId}'`;
+    const onRefresh = async () => {
+        setRefreshing(true);
+        try {
+            await refreshAuthContext();
+        }
+        finally {
+            setRefreshing(false);
+        }
+    };
+    return (<div>
       <style>{PREFLIGHT_ANIMATION_CSS}</style>
       <div className={styles.header}>
         <div>
-          <Title2>Deployment Preflight</Title2>
-          <Text block style={{ color: tokens.colorNeutralForeground2, marginTop: tokens.spacingVerticalXS }}>
+          <Typography component="div" variant="h5">Deployment Preflight</Typography>
+          <Typography style={{ color: "var(--m3-colorNeutralForeground2)", marginTop: "8px" }} component="div" variant="body2">
             Validate Azure CLI, Az PowerShell, tenant/subscription alignment, and Fabric discovery before starting a deployment.
-          </Text>
+          </Typography>
         </div>
         <div className={styles.actionRow}>
           {statusBadge(allReady, authContextLoading || refreshing)}
-          <Button icon={<ArrowSyncRegular />} onClick={onRefresh} disabled={authContextLoading || refreshing}>
+          <Button onClick={onRefresh} disabled={authContextLoading || refreshing} variant="text" startIcon={<Sync />}>
             Refresh context
           </Button>
         </div>
       </div>
 
-      {!allReady && (
-        <MessageBar intent="warning" style={{ marginBottom: tokens.spacingVerticalL }}>
-          <MessageBarBody>
+      {!allReady && (<Alert style={{ marginBottom: "24px" }} severity={"warning"}>
+          <Box>
             Preflight found items to fix before a real deployment. Use the remediation command below from an isolated terminal.
-          </MessageBarBody>
-        </MessageBar>
-      )}
+          </Box>
+        </Alert>)}
 
       <div className={styles.grid}>
         <Card>
-          <CardHeader header={<Subtitle1>Azure context</Subtitle1>} action={statusBadge(cliOk && pwshOk && aligned, authContextLoading || refreshing)} />
+          <CardHeader action={statusBadge(cliOk && pwshOk && aligned, authContextLoading || refreshing)} title={<Typography component="div" variant="subtitle1">Azure context</Typography>}/>
           <div className={styles.cardBody}>
             <div className={styles.kv}><span className={styles.label}>CLI user</span><span className={styles.value}>{authContext?.cli.user || "Not logged in"}</span></div>
             <div className={styles.kv}><span className={styles.label}>Pwsh user</span><span className={styles.value}>{authContext?.pwsh.user || "Not logged in"}</span></div>
@@ -206,42 +163,38 @@ export function Preflight() {
         </Card>
 
         <Card>
-          <CardHeader header={<Subtitle1>Readiness checklist</Subtitle1>} />
+          <CardHeader title={<Typography component="div" variant="subtitle1">Readiness checklist</Typography>}/>
           <div className={styles.cardBody}>
-            {readinessChecks.map((check) => (
-              <div key={check.label} className={styles.actionRow} style={{ justifyContent: "space-between" }}>
+            {readinessChecks.map((check) => (<div key={check.label} className={styles.actionRow} style={{ justifyContent: "space-between" }}>
                 <div>
-                  <Text weight="semibold" size={200} block>{check.label}</Text>
-                  <Text size={100} style={{ color: tokens.colorNeutralForeground3 }}>{check.detail || "—"}</Text>
+                  <Typography component="div" variant="caption" sx={{
+            fontWeight: 600
+        }}>{check.label}</Typography>
+                  <Typography style={{ color: "var(--m3-colorNeutralForeground3)" }} component="span" variant="caption">{check.detail || "—"}</Typography>
                 </div>
                 {checkBadge(check.ok, authContextLoading || refreshing)}
-              </div>
-            ))}
+              </div>))}
           </div>
         </Card>
 
         <Card>
-          <CardHeader header={<Subtitle1>Operator links</Subtitle1>} />
+          <CardHeader title={<Typography component="div" variant="subtitle1">Operator links</Typography>}/>
           <div className={styles.cardBody}>
-            <Button as="a" href="https://portal.azure.com/#view/Microsoft_Azure_Billing/SubscriptionsBlade" target="_blank" icon={<OpenRegular />}>Azure subscriptions</Button>
-            <Button as="a" href="https://app.fabric.microsoft.com/home?experience=fabric-developer" target="_blank" icon={<OpenRegular />}>Fabric portal</Button>
-            <Button as="a" href="https://learn.microsoft.com/en-us/powershell/azure/authenticate-azureps" target="_blank" icon={<OpenRegular />}>Az PowerShell auth docs</Button>
+            <Button component={"a"} href="https://portal.azure.com/#view/Microsoft_Azure_Billing/SubscriptionsBlade" target="_blank" variant="text" startIcon={<OpenInNew />}>Azure subscriptions</Button>
+            <Button component={"a"} href="https://app.fabric.microsoft.com/home?experience=fabric-developer" target="_blank" variant="text" startIcon={<OpenInNew />}>Fabric portal</Button>
+            <Button component={"a"} href="https://learn.microsoft.com/en-us/powershell/azure/authenticate-azureps" target="_blank" variant="text" startIcon={<OpenInNew />}>Az PowerShell auth docs</Button>
           </div>
         </Card>
       </div>
 
-      <Card style={{ marginTop: tokens.spacingVerticalL }}>
-        <CardHeader
-          header={<Subtitle1>Isolated Azure terminal command</Subtitle1>}
-          action={<Button icon={<ClipboardRegular />} onClick={() => copy(isolationCommand)}>Copy</Button>}
-        />
+      <Card style={{ marginTop: "24px" }}>
+        <CardHeader action={<Button onClick={() => copy(isolationCommand)} variant="text" startIcon={<ContentPaste />}>Copy</Button>} title={<Typography component="div" variant="subtitle1">Isolated Azure terminal command</Typography>}/>
         <div className={styles.cardBody}>
           <div className={styles.command}>{isolationCommand}</div>
-          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+          <Typography style={{ color: "var(--m3-colorNeutralForeground3)" }} component="span" variant="caption">
             This optional command uses a project-local Azure CLI profile under <code>.pi-run/azure-profile</code> and aligns Az PowerShell to the same tenant/subscription. Replace placeholders if the context above is not loaded yet.
-          </Text>
+          </Typography>
         </div>
       </Card>
-    </div>
-  );
+    </div>);
 }

@@ -48,14 +48,18 @@ databricks bundle plan -t "$ENVIRONMENT" "${common_vars[@]}" || \
   echo "  (bundle plan unavailable in this CLI version; proceeding to deploy review)"
 
 echo
-read -r -p "Deploy these resources to target '$ENVIRONMENT'? [y/N] " confirm
-[[ "$confirm" == "y" || "$confirm" == "Y" ]] || { echo "Aborted. Nothing deployed."; exit 1; }
+if [[ "${HLS_NONINTERACTIVE:-0}" != "1" ]]; then
+  read -r -p "Deploy these resources to target '$ENVIRONMENT'? [y/N] " confirm
+  [[ "$confirm" == "y" || "$confirm" == "Y" ]] || { echo "Aborted. Nothing deployed."; exit 1; }
+fi
 
 echo
 echo "Step 3 of 3: deploy."
 deploy_log="$(mktemp)"
 trap 'rm -f "$deploy_log"' EXIT
-if ! databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" --fail-on-active-runs 2>&1 | tee "$deploy_log"; then
+deploy_flags=(--fail-on-active-runs)
+[[ "${HLS_NONINTERACTIVE:-0}" != "1" ]] || deploy_flags+=(--auto-approve)
+if ! databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" "${deploy_flags[@]}" 2>&1 | tee "$deploy_log"; then
   # On a fresh workspace the Genie spaces cannot be created yet: the Gold and Silver tables
   # they query only exist after 06-run-and-gate.sh runs the pipelines. Accept exactly that
   # case: every error is a Genie space creation error and nothing else is left undeployed.

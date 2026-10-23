@@ -4,7 +4,7 @@
 .DESCRIPTION
     Always discovers and prints a read-only plan first. Deletion includes the Fabric workspace,
     Rayfin apps, deployment-bound connections and Unity Catalog objects, the main Azure resource
-    group, and owned cardiology, DICOM viewer and hosted orchestrator front ends. Shared or
+    group, and owned cardiology and DICOM viewer front ends. Shared or
     unrelated front ends are skipped with reasons. Azure deletion waits for completion.
     Tokens are pinned to the deployment subscription, never the Azure CLI default.
 .PARAMETER FabricWorkspaceName
@@ -54,7 +54,7 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 $ScriptDir = $PSScriptRoot
 $orchestratorDir = Join-Path $ScriptDir "orchestrator"
-$stateDir = Join-Path $ScriptDir "state-tracking"
+$stateDir = if ($env:HLS_STATE_DIR) { $env:HLS_STATE_DIR } elseif ($env:HLS_DATA_DIR) { Join-Path $env:HLS_DATA_DIR "state-tracking" } else { Join-Path $ScriptDir "state-tracking" }
 $stateFile = $null
 $stateCandidates = @()
 if ($FabricWorkspaceName) {

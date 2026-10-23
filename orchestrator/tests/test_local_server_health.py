@@ -258,31 +258,35 @@ class LocalServerHealthTests(unittest.TestCase):
         )
 
 
+    def test_deploy_request_requires_explicit_nonempty_azure_targets(self) -> None:
+        with self.assertRaises(ValueError):
+            self.local_server.DeployRequest(fabric_workspace_name="test")
+        for invalid in ("", "not-a-uuid", "00000000-0000-0000-0000-000000000000"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                self.local_server.DeployRequest(
+                    expected_tenant_id=invalid,
+                    expected_subscription_id="22222222-2222-2222-2222-222222222222",
+                )
+
     def test_local_deploy_request_defaults_reseed_off_and_rejects_reuse(self) -> None:
-        request = self.local_server.DeployRequest(fabric_workspace_name="med-test")
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test")
 
         self.assertFalse(request.reseed_data)
-        cached = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test", patient_count=250, use_cached_synthea=True
-        )
+        cached = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test", patient_count=250, use_cached_synthea=True)
         self.assertEqual(cached.patient_count, 100)
         with self.assertRaisesRegex(ValueError, "mutually exclusive"):
-            self.local_server.DeployRequest(
-                fabric_workspace_name="med-test",
-                reuse_patients=True,
-                reseed_data=True,
-            )
+            self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+            reuse_patients=True,
+            reseed_data=True,)
 
     def test_local_reseed_overrides_resume_and_skip_flags(self) -> None:
-        request = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test",
-            reseed_data=True,
-            skip_fhir=True,
-            skip_synthea=True,
-            skip_device_assoc=True,
-            skip_fhir_export=True,
-            skip_hds_pipelines=True,
-        )
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+        reseed_data=True,
+        skip_fhir=True,
+        skip_synthea=True,
+        skip_device_assoc=True,
+        skip_fhir_export=True,
+        skip_hds_pipelines=True,)
         request.reuse_patients = True  # Simulate a live auto-resume mutation.
 
         self.local_server._apply_reseed_data(request)
@@ -336,10 +340,8 @@ class LocalServerHealthTests(unittest.TestCase):
         )
 
     def test_continuation_reuses_rti_without_disabling_downstream_features(self) -> None:
-        request = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test",
-            resource_group_name="rg-med-test",
-        )
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+        resource_group_name="rg-med-test",)
         prior = {
             "instanceId": "prior-run",
             "output": {
@@ -367,7 +369,7 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertFalse(request.skip_graph_agent)
 
     def _live_continuation(self, cloud_state: dict, counts: dict):
-        request = self.local_server.DeployRequest(fabric_workspace_name="med-test", resource_group_name="rg-med-test")
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test", resource_group_name="rg-med-test")
         with (
             patch.object(self.local_server, "_cloud_state_sync", return_value=cloud_state),
             patch.object(self.local_server, "_live_resume_prerequisites", return_value={"fhirCounts": counts}),
@@ -399,10 +401,8 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertEqual(state["resourceGroup"]["status"], "unreachable")
 
     def _ontology_resume(self, phases: list[dict]):
-        request = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test",
-            resource_group_name="rg-med-test",
-        )
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+        resource_group_name="rg-med-test",)
         prior = {"instanceId": "prior-run", "output": {"phases": phases}}
         with (
             patch.object(self.local_server, "_cloud_state_sync", return_value={"workspace": {"exists": True}, "resourceGroup": {"exists": True}}),
@@ -434,7 +434,7 @@ class LocalServerHealthTests(unittest.TestCase):
             return {"instanceId": instance_id, "runtimeStatus": status, "createdTime": created,
                     "customStatus": {"workspaceName": "med-test", "resourceGroupName": "rg-med-test"}}
 
-        request = self.local_server.DeployRequest(fabric_workspace_name="med-test", resource_group_name="rg-med-test")
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test", resource_group_name="rg-med-test")
         self.local_server.deployments.clear()
         self.local_server.deployments["older-failed"] = record("older-failed", "Failed", "2026-10-05T13:42:27Z")
         self.local_server.deployments["newer-completed"] = record("newer-completed", "Completed", "2026-10-05T14:19:12Z")
@@ -448,11 +448,9 @@ class LocalServerHealthTests(unittest.TestCase):
         self.local_server.deployments.clear()
 
     def test_scaffolding_only_disables_all_data_producers(self) -> None:
-        request = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test",
-            resource_group_name="rg-med-test",
-            scaffolding_only=True,
-        )
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+        resource_group_name="rg-med-test",
+        scaffolding_only=True,)
 
         self.local_server._apply_scaffolding_only(request)
 

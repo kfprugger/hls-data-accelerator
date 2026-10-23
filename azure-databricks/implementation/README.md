@@ -108,12 +108,17 @@ Without a browser, `export DATABRICKS_AUTH_TYPE=azure-cli` instead of `auth logi
 uses tokens from the Azure CLI profile you deployed with (`az account show` must be the target
 subscription), and the workspace creator is already a workspace admin.
 
-### Step 2b — The one manual privileged action
+### Step 2b — Regional metastore assignment
 
-In the Databricks **account console**: Catalog → Metastores → assign the regional metastore
-to this workspace.
+The hosted orchestrator checks `databricks metastores current` after foundation
+deployment, discovers the account's regional metastore through the account API,
+and attempts assignment using the Azure CLI Databricks-audience token. If it
+cannot assign unambiguously or lacks account-admin permission, it pauses with
+account-console instructions and **Continue** (24-hour deadline). Continue always
+rechecks the workspace rather than trusting the button click.
 
-An account admin can do the same from the CLI, still deliberately and by hand:
+For manual runs, an account admin can assign in the **account console** under
+Catalog → Metastores, or use the CLI:
 
 ```bash
 databricks metastores list   # pick the metastore in the workspace's region
@@ -121,9 +126,10 @@ databricks metastores assign <workspace-id> <metastore-id> hive_metastore
 databricks metastores current   # confirm
 ```
 
-**Teaching note.** Metastore assignment is account-scoped, not workspace-scoped, and it is
-irreversible in practice for a shared metastore. No script in this package performs it,
-because a wrong assignment affects every other workspace on that metastore.
+**Teaching note.** Metastore assignment is account-scoped, not workspace-scoped.
+The orchestrator never chooses between multiple matching regional metastores and
+never creates or deletes a shared metastore. Provision the selected administrator
+group into the Databricks account before the Unity Catalog grants in step 4.
 
 ## Step 3 — Give Databricks read-only stream access
 
@@ -265,6 +271,25 @@ and connector by the exact resource IDs recorded at creation.
 with `created_by_bootstrap=true`. Deleting a shared metastore, credential, or storage account
 by name prefix is how a demo teardown takes out someone else's environment.
 
+## Hosted execution
+
+Select Databricks in the orchestrator's Add-ons form, or add it from a completed
+deployment. Full runs preserve `fhir-export` into `fhir-export-databricks` after the
+last export and before HDS moves the source files. Add-later runs invoke
+`phase-1/deploy-fhir.ps1 -ExportOnly -ExportContainerName fhir-export-databricks`.
+The snapshot is in the existing storage account; full RG teardown removes it.
+
+The orchestrator generates a private per-deployment `env.sh`, preserving
+`FHIR_EXPORT_URL=abfss://fhir-export-databricks@<account>.dfs.core.windows.net` even
+after reading foundation outputs. `FHIR_EXPORT_CONTAINER` controls preflight's
+container check (manual default: `fhir-export`). `HLS_NONINTERACTIVE=1` explicitly
+skips confirmation prompts in steps 02/05/06. Without that flag the manual review
+prompts remain. `DATABRICKS_AUTH_TYPE=azure-cli` uses the signed-in user's Azure
+profile; hosted bundle working copies run as that deployer, including test/prod,
+rather than requiring a separate service principal. Steps 01–06 and validation 07
+remain required and fail closed.
+
+
 ## What is still yours to decide
 
 | Decision | Why no artifact commits to it |
@@ -272,4 +297,3 @@ by name prefix is how a demo teardown takes out someone else's environment.
 | AI/BI dashboard layout | needs your reviewed visual and measure set |
 | Ontology semantics | there is no one-to-one Fabric IQ graph; encode it in comments, constraints, metric views |
 | Network isolation profile | VNet injection and private endpoints are a production profile, not a demo default |
-| Orchestrator integration | `Deploy-All.ps1` and the FastAPI activities still call Fabric; a destination adapter must migrate every caller |
