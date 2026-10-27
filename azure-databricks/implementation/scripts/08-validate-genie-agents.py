@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -113,14 +114,34 @@ def sql(statement: str, warehouse_id: str) -> list[list[str]]:
                 "statement": statement,
                 "warehouse_id": warehouse_id,
                 "wait_timeout": "50s",
-                "on_wait_timeout": "CANCEL",
+                "on_wait_timeout": "CONTINUE",
             }
         ),
     )
-    if body.get("status", {}).get("state") != "SUCCEEDED":
+    stmt_id = body.get("statement_id")
+    state = body.get("status", {}).get("state")
+    for _ in range(36):
+        if state not in ("PENDING", "RUNNING") or not stmt_id:
+            break
+        time.sleep(5)
+        body = cli("api", "get", f"/api/2.0/sql/statements/{stmt_id}")
+        state = body.get("status", {}).get("state")
+    if state != "SUCCEEDED":
         raise RuntimeError(f"statement did not succeed: {body.get('status')}")
     return body.get("result", {}).get("data_array") or []
 
+
+def resolve_warehouse(explicit: str | None) -> str:
+    if explicit:
+        return explicit
+    warehouses = cli("warehouses", "list")
+    if isinstance(warehouses, dict):
+        warehouses = warehouses.get("warehouses") or []
+    running = [w for w in (warehouses or []) if w.get("state") == "RUNNING"]
+    chosen = running or (warehouses or [])
+    if not chosen:
+        raise RuntimeError("no SQL warehouse available")
+    return chosen[0]["id"]
 
 def flatten_strings(value: Any) -> list[str]:
     if isinstance(value, str):
@@ -145,7 +166,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", default=os.environ.get("ENVIRONMENT", "dev"))
     parser.add_argument("--namespace", default=os.environ.get("DATABRICKS_NAMESPACE") or os.environ.get("STORAGE_ACCOUNT_NAME"))
-    parser.add_argument("--warehouse-id", default=os.environ.get("WAREHOUSE_ID", "65dfcdb514144f5d"))
+    parser.add_argument("--warehouse-id", default=os.environ.get("WAREHOUSE_ID"))
     parser.add_argument("--ask", action="store_true", help="Run one grounded acceptance question per Genie Agent")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -154,6 +175,7 @@ def main() -> int:
         parser.error("--namespace must be a lowercase SQL identifier")
 
     catalog = f"hls_{namespace}"
+    warehouse_id = resolve_warehouse(args.warehouse_id)
     spaces = list_spaces()
     checks: list[dict] = []
 
@@ -198,7 +220,7 @@ def main() -> int:
             continue
 
         try:
-            baseline = sql(contract["baseline"].format(catalog=catalog), args.warehouse_id)
+            baseline = sql(contract["baseline"].format(catalog=catalog), warehouse_id)
             if not baseline:
                 raise RuntimeError("baseline query returned no rows")
             record(f"agent.{title}.baseline", "pass", f"rows={len(baseline)}", baseline=baseline)
@@ -209,7 +231,7 @@ def main() -> int:
         quality_query = contract.get("quality")
         if quality_query:
             try:
-                invalid_rows = int(sql(quality_query.format(catalog=catalog), args.warehouse_id)[0][0])
+                invalid_rows = int(sql(quality_query.format(catalog=catalog), warehouse_id)[0][0])
                 if invalid_rows:
                     raise RuntimeError(f"{invalid_rows} rows violate the agent source contract")
                 record(f"agent.{title}.quality", "pass", "0 invalid source rows")

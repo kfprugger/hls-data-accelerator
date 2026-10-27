@@ -31,6 +31,8 @@ class AddonContractTests(unittest.TestCase):
     def test_explicit_model_requires_exact_version_and_fifty_free(self):
         config = self.config(deploy_cardiology=True, cardiology_chat_model="chosen", cardiology_chat_model_version="2026-07-09")
         def az(_config, *args):
+            if args[0] == "provider":
+                return {"registrationState": "Registered"}
             if args[1] == "model":
                 return [{"model": {"name": "chosen", "version": "2026-07-09", "skus": [{"name": "DataZoneStandard"}]}}]
             return [{"name": {"value": "OpenAI.DataZoneStandard.chosen"}, "limit": 100, "currentValue": 50}]
@@ -39,6 +41,50 @@ class AddonContractTests(unittest.TestCase):
             config["cardiology_chat_model_version"] = "wrong-version"
             checks = addons.preflight(config)
             self.assertEqual(next(c for c in checks if c["name"] == "Cardiology model quota")["status"], "fail")
+
+
+    def test_cardiology_quota_fallback_suggests_region_and_handles_registering_provider(self):
+        config = self.config(deploy_cardiology=True, cardiology_location="eastus2")
+        def az(_config, *args):
+            if args[0] == "provider":
+                return {"registrationState": "Registered"}
+            region = args[-1]
+            if args[1] == "model":
+                return [{"model": {"name": "gpt-5.6-luna", "version": "2026-07-09", "skus": [{"name": "DataZoneStandard"}]}}]
+            return [{"name": {"value": "OpenAI.DataZoneStandard.gpt-5.6-luna"}, "limit": 100 if region == "eastus" else 20, "currentValue": 0}]
+        with patch.object(addons, "az_json", side_effect=az), patch.object(addons.Cloud, "call", return_value={"defaultUserRolePermissions": {"allowedToCreateApps": True}}):
+            check = next(c for c in addons.preflight(config) if c["name"] == "Cardiology model quota")
+            self.assertEqual(check["status"], "fail")
+            self.assertEqual(check.get("suggestedRegion"), "eastus")
+            self.assertIn("(available in eastus)", check["message"])
+
+        with patch.object(addons, "ensure_providers_registered", return_value=[("Microsoft.CognitiveServices", "Registering")]), \
+             patch.object(addons, "_check_cardiology_region_quota", side_effect=RuntimeError("MissingSubscriptionRegistration")), \
+             patch.object(addons.Cloud, "call", return_value={"defaultUserRolePermissions": {"allowedToCreateApps": True}}):
+            check = next(c for c in addons.preflight(config) if c["name"] == "Cardiology model quota")
+            self.assertEqual(check["status"], "warn")
+            self.assertIn("Microsoft.CognitiveServices is registering", check["message"])
+
+    def test_ensure_providers_registered_raises_on_wait_timeout(self):
+        config = self.config()
+        with patch.object(addons, "az_json", return_value={"registrationState": "Registering"}), \
+             patch.object(addons.subprocess, "run"), \
+             patch.object(addons.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "Timed out waiting for Azure resource providers.*Microsoft.Databricks"):
+                addons.ensure_providers_registered(config, ["Microsoft.Databricks"], wait=True, timeout_sec=0)
+    def test_databricks_unregistered_provider_warns_and_auto_registers(self):
+        config = self.config(deploy_databricks=True)
+        provider = {"registrationState": "NotRegistered", "resourceTypes": [
+            {"resourceType": "workspaces", "locations": ["East US 2"]}]}
+        locations = {"value": [{"name": "eastus2", "displayName": "East US 2"}]}
+        with patch.object(addons, "az_json", return_value=provider), \
+             patch.object(addons, "ensure_providers_registered", return_value=[("Microsoft.Databricks", "Registering")]) as register_mock, \
+             patch.object(addons.Cloud, "call", return_value=locations), \
+             patch.object(addons.shutil, "which", return_value="/usr/bin/tool"):
+            result = addons.preflight(config)[0]
+            self.assertEqual(result["status"], "warn")
+            self.assertIn("auto-registration started", result["message"])
+            register_mock.assert_called_once_with(config, ["Microsoft.Databricks"], wait=False)
     def test_databricks_rejects_regions_not_offered_by_provider(self):
         config = self.config(deploy_databricks=True)
         provider = {"registrationState": "Registered", "resourceTypes": [
@@ -124,6 +170,7 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
             exported = True
         runner.ps = AsyncMock(side_effect=step)
         with patch.object(addons, "az_json", return_value={"properties": {"exportConfiguration": {"storageAccountName": "exports"}}}), \
+             patch.object(addons, "ensure_providers_registered", return_value=[]), \
              patch.dict(sys.modules, {"yaml": Mock()}):
             with self.assertRaisesRegex(RuntimeError, "Snapshot directory deletion denied"):
                 await runner.databricks(fresh_export=True)

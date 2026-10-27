@@ -105,7 +105,7 @@ if ! databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" "${deploy_fl
   errors="$(grep '^Error:' "$deploy_log" || true)"
   undeployed="$(databricks bundle summary -t "$ENVIRONMENT" "${common_vars[@]}" -o json |
     jq -r '.resources | to_entries[] | .key as $type | .value | to_entries[] | select(.value.id == null) | $type')"
-  if [[ -n "$errors" ]] && ! grep -qv '^Error: cannot create resources\.genie_spaces\.' <<<"$errors" &&
+  if [[ -n "$errors" ]] && grep -q '^Error: cannot create resources\.genie_spaces\.' <<<"$errors" &&
      [[ -n "$undeployed" ]] && ! grep -qv '^genie_spaces$' <<<"$undeployed"; then
     echo
     echo "Every resource except the Genie spaces is deployed. They need the Gold and Silver"

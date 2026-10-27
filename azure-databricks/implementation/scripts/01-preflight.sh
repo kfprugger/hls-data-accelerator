@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 01-preflight.sh — read-only readiness check. Mutates nothing.
+# 01-preflight.sh — readiness check and resource provider auto-registration.
 # Replaces the Fabric capacity/workspace portion of Preflight-Check.ps1.
 set -euo pipefail
 
@@ -33,10 +33,39 @@ if command -v az >/dev/null 2>&1; then
   fi
 
   echo "== Resource providers =="
+  pending_providers=()
   for provider in Microsoft.Databricks Microsoft.Storage Microsoft.EventHub Microsoft.KeyVault Microsoft.EventGrid; do
-    state="$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || echo missing)"
-    [[ "$state" == "Registered" ]] && note "ok" "$provider" || { note "FAIL" "$provider is $state"; fail=1; }
+    state="$(az provider show --namespace "$provider" --subscription "$AZ_SUBSCRIPTION_ID" --query registrationState -o tsv 2>/dev/null || echo missing)"
+    if [[ "$state" == "Registered" ]]; then
+      note "ok" "$provider"
+    elif [[ "$fail" -eq 0 ]]; then
+      note "WARN" "$provider is $state; auto-registering..."
+      az provider register --namespace "$provider" --subscription "$AZ_SUBSCRIPTION_ID" >/dev/null 2>&1 || true
+      pending_providers+=("$provider")
+    else
+      note "FAIL" "$provider is $state"; fail=1
+    fi
   done
+  if [[ "${#pending_providers[@]}" -gt 0 ]]; then
+    for _ in $(seq 1 36); do
+      still_pending=()
+      for provider in "${pending_providers[@]}"; do
+        state="$(az provider show --namespace "$provider" --subscription "$AZ_SUBSCRIPTION_ID" --query registrationState -o tsv 2>/dev/null || echo missing)"
+        if [[ "$state" == "Registered" ]]; then
+          note "ok" "$provider"
+        else
+          still_pending+=("$provider")
+        fi
+      done
+      pending_providers=("${still_pending[@]}")
+      [[ "${#pending_providers[@]}" -eq 0 ]] && break
+      sleep 5
+    done
+    for provider in "${pending_providers[@]}"; do
+      state="$(az provider show --namespace "$provider" --subscription "$AZ_SUBSCRIPTION_ID" --query registrationState -o tsv 2>/dev/null || echo missing)"
+      note "FAIL" "$provider is $state"; fail=1
+    done
+  fi
 
   echo "== Existing source estate =="
   hns="$(az storage account show -g "$AZ_RESOURCE_GROUP" -n "$STORAGE_ACCOUNT_NAME" --query isHnsEnabled -o tsv 2>/dev/null || echo missing)"
@@ -70,7 +99,7 @@ fi
 
 echo
 if [[ "$fail" -ne 0 ]]; then
-  echo "Preflight FAILED. Nothing was changed."
+  echo "Preflight FAILED."
   exit 1
 fi
-echo "Preflight passed. No cloud resource was modified."
+echo "Preflight passed."

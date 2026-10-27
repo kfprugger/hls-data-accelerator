@@ -1751,7 +1751,10 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
             req.skip_rti_phase2 = True
         elif "FABRIC RTI" in phase_name:
             req.reuse_fabric_rti = True
+        elif "HDS SOURCE DEPLOYMENT" in phase_name:
+            req.skip_hds_source = True
         elif "HDS PIPELINES" in phase_name:
+            req.skip_hds_source = True
             req.skip_hds_pipelines = True
             req.skip_dicom = True
         elif "DATA AGENTS" in phase_name:
@@ -2327,7 +2330,6 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
         deployment["customStatus"]["currentPhase"] = "Starting Deploy-All.ps1"
         deployment["customStatus"]["status"] = "running"
         save_state()
-
         logger.info("Starting Deploy-All.ps1 for workspace='%s', rg='%s'",
                      req.fabric_workspace_name, req.resource_group_name)
 
@@ -3182,7 +3184,7 @@ async def list_subscriptions(force: bool = False):
         subs = _list_subscriptions_sync(force=force)
         # Sort so default subscription comes first
         subs.sort(key=lambda s: not s.get("isDefault", False))
-        result = [{"id": s["id"], "name": s["name"]} for s in subs]
+        result = [{"id": s["id"], "name": s["name"], "tenantId": s.get("tenantId", "")} for s in subs]
         _set_timed_cached(cache_key, result)
         return result
     except Exception as e:
@@ -3196,7 +3198,7 @@ def _list_subscriptions_sync(force: bool = False) -> list[dict]:
         if cached is not None:
             return cached
     result = _az_run(
-        ["az", "account", "list", "--query", "[].{id:id, name:name, isDefault:isDefault}", "-o", "json"],
+        ["az", "account", "list", "--query", "[].{id:id, name:name, tenantId:tenantId, isDefault:isDefault}", "-o", "json"],
         check=True,
     )
     subs = json.loads(result.stdout)

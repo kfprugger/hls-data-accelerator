@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 REQUIRED_SILVER = [
@@ -57,7 +58,7 @@ def sql(statement: str, warehouse_id: str) -> list[list[str]]:
             "statement": statement,
             "warehouse_id": warehouse_id,
             "wait_timeout": "50s",
-            "on_wait_timeout": "CANCEL",
+            "on_wait_timeout": "CONTINUE",
         }
     )
     result = subprocess.run(
@@ -69,7 +70,14 @@ def sql(statement: str, warehouse_id: str) -> list[list[str]]:
     if result.returncode != 0:
         raise RuntimeError(f"statement failed: {result.stderr.strip()}")
     body = json.loads(result.stdout)
+    stmt_id = body.get("statement_id")
     state = body.get("status", {}).get("state")
+    for _ in range(36):
+        if state not in ("PENDING", "RUNNING") or not stmt_id:
+            break
+        time.sleep(5)
+        body = cli("api", "get", f"/api/2.0/sql/statements/{stmt_id}")
+        state = body.get("status", {}).get("state")
     if state != "SUCCEEDED":
         raise RuntimeError(f"statement state {state}: {body.get('status')}")
     return body.get("result", {}).get("data_array") or []

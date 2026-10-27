@@ -45,10 +45,18 @@ if ($ClearSnapshotOnly) {
     return
 }
 if ($ReuseSnapshot) {
-    $count = @(Get-BlobManifest 'fhir-export-databricks').Count
-    if ($count -lt 1) { throw 'No preserved Databricks export exists. Run a full export or add Databricks after deployment.' }
-    Write-Host "Reusing preserved Databricks export ($count blobs); HDS source may already have been consumed."
-    return
+    $count = 0
+    try { $count = @(Get-BlobManifest 'fhir-export-databricks').Count } catch { $count = 0 }
+    if ($count -ge 1) {
+        Write-Host "Reusing preserved Databricks export ($count blobs); HDS source may already have been consumed."
+        return
+    }
+    $sourceCount = 0
+    try { $sourceCount = @(Get-BlobManifest 'fhir-export').Count } catch { $sourceCount = 0 }
+    if ($sourceCount -lt 1) {
+        throw 'No preserved Databricks export exists. Run a full export or add Databricks after deployment.'
+    }
+    Write-Host "No preserved Databricks snapshot found, but fhir-export has $sourceCount blobs; creating snapshot now..."
 }
 [string[]]$source = @(Get-BlobManifest 'fhir-export')
 if ($source.Count -lt 1) { throw 'FHIR export is empty; refusing to start HDS ingestion without a Databricks snapshot.' }

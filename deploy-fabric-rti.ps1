@@ -101,17 +101,25 @@ function Get-AccessTokenForResource {
     $cached = $script:AccessTokenCache[$key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
 
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
-    $rawToken = $tokenObj.Token
-    if ($rawToken -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
-        try { $rawToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-    } elseif ($rawToken -isnot [string]) {
-        $rawToken = $rawToken | ConvertFrom-SecureString -AsPlainText
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        $rawToken = $tokenObj.Token
+        if ($rawToken -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
+            try { $rawToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        } elseif ($rawToken -isnot [string]) {
+            $rawToken = $rawToken | ConvertFrom-SecureString -AsPlainText
+        }
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = $tokenObj.ExpiresOn }
+        return $rawToken
+    } catch {
+        $cliJson = az account get-access-token --resource $ResourceUrl -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $rawToken = [string]$cliJson.accessToken
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $rawToken
     }
-    $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = $tokenObj.ExpiresOn }
-    return $rawToken
 }
 
 function Get-FabricAccessToken {

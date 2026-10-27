@@ -18,6 +18,7 @@ param (
     [switch]$Phase2,
     [switch]$Phase3,
     [switch]$Phase4,
+    [switch]$Phase5,
     [switch]$Phase7,
     [switch]$SkipImaging
 )
@@ -29,15 +30,24 @@ function Get-CachedAccessToken {
     $key = $ResourceUrl.ToLowerInvariant()
     $cached = $script:AccessTokenCache[$key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
-    $token = $tokenObj.Token
-    if ($token -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
-        try { $token = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        $token = $tokenObj.Token
+        if ($token -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+            try { $token = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        }
+        $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = $tokenObj.ExpiresOn }
+        return $token
+    } catch {
+        $subArgs = if ($ExpectedSubscriptionId) { @("--subscription", $ExpectedSubscriptionId) } else { @() }
+        $cliJson = az account get-access-token --resource $ResourceUrl @subArgs -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $token = $cliJson.accessToken
+        $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $token
     }
-    $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = $tokenObj.ExpiresOn }
-    return $token
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -185,7 +195,20 @@ try {
     Write-Host "  ✗ Bicep not installed" -ForegroundColor Red
 }
 
-# 5. Azure login
+# 5. Azure login (align context first when ExpectedSubscriptionId/ExpectedTenantId are supplied)
+if ($ExpectedSubscriptionId) {
+    $null = az account set --subscription $ExpectedSubscriptionId 2>$null
+    try {
+        $curCtx = Get-AzContext -ErrorAction SilentlyContinue
+        if (-not $curCtx -or -not $curCtx.Subscription -or $curCtx.Subscription.Id -ne $ExpectedSubscriptionId -or ($ExpectedTenantId -and $curCtx.Tenant.Id -ne $ExpectedTenantId)) {
+            if ($ExpectedTenantId) {
+                Set-AzContext -TenantId $ExpectedTenantId -SubscriptionId $ExpectedSubscriptionId -ErrorAction SilentlyContinue | Out-Null
+            } else {
+                Set-AzContext -SubscriptionId $ExpectedSubscriptionId -ErrorAction SilentlyContinue | Out-Null
+            }
+        }
+    } catch {}
+}
 try {
     $azCliAccount = az account show --output json 2>$null | ConvertFrom-Json
     if ($azCliAccount.id) {
@@ -225,12 +248,13 @@ if ($azCliAccount -and $azCliAccount.id -and $azPsContext -and $azPsContext.Subs
     $psSub = "$($azPsContext.Subscription.Id)".Trim().ToLower()
     $cliTenant = "$($azCliAccount.tenantId)".Trim().ToLower()
     $psTenant = "$($azPsContext.Tenant.Id)".Trim().ToLower()
-
-    if (($ExpectedTenantId -and $cliTenant -ne $ExpectedTenantId) -or
-        ($ExpectedSubscriptionId -and $cliSub -ne $ExpectedSubscriptionId)) {
+    $expectedTenantNorm = "$ExpectedTenantId".Trim().ToLower()
+    $expectedSubNorm = "$ExpectedSubscriptionId".Trim().ToLower()
+    if (($expectedTenantNorm -and ($cliTenant -ne $expectedTenantNorm -or $psTenant -ne $expectedTenantNorm)) -or
+        ($expectedSubNorm -and ($cliSub -ne $expectedSubNorm -or $psSub -ne $expectedSubNorm))) {
         $checks += @{ name = "Deployment Target"; status = "fail"; detail = "Current context differs from the requested tenant/subscription" }
         $failures += "Sign in to the requested deployment tenant '$ExpectedTenantId' and subscription '$ExpectedSubscriptionId'."
-    } elseif ($ExpectedTenantId -or $ExpectedSubscriptionId) {
+    } elseif ($expectedTenantNorm -or $expectedSubNorm) {
         $checks += @{ name = "Deployment Target"; status = "pass"; detail = "Requested tenant and subscription match the signed-in context" }
     }
     if ($cliSub -eq $psSub -and $cliTenant -eq $psTenant) {
@@ -251,8 +275,10 @@ if ($azCliAccount -and $azCliAccount.id -and $azPsContext -and $azPsContext.Subs
 
 # 8. Required Azure control-plane access
 if ($azCliAccount -and $azCliAccount.id) {
+    $targetSubId = if ($ExpectedSubscriptionId) { $ExpectedSubscriptionId } else { $azCliAccount.id }
+    $subArgs = if ($ExpectedSubscriptionId) { @("--subscription", $ExpectedSubscriptionId) } else { @() }
     try {
-        $subInfo = az rest --method get --url "https://management.azure.com/subscriptions/$($azCliAccount.id)?api-version=2022-12-01" -o json 2>$null | ConvertFrom-Json
+        $subInfo = az rest --method get --url "https://management.azure.com/subscriptions/${targetSubId}?api-version=2022-12-01" -o json 2>$null | ConvertFrom-Json
         if ($subInfo.subscriptionId) {
             $checks += @{ name = "ARM Access"; status = "pass"; detail = "Can read subscription metadata" }
             Write-Host "  ✓ ARM access: subscription metadata readable" -ForegroundColor Green
@@ -275,16 +301,20 @@ if ($azCliAccount -and $azCliAccount.id) {
             "Microsoft.EventHub",
             "Microsoft.ContainerInstance",
             "Microsoft.Storage",
-            "Microsoft.HealthcareApis"
+            "Microsoft.HealthcareApis",
+            "Microsoft.ManagedIdentity",
+            "Microsoft.EventGrid"
         )
 
         $notRegistered = @()
         foreach ($provider in $requiredProviders) {
-            $state = az provider show -n $provider --query registrationState -o tsv 2>$null
+            $state = az provider show -n $provider @subArgs --query registrationState -o tsv 2>$null
             if (-not $state) {
-                $notRegistered += "$provider (unknown)"
+                $null = az provider register --namespace $provider @subArgs 2>$null
+                $notRegistered += "$provider (auto-registering)"
             } elseif ($state -ne "Registered") {
-                $notRegistered += "$provider ($state)"
+                $null = az provider register --namespace $provider @subArgs 2>$null
+                $notRegistered += "$provider ($state -> auto-registering)"
             }
         }
 
@@ -293,7 +323,7 @@ if ($azCliAccount -and $azCliAccount.id) {
             Write-Host "  ✓ Required resource providers registered" -ForegroundColor Green
         } else {
             $checks += @{ name = "Resource Providers"; status = "warn"; detail = ($notRegistered -join ", ") }
-            $warnings += "Some required Azure resource providers are not fully registered: $($notRegistered -join ', '). Register with: az provider register --namespace <provider>."
+            $warnings += "Some required Azure resource providers are still registering: $($notRegistered -join ', '). Auto-registration has been triggered and will run in tandem with deployment."
             Write-Host "  ⚠ Resource provider registration incomplete" -ForegroundColor Yellow
             Write-Host "    $($notRegistered -join ', ')" -ForegroundColor DarkGray
         }
@@ -399,7 +429,7 @@ try {
         $candidateCaps = @($candidateCaps | Where-Object { $_.displayName -eq $CapacityName })
         if ($candidateCaps.Count -ne 1) { throw "Selected capacity '$CapacityName' is missing or ambiguous for the authenticated user." }
     }
-    $allPaidCaps = @($candidateCaps | Where-Object { $_.sku -like "F*" -and $_.sku -ne "FT1" -and $_.sku -ne "PP3" })
+    $allPaidCaps = @($candidateCaps | Where-Object { $_.sku -like "F*" -and $_.sku -notlike "FT*" -and $_.sku -ne "PP3" })
 
     if ($allPaidCaps.Count -gt 0) {
         $activePaidCaps = @($allPaidCaps | Where-Object { $_.state -eq "Active" })
@@ -414,7 +444,7 @@ try {
             Write-Host "  ✗ Fabric capacity: $($cap.displayName) ($($cap.sku)) — currently paused ($($cap.state))" -ForegroundColor Red
         }
     } else {
-        $activeTrialCaps = @($candidateCaps | Where-Object { $_.sku -eq "FT1" -and $_.state -eq "Active" })
+        $activeTrialCaps = @($candidateCaps | Where-Object { $_.sku -like "FT*" -and $_.state -eq "Active" })
         if ($activeTrialCaps.Count -gt 0) {
             $cap = $activeTrialCaps | Select-Object -First 1
             $checks += @{ name = "Fabric Capacity"; status = "fail"; detail = "$($cap.displayName) (SKU: $($cap.sku)) — trial not supported" }
@@ -433,7 +463,7 @@ try {
 }
 
 # 12. DICOM Cohorting Toolkit repo
-$requiresDicomToolkit = -not $SkipImaging -and ($Phase2 -or $Phase3 -or (-not $Phase4 -and -not $Phase7))
+$requiresDicomToolkit = -not $SkipImaging -and ($Phase2 -or $Phase3 -or (-not $Phase4 -and -not $Phase5 -and -not $Phase7))
 if ($requiresDicomToolkit) {
     $toolkit = Ensure-DicomToolkitRepo -Path $DicomToolkitPath
     if ($toolkit.Success) {

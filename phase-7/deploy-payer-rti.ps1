@@ -34,17 +34,26 @@ function Get-AccessTokenForResource {
     $cached = $script:AccessTokenCache[$key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
 
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
-    $rawToken = $tokenObj.Token
-    if ($rawToken -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
-        try { $rawToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-    } elseif ($rawToken -isnot [string]) {
-        $rawToken = $rawToken | ConvertFrom-SecureString -AsPlainText
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        $rawToken = $tokenObj.Token
+        if ($rawToken -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
+            try { $rawToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        } elseif ($rawToken -isnot [string]) {
+            $rawToken = $rawToken | ConvertFrom-SecureString -AsPlainText
+        }
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = $tokenObj.ExpiresOn }
+        return $rawToken
+    } catch {
+        $subArgs = if ($ExpectedSubscriptionId) { @("--subscription", $ExpectedSubscriptionId) } else { @() }
+        $cliJson = az account get-access-token --resource $ResourceUrl @subArgs -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $rawToken = [string]$cliJson.accessToken
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $rawToken
     }
-    $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = $tokenObj.ExpiresOn }
-    return $rawToken
 }
 
 function Get-FabricAccessToken { return Get-AccessTokenForResource -ResourceUrl "https://api.fabric.microsoft.com" }
@@ -509,6 +518,22 @@ function Update-EventstreamDefinition {
     $uri = "$FabricApiBase/workspaces/$WorkspaceId/eventstreams/$EventstreamId/updateDefinition?updateMetadata=True"
     try {
         $response = Invoke-WebRequest -Method POST -Uri $uri -Headers $headers -Body $updateBody -UseBasicParsing
+        if ($response.StatusCode -eq 202) {
+            $esLoc = [string]($response.Headers["Location"] | Select-Object -First 1)
+            $esOpId = [string]($response.Headers["x-ms-operation-id"] | Select-Object -First 1)
+            if ([string]::IsNullOrWhiteSpace($esLoc) -and -not [string]::IsNullOrWhiteSpace($esOpId)) {
+                $esLoc = "$FabricApiBase/operations/$esOpId"
+            }
+            if ($esLoc) {
+                for ($poll = 0; $poll -lt 30; $poll++) {
+                    Start-Sleep -Seconds 5
+                    $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
+                    $op = Invoke-RestMethod -Uri $esLoc -Headers $headers -ErrorAction Stop
+                    if ($op.status -eq "Succeeded") { break }
+                    if ($op.status -in @("Failed", "Cancelled")) { throw "Eventstream update LRO $($op.status): $($op | ConvertTo-Json -Compress)" }
+                }
+            }
+        }
         if ($response.StatusCode -eq 200 -or $response.StatusCode -eq 202) {
             Write-Host "  ✓ Eventstream definition updated: $EventstreamName" -ForegroundColor Green
             return $true
@@ -620,14 +645,55 @@ function Deploy-PayerReflex {
     $fullEntitiesJson = $entitiesJson.TrimEnd(']') + ',' + $ruleEntityJson + ']'
     if (-not $reflexId) {
         try {
-            $createBody = @{ displayName = $reflexName; description = "Payer operations alerting Reflex sourced from fn_PayerOpsWorklist(60) for fraud, high-cost, and care-gap routing."; type = "Reflex"; definition = @{ parts = @(@{path="ReflexEntities.json"; payload=(ConvertTo-Base64 $entitiesJson); payloadType="InlineBase64"}) } }
-            $created = Invoke-FabricApi -Method POST -Endpoint "/workspaces/$WorkspaceId/items" -Body $createBody
-            $reflexId = $created.id
+            $createBody = (@{ displayName = $reflexName; description = "Payer operations alerting Reflex sourced from fn_PayerOpsWorklist(60) for fraud, high-cost, and care-gap routing."; type = "Reflex"; definition = @{ parts = @(@{path="ReflexEntities.json"; payload=(ConvertTo-Base64 $entitiesJson); payloadType="InlineBase64"}) } } | ConvertTo-Json -Depth 15)
+            $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
+            $createResp = Invoke-WebRequest -Method POST -Uri "$FabricApiBase/workspaces/$WorkspaceId/items" -Headers $headers -Body $createBody -UseBasicParsing -ErrorAction Stop
+            if ($createResp.StatusCode -eq 202) {
+                $rLoc = [string]($createResp.Headers["Location"] | Select-Object -First 1)
+                $rOpId = [string]($createResp.Headers["x-ms-operation-id"] | Select-Object -First 1)
+                if ([string]::IsNullOrWhiteSpace($rLoc) -and -not [string]::IsNullOrWhiteSpace($rOpId)) { $rLoc = "$FabricApiBase/operations/$rOpId" }
+                if ($rLoc) {
+                    for ($poll = 0; $poll -lt 30; $poll++) {
+                        Start-Sleep -Seconds 5
+                        $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
+                        $op = Invoke-RestMethod -Uri $rLoc -Headers $headers -ErrorAction Stop
+                        if ($op.status -ne "Running") { break }
+                    }
+                }
+            }
+            if ($createResp.Content) {
+                try {
+                    $parsedCreate = $createResp.Content | ConvertFrom-Json
+                    if ($parsedCreate -and $parsedCreate.PSObject.Properties['id']) { $reflexId = $parsedCreate.id }
+                } catch {}
+            }
+            for ($attempt = 1; -not $reflexId -and $attempt -le 24; $attempt++) {
+                Start-Sleep -Seconds 5
+                $foundReflex = (Invoke-FabricApi -Endpoint "/workspaces/$WorkspaceId/items?type=Reflex").value | Where-Object { $_.displayName -eq $reflexName } | Select-Object -First 1
+                if ($foundReflex) { $reflexId = $foundReflex.id }
+            }
+            if (-not $reflexId) { throw "Reflex '$reflexName' was not created or discovered" }
             Write-Host "  ✓ Reflex created: $reflexName ($reflexId)" -ForegroundColor Green
         } catch { throw "Could not create Reflex: $(Get-ErrorMessage $_)" }
     }
     try {
-        $null = Invoke-FabricApi -Method POST -Endpoint "/workspaces/$WorkspaceId/items/$reflexId/updateDefinition" -Body @{ definition = @{ parts = @(@{path="ReflexEntities.json"; payload=(ConvertTo-Base64 $fullEntitiesJson); payloadType="InlineBase64"}) } }
+        $updateBody = (@{ definition = @{ parts = @(@{path="ReflexEntities.json"; payload=(ConvertTo-Base64 $fullEntitiesJson); payloadType="InlineBase64"}) } } | ConvertTo-Json -Depth 15)
+        $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
+        $updateResp = Invoke-WebRequest -Method POST -Uri "$FabricApiBase/workspaces/$WorkspaceId/items/$reflexId/updateDefinition" -Headers $headers -Body $updateBody -UseBasicParsing -ErrorAction Stop
+        if ($updateResp.StatusCode -eq 202) {
+            $uLoc = [string]($updateResp.Headers["Location"] | Select-Object -First 1)
+            $uOpId = [string]($updateResp.Headers["x-ms-operation-id"] | Select-Object -First 1)
+            if ([string]::IsNullOrWhiteSpace($uLoc) -and -not [string]::IsNullOrWhiteSpace($uOpId)) { $uLoc = "$FabricApiBase/operations/$uOpId" }
+            if ($uLoc) {
+                for ($poll = 0; $poll -lt 30; $poll++) {
+                    Start-Sleep -Seconds 5
+                    $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
+                    $op = Invoke-RestMethod -Uri $uLoc -Headers $headers -ErrorAction Stop
+                    if ($op.status -eq "Succeeded") { break }
+                    if ($op.status -in @("Failed", "Cancelled")) { throw "PayerOpsActivator update LRO $($op.status): $($op | ConvertTo-Json -Compress)" }
+                }
+            }
+        }
         Write-Host "  ✓ PayerOpsActivator rule applied" -ForegroundColor Green
     } catch { throw "Could not update PayerOpsActivator: $(Get-ErrorMessage $_)" }
 }
@@ -748,7 +814,7 @@ if (-not $SkipPayerRti) {
         $acrLoginServer = az acr show --name $acrName --query loginServer -o tsv
         $claimImageTag = "deploy-$(Get-Date -AsUTC -Format 'yyyyMMddHHmmss')"
         Write-Host "  Building claim-emulator:$claimImageTag in ACR $acrName..." -ForegroundColor White
-        $claimImageDigest = Invoke-AcrBuildWithTagVerification -Registry $acrName -Repository "claim-emulator" -Tag $claimImageTag -ContextPath "phase-7/claim-emulator"
+        $claimImageDigest = Invoke-AcrBuildWithTagVerification -Registry $acrName -Repository "claim-emulator" -Tag $claimImageTag -ContextPath (Join-Path $RepoRoot "phase-7/claim-emulator")
         # Transport object parameters as JSON on disk, not through Windows cmd quoting.
         $claimParamsObj = @{
             '$schema' = "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#"
@@ -766,7 +832,7 @@ if (-not $SkipPayerRti) {
         Write-Host "  Deploying claim-emulator-grp..." -ForegroundColor White
         try {
             [System.IO.File]::WriteAllText($claimParamsFile, ($claimParamsObj | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
-            az deployment group create --resource-group $ResourceGroupName --name claim-emulator --template-file "bicep/claim-emulator.bicep" --parameters "@$claimParamsFile" | Out-Null
+            az deployment group create --resource-group $ResourceGroupName --name claim-emulator --template-file (Join-Path $RepoRoot "bicep/claim-emulator.bicep") --parameters "@$claimParamsFile" | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "claim-emulator deployment failed" }
         } finally {
             Remove-Item -LiteralPath $claimParamsFile -Force -ErrorAction SilentlyContinue
@@ -882,19 +948,6 @@ if (-not $SkipPayerRti) {
 }
 '@
     if (-not (Invoke-KustoMgmt -Command $operationsFreshness -Label "fn_OperationsFreshness" @kqlParams)) { throw "fn_OperationsFreshness deployment failed" }
-    . (Join-Path $PSScriptRoot 'agent-grounding-backfills.ps1')
-    Invoke-AgentGroundingBackfills @kqlParams
-
-
-    if ($SkipSnapshotMaterialization) {
-        Write-Host "  Payer snapshot materialization omitted; schemas and functions remain deployed." -ForegroundColor DarkGray
-    } else {
-        Write-Host "  Materializing payer scoring snapshots..." -ForegroundColor White
-        if (-not (Invoke-KustoMgmt -Command ".set-or-append fraud_scores <| fn_FraudRisk(60) | project score_id, score_timestamp, claim_id, patient_id, provider_id, fraud_score, fraud_flags, risk_tier, latitude, longitude" -Label "fraud_scores snapshot" @kqlParams)) { throw "fraud_scores snapshot materialization failed" }
-        if (-not (Invoke-KustoMgmt -Command ".set-or-replace highcost_alerts <| fn_HighCostTrajectory(90) | project alert_id, alert_timestamp, patient_id, rolling_spend_30d, rolling_spend_90d, ed_visits_30d, readmission_flag, risk_tier, cost_trend, latitude, longitude" -Label "highcost_alerts snapshot" @kqlParams)) { throw "highcost_alerts snapshot materialization failed" }
-        if (-not (Invoke-KustoMgmt -Command ".set-or-replace care_gap_alerts <| fn_CareGapOnAlert(60) | project alert_id, alert_timestamp, patient_id, facility_id, measure_id, measure_name, gap_days_overdue, alert_priority, alert_text, latitude, longitude" -Label "care_gap_alerts snapshot" @kqlParams)) { throw "care_gap_alerts snapshot materialization failed" }
-    }
-
     Write-Host "  Configuring Eventstream topology..." -ForegroundColor White
     $ehLocalAuthDisabled = az eventhubs namespace show --resource-group $ResourceGroupName --name $EventHubNamespace --query disableLocalAuth -o tsv 2>$null
     if ($ehLocalAuthDisabled -eq "true") {
@@ -922,6 +975,18 @@ if (-not $SkipPayerRti) {
         throw "ClaimsRTIStream topology did not become active"
     }
     Write-Host "  ✓ ClaimsRTIStream configured: claim-stream → claims_events" -ForegroundColor Green
+
+    . (Join-Path $PSScriptRoot 'agent-grounding-backfills.ps1')
+    Invoke-AgentGroundingBackfills @kqlParams -SkipSnapshotMaterialization:$SkipSnapshotMaterialization
+
+    if ($SkipSnapshotMaterialization) {
+        Write-Host "  Payer snapshot materialization omitted; schemas and functions remain deployed." -ForegroundColor DarkGray
+    } else {
+        Write-Host "  Materializing payer scoring snapshots..." -ForegroundColor White
+        if (-not (Invoke-KustoMgmt -Command ".set-or-append fraud_scores <| fn_FraudRisk(60) | project score_id, score_timestamp, claim_id, patient_id, provider_id, fraud_score, fraud_flags, risk_tier, latitude, longitude" -Label "fraud_scores snapshot" @kqlParams)) { throw "fraud_scores snapshot materialization failed" }
+        if (-not (Invoke-KustoMgmt -Command ".set-or-replace highcost_alerts <| fn_HighCostTrajectory(90) | project alert_id, alert_timestamp, patient_id, rolling_spend_30d, rolling_spend_90d, ed_visits_30d, readmission_flag, risk_tier, cost_trend, latitude, longitude" -Label "highcost_alerts snapshot" @kqlParams)) { throw "highcost_alerts snapshot materialization failed" }
+        if (-not (Invoke-KustoMgmt -Command ".set-or-replace care_gap_alerts <| fn_CareGapOnAlert(60) | project alert_id, alert_timestamp, patient_id, facility_id, measure_id, measure_name, gap_days_overdue, alert_priority, alert_text, latitude, longitude" -Label "care_gap_alerts snapshot" @kqlParams)) { throw "care_gap_alerts snapshot materialization failed" }
+    }
 } else {
     Write-Host "Payer RTI skipped because -SkipPayerRti was supplied" -ForegroundColor Yellow
 }

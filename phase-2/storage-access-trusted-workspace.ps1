@@ -151,14 +151,23 @@ function Get-CachedTokenValue {
     )
     $cached = $script:AccessTokenCache[$Key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
-    if ($ResourceTypeName) {
-        $resp = Get-AzAccessToken -ResourceTypeName $ResourceTypeName -ErrorAction Stop
-    } else {
-        $resp = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+    try {
+        if ($ResourceTypeName) {
+            $resp = Get-AzAccessToken -ResourceTypeName $ResourceTypeName -ErrorAction Stop
+        } else {
+            $resp = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        }
+        $token = Resolve-TokenValue -TokenResponse $resp
+        $script:AccessTokenCache[$Key] = @{ Token = $token; ExpiresOn = $resp.ExpiresOn }
+        return $token
+    } catch {
+        $cliResource = if ($ResourceUrl) { $ResourceUrl } elseif ($ResourceTypeName -eq 'Storage') { 'https://storage.azure.com' } else { $ResourceTypeName }
+        $cliJson = az account get-access-token --resource $cliResource -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $token = [string]$cliJson.accessToken
+        $script:AccessTokenCache[$Key] = @{ Token = $token; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $token
     }
-    $token = Resolve-TokenValue -TokenResponse $resp
-    $script:AccessTokenCache[$Key] = @{ Token = $token; ExpiresOn = $resp.ExpiresOn }
-    return $token
 }
 
 function Get-OneLakeAccessToken {

@@ -58,17 +58,31 @@ $ErrorActionPreference = "Stop"
 # AUTH HELPERS (same pattern as deploy-fabric-rti.ps1)
 # ============================================================================
 
+$script:AccessTokenCache = @{}
 function Get-AccessTokenForResource {
     param ([string]$ResourceUrl)
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl
-    $rawToken = $tokenObj.Token
-    if ($rawToken -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
-        try { return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    $key = $ResourceUrl.ToLowerInvariant()
+    $cached = $script:AccessTokenCache[$key]
+    if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        $rawToken = $tokenObj.Token
+        if ($rawToken -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
+            try { $rawToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        } elseif ($rawToken -isnot [string]) {
+            $rawToken = $rawToken | ConvertFrom-SecureString -AsPlainText
+        }
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = $tokenObj.ExpiresOn }
+        return $rawToken
+    } catch {
+        $cliJson = az account get-access-token --resource $ResourceUrl -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $rawToken = [string]$cliJson.accessToken
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $rawToken
     }
-    elseif ($rawToken -is [string]) { return $rawToken }
-    else { return $rawToken | ConvertFrom-SecureString -AsPlainText }
 }
 
 function Get-FabricAccessToken { return Get-AccessTokenForResource -ResourceUrl "https://api.fabric.microsoft.com" }
@@ -301,12 +315,17 @@ if ($existingOntology) {
     if ($existingOntology -is [array]) { $existingOntology = $existingOntology[0] }
     if (-not $ReplaceExisting) {
         Write-Host "  ✓ Ontology '$OntologyName' already exists ($($existingOntology.id)); preserving existing item to avoid an ontology gap." -ForegroundColor Green
-        Write-Host "    Existing ontology will be used for Data Agent binding. Pass -ReplaceExisting to rebuild the definition." -ForegroundColor DarkGray
-        exit 0
+        Write-Host "    Verifying companion GraphModel hydration for existing ontology..." -ForegroundColor DarkGray
+    } else {
+        Write-Host "  Existing ontology '$OntologyName' ($($existingOntology.id)) will be updated in place..." -ForegroundColor Yellow
     }
-    Write-Host "  Existing ontology '$OntologyName' ($($existingOntology.id)) will be updated in place..." -ForegroundColor Yellow
 }
 
+$totalEntities = 0
+$totalRels = 0
+$claimEntities = @()
+
+if (-not $existingOntology -or $ReplaceExisting) {
 # ============================================================================
 # BUILD ONTOLOGY DEFINITION (raw JSON strings — required by Fabric API)
 # ============================================================================
@@ -671,16 +690,21 @@ for ($attempt = 1; $attempt -le 10 -and -not $createCompleted; $attempt++) {
         exit 1
     }
 }
+}
 
-# Fetch ontology ID
-Start-Sleep -Seconds 3
-$ontologies = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/ontologies"
-$ontology = $ontologies.value | Where-Object { $_.displayName -eq $OntologyName }
-if ($ontology -is [array]) { $ontology = $ontology[0] }
-$ontologyId = if ($ontology) { $ontology.id } else { "unknown" }
-if ($ontologyId -eq "unknown") {
-    Write-Host "  ✗ Ontology '$OntologyName' was not discoverable after create/update." -ForegroundColor Red
-    exit 1
+if ($existingOntology -and -not $ReplaceExisting) {
+    $ontologyId = $existingOntology.id
+} else {
+    # Fetch ontology ID
+    Start-Sleep -Seconds 3
+    $ontologies = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/ontologies"
+    $ontology = $ontologies.value | Where-Object { $_.displayName -eq $OntologyName }
+    if ($ontology -is [array]) { $ontology = $ontology[0] }
+    $ontologyId = if ($ontology) { $ontology.id } else { "unknown" }
+    if ($ontologyId -eq "unknown") {
+        Write-Host "  ✗ Ontology '$OntologyName' was not discoverable after create/update." -ForegroundColor Red
+        exit 1
+    }
 }
 
 
@@ -832,9 +856,14 @@ Write-Host ""
 Write-Host "  Ontology: $OntologyName" -ForegroundColor White
 Write-Host "  ID:       $ontologyId" -ForegroundColor White
 Write-Host ""
-Write-Host "  Deployed:" -ForegroundColor Cyan
-Write-Host ("    {0} entity types total ({1} Gold payer/claims entities)" -f $totalEntities, $claimEntities.Count) -ForegroundColor White
-Write-Host "    $totalRels relationship types with contextualizations" -ForegroundColor White
+if ($totalEntities -gt 0) {
+    Write-Host "  Deployed:" -ForegroundColor Cyan
+    Write-Host ("    {0} entity types total ({1} Gold payer/claims entities)" -f $totalEntities, $claimEntities.Count) -ForegroundColor White
+    Write-Host "    $totalRels relationship types with contextualizations" -ForegroundColor White
+} else {
+    Write-Host "  Verified:" -ForegroundColor Cyan
+    Write-Host "    $vEt entity types, $vDb data bindings, $vRl relationship parts" -ForegroundColor White
+}
 Write-Host ""
 Write-Host "  Next steps:" -ForegroundColor Yellow
 Write-Host "    1. Connect the ontology as a datasource on your Data Agents" -ForegroundColor White

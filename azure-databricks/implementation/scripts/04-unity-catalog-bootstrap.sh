@@ -103,11 +103,18 @@ while IFS= read -r -d ';' statement; do
   [[ -z "$trimmed" ]] && continue
   statement_index=$((statement_index + 1))
   printf '  [%02d] %s...\n' "$statement_index" "$(printf '%s' "$trimmed" | head -c 72 | tr '\n' ' ')"
-  databricks api post /api/2.0/sql/statements --json "$(jq -n \
+  stmt_resp="$(databricks api post /api/2.0/sql/statements --json "$(jq -n \
     --arg s "$trimmed" --arg w "$WAREHOUSE_ID" \
-    '{statement: $s, warehouse_id: $w, wait_timeout: "50s", on_wait_timeout: "CANCEL"}')" \
-    | jq -e '.status.state == "SUCCEEDED"' >/dev/null \
-    || { echo "FAIL at statement $statement_index" >&2; exit 1; }
+    '{statement: $s, warehouse_id: $w, wait_timeout: "50s", on_wait_timeout: "CONTINUE"}')")"
+  stmt_id="$(jq -r '.statement_id // empty' <<<"$stmt_resp")"
+  stmt_state="$(jq -r '.status.state // empty' <<<"$stmt_resp")"
+  for ((poll = 0; poll < 60; poll++)); do
+    [[ "$stmt_state" != "PENDING" && "$stmt_state" != "RUNNING" ]] && break
+    sleep 5
+    stmt_resp="$(databricks api get "/api/2.0/sql/statements/$stmt_id")"
+    stmt_state="$(jq -r '.status.state // empty' <<<"$stmt_resp")"
+  done
+  [[ "$stmt_state" == "SUCCEEDED" ]] || { echo "FAIL at statement $statement_index ($stmt_state): $(jq -c '.status.error // .status' <<<"$stmt_resp")" >&2; exit 1; }
 done < "$rendered"
 
 echo "Verifying the governance boundary actually behaves as intended..."

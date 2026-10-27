@@ -23,6 +23,9 @@ from shared.runtime_paths import DATA_DIR
 ROOT = Path(__file__).resolve().parents[2]
 ADDON_FLAGS = {"cardiology": "deploy_cardiology", "rayfin": "deploy_rayfin_apps", "databricks": "deploy_databricks"}
 MODEL_CANDIDATES = [("gpt-5.6-luna", "2026-07-09"), ("gpt-5.5", "2026-04-24")]
+CARDIOLOGY_FALLBACK_REGIONS = ("eastus2", "eastus", "westus", "westus3", "northcentralus", "southcentralus", "centralus", "swedencentral")
+DATABRICKS_PROVIDERS = ("Microsoft.Databricks", "Microsoft.Storage", "Microsoft.EventHub", "Microsoft.KeyVault", "Microsoft.EventGrid")
+CARDIOLOGY_PROVIDERS = ("Microsoft.App", "Microsoft.CognitiveServices", "Microsoft.OperationalInsights")
 CONTINUATIONS: dict[str, asyncio.Event] = {}
 
 
@@ -40,6 +43,57 @@ def az_json(config: dict, *args: str):
     if result.returncode:
         raise RuntimeError(result.stderr.strip()[:1000] or "Azure CLI command failed")
     return json.loads(result.stdout or "null")
+
+def ensure_providers_registered(config: dict, providers: list[str] | tuple[str, ...], wait: bool = False, timeout_sec: int = 300) -> list[tuple[str, str]]:
+    pending: list[tuple[str, str]] = []
+    for namespace in providers:
+        try:
+            info = az_json(config, "provider", "show", "--namespace", namespace)
+            state = str(info.get("registrationState") or "NotRegistered")
+        except Exception:
+            state = "NotRegistered"
+        if state != "Registered":
+            try:
+                subprocess.run(
+                    ["az", "provider", "register", "--namespace", namespace, "--subscription", config["expected_subscription_id"]],
+                    capture_output=True, text=True, timeout=60,
+                )
+                if state == "NotRegistered":
+                    state = "Registering"
+            except Exception:
+                pass
+            pending.append((namespace, state))
+    if wait and pending:
+        deadline = time.monotonic() + timeout_sec
+        remaining = [ns for ns, _ in pending]
+        while remaining and time.monotonic() < deadline:
+            still = []
+            for namespace in remaining:
+                try:
+                    info = az_json(config, "provider", "show", "--namespace", namespace)
+                    if info.get("registrationState") != "Registered":
+                        still.append(namespace)
+                except Exception:
+                    still.append(namespace)
+            remaining = still
+            if remaining:
+                time.sleep(5)
+        if remaining:
+            raise RuntimeError(f"Timed out waiting for Azure resource providers to reach Registered state: {', '.join(remaining)}")
+    return pending
+
+def _check_cardiology_region_quota(config: dict, location: str, candidates: list[tuple[str, str]]) -> str | None:
+    offered = az_json(config, "cognitiveservices", "model", "list", "-l", location)
+    usage = az_json(config, "cognitiveservices", "usage", "list", "-l", location)
+    for name, version in candidates:
+        available = any(m.get("model", {}).get("name") == name and m["model"].get("version") == version and
+                        any(s.get("name") == "DataZoneStandard" for s in m["model"].get("skus", [])) for m in offered)
+        quota = next((q for q in usage if q.get("name", {}).get("value") == f"OpenAI.DataZoneStandard.{name}"), {})
+        free = float(quota.get("limit", 0)) - float(quota.get("currentValue", 0))
+        if available and free >= 50:
+            return f"{name} {version}: DataZoneStandard in {location}, {free:g}K TPM free"
+    return None
+
 
 
 class Cloud:
@@ -88,24 +142,34 @@ def preflight(config: dict) -> list[dict]:
 
     def check(name, action):
         try:
-            detail = action()
-            checks.append({"name": name, "status": "pass", "message": detail, "detail": detail})
+            outcome = action()
+            if isinstance(outcome, dict):
+                status = outcome.get("status", "pass")
+                detail = outcome.get("message") or outcome.get("detail") or ""
+                checks.append({"name": name, "status": status, "message": detail, "detail": detail,
+                               **{k: v for k, v in outcome.items() if k not in {"name", "status", "message", "detail"}}})
+            else:
+                checks.append({"name": name, "status": "pass", "message": outcome, "detail": outcome})
         except Exception as exc:
             checks.append({"name": name, "status": "fail", "message": str(exc), "detail": str(exc)})
 
     if config.get("deploy_databricks"):
         def databricks():
             provider = az_json(config, "provider", "show", "--namespace", "Microsoft.Databricks")
-            if provider.get("registrationState") != "Registered":
-                raise RuntimeError("Register Microsoft.Databricks in the deployment subscription first")
+            reg_state = provider.get("registrationState")
+            if reg_state != "Registered":
+                ensure_providers_registered(config, ["Microsoft.Databricks"], wait=False)
             locations = Cloud(config).call("GET", f"{ARM}/subscriptions/{config['expected_subscription_id']}/locations?api-version=2022-12-01", ARM)["value"]
             region = next((x for x in locations if x["name"] == config["location"]), None)
             available = next((x.get("locations", []) for x in provider.get("resourceTypes", []) if x["resourceType"].lower() == "workspaces"), [])
-            if not region or region["displayName"] not in available:
+            if not region or (available and region["displayName"] not in available):
                 raise RuntimeError(f"Databricks workspaces are not offered in {config['location']}")
             missing = [x for x in ("azcopy", "databricks", "jq", "bash") if not shutil.which(x)]
             if missing:
                 raise RuntimeError("Missing add-on tools: " + ", ".join(missing))
+            if reg_state != "Registered":
+                msg = f"Microsoft.Databricks is {reg_state or 'NotRegistered'}; auto-registration started and will complete in tandem with deployment."
+                return {"status": "warn", "message": msg, "detail": msg}
             return "Databricks provider, region and tools ready; metastore account-admin access may require Continue"
         check("Databricks", databricks)
     if config.get("deploy_rayfin_apps"):
@@ -116,18 +180,31 @@ def preflight(config: dict) -> list[dict]:
         check("Rayfin apps", rayfin)
     if config.get("deploy_cardiology"):
         def model():
+            pending_cardio = ensure_providers_registered(config, CARDIOLOGY_PROVIDERS, wait=False)
             location = config["cardiology_location"]
-            offered = az_json(config, "cognitiveservices", "model", "list", "-l", location)
-            usage = az_json(config, "cognitiveservices", "usage", "list", "-l", location)
             candidates = [(config["cardiology_chat_model"], config["cardiology_chat_model_version"])] if config.get("cardiology_chat_model") else MODEL_CANDIDATES
-            for name, version in candidates:
-                available = any(m.get("model", {}).get("name") == name and m["model"].get("version") == version and
-                                any(s.get("name") == "DataZoneStandard" for s in m["model"].get("skus", [])) for m in offered)
-                quota = next((q for q in usage if q.get("name", {}).get("value") == f"OpenAI.DataZoneStandard.{name}"), {})
-                free = float(quota.get("limit", 0)) - float(quota.get("currentValue", 0))
-                if available and free >= 50:
-                    return f"{name} {version}: DataZoneStandard in {location}, {free:g}K TPM free"
-            raise RuntimeError(f"No requested model/version offered as DataZoneStandard with >=50K TPM free in {location}")
+            try:
+                match = _check_cardiology_region_quota(config, location, candidates)
+            except Exception as exc:
+                if "MissingSubscriptionRegistration" in str(exc):
+                    msg = "Microsoft.CognitiveServices is registering; auto-registration started and model quota will be verified once registration completes."
+                    return {"status": "warn", "message": msg, "detail": msg}
+                raise
+            if match:
+                return match
+            suggested = ""
+            for candidate_region in CARDIOLOGY_FALLBACK_REGIONS:
+                if candidate_region == location:
+                    continue
+                try:
+                    if _check_cardiology_region_quota(config, candidate_region, candidates):
+                        suggested = candidate_region
+                        break
+                except Exception:
+                    continue
+            msg = f"No requested model/version offered as DataZoneStandard with >=50K TPM free in {location}" + (f" (available in {suggested})" if suggested else "")
+            return {"status": "fail", "message": msg, "detail": msg,
+                    **({"suggestedRegion": suggested} if suggested else {})}
         def registrations():
             cloud = Cloud(config)
             policy = cloud.call("GET", GRAPH + "/v1.0/policies/authorizationPolicy", GRAPH)
@@ -369,6 +446,7 @@ class AddonRunner:
     async def databricks(self, fresh_export=False):
         import yaml
         cfg = self.config
+        await asyncio.to_thread(ensure_providers_registered, cfg, DATABRICKS_PROVIDERS, True, 300)
         root = self.working_copy(ROOT / "azure-databricks/implementation", "databricks")
         fhir = self.resource("Microsoft.HealthcareApis/workspaces/fhirservices")
         fhir_detail = await asyncio.to_thread(az_json, cfg, "resource", "show", "--ids", fhir["id"])
@@ -598,6 +676,7 @@ class AddonRunner:
         backend = wardflow / "caldova-cardio/hds-backend"
         if not backend.is_dir():
             raise RuntimeError("WARDFLOW_ROOT must contain the pinned jb-dev caldova-cardio/hds-backend")
+        await asyncio.to_thread(ensure_providers_registered, cfg, CARDIOLOGY_PROVIDERS, True, 300)
         await self.ensure_eventstream_running("MasimoTelemetryStream")
         gold, sql = await self.gold()
         fhir = self.resource("Microsoft.HealthcareApis/workspaces/fhirservices")
