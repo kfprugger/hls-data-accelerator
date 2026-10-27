@@ -836,29 +836,5 @@ Write-Host "  Deployed:" -ForegroundColor Cyan
 Write-Host ("    {0} entity types total ({1} Gold payer/claims entities)" -f $totalEntities, $claimEntities.Count) -ForegroundColor White
 Write-Host "    $totalRels relationship types with contextualizations" -ForegroundColor White
 Write-Host ""
-Write-Host "  Next steps (Fabric portal):" -ForegroundColor Yellow
-Write-Host "    1. Open the ontology → Preview tab → 'Refresh graph model'" -ForegroundColor White
-Write-Host "    2. Connect the ontology as a datasource on your Data Agents" -ForegroundColor White
-
-
-Write-Host ""
-Write-Host "  Populating GraphModel for '$OntologyName'..." -ForegroundColor White
-$ontologyIdWithoutDashes = $ontologyId -replace '-', ''
-$items = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/items"
-$graphModel = $items.value | Where-Object { $_.type -eq "GraphModel" -and $_.displayName -match "$ontologyIdWithoutDashes$" }
-if ($graphModel) {
-    if ($graphModel -is [array]) { $graphModel = $graphModel[0] }
-    $pyScript = Join-Path $PSScriptRoot "deploy-graph-model.py"
-    if (Test-Path $pyScript) {
-        $pyProc = Start-Process python3 -ArgumentList @($pyScript, "--workspace-id", $workspaceId, "--ontology-id", $ontologyId, "--graph-id", $graphModel.id) -NoNewWindow -Wait -PassThru
-        if ($pyProc.ExitCode -ne 0) {
-            Write-Host "  ⚠ Failed to populate GraphModel. (Exit code: $($pyProc.ExitCode))" -ForegroundColor Yellow
-        } else {
-            Write-Host "  ✓ GraphModel populated and refresh triggered." -ForegroundColor Green
-        }
-    } else {
-        Write-Host "  ⚠ Cannot find deploy-graph-model.py." -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "  ⚠ GraphModel item not found for this ontology. Manual populate required." -ForegroundColor Yellow
-}
+Write-Host "  Next steps:" -ForegroundColor Yellow
+Write-Host "    1. Connect the ontology as a datasource on your Data Agents" -ForegroundColor White

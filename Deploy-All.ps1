@@ -3472,6 +3472,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                         Start-Sleep -Seconds $delay
                         continue
                     }
+                    if ($fabricError.Text.Trim()) { throw "$Label failed (HTTP $($fabricError.StatusCode)): $($fabricError.Text.Trim())" }
                     throw
                 }
             }
@@ -3503,6 +3504,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                         Start-Sleep -Seconds $delay
                         continue
                     }
+                    if ($fabricError.Text.Trim()) { throw "$Label failed (HTTP $($fabricError.StatusCode)): $($fabricError.Text.Trim())" }
                     throw
                 }
             }
@@ -4024,7 +4026,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             $riskQuery = "external_table('$riskShortcutName') | where risk_tier == 'High' | project patient_id, risk_tier, risk_probability, los_days, admit_date=tostring(admit_date), message=strcat('30-day readmission risk ', round(100.0*risk_probability,1), '%')"
             $riskEntities = @(
                 @{ uniqueIdentifier=$riskContainerId; payload=@{name='Readmission Risk Alerts';type='kqlQueries'}; type='container-v1' },
-                @{ uniqueIdentifier=$riskSourceId; payload=@{name='ReadmissionRiskScores';runSettings=@{isStopped=$false;executionIntervalInSeconds=86400};query=@{queryString=$riskQuery};eventhouseItem=@{itemId=$p5KqlDb.id;workspaceId=$p5WsId;itemType='KustoDatabase'};parentContainer=@{targetUniqueIdentifier=$riskContainerId}};type='kqlSource-v1' },
+                @{ uniqueIdentifier=$riskSourceId; payload=@{name='ReadmissionRiskScores';runSettings=@{executionIntervalInSeconds=86400};query=@{queryString=$riskQuery};eventhouseItem=@{itemId=$p5KqlDb.id;workspaceId=$p5WsId;itemType='KustoDatabase'};parentContainer=@{targetUniqueIdentifier=$riskContainerId}};type='kqlSource-v1' },
                 @{ uniqueIdentifier=$riskEventId; payload=@{name='Readmission risk events';parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Event';instance=$riskSourceEvent}};type='timeSeriesView-v1' },
                 @{ uniqueIdentifier=$riskObjectId; payload=@{name='Patient';parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Object'}};type='timeSeriesView-v1' },
                 @{ uniqueIdentifier=$riskPatientId; payload=@{name='patient_id';parentObject=@{targetUniqueIdentifier=$riskObjectId};parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Attribute';instance=$riskIdentity}};type='timeSeriesView-v1' }
