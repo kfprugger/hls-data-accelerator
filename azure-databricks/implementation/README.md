@@ -104,9 +104,9 @@ export DICOM_OUTPUT_URL="$(jq -r '.dicomOutputUrl.value' .state/foundation-$ENVI
 databricks auth login --host "$DATABRICKS_HOST"
 ```
 
-Without a browser, `export DATABRICKS_AUTH_TYPE=azure-cli` instead of `auth login`: the CLI then
-uses tokens from the Azure CLI profile you deployed with (`az account show` must be the target
-subscription), and the workspace creator is already a workspace admin.
+Without a browser, `export DATABRICKS_AUTH_TYPE=azure-cli` and `export ARM_TENANT_ID="$AZ_TENANT_ID"`
+instead of `auth login`: the CLI then uses tokens from the Azure CLI profile you deployed with
+(`az account show` must be the target subscription), and the workspace creator is already a workspace admin.
 
 `DATABRICKS_NAMESPACE` scopes Unity Catalog objects that live in the regional metastore. It defaults to the globally unique deployment storage-account name when available, then to `ENVIRONMENT` for manual setups that do not provide one. The hosted orchestrator sets it explicitly so separate deployments cannot reuse another estate's catalog, storage credential, or external locations.
 

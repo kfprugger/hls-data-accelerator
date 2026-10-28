@@ -772,8 +772,8 @@ class DeployRequest(BaseModel):
                 raise ValueError(f"{field} contains unsupported characters")
         if not re.fullmatch(r"[a-z][a-z0-9]{1,30}", self.cardiology_location):
             raise ValueError("cardiology_location must be an Azure region name")
-        if self.cardiology_prefix and not re.fullmatch(r"[a-z][a-z0-9]{2,19}", self.cardiology_prefix):
-            raise ValueError("cardiology_prefix must be 3–20 lowercase letters/digits, starting with a letter")
+        if self.cardiology_prefix and not re.fullmatch(r"[a-z][a-z0-9]{2,11}", self.cardiology_prefix):
+            raise ValueError("cardiology_prefix must be 3–12 lowercase letters/digits, starting with a letter")
         if bool(self.cardiology_chat_model) != bool(self.cardiology_chat_model_version):
             raise ValueError("cardiology_chat_model and cardiology_chat_model_version must be supplied together")
         for field in ("cardiology_app_users", "cardiology_reviewer_users"):

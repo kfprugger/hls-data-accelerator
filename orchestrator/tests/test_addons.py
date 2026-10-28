@@ -304,5 +304,15 @@ class BundlePreparationTests(unittest.TestCase):
             self.assertEqual(target.get("workspace", {}).get("root_path"), expected if name in production else None)
 
 
+    def test_cardiology_default_prefix_never_exceeds_twelve_chars_and_databricks_exports_arm_tenant_id(self):
+        import re
+        for ws_name in ("med-1027", "med-1027a", "med-device-rti-hds-1028"):
+            derived = "cardio" + re.sub("[^a-z0-9]", "", ws_name.lower())[-6:]
+            self.assertLessEqual(len(derived), 12)
+            self.assertRegex(derived, r"\A[a-z0-9]{1,12}\Z")
+        source = (Path(addons.__file__)).read_text()
+        self.assertIn('"ARM_TENANT_ID": cfg["expected_tenant_id"]', source)
+        self.assertIn('re.sub("[^a-z0-9]", "", cfg["fabric_workspace_name"].lower())[-6:]', source)
+
 if __name__ == "__main__":
     unittest.main()

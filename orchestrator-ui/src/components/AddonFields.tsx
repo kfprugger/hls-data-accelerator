@@ -103,7 +103,7 @@ export function AddonFields({ value, onChange, disabled = false, unavailable = [
             <FormHelperText>{"Azure region name, such as eastus2."}</FormHelperText></FormControl>
             <FormControl><FormLabel id="field-addonfields-4-label" htmlFor="field-addonfields-4">{"Cardiology resource prefix"}</FormLabel>
               <HistoryInput field="cardiology-prefix" value={value.cardiology_prefix ?? ""} onChange={(val) => onChange({ cardiology_prefix: val })} disabled={cardiologyDisabled} id="field-addonfields-4"/>
-            <FormHelperText>{"Leave blank to derive cardio<suffix> from this deployment."}</FormHelperText></FormControl>
+            <FormHelperText>{"3–12 lowercase letters/digits, or leave blank to derive cardio<suffix>."}</FormHelperText></FormControl>
             <FormControl><FormLabel id="field-addonfields-5-label" htmlFor="field-addonfields-5">{"Cardiology app users"}</FormLabel>
               <HistoryInput field="cardiology-app-users" value={(value.cardiology_app_users ?? []).join("\n")} rows={3} multiline onChange={(val) => onChange({ cardiology_app_users: val.split("\n") })} disabled={cardiologyDisabled} id="field-addonfields-5"/>
             <FormHelperText>{"One user principal name per line. Blank lines are ignored."}</FormHelperText></FormControl>

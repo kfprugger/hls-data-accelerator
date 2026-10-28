@@ -467,7 +467,7 @@ class AddonRunner:
         group_info = require_one(groups, "Databricks admin group in the deployment tenant")
         account = await asyncio.to_thread(az_json, cfg, "account", "show")
         variables = {
-            "AZ_TENANT_ID": cfg["expected_tenant_id"], "AZ_SUBSCRIPTION_ID": cfg["expected_subscription_id"],
+            "AZ_TENANT_ID": cfg["expected_tenant_id"], "ARM_TENANT_ID": cfg["expected_tenant_id"], "AZ_SUBSCRIPTION_ID": cfg["expected_subscription_id"],
             "AZ_RESOURCE_GROUP": cfg["resource_group_name"], "AZ_LOCATION": cfg["location"],
             "ADMIN_GROUP_OBJECT_ID": group_info["id"], "DATABRICKS_ADMIN_GROUP": group_info["displayName"],
             "STORAGE_ACCOUNT_NAME": storage, "EVENTHUB_NAMESPACE": self.resource("Microsoft.EventHub/namespaces")["name"],
@@ -721,7 +721,7 @@ class AddonRunner:
             await asyncio.sleep(30)
         self.substep("Wait for HDS ingestion", "succeeded")
         await self.command("Refresh cardiology Gold", [sys.executable, backend / "cardiology-api/fabric/refresh_cardiology_gold.py", "--since", since])
-        prefix = cfg.get("cardiology_prefix") or "cardio" + re.sub("[^a-z0-9]", "", cfg["fabric_workspace_name"].lower())[-12:]
+        prefix = cfg.get("cardiology_prefix") or "cardio" + re.sub("[^a-z0-9]", "", cfg["fabric_workspace_name"].lower())[-6:]
         group = f"rg-{cfg['fabric_workspace_name']}-cardio"
         await self.ps("Deploy cardiology app", backend / "phase-8/deploy-cardiology-app.ps1", {
             **shared, "ResourceGroupName": group, "Location": cfg["cardiology_location"], "Prefix": prefix,
