@@ -110,13 +110,15 @@ Scope roles to containers/resource groups where Azure permits it. Do not grant s
 
 ### Unity Catalog layout
 
-Use one catalog per environment:
+Use one catalog per deployed estate. Manual single-estate deployments default to environment names:
 
 ```text
 hls_dev
 hls_test
 hls_prod
 ```
+
+Hosted deployments set `DATABRICKS_NAMESPACE` to the estate's globally unique FHIR storage-account name. This keeps metastore-global catalogs, storage credentials, and external locations isolated when multiple subscriptions use the same regional Databricks metastore.
 
 Each catalog contains:
 

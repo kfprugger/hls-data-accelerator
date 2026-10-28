@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Box, Button, Card, Chip, CircularProgress, Stack, Step, StepButton, Stepper, Typography } from '@mui/material';
-import type { DeploymentConfig } from '../api';
+import { errorMessageFromBody, type DeploymentConfig } from '../api';
 import { useAppState } from '../AppState';
 
-interface Check { name: string; status: string; message?: string; detail?: string }
+interface Check { name: string; status: string; message?: string; detail?: string; suggestedRegion?: string }
 interface Result { passed: boolean; checks: Check[]; failures: string[] }
 const steps = ['Connect', 'Configure', 'Validate', 'Review', 'Deploy'];
 const connect = () => window.dispatchEvent(new Event('hls-open-authentication'));
@@ -34,12 +34,13 @@ function TargetReview({ config }: { config: DeploymentConfig }) {
   </>;
 }
 
-export function GuidedDeployment({ children, config, errors, starting, onStart }: {
+export function GuidedDeployment({ children, config, errors, starting, onStart, onUpdateConfig }: {
   children: ReactNode;
   config: DeploymentConfig;
   errors: string[];
   starting: boolean;
   onStart: () => Promise<void>;
+  onUpdateConfig?: (patch: Partial<DeploymentConfig>) => void;
 }) {
   const { authContext } = useAppState();
   const [step, setStep] = useState(1);
@@ -53,14 +54,31 @@ export function GuidedDeployment({ children, config, errors, starting, onStart }
   const validationKey = JSON.stringify({ fingerprint, authenticationKey });
   const latestValidation = useRef(validationKey);
   latestValidation.current = validationKey;
+  const pendingOverrideKey = useRef('');
   const controller = useRef<AbortController | null>(null);
   const ready = Boolean(authContext?.ready);
   const canDeploy = Boolean(ready && errors.length === 0 && result?.passed && validated === validationKey);
 
   useEffect(() => () => controller.current?.abort(), []);
-  useEffect(() => { setValidated(''); setConfirmed(''); setResult(null); }, [authenticationKey, fingerprint]);
+  useEffect(() => {
+    if (pendingOverrideKey.current && validationKey === pendingOverrideKey.current) {
+      pendingOverrideKey.current = '';
+      return;
+    }
+    setValidated('');
+    setConfirmed('');
+    setResult(null);
+  }, [authenticationKey, fingerprint, validationKey]);
 
-  async function validate() {
+  async function validate(overridePatch?: Partial<DeploymentConfig>) {
+    const requestPayload = overridePatch ? JSON.stringify({ ...config, ...overridePatch }) : fingerprint;
+    const requestKey = overridePatch
+      ? JSON.stringify({ fingerprint: requestPayload, authenticationKey })
+      : validationKey;
+    if (overridePatch && onUpdateConfig) {
+      pendingOverrideKey.current = requestKey;
+      onUpdateConfig(overridePatch);
+    }
     controller.current?.abort();
     const requestController = new AbortController();
     controller.current = requestController;
@@ -72,14 +90,14 @@ export function GuidedDeployment({ children, config, errors, starting, onStart }
     const timer = setTimeout(() => requestController.abort(), 300000);
     try {
       const response = await fetch('/api/deploy/preflight', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: fingerprint, signal,
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: requestPayload, signal,
       });
       const body = await response.json();
-      if (!Array.isArray(body.checks)) throw new Error(body.detail || body.error || 'Preflight returned an invalid response');
+      if (!Array.isArray(body.checks)) throw new Error(errorMessageFromBody(body, 'Preflight returned an invalid response'));
       if (response.status !== 422 && !response.ok) throw new Error('Preflight failed; retry after checking the connection.');
-      if (latestValidation.current !== validationKey) throw new Error('Configuration or deployment credentials changed during preflight. Validate again.');
+      if (latestValidation.current !== requestKey) throw new Error('Configuration or deployment credentials changed during preflight. Validate again.');
       setResult({ ...body, failures: Array.isArray(body.failures) ? body.failures : [], passed: response.ok && body.passed === true });
-      setValidated(validationKey);
+      setValidated(requestKey);
     } catch (cause) {
       setError(signal.aborted ? 'Validation was cancelled or timed out. Retry when the backend is available.' : cause instanceof Error ? cause.message : 'Unable to validate');
     } finally {
@@ -118,10 +136,35 @@ export function GuidedDeployment({ children, config, errors, starting, onStart }
       <Button variant="contained" disabled={!ready || errors.length > 0 || busy} onClick={() => void validate()}>{busy ? 'Validating…' : 'Run preflight'}</Button>
       {busy && <CircularProgress size={24} aria-label="Checking deployment prerequisites" />}
       {error && <Alert severity="error">{error}</Alert>}
-      {result?.checks.map((check, index) => <Alert key={check.name + index} severity={check.status === 'pass' ? 'success' : check.status === 'fail' ? 'error' : 'warning'}>
-        <strong>{check.name}</strong> — {check.message || check.detail}
-      </Alert>)}
-      {result?.failures.map((failure, index) => <Alert key={`${failure}-${index}`} severity="error">{failure}</Alert>)}
+      {result?.checks.map((check, index) => {
+        const msg = check.message || check.detail || '';
+        const isModelQuotaFail = check.status === 'fail' && (check.name === 'Cardiology model quota' || msg.includes('DataZoneStandard'));
+        const fallbackRegion = check.suggestedRegion;
+        return <Alert
+          key={check.name + index}
+          severity={check.status === 'pass' ? 'success' : check.status === 'fail' ? 'error' : 'warning'}
+          action={isModelQuotaFail && fallbackRegion && onUpdateConfig ? (
+            <Button
+              color="inherit"
+              size="small"
+              variant="outlined"
+              disabled={busy}
+              onClick={() => void validate({ cardiology_location: fallbackRegion })}
+            >
+              Deploy AI Foundry in {fallbackRegion} at runtime?
+            </Button>
+          ) : undefined}
+        >
+          <strong>{check.name}</strong> — {msg}
+        </Alert>;
+      })}
+      {result?.failures
+        .filter(failure => !result.checks.some(c => c.status === 'fail' && (c.message === failure || c.detail === failure)))
+        .map((failure, index) => (
+          <Alert key={`${failure}-${index}`} severity="error">
+            {failure}
+          </Alert>
+        ))}
       {result && validated !== validationKey && <Alert severity="warning">Configuration or credentials changed. Run preflight again.</Alert>}
       <Button disabled={!canDeploy || busy} onClick={() => setStep(3)}>Continue to review</Button>
     </Stack></Card>}

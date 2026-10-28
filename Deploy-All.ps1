@@ -158,15 +158,24 @@ function Get-CachedAccessToken {
     $key = $ResourceUrl.ToLowerInvariant()
     $cached = $script:AccessTokenCache[$key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
-    $token = $tokenObj.Token
-    if ($token -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
-        try { $token = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        $token = $tokenObj.Token
+        if ($token -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+            try { $token = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        }
+        $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = $tokenObj.ExpiresOn }
+        return $token
+    } catch {
+        $subArgs = if ($ExpectedSubscriptionId) { @("--subscription", $ExpectedSubscriptionId) } else { @() }
+        $cliJson = az account get-access-token --resource $ResourceUrl @subArgs -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $token = $cliJson.accessToken
+        $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $token
     }
-    $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = $tokenObj.ExpiresOn }
-    return $token
 }
 
 function Test-FabricPaidFsku {
@@ -626,6 +635,27 @@ if (-not $Teardown) {
     $selectedAccount = az account show --output json | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or $selectedAccount.tenantId -ne $ExpectedTenantId -or $selectedAccount.id -ne $ExpectedSubscriptionId) {
         throw "Azure CLI context does not match the explicitly requested tenant and subscription."
+    }
+    $tandemProviders = @(
+        "Microsoft.Resources",
+        "Microsoft.KeyVault",
+        "Microsoft.ContainerRegistry",
+        "Microsoft.EventHub",
+        "Microsoft.ContainerInstance",
+        "Microsoft.Storage",
+        "Microsoft.HealthcareApis",
+        "Microsoft.ManagedIdentity",
+        "Microsoft.EventGrid"
+    )
+    if ($SnapshotFhirExportForDatabricks) {
+        $tandemProviders += "Microsoft.Databricks"
+    }
+    foreach ($rp in $tandemProviders) {
+        $rpState = az provider show -n $rp --subscription $ExpectedSubscriptionId --query registrationState -o tsv 2>$null
+        if ($rpState -ne "Registered") {
+            Write-Host "  ⚠ Resource provider '$rp' is $rpState — starting auto-registration in tandem with deployment..." -ForegroundColor Yellow
+            az provider register --namespace $rp --subscription $ExpectedSubscriptionId --only-show-errors | Out-Null
+        }
     }
 }
 
@@ -1251,9 +1281,12 @@ function Add-OntologyDatasourceToAgents {
                 if ($defResp.StatusCode -eq 200) {
                     $defResult = $defResp.Content | ConvertFrom-Json -Depth 50
                 } elseif ($defResp.StatusCode -eq 202) {
-                    $defLocation = $defResp.Headers["Location"]
-                    if ($defLocation -is [array]) { $defLocation = $defLocation[0] }
-                    if (-not $defLocation) { throw "Data Agent getDefinition returned 202 without a Location header for '$agentName'" }
+                    $defLocation = [string]($defResp.Headers["Location"] | Select-Object -First 1)
+                    $defOpId = [string]($defResp.Headers["x-ms-operation-id"] | Select-Object -First 1)
+                    if ([string]::IsNullOrWhiteSpace($defLocation) -and -not [string]::IsNullOrWhiteSpace($defOpId)) {
+                        $defLocation = "$FabricApiBase/operations/$defOpId"
+                    }
+                    if ([string]::IsNullOrWhiteSpace($defLocation)) { throw "Data Agent getDefinition returned 202 without a Location or x-ms-operation-id header for '$agentName'" }
                     $defResult = $null
                     for ($pollAttempt = 1; $pollAttempt -le 24; $pollAttempt++) {
                         Start-Sleep 5
@@ -1291,7 +1324,7 @@ function Add-OntologyDatasourceToAgents {
                 })
 
                 $ontDatasourceJson = @{
-                    '$schema'              = "1.0.0"
+                    '$schema'              = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/dataSource/1.0.0/schema.json"
                     artifactId             = $ontologyId
                     workspaceId            = $WorkspaceId
                     displayName            = $OntologyName
@@ -1301,7 +1334,7 @@ function Add-OntologyDatasourceToAgents {
                     elements               = $ontElements
                 } | ConvertTo-Json -Depth 10
 
-                $ontFewShotsJson = (@{ '$schema' = "1.0.0"; fewShots = @() } | ConvertTo-Json -Depth 5)
+                $ontFewShotsJson = (@{ '$schema' = "https://developer.microsoft.com/json-schemas/fabric/item/dataAgent/definition/fewShots/1.0.0/schema.json"; fewShots = @() } | ConvertTo-Json -Depth 5)
                 $ontFolderName = "ontology-$OntologyName"
                 $ontDsPart = @{
                     path        = "Files/Config/draft/$ontFolderName/datasource.json"
@@ -1326,14 +1359,17 @@ function Add-OntologyDatasourceToAgents {
                     throw "Ontology datasource update returned HTTP $($updateResp.StatusCode) for '$agentName'"
                 }
                 if ($updateResp.StatusCode -eq 202) {
-                    $upOpId = $updateResp.Headers["x-ms-operation-id"]
-                    if ($upOpId -is [array]) { $upOpId = $upOpId[0] }
-                    if (-not $upOpId) { throw "Ontology datasource update returned 202 without an operation ID for '$agentName'" }
+                    $upLocation = [string]($updateResp.Headers["Location"] | Select-Object -First 1)
+                    $upOpId = [string]($updateResp.Headers["x-ms-operation-id"] | Select-Object -First 1)
+                    if ([string]::IsNullOrWhiteSpace($upLocation) -and -not [string]::IsNullOrWhiteSpace($upOpId)) {
+                        $upLocation = "$FabricApiBase/operations/$upOpId"
+                    }
+                    if ([string]::IsNullOrWhiteSpace($upLocation)) { throw "Ontology datasource update returned 202 without a Location or x-ms-operation-id header for '$agentName'" }
                     $updateComplete = $false
                     for ($pollAttempt = 1; $pollAttempt -le 24; $pollAttempt++) {
                         Start-Sleep 5
                         $headers = @{ Authorization = "Bearer $(Get-CachedAccessToken 'https://api.fabric.microsoft.com')"; "Content-Type" = "application/json" }
-                        $upOp = Invoke-RestMethod -Uri "$FabricApiBase/operations/$upOpId" -Headers $headers -ErrorAction Stop
+                        $upOp = Invoke-RestMethod -Uri $upLocation -Headers $headers -ErrorAction Stop
                         if ($upOp.status -eq "Succeeded") { $updateComplete = $true; break }
                         if ($upOp.status -eq "Failed") { throw "Ontology datasource update failed for '$agentName': $($upOp.error.message)" }
                     }
@@ -1348,7 +1384,23 @@ function Add-OntologyDatasourceToAgents {
                     -Headers $headers `
                     -Body $publishBody `
                     -UseBasicParsing -ErrorAction Stop
-                if ($publishResp.StatusCode -ne 200) {
+                if ($publishResp.StatusCode -eq 202) {
+                    $pubLocation = [string]($publishResp.Headers["Location"] | Select-Object -First 1)
+                    $pubOpId = [string]($publishResp.Headers["x-ms-operation-id"] | Select-Object -First 1)
+                    if ([string]::IsNullOrWhiteSpace($pubLocation) -and -not [string]::IsNullOrWhiteSpace($pubOpId)) {
+                        $pubLocation = "$FabricApiBase/operations/$pubOpId"
+                    }
+                    if ([string]::IsNullOrWhiteSpace($pubLocation)) { throw "Data Agent publish returned 202 without a Location or x-ms-operation-id header for '$agentName'" }
+                    $pubComplete = $false
+                    for ($pollAttempt = 1; $pollAttempt -le 24; $pollAttempt++) {
+                        Start-Sleep 5
+                        $headers = @{ Authorization = "Bearer $(Get-CachedAccessToken 'https://api.fabric.microsoft.com')"; "Content-Type" = "application/json" }
+                        $pubOp = Invoke-RestMethod -Uri $pubLocation -Headers $headers -ErrorAction Stop
+                        if ($pubOp.status -eq "Succeeded") { $pubComplete = $true; break }
+                        if ($pubOp.status -eq "Failed") { throw "Data Agent publish failed for '$agentName': $($pubOp.error.message)" }
+                    }
+                    if (-not $pubComplete) { throw "Data Agent publish timed out for '$agentName'" }
+                } elseif ($publishResp.StatusCode -ne 200) {
                     throw "Data Agent publish returned HTTP $($publishResp.StatusCode) for '$agentName'"
                 }
                 Write-Host "  ✓ $OntologyName datasource applied and '$agentName' published" -ForegroundColor Green
@@ -1603,7 +1655,7 @@ if ($Teardown) {
 }
 
 # Phase-only continuations already have patients; -SkipFhir means reuse, not absence.
-if ($Phase2 -or $Phase3 -or $Phase4 -or $Phase5 -or $Phase7) {
+if (($Phase2 -or $Phase3 -or $Phase4 -or $Phase5) -and -not $SkipFhirExport -and -not $SkipHdsPipelines) {
     Invoke-DemoEnrichmentStep
 }
 
@@ -2034,7 +2086,7 @@ if (-not $Phase3 -and -not $Phase4 -and -not $Phase5 -and -not $Phase7 -and (-no
 
 # Fresh loads were enriched inside deploy-fhir before its first export. This also
 # covers reuse/-SkipFhir continuations before DICOM, catch-up, or Fabric RTI export.
-if (-not $Phase3 -and -not $Phase4 -and -not $Phase5 -and -not $Phase7) {
+if (-not $Phase3 -and -not $Phase4 -and -not $Phase5 -and -not $Phase7 -and -not $SkipFhirExport -and -not $SkipHdsPipelines) {
     Invoke-DemoEnrichmentStep
 }
 
@@ -2664,28 +2716,59 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
             return $t
         }
 
+        function Invoke-P4Rest {
+            param([Parameter(Mandatory)][string]$Uri, [string]$Method = 'GET', [object]$Body = $null)
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+                try {
+                    $p4Token = Get-FabricTokenLocal
+                    $headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
+                    if ($null -ne $Body) { return Invoke-RestMethod -Uri $Uri -Headers $headers -Method $Method -Body $Body -TimeoutSec 60 -ErrorAction Stop }
+                    return Invoke-RestMethod -Uri $Uri -Headers $headers -Method $Method -TimeoutSec 60 -ErrorAction Stop
+                } catch {
+                    $sc = $null; try { $sc = [int]$_.Exception.Response.StatusCode } catch {}
+                    $msg = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+                    $isTimeout = $msg -match 'HttpClient\.Timeout|TimeoutException|OperationCanceledException|timed out'
+                    if (($isTimeout -or $sc -in @(429, 500, 502, 503, 504) -or ($sc -eq 403 -and $msg -match 'RequestDeniedByInboundPolicy|Forbidden')) -and $attempt -lt 6) {
+                        $delay = [Math]::Min(15 * $attempt, 60)
+                        Write-Host "    Fabric REST transient error ($($sc ?? 'timeout')) — retrying in ${delay}s ($attempt/6)..." -ForegroundColor Yellow
+                        Start-Sleep -Seconds $delay
+                        continue
+                    }
+                    throw
+                }
+            }
+        }
+
         $p4Token = Get-FabricTokenLocal
         $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
         $p4Base = "https://api.fabric.microsoft.com/v1"
 
         # Resolve workspace
-        $p4Ws = (Invoke-RestMethod -Uri "$p4Base/workspaces" -Headers $p4Headers).value |
+        $p4Ws = (Invoke-P4Rest -Uri "$p4Base/workspaces").value |
             Where-Object { $_.displayName -eq $FabricWorkspaceName }
         if (-not $p4Ws) { throw "Workspace '$FabricWorkspaceName' not found" }
         $p4WsId = $p4Ws.id
         Write-Host "  ✓ Workspace: $FabricWorkspaceName ($p4WsId)" -ForegroundColor Green
+
+        $existingP4Ontologies = @()
+        try { $existingP4Ontologies = @((Invoke-P4Rest -Uri "$p4Base/workspaces/$p4WsId/ontologies").value) } catch {}
+        $existingClinOnt = $existingP4Ontologies | Where-Object { $_.displayName -eq 'ClinicalDeviceOntology' } | Select-Object -First 1
+        if ($existingClinOnt -and $SkipDataAgents -and -not $ReplaceOntology -and -not $Phase4) {
+            Write-Host "  ✓ ClinicalDeviceOntology ($($existingClinOnt.id)) and clinical Data Agents already deployed; skipping Phase 4 on continuation." -ForegroundColor Green
+            return
+        }
 
         # ── Step 8a: Verify clinical pipeline has completed ──
         Write-Host ""
         Write-Host "  --- Step 8a: Clinical Pipeline Verification ---" -ForegroundColor Cyan
 
         $clinPipelineName = "healthcare1_msft_clinical_data_foundation_ingestion"
-        $pipelines = (Invoke-RestMethod -Uri "$p4Base/workspaces/$p4WsId/items?type=DataPipeline" -Headers $p4Headers).value
+        $pipelines = (Invoke-P4Rest -Uri "$p4Base/workspaces/$p4WsId/items?type=DataPipeline").value
         $clinPipeline = $pipelines | Where-Object { $_.displayName -eq $clinPipelineName } | Select-Object -First 1
 
         $clinVerified = $false
         if ($clinPipeline) {
-            $clinRuns = (Invoke-RestMethod -Uri "$p4Base/workspaces/$p4WsId/items/$($clinPipeline.id)/jobs/instances?limit=1" -Headers $p4Headers).value
+            $clinRuns = (Invoke-P4Rest -Uri "$p4Base/workspaces/$p4WsId/items/$($clinPipeline.id)/jobs/instances?limit=1").value
             if ($clinRuns -and $clinRuns[0].status -eq 'Completed') {
                 Write-Host "  ✓ Clinical pipeline last run: Completed ($($clinRuns[0].endTimeUtc))" -ForegroundColor Green
                 $clinVerified = $true
@@ -2865,9 +2948,23 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
                         $daNbResp = Invoke-WebRequest -Uri "$p4Base/workspaces/$p4WsId/items" `
                             -Headers $p4Headers -Method Post -Body $daNbBody -UseBasicParsing -ErrorAction Stop
                         if ($daNbResp.StatusCode -eq 202) {
-                            $daNbOpId = $daNbResp.Headers["x-ms-operation-id"]
-                            if ($daNbOpId -is [array]) { $daNbOpId = $daNbOpId[0] }
-                            Start-Sleep 10
+                            $daNbLocation = [string]($daNbResp.Headers["Location"] | Select-Object -First 1)
+                            $daNbOpId = [string]($daNbResp.Headers["x-ms-operation-id"] | Select-Object -First 1)
+                            if ([string]::IsNullOrWhiteSpace($daNbLocation) -and -not [string]::IsNullOrWhiteSpace($daNbOpId)) {
+                                $daNbLocation = "$p4Base/operations/$daNbOpId"
+                            }
+                            if ($daNbLocation) {
+                                for ($poll = 0; $poll -lt 30; $poll++) {
+                                    Start-Sleep 5
+                                    $p4Token = Get-FabricTokenLocal
+                                    $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
+                                    $daOp = Invoke-RestMethod -Uri $daNbLocation -Headers $p4Headers -ErrorAction Stop
+                                    if ($daOp.status -eq "Succeeded") { break }
+                                    if ($daOp.status -in @("Failed", "Cancelled")) { throw "DeviceAssociation notebook create LRO $($daOp.status): $($daOp | ConvertTo-Json -Compress)" }
+                                }
+                            } else {
+                                Start-Sleep 10
+                            }
                         }
                         $daNbCreated = $true
                         break
@@ -3441,6 +3538,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             }
 
             if ($status -in @(429, 500, 502, 503, 504)) { return $true }
+            if ($null -eq $status -and $ErrorText -match '(?i)HttpClient\.Timeout|TimeoutException|OperationCanceledException|The request was canceled due to the configured HttpClient\.Timeout') { return $true }
             if ($status -ne 403) { return $false }
 
             return ($ErrorText -match '(?i)RequestDeniedByInboundPolicy|inbound communication policy|Response status code does not indicate success:\s*403\s*\(Forbidden\)|HTTP\s*403\s*\(Forbidden\)|\b403\s+Forbidden\b')
@@ -3472,6 +3570,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                         Start-Sleep -Seconds $delay
                         continue
                     }
+                    if ($fabricError.Text.Trim()) { throw "$Label failed (HTTP $($fabricError.StatusCode)): $($fabricError.Text.Trim())" }
                     throw
                 }
             }
@@ -3503,6 +3602,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                         Start-Sleep -Seconds $delay
                         continue
                     }
+                    if ($fabricError.Text.Trim()) { throw "$Label failed (HTTP $($fabricError.StatusCode)): $($fabricError.Text.Trim())" }
                     throw
                 }
             }
@@ -3544,8 +3644,12 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                 [Parameter(Mandatory)][string]$Label
             )
             if ([int]$Response.StatusCode -ne 202) { return }
-            $location = [string]$Response.Headers['Location']
-            if ([string]::IsNullOrWhiteSpace($location)) { throw "$Label returned HTTP 202 without a Location header." }
+            $location = [string]($Response.Headers['Location'] | Select-Object -First 1)
+            if ([string]::IsNullOrWhiteSpace($location)) {
+                $opId = [string]($Response.Headers['x-ms-operation-id'] | Select-Object -First 1)
+                if (-not [string]::IsNullOrWhiteSpace($opId)) { $location = "$p5Base/operations/$opId" }
+            }
+            if ([string]::IsNullOrWhiteSpace($location)) { throw "$Label returned HTTP 202 without a Location or x-ms-operation-id header." }
             for ($attempt = 1; $attempt -le 60; $attempt++) {
                 Start-Sleep -Seconds 5
                 $operation = Invoke-P5FabricRest -Uri $location -Label "$Label operation"
@@ -3679,8 +3783,9 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                     }
                 } | ConvertTo-Json -Depth 10
                 try {
-                    Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items/$($existingNb.id)/updateDefinition" `
-                        -Body $updateBody -Label 'Update materialization notebook' | Out-Null
+                    $nbUpdateResp = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items/$($existingNb.id)/updateDefinition" `
+                        -Body $updateBody -Label 'Update materialization notebook'
+                    Wait-P5FabricOperation -Response $nbUpdateResp -Label 'Update materialization notebook'
                     $nbId = $existingNb.id
                 } catch {
                     $updateStatus = (Get-P5FabricHttpError -ErrorRecord $_).StatusCode
@@ -3700,8 +3805,9 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                 Write-Host "  Creating notebook '$nbName'..." -ForegroundColor White
                 $createBody = $createBodyObj | ConvertTo-Json -Depth 10
                 try {
-                    $createResp = Invoke-P5FabricRest -Method POST -Uri "$p5Base/workspaces/$p5WsId/items" `
+                    $createResp = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items" `
                         -Body $createBody -Label 'Create materialization notebook'
+                    Wait-P5FabricOperation -Response $createResp -Label 'Create materialization notebook'
                 } catch {
                     $createStatus = (Get-P5FabricHttpError -ErrorRecord $_).StatusCode
                     if ($createStatus -eq 409) {
@@ -3709,13 +3815,15 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                         Write-Host "  Name reservation lock hit — creating '$nbName' instead." -ForegroundColor Yellow
                         $createBodyObj.displayName = $nbName
                         $createBody = $createBodyObj | ConvertTo-Json -Depth 10
-                        $createResp = Invoke-P5FabricRest -Method POST -Uri "$p5Base/workspaces/$p5WsId/items" `
+                        $createResp = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items" `
                             -Body $createBody -Label 'Create renamed materialization notebook'
+                        Wait-P5FabricOperation -Response $createResp -Label 'Create renamed materialization notebook'
                     } else {
                         throw
                     }
                 }
-                $nbId = $createResp.id
+                $nbId = $null
+                try { if ($createResp.Content) { $nbId = ($createResp.Content | ConvertFrom-Json).id } } catch {}
                 if (-not $nbId) {
                     Write-Host "  Notebook create returned no item id — waiting for Fabric item propagation..." -ForegroundColor Yellow
                     for ($nbLookupAttempt = 1; $nbLookupAttempt -le 12; $nbLookupAttempt++) {
@@ -3800,6 +3908,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                 IncludeDicom        = $true
                 IncludeTelemetry    = [bool](-not $SkipFabric)
                 IncludeGold         = $true
+                ReplaceExisting     = [bool]$ReplaceOntology
             }
             $global:LASTEXITCODE = 0
             & "$ScriptDir\phase-4\deploy-ontology.ps1" @payerOntologyArgs
@@ -4024,7 +4133,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             $riskQuery = "external_table('$riskShortcutName') | where risk_tier == 'High' | project patient_id, risk_tier, risk_probability, los_days, admit_date=tostring(admit_date), message=strcat('30-day readmission risk ', round(100.0*risk_probability,1), '%')"
             $riskEntities = @(
                 @{ uniqueIdentifier=$riskContainerId; payload=@{name='Readmission Risk Alerts';type='kqlQueries'}; type='container-v1' },
-                @{ uniqueIdentifier=$riskSourceId; payload=@{name='ReadmissionRiskScores';runSettings=@{isStopped=$false;executionIntervalInSeconds=86400};query=@{queryString=$riskQuery};eventhouseItem=@{itemId=$p5KqlDb.id;workspaceId=$p5WsId;itemType='KustoDatabase'};parentContainer=@{targetUniqueIdentifier=$riskContainerId}};type='kqlSource-v1' },
+                @{ uniqueIdentifier=$riskSourceId; payload=@{name='ReadmissionRiskScores';runSettings=@{executionIntervalInSeconds=86400};query=@{queryString=$riskQuery};eventhouseItem=@{itemId=$p5KqlDb.id;workspaceId=$p5WsId;itemType='KustoDatabase'};parentContainer=@{targetUniqueIdentifier=$riskContainerId}};type='kqlSource-v1' },
                 @{ uniqueIdentifier=$riskEventId; payload=@{name='Readmission risk events';parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Event';instance=$riskSourceEvent}};type='timeSeriesView-v1' },
                 @{ uniqueIdentifier=$riskObjectId; payload=@{name='Patient';parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Object'}};type='timeSeriesView-v1' },
                 @{ uniqueIdentifier=$riskPatientId; payload=@{name='patient_id';parentObject=@{targetUniqueIdentifier=$riskObjectId};parentContainer=@{targetUniqueIdentifier=$riskContainerId};definition=@{type='Attribute';instance=$riskIdentity}};type='timeSeriesView-v1' }
@@ -4059,8 +4168,9 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                 $createPayload = @{displayName='ReadmissionRiskAlert';description='Daily high readmission-risk alerts from healthcare1_reporting_gold.';type='Reflex';definition=@{parts=@(@{path='ReflexEntities.json';payload=$riskEntitiesB64;payloadType='InlineBase64'})}} | ConvertTo-Json -Depth 15
                 $riskCreate = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items" -Body $createPayload -Label 'Create ReadmissionRiskAlert'
                 if ($riskCreate.StatusCode -notin @(200,201,202)) { throw "ReadmissionRiskAlert create returned HTTP $($riskCreate.StatusCode)" }
+                Wait-P5FabricOperation -Response $riskCreate -Label 'Create ReadmissionRiskAlert'
                 $riskReflexId = $null
-                try { $riskReflexId = ($riskCreate.Content | ConvertFrom-Json).id } catch {}
+                try { if ($riskCreate.Content) { $riskReflexId = ($riskCreate.Content | ConvertFrom-Json).id } } catch {}
                 for ($attempt = 1; -not $riskReflexId -and $attempt -le 24; $attempt++) {
                     Start-Sleep 5
                     $created = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items?type=Reflex" -Label 'Find ReadmissionRiskAlert').value | Where-Object { $_.displayName -eq 'ReadmissionRiskAlert' } | Select-Object -First 1
@@ -4071,6 +4181,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             $riskUpdateBody = @{definition=@{parts=@(@{path='ReflexEntities.json';payload=$riskFullB64;payloadType='InlineBase64'})}} | ConvertTo-Json -Depth 15
             $riskUpdate = Invoke-P5FabricWeb -Method POST -Uri "$p5Base/workspaces/$p5WsId/items/$riskReflexId/updateDefinition" -Body $riskUpdateBody -Label 'Update ReadmissionRiskAlert'
             if ($riskUpdate.StatusCode -notin @(200,202)) { throw "ReadmissionRiskAlert update returned HTTP $($riskUpdate.StatusCode)" }
+            Wait-P5FabricOperation -Response $riskUpdate -Label 'Update ReadmissionRiskAlert'
             Write-Host "  ✓ Readmission Risk alert configured for: $AlertEmail (daily; Reflex $riskReflexId)" -ForegroundColor Green
         } else {
             Write-Host "  ⚠ Readmission Risk alert skipped (no AlertEmail or Activator disabled)" -ForegroundColor Yellow

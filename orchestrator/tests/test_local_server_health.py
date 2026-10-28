@@ -675,6 +675,18 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertFalse((repo / "state-tracking" / ".deployment-state-ws-a.json").exists())
         self.assertTrue(other.exists())
 
+    def test_deploy_request_rejects_cardiology_prefix_longer_than_twelve_chars(self) -> None:
+        base = {
+            "fabric_workspace_name": "med-1028",
+            "resource_group_name": "rg-med-1028",
+            "expected_tenant_id": "8d038e6a-9b7d-4cb8-bbcf-e84dff156478",
+            "expected_subscription_id": "9bbee190-dc61-4c58-ab47-1275cb04018f",
+        }
+        valid = self.local_server.DeployRequest(**base, cardiology_prefix="cardioed1028")
+        self.assertEqual(valid.cardiology_prefix, "cardioed1028")
+        with self.assertRaisesRegex(Exception, "3–12 lowercase letters/digits"):
+            self.local_server.DeployRequest(**base, cardiology_prefix="cardiomed1027")
+
 
 if __name__ == "__main__":
     unittest.main()

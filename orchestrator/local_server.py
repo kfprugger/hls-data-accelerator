@@ -772,8 +772,8 @@ class DeployRequest(BaseModel):
                 raise ValueError(f"{field} contains unsupported characters")
         if not re.fullmatch(r"[a-z][a-z0-9]{1,30}", self.cardiology_location):
             raise ValueError("cardiology_location must be an Azure region name")
-        if self.cardiology_prefix and not re.fullmatch(r"[a-z][a-z0-9]{2,19}", self.cardiology_prefix):
-            raise ValueError("cardiology_prefix must be 3–20 lowercase letters/digits, starting with a letter")
+        if self.cardiology_prefix and not re.fullmatch(r"[a-z][a-z0-9]{2,11}", self.cardiology_prefix):
+            raise ValueError("cardiology_prefix must be 3–12 lowercase letters/digits, starting with a letter")
         if bool(self.cardiology_chat_model) != bool(self.cardiology_chat_model_version):
             raise ValueError("cardiology_chat_model and cardiology_chat_model_version must be supplied together")
         for field in ("cardiology_app_users", "cardiology_reviewer_users"):
@@ -1373,12 +1373,22 @@ _ADDON_OPTIONS = {
 }
 
 
-async def _run_later_addons(instance_id: str, config: dict, names: list[str]) -> None:
+async def _run_later_addons(
+    instance_id: str, config: dict, names: list[str], fresh_export: bool = True,
+    pause_capacity: tuple[str, str, str] | None = None,
+) -> None:
+    """Run add-ons after the base deployment is already Completed.
+
+    Add-ons never gate the base deployment: Databricks identity and metastore propagation can take
+    minutes to hours, so the base estate is reported complete first and add-on state is tracked in
+    ``customStatus.addons``. ``pause_capacity`` is applied last because Rayfin and cardiology need an
+    active Fabric capacity.
+    """
     from activities.addons import AddonRunner
     deployment = deployments[instance_id]
     cs = deployment["customStatus"]
     try:
-        await AddonRunner(instance_id, config, deployment, save_state, active_processes).run(names, fresh_export=True)
+        await AddonRunner(instance_id, config, deployment, save_state, active_processes).run(names, fresh_export=fresh_export)
         cs["detail"] = "Requested add-ons completed."
     except Exception as exc:
         cs["detail"] = f"Add-on failed: {exc}. The completed base deployment is retained."
@@ -1391,6 +1401,13 @@ async def _run_later_addons(instance_id: str, config: dict, names: list[str]) ->
             deployment["runtimeStatus"] = "Completed"
             cs["status"] = "succeeded"
             cs["currentPhase"] = "Deployment Complete"
+        if pause_capacity and deployment.get("runtimeStatus") == "Completed":
+            try:
+                await asyncio.get_running_loop().run_in_executor(None, _pause_capacity_sync, *pause_capacity)
+                cs["capacityPaused"] = True
+            except Exception as exc:
+                logger.warning("Failed to auto-pause capacity '%s' after add-ons: %s", pause_capacity[2], exc)
+                cs["capacityPauseError"] = str(exc)
         deployment["lastUpdatedTime"] = now_iso()
         _addon_tasks.pop(instance_id, None)
         save_state()
@@ -1408,6 +1425,8 @@ async def start_addons(instance_id: str, body: dict):
     names = body.get("addons")
     if not isinstance(names, list) or not names or any(not isinstance(n, str) or n not in ADDON_FLAGS for n in names) or len(set(names)) != len(names):
         raise HTTPException(422, "addons must be a nonempty, unique list of databricks, rayfin or cardiology")
+    # Serialize add-ons to protect the shared CLI token caches, but never make cardiology wait on optional peers.
+    names = [name for name in ADDON_FLAGS if name in names]
     if set(body) - _ADDON_OPTIONS - {"addons"}:
         raise HTTPException(422, "Only add-on options can be changed by this endpoint")
     cs = deployment.get("customStatus") or {}
@@ -1509,8 +1528,8 @@ def _phase_has_blocking_logs(deployment: dict, phase_name: str) -> bool:
                 message = str(entry.get("message", ""))
                 message_upper = message.upper()
                 transient_fabric_retry = (
-                    "REQUESTDENIEDBYINBOUNDPOLICY" in message_upper
-                    and "RETRY" in message_upper
+                    ("REQUESTDENIEDBYINBOUNDPOLICY" in message_upper and "RETRY" in message_upper)
+                    or ("SHORTCUT AUTH FAILED" in message_upper and "WAITING" in message_upper)
                 )
                 if transient_fabric_retry:
                     continue
@@ -1732,7 +1751,10 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
             req.skip_rti_phase2 = True
         elif "FABRIC RTI" in phase_name:
             req.reuse_fabric_rti = True
+        elif "HDS SOURCE DEPLOYMENT" in phase_name:
+            req.skip_hds_source = True
         elif "HDS PIPELINES" in phase_name:
+            req.skip_hds_source = True
             req.skip_hds_pipelines = True
             req.skip_dicom = True
         elif "DATA AGENTS" in phase_name:
@@ -2035,6 +2057,16 @@ async def get_auth_context(force: bool = False):
     return result
 
 
+@app.get("/api/auth/live")
+async def get_live_credentials(subscription_id: str = ""):
+    """Mint a real token per deployment audience through Azure CLI and Az PowerShell and call each service once.
+
+    Unlike ``/api/auth/context`` this never trusts cached login state. Tokens are never returned.
+    """
+    from shared.live_credentials import LiveCredentialProbe
+    return await asyncio.get_event_loop().run_in_executor(None, LiveCredentialProbe().probe, subscription_id)
+
+
 def _get_live_status() -> dict:
     database_status = "ok"
     try:
@@ -2298,7 +2330,6 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
         deployment["customStatus"]["currentPhase"] = "Starting Deploy-All.ps1"
         deployment["customStatus"]["status"] = "running"
         save_state()
-
         logger.info("Starting Deploy-All.ps1 for workspace='%s', rg='%s'",
                      req.fabric_workspace_name, req.resource_group_name)
 
@@ -2366,13 +2397,12 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
             raise RuntimeError("Post-deployment live validation failed: " + "; ".join(failures))
         deployment["customStatus"]["validatedAt"] = validation.get("checkedAt")
         deployment["customStatus"]["detail"] = f"Live validation passed: {len(validation.get('checks') or [])} checks."
-        from activities.addons import AddonRunner, selected
+        from activities.addons import selected
         requested_addons = selected(config)
         if requested_addons:
             deployment["customStatus"]["addons"] = {name: {"status": "pending"} for name in requested_addons}
-            deployment["customStatus"]["totalPhases"] += len(requested_addons)
+            deployment["customStatus"]["detail"] += " Requested add-ons run next without gating this deployment."
             deployment["output"] = {"status": "running", "phases": phases, "resources": result.get("resources", {})}
-            await AddonRunner(instance_id, config, deployment, save_state, active_processes).run(requested_addons)
         deployment["runtimeStatus"] = "Completed"
         deployment["customStatus"]["status"] = "succeeded"
         deployment["customStatus"]["currentPhase"] = "Deployment Complete"
@@ -2408,8 +2438,13 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
                 deployment["output"]["resources"]["ohif_viewer_url"] = final_links["ohifViewer"]
         logger.info("Deployment %s completed (%.1fs)", instance_id, duration)
 
-        # Auto-pause Fabric capacity if requested
-        if req.pause_capacity_after_deploy and req.capacity_name:
+        if requested_addons:
+            # Add-ons start after the base is Completed; they pause the capacity when they finish.
+            _addon_tasks[instance_id] = asyncio.create_task(_run_later_addons(
+                instance_id, config, requested_addons, fresh_export=False,
+                pause_capacity=(req.capacity_subscription_id, req.capacity_resource_group, req.capacity_name)
+                if req.pause_capacity_after_deploy and req.capacity_name else None))
+        elif req.pause_capacity_after_deploy and req.capacity_name:
             try:
                 _pause_capacity_sync(
                     req.capacity_subscription_id,
@@ -3149,7 +3184,7 @@ async def list_subscriptions(force: bool = False):
         subs = _list_subscriptions_sync(force=force)
         # Sort so default subscription comes first
         subs.sort(key=lambda s: not s.get("isDefault", False))
-        result = [{"id": s["id"], "name": s["name"]} for s in subs]
+        result = [{"id": s["id"], "name": s["name"], "tenantId": s.get("tenantId", "")} for s in subs]
         _set_timed_cached(cache_key, result)
         return result
     except Exception as e:
@@ -3163,7 +3198,7 @@ def _list_subscriptions_sync(force: bool = False) -> list[dict]:
         if cached is not None:
             return cached
     result = _az_run(
-        ["az", "account", "list", "--query", "[].{id:id, name:name, isDefault:isDefault}", "-o", "json"],
+        ["az", "account", "list", "--query", "[].{id:id, name:name, tenantId:tenantId, isDefault:isDefault}", "-o", "json"],
         check=True,
     )
     subs = json.loads(result.stdout)
@@ -4029,7 +4064,8 @@ def _query_fhir_counts(rg_name: str) -> dict:
 def _active_hosted_runs() -> int:
     return sum(dep.get("runtimeStatus") in {"Running", "Pending"}
                for dep in deployments.values()
-               if (dep.get("customStatus") or {}).get("runType") != "teardownBatch")
+               if (dep.get("customStatus") or {}).get("runType") != "teardownBatch") + sum(
+        not task.done() for task in _addon_tasks.values())
 
 
 def _invalidate_auth_caches() -> None:

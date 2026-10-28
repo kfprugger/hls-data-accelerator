@@ -34,14 +34,15 @@ function Invoke-ImagingAgentGrounding {
     param(
         [Parameter(Mandatory)][string]$KustoUri,
         [Parameter(Mandatory)][string]$DatabaseName,
-        [Parameter(Mandatory)][hashtable]$KustoHeaders
+        [Parameter(Mandatory)][hashtable]$KustoHeaders,
+        [switch]$SkipSnapshotMaterialization
     )
 
     $commands = @(
         @{
             Label = 'agent_ImagingSummary'
             Command = @'
-.create-or-alter function with (folder="AgentGrounding", docstring="Deterministic imaging status, modality, study, and patient aggregates") agent_ImagingSummary() {
+.create-or-alter function with (skipvalidation="true", folder="AgentGrounding", docstring="Deterministic imaging status, modality, study, and patient aggregates") agent_ImagingSummary() {
     external_table('SilverImagingStudy')
     | mv-expand series_item=series
     | extend modality_code=tostring(series_item.modality.code), patient_id=tostring(subject.identifier.value), imaging_status=status
@@ -96,7 +97,9 @@ function Invoke-ImagingAgentGrounding {
 '@
         }
     )
-
+    if ($SkipSnapshotMaterialization) {
+        $commands = @($commands | Where-Object { $_.Label -notmatch '\bbackfill$' })
+    }
     Invoke-GroundingCommands -Purpose "Imaging agent" -Commands $commands -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders
 }
 
@@ -188,7 +191,8 @@ function Invoke-AgentGroundingBackfills {
     param(
         [Parameter(Mandatory)][string]$KustoUri,
         [Parameter(Mandatory)][string]$DatabaseName,
-        [Parameter(Mandatory)][hashtable]$KustoHeaders
+        [Parameter(Mandatory)][hashtable]$KustoHeaders,
+        [switch]$SkipSnapshotMaterialization
     )
 
     $commands = @(
@@ -443,9 +447,10 @@ claims_events
         }
     )
 
-    Invoke-ImagingAgentGrounding -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders
+    Invoke-ImagingAgentGrounding -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders -SkipSnapshotMaterialization:$SkipSnapshotMaterialization
     Invoke-ClinicalAgentGrounding -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders
     foreach ($entry in $commands) {
+        if ($SkipSnapshotMaterialization -and $entry.Label -match '\bbackfill$') { continue }
         if (-not (Invoke-KustoMgmt -Command $entry.Command -Label $entry.Label -KustoUri $KustoUri -DatabaseName $DatabaseName -KustoHeaders $KustoHeaders)) {
             throw "Agent grounding deployment failed: $($entry.Label)"
         }

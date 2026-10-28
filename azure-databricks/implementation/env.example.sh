@@ -3,6 +3,7 @@
 
 # --- Azure context (must match your existing HLS deployment) ---
 export AZ_TENANT_ID=""
+export ARM_TENANT_ID="${ARM_TENANT_ID:-$AZ_TENANT_ID}"
 export AZ_SUBSCRIPTION_ID=""
 export AZ_RESOURCE_GROUP=""            # existing HLS resource group
 export AZ_LOCATION="eastus"
@@ -17,6 +18,7 @@ export KEY_VAULT_NAME=""
 
 # --- Databricks target ---
 export ENVIRONMENT="dev"               # dev | test | prod
+export DATABRICKS_NAMESPACE=""         # optional; defaults to storage account, then ENVIRONMENT
 export DATABRICKS_HOST=""              # filled by 02-deploy-databricks-foundation.sh
 export DATABRICKS_ACCOUNT_ID=""
 export WORKLOAD_PRINCIPAL=""           # service principal application ID

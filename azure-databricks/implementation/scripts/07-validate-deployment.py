@@ -17,8 +17,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 
 REQUIRED_SILVER = [
@@ -56,7 +58,7 @@ def sql(statement: str, warehouse_id: str) -> list[list[str]]:
             "statement": statement,
             "warehouse_id": warehouse_id,
             "wait_timeout": "50s",
-            "on_wait_timeout": "CANCEL",
+            "on_wait_timeout": "CONTINUE",
         }
     )
     result = subprocess.run(
@@ -68,7 +70,14 @@ def sql(statement: str, warehouse_id: str) -> list[list[str]]:
     if result.returncode != 0:
         raise RuntimeError(f"statement failed: {result.stderr.strip()}")
     body = json.loads(result.stdout)
+    stmt_id = body.get("statement_id")
     state = body.get("status", {}).get("state")
+    for _ in range(36):
+        if state not in ("PENDING", "RUNNING") or not stmt_id:
+            break
+        time.sleep(5)
+        body = cli("api", "get", f"/api/2.0/sql/statements/{stmt_id}")
+        state = body.get("status", {}).get("state")
     if state != "SUCCEEDED":
         raise RuntimeError(f"statement state {state}: {body.get('status')}")
     return body.get("result", {}).get("data_array") or []
@@ -88,12 +97,16 @@ def resolve_warehouse(explicit: str | None) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--environment", default=os.environ.get("ENVIRONMENT", "dev"))
+    parser.add_argument("--namespace", default=os.environ.get("DATABRICKS_NAMESPACE") or os.environ.get("STORAGE_ACCOUNT_NAME"))
     parser.add_argument("--warehouse-id", default=os.environ.get("WAREHOUSE_ID"))
     parser.add_argument("--max-stream-age-minutes", type=int, default=15)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    namespace = args.namespace or args.environment
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,120}", namespace):
+        parser.error("--namespace must be a lowercase SQL identifier")
 
-    catalog = f"hls_{args.environment}"
+    catalog = f"hls_{namespace}"
     checks: list[dict] = []
 
     def record(name: str, status: str, detail: str) -> None:
@@ -110,11 +123,11 @@ def main() -> int:
     try:
         rows = sql(
             "SELECT external_location_name, read_only FROM system.information_schema.external_locations "
-            f"WHERE external_location_name LIKE 'hls_{args.environment}_%'",
+            f"WHERE external_location_name LIKE 'hls_{namespace}_%'",
             warehouse_id,
         )
         readonly = {row[0]: row[1] for row in rows}
-        expected_readonly = [f"hls_{args.environment}_fhir_export", f"hls_{args.environment}_dicom_output"]
+        expected_readonly = [f"hls_{namespace}_fhir_export", f"hls_{namespace}_dicom_output"]
         bad = [n for n in expected_readonly if str(readonly.get(n, "")).lower() not in {"true", "yes"}]
         if bad:
             record("source_locations_read_only", "fail", f"writable source locations: {bad}")
@@ -226,11 +239,15 @@ def main() -> int:
             record("clinical_alert", "skip", "alert not deployed (no reviewed recipient supplied)")
         else:
             subs = clinical[0].get("evaluation", {}).get("notification", {}).get("subscriptions") or []
-            record(
-                "clinical_alert",
-                "pass" if subs else "fail",
-                f"recipients={len(subs)}",
-            )
+            paused = (clinical[0].get("schedule") or {}).get("pause_status") == "PAUSED"
+            if subs:
+                record("clinical_alert", "pass", f"recipients={len(subs)}")
+            elif paused and not os.environ.get("ALERT_EMAIL"):
+                # The bundle always deploys this alert; without a reviewed workspace-user recipient it stays
+                # paused and silent by design (05-deploy-bundle.sh). That is a skip, never a pass.
+                record("clinical_alert", "skip", "deployed paused with no recipient (no reviewed workspace-user recipient supplied)")
+            else:
+                record("clinical_alert", "fail", f"recipients=0 paused={paused} recipient_supplied={bool(os.environ.get('ALERT_EMAIL'))}")
     except Exception as exc:
         record("clinical_alert", "skip", f"alert API unavailable: {exc}")
 

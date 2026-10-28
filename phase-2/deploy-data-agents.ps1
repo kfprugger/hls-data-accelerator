@@ -39,17 +39,31 @@ $ErrorActionPreference = "Stop"
 # AUTH HELPERS (same pattern as deploy-fabric-rti.ps1)
 # ============================================================================
 
+$script:AccessTokenCache = @{}
 function Get-AccessTokenForResource {
     param ([string]$ResourceUrl)
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl
-    $rawToken = $tokenObj.Token
-    if ($rawToken -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
-        try { return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    $key = $ResourceUrl.ToLowerInvariant()
+    $cached = $script:AccessTokenCache[$key]
+    if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        $rawToken = $tokenObj.Token
+        if ($rawToken -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
+            try { $rawToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        } elseif ($rawToken -isnot [string]) {
+            $rawToken = $rawToken | ConvertFrom-SecureString -AsPlainText
+        }
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = $tokenObj.ExpiresOn }
+        return $rawToken
+    } catch {
+        $cliJson = az account get-access-token --resource $ResourceUrl -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $rawToken = [string]$cliJson.accessToken
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $rawToken
     }
-    elseif ($rawToken -is [string]) { return $rawToken }
-    else { return $rawToken | ConvertFrom-SecureString -AsPlainText }
 }
 
 function Get-FabricAccessToken { return Get-AccessTokenForResource -ResourceUrl "https://api.fabric.microsoft.com" }
@@ -210,6 +224,14 @@ $silverTables = @(
     'Immunization'
 )
 if ($IncludeDicomImaging) { $silverTables += 'ImagingStudy' }
+try {
+    $existingSilverTables = @((Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/lakehouses/$silverLhId/tables").data | ForEach-Object { [string]$_.name })
+    foreach ($ontTable in @('DeviceAssociation', 'PatientOntology', 'DeviceOntology', 'EncounterOntology', 'ConditionOntology', 'MedicationRequestOntology', 'ObservationOntology', 'ImagingStudyOntology')) {
+        if ($existingSilverTables -contains $ontTable -and $silverTables -notcontains $ontTable) {
+            $silverTables += $ontTable
+        }
+    }
+} catch {}
 
 # ============================================================================
 # SHARED LAKEHOUSE DATASOURCE INSTRUCTIONS + FEW-SHOTS
