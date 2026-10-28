@@ -1528,8 +1528,8 @@ def _phase_has_blocking_logs(deployment: dict, phase_name: str) -> bool:
                 message = str(entry.get("message", ""))
                 message_upper = message.upper()
                 transient_fabric_retry = (
-                    "REQUESTDENIEDBYINBOUNDPOLICY" in message_upper
-                    and "RETRY" in message_upper
+                    ("REQUESTDENIEDBYINBOUNDPOLICY" in message_upper and "RETRY" in message_upper)
+                    or ("SHORTCUT AUTH FAILED" in message_upper and "WAITING" in message_upper)
                 )
                 if transient_fabric_retry:
                     continue

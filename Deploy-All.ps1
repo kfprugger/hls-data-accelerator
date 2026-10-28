@@ -2716,28 +2716,59 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
             return $t
         }
 
+        function Invoke-P4Rest {
+            param([Parameter(Mandatory)][string]$Uri, [string]$Method = 'GET', [object]$Body = $null)
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+                try {
+                    $p4Token = Get-FabricTokenLocal
+                    $headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
+                    if ($null -ne $Body) { return Invoke-RestMethod -Uri $Uri -Headers $headers -Method $Method -Body $Body -TimeoutSec 60 -ErrorAction Stop }
+                    return Invoke-RestMethod -Uri $Uri -Headers $headers -Method $Method -TimeoutSec 60 -ErrorAction Stop
+                } catch {
+                    $sc = $null; try { $sc = [int]$_.Exception.Response.StatusCode } catch {}
+                    $msg = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+                    $isTimeout = $msg -match 'HttpClient\.Timeout|TimeoutException|OperationCanceledException|timed out'
+                    if (($isTimeout -or $sc -in @(429, 500, 502, 503, 504) -or ($sc -eq 403 -and $msg -match 'RequestDeniedByInboundPolicy|Forbidden')) -and $attempt -lt 6) {
+                        $delay = [Math]::Min(15 * $attempt, 60)
+                        Write-Host "    Fabric REST transient error ($($sc ?? 'timeout')) — retrying in ${delay}s ($attempt/6)..." -ForegroundColor Yellow
+                        Start-Sleep -Seconds $delay
+                        continue
+                    }
+                    throw
+                }
+            }
+        }
+
         $p4Token = Get-FabricTokenLocal
         $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
         $p4Base = "https://api.fabric.microsoft.com/v1"
 
         # Resolve workspace
-        $p4Ws = (Invoke-RestMethod -Uri "$p4Base/workspaces" -Headers $p4Headers).value |
+        $p4Ws = (Invoke-P4Rest -Uri "$p4Base/workspaces").value |
             Where-Object { $_.displayName -eq $FabricWorkspaceName }
         if (-not $p4Ws) { throw "Workspace '$FabricWorkspaceName' not found" }
         $p4WsId = $p4Ws.id
         Write-Host "  ✓ Workspace: $FabricWorkspaceName ($p4WsId)" -ForegroundColor Green
+
+        $existingP4Ontologies = @()
+        try { $existingP4Ontologies = @((Invoke-P4Rest -Uri "$p4Base/workspaces/$p4WsId/ontologies").value) } catch {}
+        $existingClinOnt = $existingP4Ontologies | Where-Object { $_.displayName -eq 'ClinicalDeviceOntology' } | Select-Object -First 1
+        if ($existingClinOnt -and $SkipDataAgents -and -not $ReplaceOntology -and -not $Phase4) {
+            Write-Host "  ✓ ClinicalDeviceOntology ($($existingClinOnt.id)) and clinical Data Agents already deployed; skipping Phase 4 on continuation." -ForegroundColor Green
+            return
+        }
 
         # ── Step 8a: Verify clinical pipeline has completed ──
         Write-Host ""
         Write-Host "  --- Step 8a: Clinical Pipeline Verification ---" -ForegroundColor Cyan
 
         $clinPipelineName = "healthcare1_msft_clinical_data_foundation_ingestion"
-        $pipelines = (Invoke-RestMethod -Uri "$p4Base/workspaces/$p4WsId/items?type=DataPipeline" -Headers $p4Headers).value
+        $pipelines = (Invoke-P4Rest -Uri "$p4Base/workspaces/$p4WsId/items?type=DataPipeline").value
         $clinPipeline = $pipelines | Where-Object { $_.displayName -eq $clinPipelineName } | Select-Object -First 1
 
         $clinVerified = $false
         if ($clinPipeline) {
-            $clinRuns = (Invoke-RestMethod -Uri "$p4Base/workspaces/$p4WsId/items/$($clinPipeline.id)/jobs/instances?limit=1" -Headers $p4Headers).value
+            $clinRuns = (Invoke-P4Rest -Uri "$p4Base/workspaces/$p4WsId/items/$($clinPipeline.id)/jobs/instances?limit=1").value
             if ($clinRuns -and $clinRuns[0].status -eq 'Completed') {
                 Write-Host "  ✓ Clinical pipeline last run: Completed ($($clinRuns[0].endTimeUtc))" -ForegroundColor Green
                 $clinVerified = $true
@@ -3507,6 +3538,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             }
 
             if ($status -in @(429, 500, 502, 503, 504)) { return $true }
+            if ($null -eq $status -and $ErrorText -match '(?i)HttpClient\.Timeout|TimeoutException|OperationCanceledException|The request was canceled due to the configured HttpClient\.Timeout') { return $true }
             if ($status -ne 403) { return $false }
 
             return ($ErrorText -match '(?i)RequestDeniedByInboundPolicy|inbound communication policy|Response status code does not indicate success:\s*403\s*\(Forbidden\)|HTTP\s*403\s*\(Forbidden\)|\b403\s+Forbidden\b')
