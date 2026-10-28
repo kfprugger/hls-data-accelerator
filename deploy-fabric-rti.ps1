@@ -1856,21 +1856,19 @@ if (-not $ehConnStr) {
             Write-Host "  ✓ Cloud connection already exists: $connectionName (ID: $dataConnectionId)" -ForegroundColor Green
         }
 
-        # Clean up stale connections from previous deployments that used the old
-        # non-unique name format ("masimo-eh-<EventHubName>") or unique names from
-        # other namespaces. These point at deleted Event Hub namespaces and break
-        # the Eventstream source if Fabric picks them up.
-        $staleNamePattern = "^masimo-eh-(.+-)?$([regex]::Escape($EventHubName))$"
+        # Clean up only the legacy non-unique connection name ("masimo-eh-<EventHubName>").
+        # Never delete connections belonging to other Event Hub namespaces (e.g., side-by-side workspaces).
+        $legacyName = "masimo-eh-$EventHubName"
         $staleConns = $existingConns.value | Where-Object {
-            $_.displayName -match $staleNamePattern -and $_.displayName -ne $connectionName
+            $_.displayName -eq $legacyName -and $_.displayName -ne $connectionName
         }
         foreach ($stale in $staleConns) {
-            Write-Host "  Removing stale Event Hub connection '$($stale.displayName)' ($($stale.id))..." -ForegroundColor Yellow
+            Write-Host "  Removing legacy non-unique Event Hub connection '$($stale.displayName)' ($($stale.id))..." -ForegroundColor Yellow
             try {
                 Invoke-FabricApi -Method "DELETE" -Endpoint "/connections/$($stale.id)" | Out-Null
-                Write-Host "  ✓ Removed stale connection" -ForegroundColor Green
+                Write-Host "  ✓ Removed legacy connection" -ForegroundColor Green
             } catch {
-                Write-Host "  ⚠ Could not remove stale connection: $_" -ForegroundColor Yellow
+                Write-Host "  ⚠ Could not remove legacy connection: $_" -ForegroundColor Yellow
             }
         }
     } catch {

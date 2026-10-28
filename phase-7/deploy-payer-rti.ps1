@@ -1063,7 +1063,13 @@ $payerDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDb
 $graphDataSources = @((New-KqlDatasource -DisplayName $kqlDbName -KqlDbId $kqlDbId -WorkspaceId $workspaceId -Tables $kqlTables -FewShots $graphKqlFewShots -Instructions $graphKqlInstructions -Functions $requiredKqlFunctions))
 $goldUnavailableInstruction = ""
 if ($goldLh) {
-    $goldTables = @('fact_claim','dim_payer','care_gaps','agg_high_cost_claimants','readmission_risk_scores')
+    $goldTables = @(
+        'fact_claim','dim_payer','care_gaps','agg_high_cost_claimants','readmission_risk_scores',
+        'DeviceAssociation','PatientOntology','DeviceOntology','EncounterOntology',
+        'ConditionOntology','MedicationRequestOntology','ObservationOntology',
+        'ImagingStudyOntology','FactDiagnosisOntology','dim_diagnosis',
+        'agg_medication_adherence','agg_risk_scores'
+    )
     $payerDataSources += (New-LakehouseDatasource -DisplayName $goldLh.displayName -LakehouseId $goldLh.id -WorkspaceId $workspaceId -Tables $goldTables -FewShots $goldFewShots -Instructions "PRIMARY source for historical and analytical facts: claims, paid/billed amounts, payer categories, care gaps, high-cost cohorts, and readmission risk. For mixed questions query Gold and KQL separately and label each result.")
     $graphDataSources += (New-LakehouseDatasource -DisplayName $goldLh.displayName -LakehouseId $goldLh.id -WorkspaceId $workspaceId -Tables $goldTables -FewShots $goldFewShots -Instructions "Use Reporting Gold only to enrich ontology entities with historical claims, paid amounts, payer category, care gaps, high-cost cohort, and readmission risk. Do not infer graph relationships from table co-occurrence.")
 } else {

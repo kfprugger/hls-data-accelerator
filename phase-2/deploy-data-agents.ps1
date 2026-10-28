@@ -224,6 +224,14 @@ $silverTables = @(
     'Immunization'
 )
 if ($IncludeDicomImaging) { $silverTables += 'ImagingStudy' }
+try {
+    $existingSilverTables = @((Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/lakehouses/$silverLhId/tables").data | ForEach-Object { [string]$_.name })
+    foreach ($ontTable in @('DeviceAssociation', 'PatientOntology', 'DeviceOntology', 'EncounterOntology', 'ConditionOntology', 'MedicationRequestOntology', 'ObservationOntology', 'ImagingStudyOntology')) {
+        if ($existingSilverTables -contains $ontTable -and $silverTables -notcontains $ontTable) {
+            $silverTables += $ontTable
+        }
+    }
+} catch {}
 
 # ============================================================================
 # SHARED LAKEHOUSE DATASOURCE INSTRUCTIONS + FEW-SHOTS

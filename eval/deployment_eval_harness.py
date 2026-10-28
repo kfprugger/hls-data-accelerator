@@ -91,18 +91,24 @@ def http(method: str, url: str, token: str, body=None, timeout=90, skill: str | 
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     if url.lower().startswith(FABRIC_RESOURCE):
         headers["x-ms-fabric-skill"] = skill or fabric_skill(url)
-    req = urllib.request.Request(url, data=data, method=method, headers=headers)
-    try:
-        r = urllib.request.urlopen(req, context=_CTX, timeout=timeout)
-        raw = r.read()
-        return r.status, (json.loads(raw) if raw else {})
-    except urllib.error.HTTPError as e:
-        raw = e.read().decode(errors="replace")
+    last_exc = None
+    for attempt in range(3):
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
-            return e.code, json.loads(raw)
-        except Exception:
-            return e.code, {"_raw": raw[:400]}
-
+            r = urllib.request.urlopen(req, context=_CTX, timeout=timeout)
+            raw = r.read()
+            return r.status, (json.loads(raw) if raw else {})
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode(errors="replace")
+            try:
+                return e.code, json.loads(raw)
+            except Exception:
+                return e.code, {"_raw": raw[:400]}
+        except Exception as e:
+            last_exc = e
+            if attempt < 2:
+                time.sleep(3 * (attempt + 1))
+    return 0, {"_raw": f"transport error: {last_exc}"}
 
 def resolve_capacity_id(az: Az, ws_id: str) -> str | None:
     """ARM ID of the Fabric capacity backing the workspace, in whichever subscription holds it."""
