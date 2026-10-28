@@ -1,8 +1,12 @@
-import { Checkbox, FormControl, FormControlLabel, FormHelperText, FormLabel, TextField, Typography } from "@mui/material";
+import { Checkbox, FormControl, FormControlLabel, FormHelperText, FormLabel, Typography } from "@mui/material";
 import { makeStyles } from "@griffel/react";
 
 import type { AddonName, AddonOptions } from "../api";
+import { HistoryInput } from "./HistoryInput";
 
+export const CARDIOLOGY_SUPPORTED_REGIONS = ["eastus2", "eastus", "westus", "westus3", "northcentralus", "southcentralus", "centralus", "swedencentral"];
+export const CARDIOLOGY_MODEL_CANDIDATES = ["gpt-5.6-luna", "gpt-5.5"];
+export const CARDIOLOGY_MODEL_VERSIONS = ["2026-07-09", "2026-04-24"];
 export function getAddonOptions(value: Partial<AddonOptions> = {}): AddonOptions {
   return {
     deploy_databricks: value.deploy_databricks ?? false,
@@ -68,16 +72,10 @@ export function AddonFields({ value, onChange, disabled = false, unavailable = [
         </Typography>
         {value.deploy_databricks && (<div className={styles.options}>
             <FormControl><FormLabel id="field-addonfields-1-label" htmlFor="field-addonfields-1">{"Databricks environment"}</FormLabel>
-              <TextField value={value.databricks_environment ?? "dev"} onChange={(event) => {
-                const data = { value: event.target.value };
-                return onChange({ databricks_environment: data.value });
-            }} disabled={databricksDisabled} fullWidth size="small" id="field-addonfields-1"/>
+              <HistoryInput field="databricks-environment" value={value.databricks_environment ?? "dev"} onChange={(val) => onChange({ databricks_environment: val })} disabled={databricksDisabled} suggestions={["dev", "test", "prod"]} suggestionsLabel="Supported environments" id="field-addonfields-1"/>
             <FormHelperText>{"Environment name used by the Databricks deployment scripts."}</FormHelperText></FormControl>
             <FormControl><FormLabel id="field-addonfields-2-label" htmlFor="field-addonfields-2">{"Databricks admin group"}</FormLabel>
-              <TextField value={value.databricks_admin_group ?? ""} placeholder={adminGroup || "Use deployment admin security group"} onChange={(event) => {
-                const data = { value: event.target.value };
-                return onChange({ databricks_admin_group: data.value });
-            }} disabled={databricksDisabled} fullWidth size="small" id="field-addonfields-2"/>
+              <HistoryInput field="admin-security-group" value={value.databricks_admin_group ?? ""} placeholder={adminGroup || "Use deployment admin security group"} onChange={(val) => onChange({ databricks_admin_group: val })} disabled={databricksDisabled} id="field-addonfields-2"/>
             <FormHelperText>{"Leave blank to use the deployment's admin security group."}</FormHelperText></FormControl>
           </div>)}
       </div>
@@ -101,40 +99,22 @@ export function AddonFields({ value, onChange, disabled = false, unavailable = [
         </Typography>
         {value.deploy_cardiology && (<div className={styles.options}>
             <FormControl><FormLabel id="field-addonfields-3-label" htmlFor="field-addonfields-3">{"Cardiology Azure location"}</FormLabel>
-              <TextField value={value.cardiology_location ?? "eastus2"} onChange={(event) => {
-                const data = { value: event.target.value };
-                return onChange({ cardiology_location: data.value });
-            }} disabled={cardiologyDisabled} fullWidth size="small" id="field-addonfields-3"/>
+              <HistoryInput field="cardiology-location" value={value.cardiology_location ?? "eastus2"} onChange={(val) => onChange({ cardiology_location: val })} disabled={cardiologyDisabled} suggestions={CARDIOLOGY_SUPPORTED_REGIONS} suggestionsLabel="Supported AI Foundry regions" id="field-addonfields-3"/>
             <FormHelperText>{"Azure region name, such as eastus2."}</FormHelperText></FormControl>
             <FormControl><FormLabel id="field-addonfields-4-label" htmlFor="field-addonfields-4">{"Cardiology resource prefix"}</FormLabel>
-              <TextField value={value.cardiology_prefix ?? ""} onChange={(event) => {
-                const data = { value: event.target.value };
-                return onChange({ cardiology_prefix: data.value });
-            }} disabled={cardiologyDisabled} fullWidth size="small" id="field-addonfields-4"/>
+              <HistoryInput field="cardiology-prefix" value={value.cardiology_prefix ?? ""} onChange={(val) => onChange({ cardiology_prefix: val })} disabled={cardiologyDisabled} id="field-addonfields-4"/>
             <FormHelperText>{"Leave blank to derive cardio<suffix> from this deployment."}</FormHelperText></FormControl>
             <FormControl><FormLabel id="field-addonfields-5-label" htmlFor="field-addonfields-5">{"Cardiology app users"}</FormLabel>
-              <TextField value={(value.cardiology_app_users ?? []).join("\n")} rows={3} onChange={(event) => {
-                const data = { value: event.target.value };
-                return onChange({ cardiology_app_users: data.value.split("\n") });
-            }} disabled={cardiologyDisabled} fullWidth size="small" multiline id="field-addonfields-5"/>
+              <HistoryInput field="cardiology-app-users" value={(value.cardiology_app_users ?? []).join("\n")} rows={3} multiline onChange={(val) => onChange({ cardiology_app_users: val.split("\n") })} disabled={cardiologyDisabled} id="field-addonfields-5"/>
             <FormHelperText>{"One user principal name per line. Blank lines are ignored."}</FormHelperText></FormControl>
             <FormControl><FormLabel id="field-addonfields-6-label" htmlFor="field-addonfields-6">{"Cardiology reviewer users"}</FormLabel>
-              <TextField value={(value.cardiology_reviewer_users ?? []).join("\n")} rows={3} onChange={(event) => {
-                const data = { value: event.target.value };
-                return onChange({ cardiology_reviewer_users: data.value.split("\n") });
-            }} disabled={cardiologyDisabled} fullWidth size="small" multiline id="field-addonfields-6"/>
+              <HistoryInput field="cardiology-reviewer-users" value={(value.cardiology_reviewer_users ?? []).join("\n")} rows={3} multiline onChange={(val) => onChange({ cardiology_reviewer_users: val.split("\n") })} disabled={cardiologyDisabled} suggestions={(value.cardiology_app_users ?? []).map((u) => u.trim()).filter(Boolean)} suggestionsLabel="Cardiology app users" id="field-addonfields-6"/>
             <FormHelperText>{"One reviewer user principal name per line. Blank lines are ignored."}</FormHelperText></FormControl>
             <FormControl><FormLabel id="field-addonfields-7-label" htmlFor="field-addonfields-7">{"Cardiology chat model"}</FormLabel>
-              <TextField value={value.cardiology_chat_model ?? ""} onChange={(event) => {
-                const data = { value: event.target.value };
-                return onChange({ cardiology_chat_model: data.value });
-            }} disabled={cardiologyDisabled} fullWidth size="small" id="field-addonfields-7"/>
+              <HistoryInput field="cardiology-chat-model" value={value.cardiology_chat_model ?? ""} onChange={(val) => onChange({ cardiology_chat_model: val })} disabled={cardiologyDisabled} suggestions={CARDIOLOGY_MODEL_CANDIDATES} suggestionsLabel="Built-in model candidates" id="field-addonfields-7"/>
             <FormHelperText>{"Leave model and version blank to try gpt-5.6-luna (2026-07-09), then gpt-5.5 (2026-04-24)."}</FormHelperText></FormControl>
             <FormControl><FormLabel id="field-addonfields-8-label" htmlFor="field-addonfields-8">{"Cardiology chat model version"}</FormLabel>
-              <TextField value={value.cardiology_chat_model_version ?? ""} onChange={(event) => {
-                const data = { value: event.target.value };
-                return onChange({ cardiology_chat_model_version: data.value });
-            }} disabled={cardiologyDisabled} fullWidth size="small" id="field-addonfields-8"/>
+              <HistoryInput field="cardiology-chat-model-version" value={value.cardiology_chat_model_version ?? ""} onChange={(val) => onChange({ cardiology_chat_model_version: val })} disabled={cardiologyDisabled} suggestions={CARDIOLOGY_MODEL_VERSIONS} suggestionsLabel="Built-in model versions" id="field-addonfields-8"/>
             <FormHelperText>{"Set the model name and version together to override the built-in candidates."}</FormHelperText></FormControl>
           </div>)}
       </div>

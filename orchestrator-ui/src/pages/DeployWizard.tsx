@@ -238,6 +238,7 @@ export function DeployWizard() {
     const [subscriptions, setSubscriptions] = useState<Array<{
         id: string;
         name: string;
+        tenantId?: string;
     }>>([]);
     const [loading, setLoading] = useState(false);
     const [deploymentStartMessage, setDeploymentStartMessage] = useState("");
@@ -473,10 +474,7 @@ export function DeployWizard() {
             return;
         }
         listSubscriptions()
-            .then((subs: Array<{
-            id: string;
-            name: string;
-        }>) => {
+            .then((subs) => {
             if (subs.length > 0) {
                 setSubscriptions(subs);
                 setLoadWarning("");
@@ -598,10 +596,11 @@ export function DeployWizard() {
     });
     useEffect(() => {
         const subscriptionId = selectedSubscription || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || "";
-        const tenantId = ctxSubscriptions.find((item) => item.id === subscriptionId)?.tenantId
+        const tenantId = subscriptions.find((item) => item.id === subscriptionId)?.tenantId
+            || ctxSubscriptions.find((item) => item.id === subscriptionId)?.tenantId
             || authContext?.cli.tenantId || authContext?.pwsh.tenantId || "";
         setConfig((current) => ({ ...current, expected_tenant_id: tenantId, expected_subscription_id: subscriptionId }));
-    }, [authContext, selectedSubscription, ctxSubscriptions]);
+    }, [authContext, selectedSubscription, subscriptions, ctxSubscriptions]);
     const [useNamingConvention, setUseNamingConvention] = useState(draft?.useNamingConvention ?? true);
     const [useTags, setUseTags] = useState(true);
     const [tagRows, setTagRows] = useState<Array<{
@@ -1263,8 +1262,14 @@ export function DeployWizard() {
     const buildDeploymentConfig = (): DeploymentConfig => {
         const cap = findCapacity(selectedCapacity);
         const fallbackCapacity = getCapacityFallbackParts(selectedCapacity);
+        const subscriptionId = selectedSubscription || config.expected_subscription_id || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || '';
+        const tenantId = subscriptions.find((item) => item.id === subscriptionId)?.tenantId
+            || ctxSubscriptions.find((item) => item.id === subscriptionId)?.tenantId
+            || config.expected_tenant_id || authContext?.cli.tenantId || authContext?.pwsh.tenantId || '';
         return {
             ...config, ...getAddonOptions(config),
+            expected_tenant_id: tenantId,
+            expected_subscription_id: subscriptionId,
             patient_count: config.use_cached_synthea ? 100 : config.patient_count,
             reseed_data: !config.scaffolding_only && config.reseed_data,
             reuse_patients: !config.scaffolding_only && !config.reseed_data && config.reuse_patients,
@@ -1285,14 +1290,14 @@ export function DeployWizard() {
         setDeploymentStartMessage("Validating local auth and starting the backend deployment run…");
         setError("");
         try {
-            if (!config.expected_tenant_id || !config.expected_subscription_id) {
+            const deployConfig = buildDeploymentConfig();
+            if (!deployConfig.expected_tenant_id || !deployConfig.expected_subscription_id) {
                 throw new Error("Sign in to Azure and select a deployment subscription before deploying.");
             }
             // Save tags to history before deploying
             if (Object.keys(config.tags).length > 0) {
                 addTagToHistory(config.tags);
             }
-            const deployConfig = buildDeploymentConfig();
             const { instanceId } = await startDeployment(deployConfig);
             navigate(`/monitor/${instanceId}`);
         }
@@ -1388,7 +1393,7 @@ export function DeployWizard() {
         useNamingConvention,
         namingPrefix,
     ]); // eslint-disable-line react-hooks/exhaustive-deps
-    return (<GuidedDeployment config={buildDeploymentConfig()} errors={validationErrors} starting={loading} onStart={startActualDeployment}><div className="deployment-workspace" style={{ display: "flex", flexWrap: "wrap", gap: "32px", position: "relative" }}>
+    return (<GuidedDeployment config={buildDeploymentConfig()} errors={validationErrors} starting={loading} onStart={startActualDeployment} onUpdateConfig={(patch) => setConfig((prev) => ({ ...prev, ...patch }))}><div className="deployment-workspace" style={{ display: "flex", flexWrap: "wrap", gap: "32px", position: "relative" }}>
       {/* Main content area */}
       <div style={{ flex: 1, minWidth: 0 }}>
         {loadWarning && (<div style={{

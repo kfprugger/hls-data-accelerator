@@ -62,9 +62,11 @@ interface HistoryInputProps {
   suggestions?: string[];
   /** Label shown above the extra suggestions section. */
   suggestionsLabel?: string;
+  multiline?: boolean;
+  rows?: number;
 }
 
-export function HistoryInput({ id, field, value, onChange, onCommit, placeholder, disabled, type, suggestions, suggestionsLabel, }: HistoryInputProps) {
+export function HistoryInput({ id, field, value, onChange, onCommit, placeholder, disabled, type, suggestions, suggestionsLabel, multiline, rows, }: HistoryInputProps) {
     const styles = useStyles();
     const [history, setHistory] = useState<string[]>([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -84,28 +86,58 @@ export function HistoryInput({ id, field, value, onChange, onCommit, placeholder
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
-    // Filter history based on current input
-    const filtered = value
-        ? history.filter((h) => h.toLowerCase().includes(value.toLowerCase()) && h !== value)
-        : history.filter((h) => h !== value);
+    // Filter history based on current input (or active line when multiline)
+    const rawLines = multiline ? value.split("\n") : [value];
+    const activeQuery = multiline ? (rawLines[rawLines.length - 1] ?? "").trim().toLowerCase() : value.toLowerCase();
+    const existingMap: Record<string, true> = {};
+    if (multiline) {
+        for (const s of rawLines) {
+            const trimmed = s.trim().toLowerCase();
+            if (trimmed) existingMap[trimmed] = true;
+        }
+    } else if (value) {
+        existingMap[value.toLowerCase()] = true;
+    }
+    const filtered = multiline
+        ? history.filter((h) => !existingMap[h.toLowerCase()] && (!activeQuery || h.toLowerCase().includes(activeQuery)))
+        : value
+            ? history.filter((h) => h.toLowerCase().includes(value.toLowerCase()) && h !== value)
+            : history.filter((h) => h !== value);
     // Filter external suggestions (exclude history items to avoid dupes)
-    const historySet = new Set(history.map((h) => h.toLowerCase()));
-    const filteredSuggestions = (suggestions ?? []).filter((s) => s !== value &&
-        !historySet.has(s.toLowerCase()) &&
-        (!value || s.toLowerCase().includes(value.toLowerCase())));
+    const historyMap: Record<string, true> = {};
+    for (const h of history) historyMap[h.toLowerCase()] = true;
+    const filteredSuggestions = (suggestions ?? []).filter((s) => !existingMap[s.toLowerCase()] &&
+        !historyMap[s.toLowerCase()] &&
+        (!activeQuery || s.toLowerCase().includes(activeQuery)));
     const hasDropdownItems = filtered.length > 0 || filteredSuggestions.length > 0;
     const handleSelect = (suggestion: string) => {
-        onChange(suggestion);
+        let nextValue = suggestion;
+        if (multiline) {
+            const lines = value.split("\n");
+            const lastTrimmed = (lines[lines.length - 1] ?? "").trim().toLowerCase();
+            const knownMap: Record<string, true> = { ...historyMap };
+            for (const s of suggestions ?? []) knownMap[s.toLowerCase()] = true;
+            if (lastTrimmed === "" || !knownMap[lastTrimmed]) {
+                lines[lines.length - 1] = suggestion;
+            } else {
+                lines.push(suggestion);
+            }
+            nextValue = lines.join("\n");
+        }
+        onChange(nextValue);
         setShowSuggestions(false);
         setActiveIndex(-1);
-        onCommit?.(suggestion);
+        onCommit?.(nextValue);
     };
     const handleBlur = () => {
         // Save to history on blur if value is non-empty
-        if (value.trim()) {
-            addToHistory(field, value.trim());
-            // Refresh history
-            getHistory(field).then(setHistory).catch(() => { });
+        const entries = multiline
+            ? value.split("\n").map((s) => s.trim()).filter(Boolean)
+            : value.trim() ? [value.trim()] : [];
+        if (entries.length > 0) {
+            void Promise.all(entries.map((entry) => addToHistory(field, entry))).then(() => {
+                getHistory(field).then(setHistory).catch(() => { });
+            });
         }
         // Delay hiding to allow click on suggestion
         setTimeout(() => setShowSuggestions(false), 200);
@@ -137,7 +169,7 @@ export function HistoryInput({ id, field, value, onChange, onCommit, placeholder
             onChange(d.value);
             setShowSuggestions(true);
             setActiveIndex(-1);
-        }} onFocus={() => setShowSuggestions(true)} onBlur={handleBlur} onKeyDown={handleKeyDown} placeholder={placeholder} type={type} disabled={disabled} fullWidth size="small"/>
+        }} onFocus={() => setShowSuggestions(true)} onBlur={handleBlur} onKeyDown={handleKeyDown} placeholder={placeholder} type={type} disabled={disabled} multiline={multiline} rows={rows} fullWidth size="small"/>
       {showSuggestions && hasDropdownItems && !disabled && (<div className={styles.suggestions}>
           {filtered.map((s, i) => (<div key={s} className={`${styles.suggestion} ${i === activeIndex ? styles.suggestionActive : ""}`} onMouseDown={() => handleSelect(s)}>
               <span className={styles.suggestionIcon}>&#x1F552;</span>
