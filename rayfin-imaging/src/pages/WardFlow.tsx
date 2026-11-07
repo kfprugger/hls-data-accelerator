@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { DocSection, DocSpec } from '@/components/Doc';
 import { ListColumn, PanelRow, PanelSection, WorkspaceHeader } from '@/components/Panel';
 import { AlertStopwatchCard } from '@/components/AlertStopwatchCard';
+import { GlossaryTooltip } from '@/components/GlossaryTooltip';
 import { useWardFlowReviews, type ReviewRow } from '@/hooks/useWardFlowReviews';
 import { fetchWardFlowCohort, type WardFlowCohortSnapshot, type WardFlowSubject } from '@/lib/api';
 import { fmtMs, fmtNum } from '@/lib/format';
@@ -552,6 +553,23 @@ function CohortTab({
         <AlertStopwatchCard />
       </div>
 
+      <div className="masimo-telemetry-bar my-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface-muted,#f8fafc)] dark:bg-slate-900/40 px-4 py-2.5 text-[12.5px]" data-testid="wardflow-telemetry-bar">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-[var(--ink)]">Masimo SpO₂ Bedside Telemetry Stream:</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-0.5 text-[11.5px] font-medium shadow-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <GlossaryTooltip term="Eventhouse">Eventhouse</GlossaryTooltip>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-0.5 text-[11.5px] font-medium shadow-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+            <GlossaryTooltip term="Activator">Activator</GlossaryTooltip>
+          </span>
+        </div>
+        <div className="t-faint text-[12px]">
+          Masimo continuous vital telemetry · Real-Time Intelligence
+        </div>
+      </div>
+
       <div className="mt-6 overflow-x-auto">
         <table className="tbl text-[13px]">
           <thead>
@@ -727,7 +745,9 @@ function AgentLoopTab({
                         Beat {b.beat} · {BEAT_NAMES[b.beat] ?? ''}
                       </span>
                       <span className="font-semibold">{b.name}</span>
-                      <span className="syn-tag ml-auto">{b.status}</span>
+                      <span className="syn-tag ml-auto">
+                        {b.status === 'halted' ? 'Awaiting Clinician Sign-Off' : b.status === 'done' ? 'Completed · Verified' : b.status}
+                      </span>
                     </div>
                     <p className="t-muted mt-1 text-[13px]">{b.detail}</p>
                   </div>

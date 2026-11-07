@@ -477,7 +477,7 @@ export function GenomicsSection({ b }: { b: PatientBundle }) {
   return (
     <div>
       <div className="sec-head">
-        <h2 className="sec-title">Tumour genome</h2>
+        <h2 className="sec-title">Somatic Mutations &amp; Molecular Drivers</h2>
         <span className="sec-note">
           Whole-exome sequencing, copy number and RNA of the same tumour sample as the slide, compared with {fmtNum(n, 0)} other{' '}
           {cancer.toLowerCase()} tumours in TCGA.

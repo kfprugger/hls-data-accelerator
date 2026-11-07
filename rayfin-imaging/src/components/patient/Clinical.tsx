@@ -45,7 +45,7 @@ export function ClinicalSection({ b }: { b: PatientBundle }) {
   return (
     <div>
       <div className="sec-head">
-        <h2 className="sec-title">Cancer registry</h2>
+        <h2 className="sec-title">Clinical Registry &amp; Demographics</h2>
         <span className="sec-note">Diagnosis, staging, treatment and outcomes as abstracted by the treating site for TCGA.</span>
         <span className="src ml-auto"><span className="swatch sw-clinical" />clinical_lakehouse</span>
       </div>

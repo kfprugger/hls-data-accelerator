@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchAlertStopwatch, type AlertStopwatch } from '@/lib/api';
-
+import { GlossaryTooltip } from '@/components/GlossaryTooltip';
 interface AlertStopwatchCardProps {
   patientId?: string;
   className?: string;
@@ -85,6 +85,23 @@ export function AlertStopwatchCard({ patientId, className = '' }: AlertStopwatch
         </div>
       </div>
 
+      {/* Real-time Masimo SpO2 telemetry monitoring bar */}
+      <div className="masimo-telemetry-bar mt-3 flex flex-wrap items-center justify-between gap-2.5 rounded-lg border border-[var(--line,#e2e8f0)] bg-[var(--surface-muted,#f8fafc)] dark:bg-slate-900/40 px-3.5 py-2 text-[12px]" data-testid="masimo-telemetry-bar">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-[var(--ink,#0f172a)]">Masimo SpO₂ Telemetry Monitoring:</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-0.5 text-[11.5px] font-medium shadow-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <GlossaryTooltip term="Eventhouse">Eventhouse</GlossaryTooltip>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface)] px-2.5 py-0.5 text-[11.5px] font-medium shadow-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+            <GlossaryTooltip term="Activator">Activator</GlossaryTooltip>
+          </span>
+        </div>
+        <div className="t-faint text-[11.5px]">
+          Continuous Masimo Radius-7 streaming telemetry · sub-second clinical alert dispatch
+        </div>
+      </div>
       {/* Patient, Device, Alert Tier, and Breached Vitals */}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 border-b border-[var(--line,#e2e8f0)] pb-4 text-[13px]">
         <div>

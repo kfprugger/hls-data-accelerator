@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
 import { DocSection as Section, DocSpec as Spec } from '@/components/Doc';
+import { GlossaryTooltip } from '@/components/GlossaryTooltip';
 import { useCatalog, useVolumeCatalog } from '@/hooks/useCatalog';
 import { formatBytes } from '@/lib/catalog';
 import { formatMb } from '@/lib/volumes';
@@ -169,9 +170,10 @@ export function Overview() {
             </h1>
             <p className="t-muted mt-6 max-w-[68ch] text-[15px]">
               Built on Project Rayfin, this unified app brings together longitudinal oncology records (15 TCGA patients
-              joined across clinical, genomics and imaging Lakehouses via OneLake shortcuts), Idan Shimon&apos;s WardFlow
+              joined across clinical, genomics, and imaging lakehouses via <GlossaryTooltip term="OneLake">OneLake</GlossaryTooltip>{' '}
+              <GlossaryTooltip term="shortcut">shortcuts</GlossaryTooltip>), Idan Shimon&apos;s WardFlow
               &amp; Caldova Cardiology 7-beat governed decision-support workbench over HDS Reporting Gold, and
-              zero-server OpenSeadragon pathology + NiiVue 3D/4D radiology streaming directly from OneLake.
+              zero-data-duplication pathology and 3D/4D radiology streaming directly from OneLake.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to="/patients" className="btn btn-ink h-10 px-4 text-[13.5px]">

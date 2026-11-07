@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react';
 
 import { DocSection } from '@/components/Doc';
+import { GlossaryTooltip } from '@/components/GlossaryTooltip';
 import { fetchDataMap, num, str, type DataMap as DataMapT } from '@/lib/api';
 import { fmtBytes, fmtInt, fmtMs } from '@/lib/format';
 import { LOCAL_DATA } from '@/lib/localMode';
 
 const SILO_SWATCH: Record<string, string> = { clinical: 'sw-clinical', genomics: 'sw-genomics', imaging: 'sw-imaging' };
+
+const SILO_OUTCOME_TITLES: Record<string, string> = {
+  clinical: 'Clinical Registry (OneLake)',
+  genomics: 'Sequencing Core (OneLake)',
+  imaging: 'Digital Pathology & Radiology (OneLake)',
+};
+
+function siloDisplayName(silo: string, fallback: string): string {
+  return SILO_OUTCOME_TITLES[silo] ?? fallback;
+}
 
 function Schematic({ map }: { map: DataMapT }) {
   const total = (silo: string) =>
@@ -19,8 +30,9 @@ function Schematic({ map }: { map: DataMapT }) {
           <a key={s.silo} href={s.portalUrl || undefined} target="_blank" rel="noreferrer" className="hair block border p-4 hover:border-[var(--ink)]">
             <div className="flex items-center gap-2">
               <span className={`swatch ${SILO_SWATCH[s.silo]}`} />
-              <span className="mono text-[13px]">{s.name}</span>
+              <span className="text-[13px] font-medium">{siloDisplayName(s.silo, s.name)}</span>
             </div>
+            <div className="mono t-faint text-[11.5px] mt-0.5">{s.name}</div>
             <div className="t-muted mt-1 text-[12.5px]">{s.role}</div>
             <div className="num mt-2 text-[13px]">
               {tables(s.silo)} tables · {fmtBytes(total(s.silo))}
@@ -39,11 +51,16 @@ function Schematic({ map }: { map: DataMapT }) {
             <span className="swatch" style={{ background: 'var(--accent)' }} />
             <span className="mono text-[13px]">{map.patient360.name}</span>
           </div>
-          <div className="t-muted mt-1 text-[12.5px]">Lakehouse of OneLake shortcuts</div>
+          <div className="t-muted mt-1 text-[12.5px]">
+            Lakehouse of <GlossaryTooltip term="OneLake">OneLake</GlossaryTooltip>{' '}
+            <GlossaryTooltip term="shortcut">shortcuts</GlossaryTooltip>
+          </div>
           <div className="num mt-2 text-[13px]">
             {shortcutCount} shortcuts · <span className="font-medium">0 bytes of its own</span>
           </div>
-          <div className="t-faint mt-2 text-[11.5px]">One SQL analytics endpoint over all three silos</div>
+          <div className="t-faint mt-2 text-[11.5px]">
+            One SQL analytics endpoint &amp; <GlossaryTooltip term="Direct Lake">Direct Lake</GlossaryTooltip> mode over all three silos
+          </div>
         </a>
         <div className="mt-4 border-t border-dashed pt-2 text-[11.5px]" style={{ borderColor: 'var(--c-rad)' }}>
           <span style={{ color: 'var(--c-rad)' }}>Pixels skip this path.</span>{' '}
@@ -107,13 +124,30 @@ export function DataMap() {
         <h1 className="t-display mt-1 text-[40px]">Three silos, one patient, no copies</h1>
         <p className="t-muted mt-3 max-w-[92ch] text-[15px] leading-relaxed">
           A hospital keeps its records, its sequencing results and its images in different systems, run by different teams.
-          Here each is its own Lakehouse in OneLake. The app does not gather them into a new database. It reads them where
-          they are, through a fourth Lakehouse that contains nothing but shortcuts.
+          Here each is its own Lakehouse in <GlossaryTooltip term="OneLake">OneLake</GlossaryTooltip>. The app does not gather them into a new database. It reads them where
+          they are, through a fourth Lakehouse that contains nothing but <GlossaryTooltip term="shortcut">shortcuts</GlossaryTooltip>.
         </p>
         <p className="num mt-5 text-[14px]">
           {fmtBytes(stored)} stored in the silos · {fmtInt(files)} files · {fmtInt(rows)} table rows · {fmtBytes(0)} copied
           into the app · this page read live in {fmtMs(ms)}
         </p>
+
+        {/* Fabric Architectural Badges with Tooltips for OneLake, shortcut, and Direct Lake */}
+        <div className="mt-4 flex flex-wrap items-center gap-2.5">
+          <span className="text-[12px] font-medium t-faint">Fabric Architecture:</span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-muted,#f1f5f9)] dark:bg-slate-800 px-3 py-1 text-[12px] font-medium shadow-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+            <GlossaryTooltip term="OneLake">OneLake</GlossaryTooltip>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-muted,#f1f5f9)] dark:bg-slate-800 px-3 py-1 text-[12px] font-medium shadow-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+            <GlossaryTooltip term="shortcut">shortcut</GlossaryTooltip>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-muted,#f1f5f9)] dark:bg-slate-800 px-3 py-1 text-[12px] font-medium shadow-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+            <GlossaryTooltip term="Direct Lake">Direct Lake</GlossaryTooltip>
+          </span>
+        </div>
 
         {LOCAL_DATA && (
           <p className="hair mt-5 max-w-[92ch] border-l-2 pl-3 text-[13.5px]" style={{ borderColor: 'var(--accent)' }}>
@@ -143,7 +177,8 @@ export function DataMap() {
               <div key={s.silo}>
                 <div className="mb-2 flex items-center gap-2">
                   <span className={`swatch ${SILO_SWATCH[s.silo]}`} />
-                  <span className="mono text-[13px]">{s.name}</span>
+                  <span className="text-[13.5px] font-medium">{siloDisplayName(s.silo, s.name)}</span>
+                  <span className="mono t-faint text-[11.5px]">({s.name})</span>
                   <span className="t-faint text-[12.5px]">· {s.role}</span>
                 </div>
                 <div className="overflow-x-auto">
@@ -221,7 +256,9 @@ export function DataMap() {
               <div className="flex flex-col justify-between rounded border border-[var(--line)] bg-[var(--surface)] p-5">
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="t-label">OneLake Shortcuts</span>
+                    <span className="t-label">
+                      <GlossaryTooltip term="shortcut">OneLake Shortcuts</GlossaryTooltip>
+                    </span>
                     <span className="mono text-[12px] font-medium text-[var(--c-good)]">100% external</span>
                   </div>
                   <div className="mt-3 text-[32px] font-semibold tracking-tight text-[var(--ink)]">
@@ -238,7 +275,8 @@ export function DataMap() {
                         <div key={siloKey} className="flex items-center justify-between text-[12px]">
                           <span className="inline-flex items-center gap-2">
                             <span className={`swatch ${SILO_SWATCH[siloKey]}`} />
-                            <span className="mono">{siloName}</span>
+                            <span className="font-medium">{SILO_OUTCOME_TITLES[siloKey] ?? `${siloKey}_lakehouse`}</span>
+                            <span className="mono t-faint text-[11px]">({siloName})</span>
                           </span>
                           <span className="num t-muted">
                             {tableShortcuts.length} tables · {totalShortcuts.length} shortcuts
