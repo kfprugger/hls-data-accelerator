@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920,height=1080">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: #FFFFFF radial-gradient(#E2E8F0 1.5px, transparent 1.5px);
+    background-size: 32px 32px;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    color: #0F172A;
+  }
+  .board {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    padding: 60px 80px;
+  }
+  .kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 600;
+    color: #0284C7;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+  .title {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 58px;
+    font-weight: 800;
+    color: #0F172A;
+    line-height: 1.12;
+    letter-spacing: -0.03em;
+  }
+  .content {
+    margin-top: 28px;
+    display: flex;
+    gap: 40px;
+    align-items: stretch;
+    height: 680px;
+  }
+  .card {
+    background: #FFFFFF;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 14px;
+    box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+  }
+  .card-pad {
+    padding: 32px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #EFF6FF;
+    border: 1.5px solid #3B82F6;
+    color: #1D4ED8;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+  }
+  .badge-danger {
+    background: #FEF2F2;
+    border-color: #EF4444;
+    color: #B91C1C;
+  }
+  .metric-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 64px;
+    font-weight: 800;
+    line-height: 1;
+    color: #0F172A;
+  }
+  .metric-label {
+    font-size: 28px;
+    font-weight: 600;
+    color: #475569;
+    margin-top: 8px;
+  }
+  .caption-bar {
+    position: absolute;
+    bottom: 36px;
+    left: 160px;
+    right: 160px;
+    background: rgba(15, 23, 42, 0.94);
+    color: #F8FAFC;
+    border-radius: 12px;
+    padding: 16px 28px;
+    font-size: 30px;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    line-height: 1.3;
+  }
+</style>
+</head>
+<body>
+
+<div class="board">
+  <div class="kicker">Beat 6: Clinician Approval & Economic Impact</div>
+  <div class="title">Clinician Sign-Off Protects Hospital Margin</div>
+  <div class="content">
+    <div class="card card-pad" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; border-color: #059669; background: #F0FDF4;">
+      <div>
+        <div class="badge" style="background: #DCFCE7; border-color: #16A34A; color: #15803D;">CLINICIAN ORDER SIGNED</div>
+        <div style="font-size: 42px; font-weight: 800; color: #166534; margin-top: 16px;">Dr. J. Brakefield</div>
+        <div class="metric-label" style="color: #14532D; margin-top: 12px; line-height: 1.4;">
+          Attending Cardiologist verified recommendation.<br>
+          Inotropic titration and diuresis protocol approved.
+        </div>
+      </div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; color: #15803D;">
+        Audit row committed to Fabric SQL: 42 ms
+      </div>
+    </div>
+    <div class="card card-pad" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; border-color: #2563EB;">
+      <div>
+        <div class="badge">FINANCIAL PROTECTION</div>
+        <div class="metric-num" style="color: #1D4ED8; margin-top: 16px; font-size: 64px;">+$4,820</div>
+        <div class="metric-label" style="margin-top: 12px; line-height: 1.4;">
+          CMS MS-DRG penalty mitigation & STS registry adherence via timely guided escalation.
+        </div>
+      </div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 600; color: #1E40AF;">
+        Zero avoidable readmission penalty
+      </div>
+    </div>
+  </div>
+  <div class="caption-bar">
+    Doctor Brakefield approves the order. It writes back to Fabric SQL in forty-two milliseconds, protecting forty-eight hundred dollars in margin.
+  </div>
+</div>
+</body>
+</html>

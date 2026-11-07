@@ -204,6 +204,8 @@ export interface DeploymentStatus {
     status: string;
     phases: PhaseInfo[];
     resources: Record<string, string>;
+    durationSeconds?: number;
+    completedAt?: string | null;
     teardown?: {
       status?: string;
       skipped?: Array<{ name: string; skip_reason: string }>;
@@ -223,8 +225,11 @@ export interface DeploymentStatus {
     logs?: Array<{ timestamp: string; level: string; message: string; phase?: string | number }>;
     subStepsByPhase?: Record<string, PhaseSubStep[]>;
     durationSeconds?: number;
+    completedAt?: string | null;
     addons?: Record<string, AddonStatus>;
   } | null;
+  completedAt?: string | null;
+  durationSeconds?: number;
   createdTime: string | null;
   lastUpdatedTime: string | null;
 }
@@ -245,9 +250,10 @@ export interface DeploymentSummary {
   runtimeStatus: string;
   createdTime: string | null;
   lastUpdatedTime: string | null;
+  completedAt?: string | null;
+  durationSeconds?: number;
   customStatus: Record<string, unknown> | null;
 }
-
 export interface AuthMechanismContext {
   installed: boolean;
   loggedIn: boolean;
