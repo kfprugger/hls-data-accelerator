@@ -1,3 +1,3 @@
-dim_diagnosis query error: ('42S22', "[42S22] [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Invalid column name 'patient_id'. (207) (SQLExecDirectW)")
-fact_claim count for TCGA-G6-A8L6: 0
-TCGA patient rows not found in healthcare1_reporting_gold fact_claim (HDS pipeline has not materialized TCGA cohort into Gold).
+# router-run query, materialize_reporting_tables job 2c22d7de-7c50-4594-93b5-b60e159e6b9f
+SELECT COUNT(*) FROM dbo.PatientReporting -> [(115,)]
+SELECT PatientUUID, FullName, Gender, Age FROM dbo.PatientReporting WHERE CAST(FullName AS varchar(200)) LIKE '%Vance%' -> [('302a99a7-6156-5662-84f7-de8089507854', 'Marcus Vance', 'male', 70)]

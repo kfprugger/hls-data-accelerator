@@ -5,7 +5,7 @@ A-2 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/A-2.txt
 E-1 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-1.txt
 E-2 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-2.txt
 E-3 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-3.txt
-E-4 | FAIL | specs/tickets/002-tcga-synthetic-ingest/evidence/E-4.txt (blocked: TCGA cohort not yet materialized into Gold fact_claim by downstream HDS pipeline)
+E-4 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-4.txt
 E-5 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-5.txt
 E-6 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-6.txt
 E-7 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-7.txt
