@@ -31,16 +31,16 @@
   }
   .title {
     font-family: 'Plus Jakarta Sans', sans-serif;
-    font-size: 58px;
+    font-size: 56px;
     font-weight: 800;
     color: #0F172A;
     line-height: 1.12;
     letter-spacing: -0.03em;
   }
   .content {
-    margin-top: 28px;
+    margin-top: 26px;
     display: flex;
-    gap: 40px;
+    gap: 36px;
     align-items: stretch;
     height: 680px;
   }
@@ -74,7 +74,7 @@
   }
   .metric-num {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 64px;
+    font-size: 60px;
     font-weight: 800;
     line-height: 1;
     color: #0F172A;
@@ -87,7 +87,7 @@
   }
   .caption-bar {
     position: absolute;
-    bottom: 36px;
+    bottom: 34px;
     left: 160px;
     right: 160px;
     background: rgba(15, 23, 42, 0.94);
@@ -105,37 +105,37 @@
 <body>
 
 <div class="board">
-  <div class="kicker">Beat 6: Clinician Approval & Economic Impact</div>
-  <div class="title">Clinician Sign-Off Protects Hospital Margin</div>
+  <div class="kicker">Beat 6: Clinician Governance</div>
+  <div class="title">Clinician Sign-Off with Verified Fabric Audit Trail</div>
   <div class="content">
     <div class="card card-pad" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; border-color: #059669; background: #F0FDF4;">
       <div>
-        <div class="badge" style="background: #DCFCE7; border-color: #16A34A; color: #15803D;">CLINICIAN ORDER SIGNED</div>
-        <div style="font-size: 42px; font-weight: 800; color: #166534; margin-top: 16px;">Dr. J. Brakefield</div>
-        <div class="metric-label" style="color: #14532D; margin-top: 12px; line-height: 1.4;">
-          Attending Cardiologist verified recommendation.<br>
-          Inotropic titration and diuresis protocol approved.
+        <div class="badge" style="background: #DCFCE7; border-color: #16A34A; color: #15803D;">CLINICIAN GATE ENFORCED</div>
+        <div style="font-size: 38px; font-weight: 800; color: #166534; margin-top: 18px;">Attending Clinician Approval</div>
+        <div class="metric-label" style="color: #14532D; margin-top: 14px; line-height: 1.4;">
+          Human-in-the-loop sign-off required for guideline escalation.<br>
+          Prevents unverified autonomous AI execution.
         </div>
       </div>
-      <div style="font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; color: #15803D;">
-        Audit row committed to Fabric SQL: 42 ms
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; color: #15803D;">
+        Verified: Zero unapproved agent actions
       </div>
     </div>
     <div class="card card-pad" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; border-color: #2563EB;">
       <div>
-        <div class="badge">FINANCIAL PROTECTION</div>
-        <div class="metric-num" style="color: #1D4ED8; margin-top: 16px; font-size: 64px;">+$4,820</div>
-        <div class="metric-label" style="margin-top: 12px; line-height: 1.4;">
-          CMS MS-DRG penalty mitigation & STS registry adherence via timely guided escalation.
+        <div class="badge">IMMUTABLE FABRIC AUDIT</div>
+        <div class="metric-num" style="color: #1D4ED8; margin-top: 18px; font-size: 52px;">Zero Copies</div>
+        <div class="metric-label" style="margin-top: 14px; line-height: 1.4;">
+          Signed orders and clinical reviews persist directly into conformed Delta tables with complete audit provenance.
         </div>
       </div>
       <div style="font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 600; color: #1E40AF;">
-        Zero avoidable readmission penalty
+        Full compliance and registry adherence
       </div>
     </div>
   </div>
   <div class="caption-bar">
-    Doctor Brakefield approves the order. It writes back to Fabric SQL in forty-two milliseconds, protecting forty-eight hundred dollars in margin.
+    The attending clinician approves the order, maintaining a complete Fabric audit trail with zero duplicate copies.
   </div>
 </div>
 </body>

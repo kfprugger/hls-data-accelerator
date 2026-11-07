@@ -37,9 +37,9 @@
 ## 2. Taste Archive Entries Used (`~/.huashu-design/experience.md`)
 
 - **L1 (Protagonist & Task):** Single protagonist Marcus Vance (`TCGA-G6-A8L6`, 55M) followed through a single clinical arc:
-  `Hook (Bed 04 SpO2 drop) -> Tension (6 siloed tabs) -> Reveal (OneLake shortcut graph) -> Proof (VHL genomics + 3D CT) -> Payoff (Beat 4 clinician sign-off, +$4,820 margin) -> End card (hls.jbatl.dev)`.
+  `Hook (Bed 04 SpO2 84.0% drop) -> Tension (6 siloed tabs converging) -> Reveal (OneLake shortcut graph) -> Proof (VHL genomics + 3D CT) -> Payoff (WardFlow Beat 4 clinician sign-off) -> End card (hls.jbatl.dev)`.
 - **L2 (Clean Minimal Theme):** 1920×1080 canvas, crisp white paper `#FFFFFF`, dot-grid texture (`radial-gradient(#E2E8F0 1.5px)`), thin-bordered cards (`#CBD5E1`, 1.5px), soft clinical shadows, `Plus Jakarta Sans` display headings + `JetBrains Mono` telemetry labels, clinical blue (`#0284C7`) / teal (`#0D9488`) accents.
-- **L4 (Anti-Slop Avoidance):** Completely avoided dark navy `#080d1a` background, avoided cyan/emerald radial glows, avoided equal-card feature grids.
+- **L4 (Anti-Slop Avoidance):** Completely avoided dark navy `#080d1a` background, avoided cyan/emerald radial glows, avoided equal-card feature grids (Beat 2 implemented as animated silo-collapse scene rather than static side-by-side cards).
 
 ---
 
@@ -51,28 +51,28 @@
   🟡 相对路径图片 1 张（['../assets/screenshots/01-bedside-alert.png']）
 
 ■ docs/demo/boards/02-silos-patient.html
-  样子：浅·中性白底 #FFFFFF，无衬线标题（Plus Jakarta Sans），正文 ?
+  样子：浅·中性白底 #FFFFFF，无衬线标题（JetBrains Mono），正文 ?
   ✓ 没有红灯，也没有模板装饰
 
 ■ docs/demo/boards/03-alert-stopwatch.html
   样子：浅·中性白底 #FFFFFF，无衬线标题（JetBrains Mono），正文 ?
-  🟡 相对路径图片 1 张（['../assets/screenshots/03-standards.png']）
+  🟡 相对路径图片 1 张（['../assets/screenshots/03-alert-stopwatch.png']）
 
 ■ docs/demo/boards/04-multimodal-oncology.html
   样子：浅·中性白底 #FFFFFF，无衬线标题（Plus Jakarta Sans），正文 ?
-  🟡 相对路径图片 1 张（['../assets/screenshots/02-patient360-oncology.png']）
+  🟡 相对路径图片 1 张（['../assets/screenshots/04-vhl-genomics.png']）
 
 ■ docs/demo/boards/05-wardflow-cardiology.html
   样子：浅·中性白底 #FFFFFF，无衬线标题（Plus Jakarta Sans），正文 ?
-  🟡 相对路径图片 1 张（['../assets/screenshots/01-bedside-alert.png']）
+  🟡 相对路径图片 1 张（['../assets/screenshots/05-wardflow-triage.png']）
 
 ■ docs/demo/boards/06-clinician-signoff.html
-  样子：浅·中性白底 #FFFFFF，无衬线标题（JetBrains Mono），正文 ?
+  样子：浅·中性白底 #FFFFFF，无衬线标题（Plus Jakarta Sans），正文 ?
   ✓ 没有红灯，也没有模板装饰
 
 ■ docs/demo/boards/07-endcard.html
   样子：浅·中性白底 #FFFFFF，无衬线标题（Plus Jakarta Sans），正文 ?
-  🟡 相对路径图片 1 张（['../assets/screenshots/04-onelake-datamap.png']）
+  🟡 相对路径图片 1 张（['../assets/screenshots/07-onelake-architecture.png']）
 ```
 
 **Zero Red Findings.**  
@@ -94,5 +94,5 @@ Committed to external clone `/Users/joey/git/YouTube-AI-Motion-Graphics` on bran
 
 ```text
 已记账 → /Users/joey/.huashu-design/ledger.jsonl
-  hls-fabric-demo: docs/demo/out/hls-fabric-demo-60s.mp4
+  hls-fabric-demo: docs/demo/out/hls-fabric-demo-60s.mp4 (duration 63.47s)
 ```

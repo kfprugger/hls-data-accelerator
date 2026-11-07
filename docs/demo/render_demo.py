@@ -22,9 +22,10 @@ from pathlib import Path
 
 REQUIRED_SCREENSHOTS = [
     "01-bedside-alert.png",
-    "02-patient360-oncology.png",
-    "03-standards.png",
-    "04-onelake-datamap.png",
+    "03-alert-stopwatch.png",
+    "04-vhl-genomics.png",
+    "05-wardflow-triage.png",
+    "07-onelake-architecture.png",
 ]
 
 KOKORO_MODEL = Path("/Users/joey/.cache/hyperframes/tts/models/kokoro-v1.0.onnx")

@@ -11,11 +11,11 @@
 ## Phase 1 (Minute 0:00–1:00): Executive Context & Bedside Alarm
 
 - **Route:** `/wardflow`
-- **Visual Focus:** Bed 04 Marcus Vance (`TCGA-G6-A8L6`), Acute Alert Stopwatch Card, SpO2 Drop (`88%`), Pulse Rate (`115 bpm`).
-- **Click Target:** Bed 04 Alert Banner in WardFlow Active Cohort.
+- **Visual Focus:** Bed 04 Marcus Vance (`TCGA-G6-A8L6`), Alert Stopwatch Card, SpO2 Trigger (`84.0%`), Pulse Rate (`115 bpm`), Device `MASIMO-RADIUS7-0101`.
+- **Click Target:** Bed 04 Alert Banner in WardFlow Active Cohort or Patient 360 Header.
 - **Visual Proof Point:** Stopwatch card displaying `20.5s` pipeline latency from Masimo device telemetry to clinician alert dispatch.
 - **Spoken Narrative (Joey Voice):**
-  > "Good morning. We’ve all seen what happens when acute bedside telemetry lives in a separate silo from the oncology EHR and PACS archive. It is 02:14 in the morning. Bed 4 alarms: Marcus Vance, a 55-year-old with stage IV clear-cell renal carcinoma, has dropped his oxygen saturation to eighty-eight percent and spiked a sinus tachycardia of 115.
+  > "Good morning. We’ve all seen what happens when acute bedside telemetry lives in a separate silo from the oncology EHR and PACS archive. It is 02:14 in the morning. Bed 4 alarms: Marcus Vance, a 55-year-old with stage IV clear-cell renal carcinoma, has dropped his oxygen saturation to eighty-four percent and spiked a sinus tachycardia of 115 on his Masimo Radius-7 device.
   > In a traditional healthcare estate, a critical event like this takes minutes just to pull the prior oncology regimen and cardiology consults across four separate logins.
   > Here on Microsoft Fabric, Real-Time Intelligence ingested that Masimo telemetry, evaluated the clinical threshold in Eventhouse KQL, and dispatched the notification in exactly 20.5 seconds. Let’s click Marcus Vance and see his complete multi-modal clinical record."
 
@@ -51,15 +51,14 @@
 ## Phase 4 (Minute 3:00–4:00): Governed Cardiology Triage (WardFlow)
 
 - **Route:** `/wardflow`
-- **Visual Focus:** Stevenson 2×2 Hemodynamic Grid, Marcus Vance positioned in **Profile C (Wet-Cold)**, 7-Beat Cardiology Triage Agent loop paused at **Beat 4 (Awaiting Clinician Approval)**.
-- **Click Target:** "Review & Sign" button on Beat 4 card (`Dr. J. Brakefield`).
-- **Visual Proof Point:** The AI agent does not self-execute therapy. Beat 4 enforces an ironclad human-in-the-loop clinical approval gate. Upon clicking "Approve & Sign", the transaction commits to Fabric SQL in 42 ms and updates the CMS MS-DRG margin indicator (`+$4,820 margin protected`).
+- **Visual Focus:** Stevenson 2×2 Hemodynamic Grid, acute shock cohort, 7-Beat Cardiology Triage Agent loop paused at **Beat 4 (Awaiting Clinician Approval)**.
+- **Click Target:** "Review & Sign" button on Beat 4 card.
+- **Visual Proof Point:** The AI agent does not self-execute therapy. Beat 4 enforces an ironclad human-in-the-loop clinical approval gate. Upon clicking "Approve & Sign", the transaction commits directly to conformed Delta tables with complete audit provenance.
 - **Spoken Narrative (Joey Voice):**
-  > "Now we return to Marcus Vance’s acute cardiac management in WardFlow. The AI triage agent evaluated his hemodynamic parameters—elevated wedge pressure, depressed cardiac index—and plotted him in Stevenson Profile C: Wet-Cold cardiogenic shock.
+  > "Now we look at acute cardiac triage in WardFlow. The AI triage agent evaluated hemodynamic risk and plotted the cohort across the Stevenson 2×2 grid.
   > Notice that Beats 1 through 3 drafted the guideline-directed therapy escalation, but the system halts completely at Beat 4. In regulated healthcare, an AI agent must never order inotropic support or diuretic changes autonomously.
-  > As the attending clinician, I review the recommendation, adjust the infusion rate, and click 'Approve & Sign'.
-  > In 42 milliseconds, that signed order commits an immutable audit record to Fabric SQL. The hospital protects $4,820 in avoidable readmission penalty, and the patient receives verified, guideline-adherent care."
-
+  > As the attending clinician, I review the recommendation, verify clinical context, and click 'Approve & Sign'.
+  > That signed order commits an immutable audit record to Fabric with zero duplicate copies, ensuring full regulatory adherence while the patient receives verified, guideline-guided care."
 ---
 
 ## Phase 5 (Minute 4:00–5:00): Zero-Copy Fabric Architecture & Conclusion

@@ -31,16 +31,16 @@
   }
   .title {
     font-family: 'Plus Jakarta Sans', sans-serif;
-    font-size: 58px;
+    font-size: 56px;
     font-weight: 800;
     color: #0F172A;
     line-height: 1.12;
     letter-spacing: -0.03em;
   }
   .content {
-    margin-top: 28px;
+    margin-top: 26px;
     display: flex;
-    gap: 40px;
+    gap: 36px;
     align-items: stretch;
     height: 680px;
   }
@@ -74,7 +74,7 @@
   }
   .metric-num {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 64px;
+    font-size: 60px;
     font-weight: 800;
     line-height: 1;
     color: #0F172A;
@@ -87,7 +87,7 @@
   }
   .caption-bar {
     position: absolute;
-    bottom: 36px;
+    bottom: 34px;
     left: 160px;
     right: 160px;
     background: rgba(15, 23, 42, 0.94);
@@ -104,39 +104,51 @@
 </head>
 <body>
 
+<style>
+  @keyframes collapseIn {
+    0% { transform: scale(1.08); opacity: 0.7; }
+    100% { transform: scale(1.0); opacity: 1; }
+  }
+  .silo-chip {
+    background: #FEF2F2;
+    border: 1.5px solid #FCA5A5;
+    color: #991B1B;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+  }
+</style>
 <div class="board">
-  <div class="kicker">Beat 2: The System Problem</div>
-  <div class="title">Legacy Hospital Silos vs. Fabric OneLake Shortcuts</div>
-  <div class="content">
-    <div class="card card-pad" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; border-color: #F87171;">
-      <div>
-        <div class="badge badge-danger">LEGACY WORKFLOW</div>
-        <div class="metric-num" style="margin-top: 20px; font-size: 52px; color: #991B1B;">6 Siloed Tabs</div>
-        <div class="metric-label" style="margin-top: 16px; line-height: 1.4;">
-          • EHR in separate clinical network<br>
-          • cBioPortal external login<br>
-          • Stalled PACS CD / DICOM download<br>
-          • Manual copy-paste across charts
-        </div>
+  <div class="kicker">Beat 2: Silo Convergence</div>
+  <div class="title">Collapsing Six Disconnected Hospital Silos into OneLake</div>
+  <div class="content" style="flex-direction: column; justify-content: space-between; gap: 24px;">
+    <!-- Perimeter Silos (6 Legacy Systems) -->
+    <div style="display: flex; justify-content: space-between; gap: 16px;">
+      <div class="silo-chip">1. EHR Portal</div>
+      <div class="silo-chip">2. cBioPortal</div>
+      <div class="silo-chip">3. PACS Viewer</div>
+      <div class="silo-chip">4. Radiology CD</div>
+      <div class="silo-chip">5. Lab System</div>
+      <div class="silo-chip">6. Registry Export</div>
+    </div>
+
+    <!-- Central Hero Card: One Record Zero Copies -->
+    <div class="card card-pad" style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border-color: #38BDF8; background: #F0F9FF; animation: collapseIn 0.8s ease-out;">
+      <div class="badge" style="font-size: 32px; padding: 10px 24px;">ONE PATIENT RECORD: ONELAKE SHORTCUTS</div>
+      <div class="metric-num" style="margin-top: 18px; font-size: 58px; color: #0369A1;">
+        Three Silos, One Patient, Zero Copies
       </div>
-      <div style="font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 600; color: #DC2626;">
-        Result: Delayed acute interventions
+      <div class="metric-label" style="font-size: 30px; margin-top: 14px; max-width: 1200px; color: #0284C7;">
+        clinical_lakehouse, genomics_lakehouse, and imaging_lakehouse conformed via patient360 shortcuts
       </div>
     </div>
-    <div class="card card-pad" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; border-color: #38BDF8; background: #F0F9FF;">
-      <div>
-        <div class="badge">MICROSOFT FABRIC</div>
-        <div class="metric-num" style="margin-top: 20px; font-size: 52px; color: #0369A1;">One Record. Zero Copies.</div>
-        <div class="metric-label" style="margin-top: 16px; line-height: 1.4;">
-          • patient360 conformed shortcuts<br>
-          • Direct Lakehouse unification<br>
-          • Real-Time Intelligence streaming<br>
-          • Bi-directional Databricks interop
-        </div>
-      </div>
-      <div style="font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 600; color: #0284C7;">
-        Result: Instant multimodal clinical context
-      </div>
+
+    <div style="display: flex; justify-content: space-around; font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; color: #047857;">
+      <span>✓ 32 OneLake Shortcuts</span>
+      <span>✓ 0 Bytes Duplicated</span>
+      <span>✓ Read Live in 32 ms</span>
     </div>
   </div>
   <div class="caption-bar">
