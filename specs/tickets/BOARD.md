@@ -2,7 +2,7 @@
 |---|---|---|---|---|
 | 001 | Local demo dataset (offline 15-patient tables) | done | solo | alongside |
 | 002 | TCGA patients through the synthetic HLS pipeline | ready | solo | alongside |
-| 003 | Zero-copy proof on the data map | ready | solo | waits for 001: local data map needs the 001 tables |
+| 003 | Zero-copy proof on the data map | done | solo | waits for 001: local data map needs the 001 tables |
 | 008 | Imaging hero (CT + slide + genomics side by side) | ready | solo | waits for 001: patient view needs the 001 tables |
 | 010 | Databricks reads the same OneLake tables | ready | solo | waits for 003: both change DataMap.tsx and the shared function files |
 | 007 | Standards view (FHIR / DICOM to tables) | ready | solo | waits for 010: shared function_app.ts, local/api.ts, App.tsx, AppShell.tsx |

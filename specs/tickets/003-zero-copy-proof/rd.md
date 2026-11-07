@@ -1,6 +1,6 @@
 # 003: Zero-Copy Proof and Reversible Demo Edit
 
-**Status:** ready
+**Status:** done
 | **Risk** | Medium: Data map misreports shortcut topology or demo edit corrupts clinical lakehouse data if rollback fails |
 
 ## Summary
