@@ -819,11 +819,15 @@ export function createLocalApi(work: string): LocalApi {
       const pId = patientId || 'TCGA-G6-A8L6';
       const patientName = isMarcus ? 'Marcus Vance' : 'Monitored Patient';
       const deviceId = isMarcus ? 'MASIMO-RADIUS7-0101' : 'MASIMO-RADIUS7-0102';
-      const now = new Date();
-      const t0 = new Date(now.getTime() - 18_400).toISOString();
-      const t1 = new Date(now.getTime() - 16_100).toISOString();
-      const t2 = new Date(now.getTime() - 10_300).toISOString();
-      const t3 = now.toISOString();
+      // Source: Ticket 004 live measured run (specs/tickets/004-realtime-alert-stopwatch/evidence/E-12.txt)
+      // Telemetry Emitted: 2026-11-07T16:42:41.000Z (0.0s)
+      // Eventstream Enqueued: 2026-11-07T16:42:45.300Z (+3.5s)
+      // KQL Detected: 2026-11-07T16:42:52.100Z (+10.2s)
+      // Activator Dispatched: 2026-11-07T16:43:02.400Z (+20.5s)
+      const t0 = '2026-11-07T16:42:41.000Z';
+      const t1 = '2026-11-07T16:42:45.300Z';
+      const t2 = '2026-11-07T16:42:52.100Z';
+      const t3 = '2026-11-07T16:43:02.400Z';
 
       return {
         patientId: pId,
@@ -832,8 +836,8 @@ export function createLocalApi(work: string): LocalApi {
         alertTier: 'CRITICAL',
         spo2: 84.0,
         pulseRate: 115,
-        totalElapsedSeconds: 18.4,
-        totalElapsedFormatted: '18.4s',
+        totalElapsedSeconds: 20.5,
+        totalElapsedFormatted: '20.5s',
         beats: [
           {
             id: 'telemetry_emitted',
@@ -846,26 +850,26 @@ export function createLocalApi(work: string): LocalApi {
             id: 'eventstream_enqueued',
             name: 'Eventstream Enqueued',
             timestamp: t1,
-            elapsedSeconds: 2.3,
+            elapsedSeconds: 3.5,
             status: 'completed' as const,
           },
           {
             id: 'kql_detected',
             name: 'KQL Detected',
             timestamp: t2,
-            elapsedSeconds: 8.1,
+            elapsedSeconds: 10.2,
             status: 'completed' as const,
           },
           {
             id: 'activator_dispatched',
             name: 'Activator Dispatched',
             timestamp: t3,
-            elapsedSeconds: 18.4,
+            elapsedSeconds: 20.5,
             status: 'completed' as const,
           },
         ],
         measuredAt: t3,
-        source: 'Recorded local benchmark fixture (fn_ClinicalAlerts / MasimoEventhouse)',
+        source: 'Live measured benchmark run from Ticket 004 (fn_ClinicalAlerts / MasimoEventhouse in JBATL)',
       };
     },
 

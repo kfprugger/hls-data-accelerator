@@ -277,6 +277,8 @@ const mockInstances = new Map<
     currentPhaseIndex: number;
     status: string;
     startedAt: string;
+    completedAt?: string | null;
+    durationSeconds?: number;
     resources: Record<string, string>;
     timers: ReturnType<typeof setTimeout>[];
   }
@@ -339,6 +341,8 @@ function advancePhase(instanceId: string): void {
   if (inst.currentPhaseIndex >= inst.phases.length) {
     // All done
     inst.status = "Completed";
+    inst.completedAt = now();
+    inst.durationSeconds = Math.max(0, (new Date(inst.completedAt).getTime() - new Date(inst.startedAt).getTime()) / 1000);
     return;
   }
 
@@ -444,10 +448,91 @@ export function cancelMockDeployment(instanceId: string): void {
   }
 }
 
+function ensurePredefinedMocks(): void {
+  if (!mockInstances.has("mock-completed")) {
+    const started = new Date(Date.now() - 860 * 1000).toISOString();
+    const completed = new Date().toISOString();
+    const completedPhases = MOCK_PHASES.map((p, idx) => ({
+      phase: p.phase,
+      status: "succeeded",
+      duration: Math.round(860 / MOCK_PHASES.length),
+      logs: p.logs.map((l) => ({
+        timestamp: new Date(Date.now() - (860 - idx * 40) * 1000).toISOString(),
+        level: l.level,
+        message: l.message,
+      })),
+    }));
+    mockInstances.set("mock-completed", {
+      config: {
+        expected_tenant_id: "tenant-demo-001",
+        expected_subscription_id: "sub-demo-001",
+        fabric_workspace_name: "med-device-rti-hds",
+        resource_group_name: "rg-medtech-rti-fhir",
+        location: "eastus",
+        patient_count: 100,
+        masimo_device_count: 100,
+      } as unknown as DeploymentConfig,
+      phases: completedPhases,
+      currentPhaseIndex: completedPhases.length,
+      status: "Completed",
+      startedAt: started,
+      completedAt: completed,
+      durationSeconds: 860,
+      resources: {
+        fabric_workspace_id: "d2398e14-7f1f-481f-82d9-3c73a0ffb364",
+        resource_group: "rg-medtech-rti-fhir",
+        eventhouse_id: "eh-abc123",
+      },
+      timers: [],
+    });
+  }
+
+  if (!mockInstances.has("mock-deployment")) {
+    startMockDeployment({
+      expected_tenant_id: "tenant-demo-001",
+      expected_subscription_id: "sub-demo-001",
+      fabric_workspace_name: "med-device-rti-live",
+      resource_group_name: "rg-medtech-live",
+      location: "eastus",
+      patient_count: 100,
+      masimo_device_count: 100,
+    } as unknown as DeploymentConfig);
+    // Rename or rekey the generated id to "mock-deployment"
+    const keys = Array.from(mockInstances.keys());
+    const lastKey = keys[keys.length - 1];
+    if (lastKey && lastKey !== "mock-completed") {
+      const val = mockInstances.get(lastKey)!;
+      mockInstances.delete(lastKey);
+      mockInstances.set("mock-deployment", val);
+    }
+  }
+
+  if (!mockInstances.has("mock-legacy")) {
+    mockInstances.set("mock-legacy", {
+      config: {
+        expected_tenant_id: "tenant-demo-legacy",
+        expected_subscription_id: "sub-demo-legacy",
+        fabric_workspace_name: "legacy-untracked-workspace",
+        resource_group_name: "rg-legacy-preview",
+        location: "eastus",
+      } as unknown as DeploymentConfig,
+      phases: [],
+      currentPhaseIndex: 0,
+      status: "Terminated",
+      startedAt: "2026-11-06T10:00:00Z",
+      completedAt: null,
+      durationSeconds: undefined,
+      resources: {},
+      timers: [],
+    });
+  }
+}
+
 /**
  * Get the status of a mock deployment (matches DeploymentStatus shape).
  */
 export function getMockStatus(instanceId: string): DeploymentStatus | null {
+  ensurePredefinedMocks();
   const inst = mockInstances.get(instanceId);
   if (!inst) return null;
 
@@ -465,18 +550,24 @@ export function getMockStatus(instanceId: string): DeploymentStatus | null {
             status: inst.status === "Completed" ? "succeeded" : "cancelled",
             phases: inst.phases,
             resources: inst.resources,
+            durationSeconds: inst.durationSeconds,
+            completedAt: inst.completedAt,
           }
         : null,
     customStatus: {
       currentPhase: currentPhase?.phase ?? "",
-      status: currentPhase?.status ?? "pending",
+      status: currentPhase?.status ?? (inst.status === "Completed" ? "succeeded" : "pending"),
       detail: "",
       completedPhases: completedPhases.length,
       totalPhases: inst.phases.length,
       resources: inst.resources,
+      durationSeconds: inst.durationSeconds,
+      completedAt: inst.completedAt,
     },
+    durationSeconds: inst.durationSeconds,
+    completedAt: inst.completedAt,
     createdTime: inst.startedAt,
-    lastUpdatedTime: now(),
+    lastUpdatedTime: inst.status === "Completed" ? (inst.completedAt ?? inst.startedAt) : inst.status === "Terminated" && instanceId === "mock-legacy" ? null : now(),
   };
 }
 
@@ -520,14 +611,19 @@ export function listMockDeployments(): Array<{
   runtimeStatus: string;
   createdTime: string | null;
   lastUpdatedTime: string | null;
+  completedAt?: string | null;
+  durationSeconds?: number;
   customStatus: Record<string, unknown> | null;
 }> {
+  ensurePredefinedMocks();
   const results: Array<{
     instanceId: string;
     name: string;
     runtimeStatus: string;
     createdTime: string | null;
     lastUpdatedTime: string | null;
+    completedAt?: string | null;
+    durationSeconds?: number;
     customStatus: Record<string, unknown> | null;
   }> = [];
 
@@ -537,11 +633,16 @@ export function listMockDeployments(): Array<{
       name: "deploy_all_orchestrator",
       runtimeStatus: inst.status,
       createdTime: inst.startedAt,
-      lastUpdatedTime: now(),
+      lastUpdatedTime: inst.status === "Completed" ? (inst.completedAt ?? inst.startedAt) : inst.status === "Terminated" && id === "mock-legacy" ? null : now(),
+      completedAt: inst.completedAt,
+      durationSeconds: inst.durationSeconds,
       customStatus: {
         workspaceName: inst.config.fabric_workspace_name,
+        resourceGroupName: inst.config.resource_group_name,
         completedPhases: inst.phases.filter((p) => p.status === "succeeded").length,
         totalPhases: inst.phases.length,
+        durationSeconds: inst.durationSeconds,
+        completedAt: inst.completedAt,
       },
     });
   }

@@ -127,6 +127,57 @@ function statusColor(s: string): "success" | "error" | "info" | "warning" | "def
         return "warning";
     return "default";
 }
+function formatDuration(seconds: number): string {
+    const s = Math.max(0, Math.floor(seconds));
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${m}m ${rem}s`;
+}
+
+function getElapsedInfo(d: DeploymentSummary, nowMs: number): { text: string; isRunning: boolean } {
+    const cs = d.customStatus as Record<string, unknown> | null;
+    const isTerminal = d.runtimeStatus === "Completed" || d.runtimeStatus === "Terminated" || d.runtimeStatus === "Failed";
+
+    // 1. durationSeconds if present
+    const ds = (cs?.durationSeconds as number | undefined) ?? d.durationSeconds;
+    if (typeof ds === "number" && !isNaN(ds) && ds >= 0) {
+        return { text: formatDuration(ds), isRunning: false };
+    }
+
+    if (!d.createdTime) {
+        return { text: "—", isRunning: false };
+    }
+    const created = new Date(d.createdTime).getTime();
+    if (isNaN(created)) {
+        return { text: "—", isRunning: false };
+    }
+
+    // 2. completedAt if present
+    const completedAt = (cs?.completedAt as string | undefined) ?? d.completedAt;
+    if (completedAt) {
+        const comp = new Date(completedAt).getTime();
+        if (!isNaN(comp) && comp >= created) {
+            return { text: formatDuration((comp - created) / 1000), isRunning: false };
+        }
+    }
+
+    // 3. If terminal, use lastUpdatedTime
+    if (isTerminal) {
+        if (!d.lastUpdatedTime) {
+            return { text: "—", isRunning: false };
+        }
+        const updated = new Date(d.lastUpdatedTime).getTime();
+        if (isNaN(updated) || updated < created) {
+            return { text: "—", isRunning: false };
+        }
+        return { text: formatDuration((updated - created) / 1000), isRunning: false };
+    }
+
+    // 4. Running deployment
+    const runningSecs = Math.max(0, (nowMs - created) / 1000);
+    return { text: formatDuration(runningSecs), isRunning: true };
+}
+
 
 function isRunningTeardownBatch(deployment: DeploymentSummary): boolean {
   const cs = deployment.customStatus as Record<string, unknown> | null;
@@ -167,6 +218,7 @@ export function DeploymentHistory() {
     const [liveUpdates, setLiveUpdates] = useState(() => searchParams.get("live") !== "0");
     const [compareIds, setCompareIds] = useState<Set<string>>(new Set());
     const [relatedFor, setRelatedFor] = useState<string | null>(null);
+    const [nowMs, setNowMs] = useState(() => Date.now());
     const [error, setError] = useState("");
     const toggleExpanded = (id: string) => {
         setExpandedIds((prev) => {
@@ -221,6 +273,11 @@ export function DeploymentHistory() {
         }, 5000);
         return () => clearInterval(interval);
     }, [refresh, liveUpdates]);
+    useEffect(() => {
+        const timer = setInterval(() => setNowMs(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
     useEffect(() => {
         const next = new URLSearchParams();
         next.set("type", runFilter);
@@ -398,6 +455,7 @@ export function DeploymentHistory() {
                   <Typography component="span" variant="caption">Workspace: {(cs?.workspaceName as string) || "—"}</Typography>
                   <Typography component="span" variant="caption">RG: {(cs?.resourceGroupName as string) || "—"}</Typography>
                   <Typography component="span" variant="caption">Phases: {(cs?.completedPhases as number) ?? 0}/{(cs?.totalPhases as number) ?? 0}</Typography>
+                  <Typography component="span" variant="caption">Elapsed: {getElapsedInfo(run, nowMs).text}</Typography>
                   <Typography component="span" variant="caption">Updated: {run.lastUpdatedTime ? new Date(run.lastUpdatedTime).toLocaleString() : "—"}</Typography>
                 </div>);
             })}
@@ -417,6 +475,7 @@ export function DeploymentHistory() {
             <div style={{ width: 100 }}>Type</div>
             <div style={{ width: 100 }}>Status</div>
             <div style={{ width: 60 }}>Progress</div>
+            <div style={{ width: 100 }}>Elapsed</div>
             <div style={{ width: 150 }}>Created</div>
             <div style={{ width: 120 }}>Actions</div>
           </div>)}
@@ -434,6 +493,7 @@ export function DeploymentHistory() {
             const isMock = d.instanceId.startsWith("mock-");
             const isExpanded = expandedIds.has(d.instanceId);
             const links = cs?.links as Record<string, string> | undefined;
+            const elapsedInfo = getElapsedInfo(d, nowMs);
             const relatedCount = deployments.filter((other) => {
                 if (other.instanceId === d.instanceId)
                     return false;
@@ -467,6 +527,12 @@ export function DeploymentHistory() {
                       {completed}/{total}
                     </Typography>)}
                 </div>
+                <Typography style={{ color: "var(--m3-colorNeutralForeground3)", width: 100, display: "flex", alignItems: "center", gap: "4px" }} component="span" variant="caption">
+                  {elapsedInfo.isRunning && (
+                    <span style={{ display: "inline-block", width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "var(--m3-colorPaletteBlueBackground2, #0078d4)" }} />
+                  )}
+                  {elapsedInfo.text}
+                </Typography>
                 <Typography style={{ color: "var(--m3-colorNeutralForeground3)", width: 150 }} component="span" variant="caption">
                   {d.createdTime ? new Date(d.createdTime).toLocaleString() : "—"}
                 </Typography>
@@ -499,6 +565,10 @@ export function DeploymentHistory() {
                     <Typography component="span" variant="caption" sx={{
                         fontFamily: "monospace"
                     }}>{d.instanceId}</Typography>
+                  </div>
+                  <div className={styles.linkGroup}>
+                    <span className={styles.linkLabel}>Elapsed</span>
+                    <Typography component="span" variant="caption">{elapsedInfo.text}</Typography>
                   </div>
                   <div className={styles.linkGroup}>
                     <span className={styles.linkLabel}>Created</span>

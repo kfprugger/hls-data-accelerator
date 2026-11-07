@@ -56,7 +56,31 @@ function ShellHeader() {
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex shrink-0 items-center gap-2.5 sm:gap-3 text-[12px]">
+        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-2.5 text-[12px]">
+          <div
+            className="group relative flex items-center"
+            tabIndex={0}
+            role="region"
+            aria-label="100% synthetic / public de-identified data notice"
+          >
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full border border-teal-600/30 dark:border-teal-400/30 bg-teal-50 dark:bg-teal-950/40 px-2 sm:px-2.5 py-0.5 text-[11px] font-medium text-teal-800 dark:text-teal-300 transition-colors shadow-2xs select-none cursor-help"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-teal-500 animate-pulse shrink-0" aria-hidden="true" />
+              <span className="hidden sm:inline">100% synthetic / public de-identified data</span>
+              <span className="inline sm:hidden font-mono text-[10px] font-semibold tracking-wider">SYNTHETIC</span>
+            </span>
+            <div
+              role="tooltip"
+              className="pointer-events-none absolute right-0 top-full mt-1.5 hidden w-72 max-w-[calc(100vw-32px)] rounded-md border border-[var(--line)] bg-[var(--surface,#ffffff)] dark:bg-slate-900 p-2.5 text-[11.5px] leading-relaxed text-[var(--ink)] shadow-lg group-hover:block group-focus:block z-50 text-left"
+            >
+              <div className="font-semibold text-teal-700 dark:text-teal-400 mb-1 flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-teal-500 inline-block" />
+                HIPAA Safe Harbor (§164.514)
+              </div>
+              TCGA open research data de-identified per HIPAA Safe Harbor (§164.514) combined with Synthea algorithmic synthetic profiles. Zero live patient data.
+            </div>
+          </div>
           {LOCAL_DATA ? (
             <span className="t-muted t-mono hidden 2xl:inline text-[11px]" title="Local mode: data is read from the work/ folder on this computer">
               local mode · work/

@@ -751,20 +751,30 @@ export function PhaseMonitor() {
     }, [isRunning]);
     useEffect(() => {
         if (!isRunning && status && frozenElapsed === null) {
-            // Priority 1: sum of phase durations (excludes HDS manual wait)
+            // Priority 0: completedAt - createdTime if present
+            const completedAt = (status as any).completedAt || (status.customStatus as Record<string, unknown>)?.completedAt || (status.output as any)?.completedAt;
+            if (completedAt && status.createdTime) {
+                const created = new Date(status.createdTime).getTime();
+                const comp = new Date(completedAt).getTime();
+                if (!isNaN(created) && !isNaN(comp) && comp >= created) {
+                    setFrozenElapsed(Math.max(0, (comp - created) / 1000));
+                    return;
+                }
+            }
+            // Priority 1: backend-computed durationSeconds
+            const backendDuration = (status.customStatus as Record<string, unknown>)?.durationSeconds ?? (status as any).durationSeconds ?? (status.output as any)?.durationSeconds;
+            if (typeof backendDuration === "number" && backendDuration > 0) {
+                setFrozenElapsed(Math.max(0, backendDuration));
+                return;
+            }
+            // Priority 2: sum of phase durations (excludes HDS manual wait)
             const phaseDurationSum = phases.reduce((sum, p) => {
                 if (typeof p.duration === "number")
                     return sum + p.duration;
                 return sum;
             }, 0);
             if (phaseDurationSum > 0) {
-                setFrozenElapsed(phaseDurationSum);
-                return;
-            }
-            // Priority 2: backend-computed durationSeconds
-            const backendDuration = (status.customStatus as Record<string, unknown>)?.durationSeconds;
-            if (typeof backendDuration === "number" && backendDuration > 0) {
-                setFrozenElapsed(backendDuration);
+                setFrozenElapsed(Math.max(0, phaseDurationSum));
                 return;
             }
             // Priority 3: lastUpdatedTime - createdTime
@@ -819,9 +829,9 @@ export function PhaseMonitor() {
         });
     }, [instanceId, showAfterActionReport, afterActionReport]);
     const elapsedSeconds = frozenElapsed !== null
-        ? frozenElapsed
+        ? Math.max(0, frozenElapsed)
         : status?.createdTime
-            ? (Date.now() - new Date(status.createdTime).getTime()) / 1000
+            ? Math.max(0, (Date.now() - new Date(status.createdTime).getTime()) / 1000)
             : 0;
     void tick; // suppress unused warning
     const elapsedFormatted = elapsedSeconds > 0
@@ -1417,9 +1427,7 @@ export function PhaseMonitor() {
                 }
             }}/>}/>
           <Chip style={{ transform: "translateY(1px)" }} component="span" size="small" variant="filled" color={isCancelled ? "warning" : isFailed ? "error" : isComplete ? (isTeardown ? "warning" : "success") : isRunning ? "info" : "default" as any} label={<>
-            {milestonesDone}/{totalMilestones} phases{" "}
-            {isCancelled ? "cancelled" : isComplete ? (isTeardown ? "torn down" : "complete") : ""}{" "}
-            {elapsedFormatted && `(${elapsedFormatted})`}
+            {isCancelled ? `Cancelled (${elapsedFormatted || "0m 0s"})` : isFailed ? `Failed (${elapsedFormatted || "0m 0s"})` : isComplete ? (isTeardown ? `Torn down in ${elapsedFormatted || "0m 0s"}` : `Completed in ${elapsedFormatted || "0m 0s"}`) : `${milestonesDone}/${totalMilestones} phases ${elapsedFormatted ? `(${elapsedFormatted})` : ""}`}
           </>}/>
           {isComplete && !isTeardown && (<Button onClick={() => setShowAfterActionReport((prev) => !prev)} style={showAfterActionReport ? {} : {
                 borderColor: "var(--m3-colorPaletteBlueBorderActive)",
@@ -1514,7 +1522,7 @@ export function PhaseMonitor() {
             {isRunning && currentPhase ? ` · ${currentPhase}` : ""}
           </Typography>
           <Typography style={{ color: "var(--m3-colorNeutralForeground3)" }} component="span" variant="caption">
-            {elapsedFormatted || "0m 0s"}{isRunning && etaMinutes > 0 ? ` · ETA ~${etaMinutes}m` : ""}
+            {isComplete && !isCancelled && !isFailed ? `Completed in ${elapsedFormatted || "0m 0s"}` : (elapsedFormatted || "0m 0s")}{isRunning && etaMinutes > 0 ? ` · ETA ~${etaMinutes}m` : ""}
           </Typography>
         </div>
 
