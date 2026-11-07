@@ -1,6 +1,3 @@
-{
-  "requestId": "8c9412c1-0602-4d9c-b7b2-275065e79851",
-  "errorCode": "CapacityNotActive",
-  "message": "Internal error CapacityNotActive.Capacity 7ab8ca41-04d8-4638-bbc3-de5928e9533a is not active",
-  "isRetriable": false
-}
+dim_diagnosis query error: ('42S22', "[42S22] [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Invalid column name 'patient_id'. (207) (SQLExecDirectW)")
+fact_claim count for TCGA-G6-A8L6: 0
+TCGA patient rows not found in healthcare1_reporting_gold fact_claim (HDS pipeline has not materialized TCGA cohort into Gold).
