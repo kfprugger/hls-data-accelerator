@@ -1,0 +1,115 @@
+............................................Rebuilding invalid HDS source cache: File is not a zip file
+....................................Network failure on POST /items (ConnectionError, attempt 1/3); not replaying request.
+Network failure on POST /items (ReadTimeout, attempt 1/3); not replaying request.
+Network failure on POST /items (ChunkedEncodingError, attempt 1/3); not replaying request.
+Network failure on POST /items (ConnectionError, attempt 1/3); not replaying request.
+Network failure on POST /items (ReadTimeout, attempt 1/3); not replaying request.
+Network failure on POST /items (ChunkedEncodingError, attempt 1/3); not replaying request.
+Network failure on POST /items (ConnectionError, attempt 1/3); not replaying request.
+Network failure on POST /items (ReadTimeout, attempt 1/3); not replaying request.
+Network failure on POST /items (ChunkedEncodingError, attempt 1/3); not replaying request.
+.Network failure on POST /items (ConnectTimeout, attempt 1/3); retrying in 5.0s.
+Network failure on POST /items (ConnectTimeout, attempt 1/3); retrying in 5.0s.
+Network failure on POST /items (ConnectTimeout, attempt 1/3); retrying in 5.0s.
+..Network failure on GET https://api.fabric.test/v1/jobs/one (ReadTimeout, attempt 1/3); retrying in 1.0s.
+.Network failure polling LRO https://api.fabric.test/v1/operations/one (ConnectionError); retrying within deadline.
+Network failure polling LRO https://api.fabric.test/v1/operations/one (ConnectionError); retrying within deadline.
+Network failure polling LRO https://api.fabric.test/v1/operations/one (ConnectionError); retrying within deadline.
+.Network failure polling LRO https://api.fabric.test/v1/operations/one (ReadTimeout); retrying within deadline.
+..Network failure on GET /items (ConnectionError, attempt 1/3); retrying in 5.0s.
+Network failure on GET /items (ConnectionError, attempt 1/2); retrying in 5.0s.
+Network failure on GET /items (ConnectionError, attempt 2/2); not replaying request.
+Network failure on GET /items (ChunkedEncodingError, attempt 1/3); retrying in 5.0s.
+Network failure on GET /items (ChunkedEncodingError, attempt 1/2); retrying in 5.0s.
+Network failure on GET /items (ChunkedEncodingError, attempt 2/2); not replaying request.
+Network failure on GET /items (ReadTimeout, attempt 1/3); retrying in 5.0s.
+Network failure on GET /items (ReadTimeout, attempt 1/2); retrying in 5.0s.
+Network failure on GET /items (ReadTimeout, attempt 2/2); not replaying request.
+Network failure on GET /items (ConnectionError, attempt 1/3); retrying in 5.0s.
+Network failure on GET /items (ConnectionError, attempt 1/2); retrying in 5.0s.
+Network failure on GET /items (ConnectionError, attempt 2/2); not replaying request.
+Network failure on GET /items (ChunkedEncodingError, attempt 1/3); retrying in 5.0s.
+Network failure on GET /items (ChunkedEncodingError, attempt 1/2); retrying in 5.0s.
+Network failure on GET /items (ChunkedEncodingError, attempt 2/2); not replaying request.
+Network failure on GET /items (ReadTimeout, attempt 1/3); retrying in 5.0s.
+Network failure on GET /items (ReadTimeout, attempt 1/2); retrying in 5.0s.
+Network failure on GET /items (ReadTimeout, attempt 2/2); not replaying request.
+Network failure on GET /items (ConnectionError, attempt 1/3); retrying in 5.0s.
+Network failure on GET /items (ConnectionError, attempt 1/2); retrying in 5.0s.
+Network failure on GET /items (ConnectionError, attempt 2/2); not replaying request.
+Network failure on GET /items (ChunkedEncodingError, attempt 1/3); retrying in 5.0s.
+Network failure on GET /items (ChunkedEncodingError, attempt 1/2); retrying in 5.0s.
+Network failure on GET /items (ChunkedEncodingError, attempt 2/2); not replaying request.
+Network failure on GET /items (ReadTimeout, attempt 1/3); retrying in 5.0s.
+Network failure on GET /items (ReadTimeout, attempt 1/2); retrying in 5.0s.
+Network failure on GET /items (ReadTimeout, attempt 2/2); not replaying request.
+.Network failure on GET /items (SSLError, attempt 1/3); not replaying request.
+Network failure on GET /items (SSLError, attempt 1/3); not replaying request.
+Network failure on GET /items (SSLError, attempt 1/3); not replaying request.
+.HTTP 429 on /items. Waiting 7s (attempt 1/3): {}
+........................Recovered interrupted deployment base as Completed
+Recovered interrupted deployment pending as Terminated
+..PowerShell wait raised after process completion; using exit code 0
+Traceback (most recent call last):
+  File "/Users/joey/git/.worktrees/hls-fabric-wow/.claude/worktrees/002-tcga-synthetic-ingest/orchestrator/activities/invoke_powershell.py", line 736, in _run_powershell
+    exit_code = process.wait()
+  File "/Users/joey/git/.worktrees/hls-fabric-wow/.claude/worktrees/002-tcga-synthetic-ingest/orchestrator/tests/test_invoke_powershell_parser.py", line 30, in wait
+    raise OSError(22, "bad parameter or other API misuse")
+OSError: [Errno 22] bad parameter or other API misuse
+.✗ Sidecar Pipeline: healthcare1_msft_sdoh_ingestion - 0.4 min
+✗ Sidecar Pipeline: healthcare1_msft_sdoh_ingestion  Failed: trigger unavailable  12 sec
+...................2026-11-07 02:06:10,886 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:10,901 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:10,915 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:10,926 INFO local_server: Loaded 0 deployments from database
+2026-11-07 02:06:10,936 INFO local_server: Auto-resume skipping phase 'Phase 2: Fabric RTI' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:10,936 INFO local_server: Auto-resume activated: loaded successful phases from prior-run. Applied skips: base_infra=False, fhir=False, dicom=False, fabric=False, reuse_rti=True, rti2=False, hds=False, agents=False, imaging=False, ontology=False, activator=False, quality=False
+.2026-11-07 02:06:10,938 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:10,954 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:10,967 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:10,978 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:10,989 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,002 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,033 INFO local_server: Loaded 0 deployments from database
+2026-11-07 02:06:11,043 INFO local_server: Continue-from-failure live fallback for prior-run applied=True: base_infra=False, reuse_patients=True, skip_synthea=True, skip_fhir=False, skip_dicom=True, patients=100, devices=100, exportedFiles=0, dicomStudies=202
+.2026-11-07 02:06:11,045 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,056 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,068 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,079 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,089 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,100 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,113 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,123 INFO local_server: Loaded 0 deployments from database
+2026-11-07 02:06:11,132 INFO local_server: Auto-resume skipping phase 'PHASE 4: ONTOLOGY' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,132 INFO local_server: Auto-resume not skipping phase 'PHASE 4: ONTOLOGY' from prior-run because not every ontology step succeeded
+2026-11-07 02:06:11,132 INFO local_server: Auto-resume skipping phase 'Phase 4: Ontology Deployment' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,132 INFO local_server: Auto-resume not skipping phase 'Phase 4: Ontology Deployment' from prior-run because not every ontology step succeeded
+2026-11-07 02:06:11,132 INFO local_server: Auto-resume skipping phase 'Phase 6: CMS Quality Measures' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,132 INFO local_server: Auto-resume activated: loaded successful phases from prior-run. Applied skips: base_infra=False, fhir=False, dicom=False, fabric=False, reuse_rti=False, rti2=False, hds=False, agents=False, imaging=False, ontology=False, activator=False, quality=True
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume skipping phase 'PHASE 4: ONTOLOGY' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume not skipping phase 'PHASE 4: ONTOLOGY' from prior-run because not every ontology step succeeded
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume skipping phase 'Phase 4: Ontology Deployment' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume not skipping phase 'Phase 4: Ontology Deployment' from prior-run because not every ontology step succeeded
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume skipping phase 'Phase 4: Ontology-Aware Data Agents' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume activated: loaded successful phases from prior-run. Applied skips: base_infra=False, fhir=False, dicom=False, fabric=False, reuse_rti=False, rti2=False, hds=False, agents=True, imaging=False, ontology=False, activator=False, quality=False
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume skipping phase 'PHASE 4: ONTOLOGY' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume skipping phase 'Phase 4: Ontology Deployment' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume skipping phase 'Phase 4: Ontology-Aware Data Agents' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume skipping phase 'Phase 6: CMS Quality Measures' from prior-run after live prerequisite validation: verified
+2026-11-07 02:06:11,133 INFO local_server: Auto-resume activated: loaded successful phases from prior-run. Applied skips: base_infra=False, fhir=False, dicom=False, fabric=False, reuse_rti=False, rti2=False, hds=False, agents=True, imaging=False, ontology=True, activator=False, quality=True
+.2026-11-07 02:06:11,135 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,147 INFO local_server: Loaded 0 deployments from database
+2026-11-07 02:06:11,156 INFO local_server: Deployment deployment-id stale validation failure state cleared
+.2026-11-07 02:06:11,158 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,170 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,181 INFO local_server: Loaded 0 deployments from database
+2026-11-07 02:06:11,192 INFO local_server: [teardownFull-test] Starting teardown (workspace='', rg='rg-a', subscription=sub-a)
+2026-11-07 02:06:11,192 INFO local_server: [teardownFull-test] Teardown finished with 1 failure(s): Azure Resource Group: still deleting
+2026-11-07 02:06:11,192 INFO local_server: Teardown teardownFull-test finished (status=failed, 0.0s)
+.2026-11-07 02:06:11,194 INFO local_server: Loaded 0 deployments from database
+.2026-11-07 02:06:11,205 INFO local_server: Loaded 0 deployments from database
+............
+----------------------------------------------------------------------
+Ran 172 tests in 50.081s
+
+OK

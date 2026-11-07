@@ -347,6 +347,20 @@ export type ZeroCopySummary = {
   physicalBytesInPatient360: 0;
 };
 
+export type DatabricksInteropProof = {
+  timestamp: string;
+  engine: string;
+  statement: string;
+  warehouseId: string;
+  rowCount: number;
+  fabricP360Count?: number;
+  deltaTableVersion?: number;
+  executionTimeMs: number;
+  oneLakeExternalLocation: string;
+  status: string;
+  zeroCopyVerified: boolean;
+};
+
 export type DataMap = {
   workspace: { id: string; name: string; portalUrl: string };
   patient360: {
@@ -359,6 +373,7 @@ export type DataMap = {
     error?: string;
   };
   zeroCopy: ZeroCopySummary;
+  databricksInterop?: DatabricksInteropProof | null;
   silos: SiloInventory[];
   provenance: Provenance;
 };
@@ -914,7 +929,7 @@ udf.func(
 
 udf.func(
   'getDataMap',
-  async (ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Fabric>): Promise<DataMap> => {
+  async (ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Fabric | AudienceType.Storage>): Promise<DataMap> => {
     const tracer = new Tracer(await getPool(ctx.Tokens.Sql, PATIENT360.name));
     const silos = Object.keys(SILOS) as Silo[];
     const inventory = await Promise.all(
@@ -964,6 +979,17 @@ udf.func(
       sourceSilos,
       physicalBytesInPatient360: 0,
     };
+    let databricksInterop: DatabricksInteropProof | null = null;
+    try {
+      if (ctx.Tokens && 'Storage' in ctx.Tokens && typeof ctx.Tokens.Storage === 'string' && !/^0{8}-/.test(LAKEHOUSE_ID)) {
+        const proofRes = await readOneLake(ctx.Tokens.Storage, 'interop/databricks_proof.json');
+        if (proofRes.ok) {
+          databricksInterop = (await proofRes.json()) as DatabricksInteropProof;
+        }
+      }
+    } catch {
+      databricksInterop = null;
+    }
     return {
       workspace: { id: WORKSPACE_ID, name: WORKSPACE_NAME, portalUrl: `https://app.fabric.microsoft.com/groups/${WORKSPACE_ID}` },
       patient360: {
@@ -975,6 +1001,7 @@ udf.func(
         ...(error ? { error } : {}),
       },
       zeroCopy,
+      databricksInterop,
       silos: silos.map((silo, i) => ({
         silo,
         ...SILOS[silo],

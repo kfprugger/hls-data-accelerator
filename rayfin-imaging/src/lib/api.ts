@@ -7,6 +7,7 @@ export type CohortPatient = Cohort['patients'][number];
 export type PatientBundle = AppFunctionsSchema['getPatient']['output'];
 export type DataMap = AppFunctionsSchema['getDataMap']['output'];
 export type ZeroCopySummary = DataMap['zeroCopy'];
+export type DatabricksInteropProof = NonNullable<DataMap['databricksInterop']>;
 export type WardFlowCohortSnapshot = AppFunctionsSchema['getWardFlowCohort']['output'];
 export type WardFlowSubject = WardFlowCohortSnapshot['subjects'][number];
 export type StandardsMapping = AppFunctionsSchema['getStandardsMapping']['output'];

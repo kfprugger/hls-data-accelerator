@@ -1,6 +1,6 @@
 # 002: TCGA Cohort Synthetic FHIR, Device, and Claim Ingestion
 
-**Status:** ready
+**Status:** done
 
 | **Risk** | High: Accidental overwrite of clinical FHIR records, credential exposure, or data leakage of synthetic identifiers into non-demo pipelines |
 

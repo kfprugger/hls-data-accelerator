@@ -1,6 +1,6 @@
 # 010: Azure Databricks Zero-Copy OneLake Interoperability
 
-**Status:** ready
+**Status:** done
 | **Risk** | Medium: Databricks SQL execution hangs or writes unvalidated interop payload to imaging lakehouse |
 
 ## Summary
