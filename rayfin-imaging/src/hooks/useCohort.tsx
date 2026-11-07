@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { fetchCohort, fetchPatient, type Cohort, type PatientBundle } from '@/lib/api';
+import { usePersona } from '@/hooks/usePersona';
 
 /** Signed URLs last 55 minutes; refetch well before. */
 const MAX_AGE_MS = 30 * 60_000;
@@ -20,11 +21,11 @@ const Ctx = createContext<CohortState | undefined>(undefined);
 type Entry = { at: number; promise: Promise<PatientBundle>; value: PatientBundle | null };
 
 export function CohortProvider({ children }: { children: ReactNode }) {
+  const { persona } = usePersona();
   const [cohort, setCohort] = useState<Cohort | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const cache = useRef(new Map<string, Entry>());
-
   const reload = useCallback(async () => {
     setLoading(true);
     try {
@@ -39,25 +40,34 @@ export function CohortProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    cache.current.clear();
     void reload();
-  }, [reload]);
+  }, [persona, reload]);
 
-  const getPatient = useCallback((id: string) => {
-    const hit = cache.current.get(id);
-    if (hit && Date.now() - hit.at < MAX_AGE_MS) return hit.promise;
-    const entry: Entry = { at: Date.now(), promise: fetchPatient(id), value: null };
-    entry.promise.then(
-      (v) => (entry.value = v),
-      () => cache.current.delete(id)
-    );
-    cache.current.set(id, entry);
-    return entry.promise;
-  }, []);
+  const getPatient = useCallback(
+    (id: string) => {
+      const key = `${persona}:${id}`;
+      const hit = cache.current.get(key);
+      if (hit && Date.now() - hit.at < MAX_AGE_MS) return hit.promise;
+      const entry: Entry = { at: Date.now(), promise: fetchPatient(id, persona), value: null };
+      entry.promise.then(
+        (v) => (entry.value = v),
+        () => cache.current.delete(key)
+      );
+      cache.current.set(key, entry);
+      return entry.promise;
+    },
+    [persona]
+  );
 
-  const peekPatient = useCallback((id: string) => {
-    const hit = cache.current.get(id);
-    return hit && Date.now() - hit.at < MAX_AGE_MS ? hit.value : null;
-  }, []);
+  const peekPatient = useCallback(
+    (id: string) => {
+      const key = `${persona}:${id}`;
+      const hit = cache.current.get(key);
+      return hit && Date.now() - hit.at < MAX_AGE_MS ? hit.value : null;
+    },
+    [persona]
+  );
 
   return (
     <Ctx.Provider value={{ cohort, loading, error, reload, getPatient, peekPatient }}>{children}</Ctx.Provider>
@@ -72,6 +82,7 @@ export function useCohort(): CohortState {
 
 /** Loads one patient; keeps showing the previous patient until the next one arrives. */
 export function usePatient(id: string | null) {
+  const { persona } = usePersona();
   const { getPatient, peekPatient } = useCohort();
   const [bundle, setBundle] = useState<PatientBundle | null>(() => (id ? peekPatient(id) : null));
   const [loading, setLoading] = useState(false);
@@ -102,7 +113,7 @@ export function usePatient(id: string | null) {
     return () => {
       cancelled = true;
     };
-  }, [id, getPatient, peekPatient]);
+  }, [id, getPatient, peekPatient, persona]);
 
   return { bundle: bundle && bundle.patient.patient_id === id ? bundle : null, stale: bundle, loading, error, loadMs };
 }

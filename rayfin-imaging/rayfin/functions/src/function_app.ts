@@ -278,6 +278,8 @@ export type CohortPatient = {
 export type Cohort = {
   patients: CohortPatient[];
   provenance: Provenance;
+  isDeidentified?: boolean;
+  persona?: 'nurse' | 'researcher';
 };
 
 export type ReportText = {
@@ -296,6 +298,8 @@ export type MutationMap = {
 };
 
 export type PatientBundle = {
+  isDeidentified?: boolean;
+  persona?: 'nurse' | 'researcher';
   patient: Row;
   header: Row;
   diagnoses: Row[];
@@ -643,6 +647,21 @@ FROM dbo.patient p                                            -- clinical_lakeho
 JOIN dbo.molecular_profile m ON m.patient_id = p.patient_id   -- genomics_lakehouse
 JOIN dbo.pathology_slide s  ON s.patient_id = p.patient_id AND s.role = 'diagnostic'  -- imaging_lakehouse
 WHERE p.patient_id = @id`;
+const COHORT_SQL_DEIDENTIFIED = COHORT_SQL.replace('FROM dbo.patient p', 'FROM dbo.patient_deidentified p');
+const HEADER_SQL_DEIDENTIFIED = HEADER_SQL.replace('FROM dbo.patient p', 'FROM dbo.patient_deidentified p');
+
+function isResearcherPersona(token?: string): boolean {
+  if (!token) return false;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return false;
+    const claims = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8')) as Record<string, unknown>;
+    const upn = String(claims.upn ?? claims.preferred_username ?? claims.email ?? claims.unique_name ?? '').toLowerCase();
+    return upn.includes('researcher-demo');
+  } catch {
+    return false;
+  }
+}
 
 /* ------------------------------------------------------------------ WardFlow Cardiology SQL */
 
@@ -782,12 +801,15 @@ udf.func(
 udf.func(
   'getCohort',
   async (ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Storage>): Promise<Cohort> => {
+    const isResearcher = isResearcherPersona(ctx.Tokens.Sql);
+    const cohortSql = isResearcher ? COHORT_SQL_DEIDENTIFIED : COHORT_SQL;
+    const patientTable = isResearcher ? 'patient_deidentified' : 'patient';
     const tracer = new Tracer(await getPool(ctx.Tokens.Sql, PATIENT360.name));
     const list = await tracer.run(
       'cohort',
       ['clinical', 'genomics', 'imaging'],
-      ['patient', 'molecular_profile', 'pathology_slide', 'somatic_mutation', 'radiology_series'],
-      COHORT_SQL,
+      [patientTable, 'molecular_profile', 'pathology_slide', 'somatic_mutation', 'radiology_series'],
+      cohortSql,
     );
     const storage = ctx.Tokens.Storage;
     const patients = await Promise.all(
@@ -803,7 +825,12 @@ udf.func(
         } satisfies CohortPatient;
       }),
     );
-    return { patients, provenance: tracer.provenance(COHORT_SQL) };
+    return {
+      patients,
+      provenance: tracer.provenance(cohortSql),
+      isDeidentified: isResearcher,
+      persona: isResearcher ? 'researcher' : 'nurse',
+    };
   },
   [],
 );
@@ -815,6 +842,9 @@ udf.func(
     ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Storage>,
   ): Promise<PatientBundle> => {
     if (!PATIENT_ID.test(patientId)) throw new Error('Invalid patient id');
+    const isResearcher = isResearcherPersona(ctx.Tokens.Sql);
+    const headerSql = isResearcher ? HEADER_SQL_DEIDENTIFIED : HEADER_SQL;
+    const patientTable = isResearcher ? 'patient_deidentified' : 'patient';
     const tracer = new Tracer(await getPool(ctx.Tokens.Sql, PATIENT360.name));
     const params = { id: patientId };
     const q = (id: string, silo: Silo, table: string, text: string) => tracer.run(id, [silo], [table], text, params);
@@ -828,11 +858,11 @@ udf.func(
       tracer.run(
         'header',
         ['clinical', 'genomics', 'imaging'],
-        ['patient', 'molecular_profile', 'pathology_slide', 'radiology_study', 'radiology_series', 'observation'],
-        HEADER_SQL,
+        [patientTable, 'molecular_profile', 'pathology_slide', 'radiology_study', 'radiology_series', 'observation'],
+        headerSql,
         params,
       ),
-      q('patient', 'clinical', 'patient', `SELECT * FROM dbo.patient ${where}`),
+      q('patient', 'clinical', patientTable, `SELECT * FROM dbo.${patientTable} ${where}`),
       q('diagnoses', 'clinical', 'diagnosis', `SELECT * FROM dbo.diagnosis ${where} ORDER BY day`),
       q('treatments', 'clinical', 'treatment', `SELECT * FROM dbo.treatment ${where} ORDER BY start_day`),
       q('followUps', 'clinical', 'follow_up', `SELECT * FROM dbo.follow_up ${where} ORDER BY day`),
@@ -943,7 +973,9 @@ udf.func(
       radiologyStudies: studies,
       radiologySeries: series,
       access: { slide: slideAccess, radiology: radiologyAccess, report: reportAccess },
-      provenance: tracer.provenance(HEADER_SQL),
+      provenance: tracer.provenance(headerSql),
+      isDeidentified: isResearcher,
+      persona: isResearcher ? 'researcher' : 'nurse',
     };
   },
   [],

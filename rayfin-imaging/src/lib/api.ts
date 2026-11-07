@@ -18,6 +18,20 @@ export type FileAccess = PatientBundle['access']['slide'];
 export type Row = PatientBundle['patient'];
 export type Cell = Row[string];
 export type Silo = 'clinical' | 'genomics' | 'imaging';
+export type Persona = 'nurse' | 'researcher';
+
+let currentPersona: Persona =
+  typeof window !== 'undefined' && window.localStorage?.getItem('rayfin_active_persona') === 'researcher'
+    ? 'researcher'
+    : 'nurse';
+
+export function getActivePersona(): Persona {
+  return currentPersona;
+}
+
+export function setActivePersona(p: Persona): void {
+  currentPersona = p;
+}
 
 export const SILO_NAMES: Record<Silo, string> = {
   clinical: 'clinical_lakehouse',
@@ -25,14 +39,22 @@ export const SILO_NAMES: Record<Silo, string> = {
   imaging: 'imaging_lakehouse',
 };
 
-export async function fetchCohort(): Promise<Cohort> {
-  if (LOCAL_DATA) return localApi('getCohort');
-  return getRayfinClient().functions.getCohort.invoke(undefined, { timeoutMs: 90_000 });
+export async function fetchCohort(persona?: Persona): Promise<Cohort> {
+  const p = persona ?? currentPersona;
+  if (LOCAL_DATA) {
+    const query = p === 'researcher' ? '?persona=researcher' : '';
+    return localApi(`getCohort${query}`, { headers: { 'x-rayfin-persona': p } });
+  }
+  return getRayfinClient().functions.getCohort.invoke(p ? { persona: p } : undefined, { timeoutMs: 90_000 });
 }
 
-export async function fetchPatient(patientId: string): Promise<PatientBundle> {
-  if (LOCAL_DATA) return localApi(`getPatient?patientId=${encodeURIComponent(patientId)}`);
-  return getRayfinClient().functions.getPatient.invoke({ patientId }, { timeoutMs: 90_000 });
+export async function fetchPatient(patientId: string, persona?: Persona): Promise<PatientBundle> {
+  const p = persona ?? currentPersona;
+  if (LOCAL_DATA) {
+    const query = `patientId=${encodeURIComponent(patientId)}${p === 'researcher' ? '&persona=researcher' : ''}`;
+    return localApi(`getPatient?${query}`, { headers: { 'x-rayfin-persona': p } });
+  }
+  return getRayfinClient().functions.getPatient.invoke({ patientId, ...(p ? { persona: p } : {}) }, { timeoutMs: 90_000 });
 }
 
 export async function fetchDataMap(): Promise<DataMap> {

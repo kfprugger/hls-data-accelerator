@@ -87,7 +87,7 @@ describe('src/lib/api.ts Core Rayfin UDFs and helpers (R-2, FR-7)', () => {
       const spy = vi.spyOn(localModeModule, 'localApi').mockResolvedValue(mockCohort);
 
       const res = await fetchCohort();
-      expect(spy).toHaveBeenCalledWith('getCohort');
+      expect(spy).toHaveBeenCalledWith('getCohort', { headers: { 'x-rayfin-persona': 'nurse' } });
       expect(res).toEqual(mockCohort);
     });
 
@@ -114,7 +114,7 @@ describe('src/lib/api.ts Core Rayfin UDFs and helpers (R-2, FR-7)', () => {
       const spy = vi.spyOn(localModeModule, 'localApi').mockResolvedValue(mockPatient);
 
       const res = await fetchPatient('TCGA-G6-A8L6');
-      expect(spy).toHaveBeenCalledWith('getPatient?patientId=TCGA-G6-A8L6');
+      expect(spy).toHaveBeenCalledWith('getPatient?patientId=TCGA-G6-A8L6', { headers: { 'x-rayfin-persona': 'nurse' } });
       expect(res).toEqual(mockPatient);
     });
 
