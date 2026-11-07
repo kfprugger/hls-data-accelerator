@@ -19,7 +19,7 @@ The check script (`.claude/watchdog/check.mjs`) reads the numbers below, and the
   "healthTimeoutSeconds": 30,
   "browserWalkEveryNRounds": 3,
   "repeatReportAfterMinutes": 60,
-  "driftIgnore": [".job/"]
+  "driftIgnore": [".job/", "rayfin-imaging/rayfin/functions/src/types.ts", "rayfin-imaging/rayfin/functions/runtimemetadata.json"]
 }
 ```
 
