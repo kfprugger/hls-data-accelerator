@@ -1,6 +1,6 @@
 # 009: Plain-Language Healthcare Copy & Fabric Glossary Tooltips
 
-**Status:** ready
+**Status:** done
 
 | **Risk** | Low: A copy label or glossary tooltip is misspelled or misaligned, confusing clinical viewers without impacting underlying data queries. |
 
