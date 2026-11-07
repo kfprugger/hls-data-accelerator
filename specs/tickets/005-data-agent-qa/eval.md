@@ -129,6 +129,15 @@
   3. Verify the helper hint shows `Please enter a question`.
 - **Expected**: Submit button cannot be clicked; form is not submitted.
 
+### E-10 [U] Live: the published Data Agent answers and the generated query is returned (covers FR-3, FR-8, NFR-1) — added by the router
+- **Type**: CLI
+- **Steps**:
+  1. Run against med-1103a with the signed-in user's delegated token:
+     ```bash
+     AZURE_CONFIG_DIR=$HOME/.azure-isolated/JBATL HLS_BIND_INTERFACE=en0 /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python scripts/verify_data_agent_qa.py --query "How many distinct patients are in the Patient table?" --json
+     ```
+- **Expected**: Exit 0. The JSON has a non-empty `answer`, a non-empty `generatedQuery` taken from the agent run's own steps (the SQL or KQL the agent actually executed, not a template), `queryLanguage` of `SQL` or `KQL`, and `execution_time_ms` ≤ 45000. The same `generatedQuery` field is what the `askDataAgent` UDF returns to the `/ask` page in live mode. (NFR-1's live budget is 45 s: the router measured 21 s for one real agent run on 2026-11-07, which is outside the app's control.)
+
 ## Regression checks
 
 ### R-1 [R] Core patient navigation remains unaffected
