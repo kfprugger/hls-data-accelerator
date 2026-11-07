@@ -38,13 +38,19 @@ FABRIC_API = "https://api.fabric.microsoft.com/v1"
 SKILL_NAME = "hls-data-agent-mcp-evaluation"
 
 
-def get_delegated_token() -> str:
-    """Acquires delegated Fabric bearer token using MSAL cache or Azure CLI."""
-    if os.environ.get("HLS_FABRIC_TOKEN"):
+def get_delegated_token(resource: str = "https://api.fabric.microsoft.com") -> str:
+    """Acquires delegated Fabric access credential using MSAL cache or Azure CLI."""
+    if resource == "https://api.fabric.microsoft.com" and os.environ.get("HLS_FABRIC_TOKEN"):
         return os.environ["HLS_FABRIC_TOKEN"]
 
     az_dir = pathlib.Path(os.environ.get("AZURE_CONFIG_DIR") or (pathlib.Path.home() / ".azure"))
     msal_path = az_dir / "msal_token_cache.json"
+
+    target_scope = f"{resource.rstrip('/')}/.default"
+    if "kusto" in resource.lower():
+        target_scope = "https://kusto.kusto.windows.net/.default"
+    elif "database.windows.net" in resource.lower():
+        target_scope = "https://database.windows.net/.default"
 
     if msal_path.is_file():
         try:
@@ -61,7 +67,7 @@ def get_delegated_token() -> str:
                     "client_id": rt_entry["client_id"],
                     "grant_type": "refresh_token",
                     "refresh_token": rt_entry["secret"],
-                    "scope": "https://api.fabric.microsoft.com/.default offline_access",
+                    "scope": f"{target_scope} offline_access",
                 },
                 timeout=20,
             )
@@ -74,9 +80,8 @@ def get_delegated_token() -> str:
     from azure.identity import AzureCliCredential
 
     cred = AzureCliCredential(process_timeout=30)
-    tok = cred.get_token("https://api.fabric.microsoft.com/.default")
+    tok = cred.get_token(target_scope)
     return tok.token
-
 
 class DataAgentVerifier:
     def __init__(self, workspace_name: str, agent_name: str = "Patient 360", token: Optional[str] = None):
@@ -170,37 +175,43 @@ class DataAgentVerifier:
         agent = self.resolve_agent()
         agent_id = agent["id"]
 
-        base_url = f"{FABRIC_API}/workspaces/{ws_id}/aiskills/{agent_id}/aiassistant/openai"
-        params = {"api-version": "2024-05-01-preview"}
+        base_url = f"{FABRIC_API}/workspaces/{ws_id}/dataagents/{agent_id}/aiassistant/openai"
+        params = {"api-version": "2024-05-01-preview", "stage": "production"}
+        call_headers = dict(self.headers)
+        call_headers["OpenAI-Beta"] = "assistants=v2"
 
         t0 = time.time()
-        # 1. Create thread
-        r_th = requests.post(f"{base_url}/threads", params=params, headers=self.headers, json={}, timeout=30)
+        # 1. Resolve assistant
+        r_asst = requests.post(f"{base_url}/assistants", params=params, headers=call_headers, json={"model": "not used"}, timeout=30)
+        r_asst.raise_for_status()
+        asst_id = r_asst.json()["id"]
+
+        # 2. Create thread
+        r_th = requests.post(f"{base_url}/threads", params=params, headers=call_headers, json={}, timeout=30)
         r_th.raise_for_status()
         th_id = r_th.json()["id"]
 
-        # 2. Add message (sending user question unchanged without extra prompt instructions)
+        # 3. Add message (sending user question unchanged without extra prompt instructions)
         r_msg = requests.post(
             f"{base_url}/threads/{th_id}/messages",
             params=params,
-            headers=self.headers,
+            headers=call_headers,
             json={"role": "user", "content": question},
             timeout=30,
         )
         r_msg.raise_for_status()
 
-        # 3. Create run
+        # 4. Create run
         r_run = requests.post(
             f"{base_url}/threads/{th_id}/runs",
             params=params,
-            headers=self.headers,
-            json={"assistant_id": agent_id},
+            headers=call_headers,
+            json={"assistant_id": asst_id},
             timeout=30,
         )
         r_run.raise_for_status()
         run_data = r_run.json()
         run_id = run_data["id"]
-
         # 4. Poll run until completion or terminal state
         terminal_status: Optional[Dict[str, Any]] = None
         for _ in range(45):
@@ -208,7 +219,7 @@ class DataAgentVerifier:
             r_poll = requests.get(
                 f"{base_url}/threads/{th_id}/runs/{run_id}",
                 params=params,
-                headers=self.headers,
+                headers=call_headers,
                 timeout=30,
             )
             if r_poll.status_code == 200:
@@ -224,7 +235,7 @@ class DataAgentVerifier:
         r_steps = requests.get(
             f"{base_url}/threads/{th_id}/runs/{run_id}/steps",
             params=params,
-            headers=self.headers,
+            headers=call_headers,
             timeout=30,
         )
         steps_data = r_steps.json() if r_steps.status_code == 200 else {}
@@ -244,41 +255,67 @@ class DataAgentVerifier:
                     try:
                         args_obj = json.loads(args) if isinstance(args, str) else args
                         if isinstance(args_obj, dict):
+                            if "code" in args_obj and str(args_obj["code"]).strip():
+                                candidate = str(args_obj["code"]).strip()
+                                generated_query = candidate
+                                query_language = "KQL" if "kql" in name.lower() or "kusto" in name.lower() or "|" in candidate else "SQL"
+                                break
                             for k, v in args_obj.items():
-                                if any(sub in k.lower() for sub in ("query", "code", "sql")):
-                                    generated_query = str(v).strip()
-                                    query_language = "KQL" if "kql" in name.lower() or "kusto" in name.lower() else "SQL"
+                                if "natural" in k.lower():
+                                    continue
+                                if any(sub in k.lower() for sub in ("code", "sql", "query")):
+                                    candidate = str(v).strip()
+                                    if candidate and ("select" in candidate.lower() or "|" in candidate):
+                                        generated_query = candidate
+                                        query_language = "KQL" if "kql" in name.lower() or "kusto" in name.lower() or "|" in candidate else "SQL"
+                                        break
                     except Exception:
                         pass
-                    if not generated_query and isinstance(out, str) and ("select" in out.lower() or "| where" in out.lower()):
+                    if not generated_query and isinstance(out, str) and ("select" in out.lower() or "| where" in out.lower() or "from " in out.lower()):
                         generated_query = out.strip()
                         query_language = "KQL" if "telemetry" in out.lower() or "| " in out else "SQL"
+            if generated_query:
+                break
 
-        # 7. Get final assistant message
+        # Strip markdown fences if present in generated_query
+        if generated_query.startswith("```"):
+            lines = generated_query.splitlines()
+            if len(lines) >= 2 and lines[0].startswith("```"):
+                end_idx = len(lines) - 1 if lines[-1].strip() == "```" else len(lines)
+                generated_query = "\n".join(lines[1:end_idx]).strip()
+
+        # 7. Get final assistant message (latest assistant response)
         r_msgs = requests.get(
             f"{base_url}/threads/{th_id}/messages",
             params=params,
-            headers=self.headers,
+            headers=call_headers,
             timeout=30,
         )
         answer = ""
         if r_msgs.status_code == 200:
             for m in r_msgs.json().get("data", []):
                 if m.get("role") == "assistant":
-                    for c in m.get("content", []):
-                        if c.get("type") == "text":
-                            answer += c.get("text", {}).get("value", "")
+                    text_parts = [c.get("text", {}).get("value", "") for c in m.get("content", []) if c.get("type") == "text"]
+                    answer = "\n".join(text_parts).strip()
+                    if answer:
+                        break
 
+        # 8. Clean up ephemeral thread
+        try:
+            requests.delete(f"{base_url}/threads/{th_id}", params=params, headers=call_headers, timeout=10)
+        except Exception:
+            pass
         # If steps returned no query text, report raw steps response
         if not generated_query:
+            is_err = (terminal_status.get("status") if terminal_status else "") != "completed" or not answer
             return {
                 "question": question,
                 "answer": answer,
                 "generatedQuery": "",
                 "queryLanguage": "",
                 "execution_time_ms": elapsed_ms,
-                "is_error": True,
-                "error": "no query text in run steps",
+                "is_error": is_err,
+                "error": "no query text in run steps" if is_err else None,
                 "raw_steps": steps_data,
                 "run_status": terminal_status.get("status") if terminal_status else "unknown",
                 "last_error": terminal_status.get("last_error") if terminal_status else None,

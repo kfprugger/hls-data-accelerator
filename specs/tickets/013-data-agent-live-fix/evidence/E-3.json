@@ -1,0 +1,8 @@
+{
+  "question": "What cancer diagnosis does the patient Marcus Vance have?",
+  "answer": "Patient Marcus Vance has the cancer diagnosis:\n\n- **Clear cell renal cell carcinoma**",
+  "generatedQuery": "SELECT DISTINCT\n    p.idOrig AS patient_idOrig,\n    JSON_VALUE(c.code_string, '$.coding[0].display') AS cancer_diagnosis_display\nFROM dbo.Patient p\nINNER JOIN dbo.Condition c\n    ON COALESCE(\n           REPLACE(NULLIF(JSON_VALUE(c.subject_string, '$.msftSourceReference'), ''), 'Patient/', ''),\n           NULLIF(JSON_VALUE(c.subject_string, '$.idOrig'), '')\n       ) = p.idOrig\nWHERE p.name_string LIKE '%Marcus%'\n  AND p.name_string LIKE '%Vance%'\n  AND JSON_VALUE(c.code_string, '$.coding[0].display') IS NOT NULL\n  AND (\n        JSON_VALUE(c.code_string, '$.coding[0].display') LIKE '%malignancy%'\n     OR JSON_VALUE(c.code_string, '$.coding[0].display') LIKE '%carcinoma%'\n     OR JSON_VALUE(c.code_string, '$.coding[0].display') LIKE '%lymphoma%'\n     OR JSON_VALUE(c.code_string, '$.coding[0].display') LIKE '%leukemia%'\n     OR JSON_VALUE(c.code_string, '$.coding[0].display') LIKE '%sarcoma%'\n     OR JSON_VALUE(c.code_string, '$.coding[0].display') LIKE '%myeloma%'\n     OR JSON_VALUE(c.code_string, '$.coding[0].display') LIKE '%neoplasm%'\n     OR JSON_VALUE(c.code_string, '$.coding[0].display') LIKE '%neoplasms%'\n  );",
+  "queryLanguage": "SQL",
+  "execution_time_ms": 27088,
+  "is_error": false
+}

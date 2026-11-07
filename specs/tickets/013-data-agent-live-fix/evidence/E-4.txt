@@ -1,0 +1,37 @@
+╔══════════════════════════════════════════════════════════════╗
+║           FABRIC DATA AGENTS — Deploy                       ║
+╚══════════════════════════════════════════════════════════════╝
+
+  ✓ Workspace: med-1103a (f306e105-78fd-4b16-bfbe-2b556d493cb7)
+  ✓ KQL Database: MasimoEventhouse (bf7ee3b0-0423-4111-a295-9f62afd6216f)
+  ✓ agent_CurrentAlertSeverity
+  ✓ agent_LowOxygen
+  ✓ agent_TelemetrySevenDaySummary
+  ✓ agent_CurrentDeviceSummary
+  ✓ agent_ClinicalAggregateSummary
+  ✓ Silver Lakehouse: healthcare1_msft_silver (5c69a4c9-e851-4b4d-a12d-3c2ac65c4af6)
+
+  ℹ DICOM ImagingStudy datasource content excluded; enable the DICOM imaging toolkit to deploy DICOM-dependent agent portions.
+═══════════════════════════════════════════════════════════════
+  AGENT 1: Patient 360
+═══════════════════════════════════════════════════════════════
+──────────────────────────────────────────────────────────────
+  Deploying Data Agent: Patient 360
+──────────────────────────────────────────────────────────────
+  ✓ Data Agent already exists: Patient 360 (9f091d45-2f69-4fa9-961e-64930a02f4b4)
+  Applying definition (AI instructions + data sources + few-shot examples)...
+  ✓ Definition applied successfully
+  Publishing Data Agent staging configuration...
+  ✓ Data Agent published successfully
+  ✓ Agent URL: https://app.fabric.microsoft.com/groups/f306e105-78fd-4b16-bfbe-2b556d493cb7/aiskills/9f091d45-2f69-4fa9-961e-64930a02f4b4
+
+
+╔══════════════════════════════════════════════════════════════╗
+║  DEPLOYMENT COMPLETE                                        ║
+╚══════════════════════════════════════════════════════════════╝
+
+  Architecture:
+    KQL: TelemetryRaw + AlertHistory (inline query patterns)
+    Lakehouse: healthcare1_msft_silver (Patient, Condition, Device, Location, Encounter, Basic, Observation, MedicationRequest, Procedure, Immunization)
+
+  Patient 360:     https://app.fabric.microsoft.com/groups/f306e105-78fd-4b16-bfbe-2b556d493cb7/aiskills/9f091d45-2f69-4fa9-961e-64930a02f4b4

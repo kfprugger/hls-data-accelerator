@@ -45,6 +45,19 @@ function Get-AccessTokenForResource {
     $key = $ResourceUrl.ToLowerInvariant()
     $cached = $script:AccessTokenCache[$key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
+    if ($env:HLS_FABRIC_TOKEN -and ($ResourceUrl -match 'api\.fabric\.microsoft\.com' -or $ResourceUrl -match 'powerbi\.com') -and $ResourceUrl -notmatch 'kusto') {
+        $script:AccessTokenCache[$key] = @{ Token = $env:HLS_FABRIC_TOKEN; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $env:HLS_FABRIC_TOKEN
+    }
+    try {
+        $rootPath = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+        $pyTok = & /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -c "import os, sys; sys.path.insert(0, sys.argv[1]); from scripts.verify_data_agent_qa import get_delegated_token; print(get_delegated_token(sys.argv[2]))" "$rootPath" "$ResourceUrl" 2>$null
+        if ($pyTok -and $pyTok.Trim().Length -gt 100) {
+            $rawToken = $pyTok.Trim()
+            $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = (Get-Date).AddMinutes(50) }
+            return $rawToken
+        }
+    } catch {}
     try {
         $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
         $rawToken = $tokenObj.Token
@@ -274,7 +287,12 @@ Other relationships:
 Patient location rules:
 - Patient home/location demographics live in dbo.Patient.address_string, not dbo.Location. dbo.Location is facility/encounter location.
 - For "Atlanta" or "Atlanta area" patient filters, join dbo.Basic to dbo.Patient with JSON_VALUE(b.subject_string, '`$.idOrig') = p.idOrig, then filter/extract address from CAST(p.address_string AS VARCHAR(MAX)).
-- Extract city/state with JSON_VALUE(CAST(p.address_string AS VARCHAR(MAX)), '`$[0].city') and JSON_VALUE(CAST(p.address_string AS VARCHAR(MAX)), '`$[0].state'), and keep CAST(p.address_string AS VARCHAR(MAX)) as fallback when a generated patient uses a nearby metro city instead of literal Atlanta.
+    Extract city/state with JSON_VALUE(CAST(p.address_string AS VARCHAR(MAX)), '`$[0].city') and JSON_VALUE(CAST(p.address_string AS VARCHAR(MAX)), '`$[0].state'), and keep CAST(p.address_string AS VARCHAR(MAX)) as fallback when a generated patient uses a nearby metro city instead of literal Atlanta.
+
+Patient demographics & diagnosis lookup:
+- For patient counts or demographics, query dbo.Patient directly: SELECT COUNT(DISTINCT idOrig) FROM dbo.Patient.
+- For patient name searches (such as Marcus Vance or other cohort members), search dbo.Patient where p.name_string LIKE '%<First>%' AND p.name_string LIKE '%<Last>%'.
+- Join dbo.Patient to dbo.Condition: dbo.Patient p INNER JOIN dbo.Condition c ON COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) = p.idOrig. Cancer diagnoses are in JSON_VALUE(c.code_string, '`$.coding[0].display').
 
 If the user asks about SpO2, vitals, pulse rate, or alerts, you MUST ALSO query the KQL datasource. This datasource has NO telemetry.
 "@
@@ -369,6 +387,16 @@ $lhFewShots = @(
         id       = "c1c2c3c4-0017-4000-c000-000000000017"
         question = "Full patient summary: demographics, conditions, medications, procedures, immunizations, and imaging for device MASIMO-RADIUS7-0033"
         query    = "SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Condition' AS record_type, JSON_VALUE(c.code_string, '`$.coding[0].display') AS description, c.onsetDateTime AS date_recorded FROM dbo.Basic b INNER JOIN dbo.Condition c ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' UNION ALL SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Medication' AS record_type, JSON_VALUE(m.medicationCodeableConcept_string, '`$.coding[0].display') AS description, m.authoredOn AS date_recorded FROM dbo.Basic b INNER JOIN dbo.MedicationRequest m ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(m.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(m.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' UNION ALL SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Procedure' AS record_type, JSON_VALUE(pr.code_string, '`$.coding[0].display') AS description, pr.performedDateTime AS date_recorded FROM dbo.Basic b INNER JOIN dbo.[Procedure] pr ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(pr.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(pr.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' UNION ALL SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'Immunization' AS record_type, JSON_VALUE(i.vaccineCode_string, '`$.coding[0].display') AS description, i.occurrenceDateTime AS date_recorded FROM dbo.Basic b INNER JOIN dbo.Immunization i ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(REPLACE(NULLIF(JSON_VALUE(i.patient_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(i.patient_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' UNION ALL SELECT JSON_VALUE(b.subject_string, '`$.display') AS patient_name, 'ImagingStudy' AS record_type, COALESCE(img.description, JSON_VALUE(img.modality_string, '`$[0].code')) AS description, img.started AS date_recorded FROM dbo.Basic b INNER JOIN dbo.ImagingStudy img ON JSON_VALUE(b.subject_string, '`$.idOrig') = COALESCE(NULLIF(JSON_VALUE(img.subject_string, '`$.identifier.value'), ''), REPLACE(NULLIF(JSON_VALUE(img.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(img.subject_string, '`$.idOrig'), '')) WHERE JSON_VALUE(b.code_string, '`$.coding[0].code') = 'device-assoc' AND JSON_VALUE(b.extension, '`$[0].valueReference.reference') LIKE '%MASIMO-RADIUS7-0033%' ORDER BY patient_name, record_type, date_recorded DESC"
+    },
+    @{
+        id       = "c1c2c3c4-0019-4000-c000-000000000019"
+        question = "How many distinct patients are in the Patient table?"
+        query    = "SELECT COUNT(DISTINCT idOrig) AS distinct_patient_count FROM dbo.Patient"
+    },
+    @{
+        id       = "c1c2c3c4-0020-4000-c000-000000000020"
+        question = "What cancer diagnosis does the patient Marcus Vance have?"
+        query    = "SELECT p.idOrig AS patient_id, JSON_VALUE(c.code_string, '`$.coding[0].display') AS cancer_diagnosis FROM dbo.Patient p INNER JOIN dbo.Condition c ON COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) = p.idOrig WHERE (p.name_string LIKE '%Marcus%' AND p.name_string LIKE '%Vance%')"
     }
 )
 
@@ -681,6 +709,10 @@ TABLES AND RELATIONSHIPS:
   DISCOVERING TABLE SCHEMAS:
   For tables you haven't queried before, run SELECT TOP 5 * FROM dbo.<TableName> first to discover the exact column names.
 
+  PATIENT LOOKUPS AND TCGA DEMO COHORTS:
+  - Demographics and cohort queries: query dbo.Patient directly (e.g. SELECT COUNT(DISTINCT idOrig) FROM dbo.Patient).
+  - Patient name search: filter p.name_string LIKE '%<First>%' AND p.name_string LIKE '%<Last>%'.
+  - Diagnoses and cancer conditions: join dbo.Patient p to dbo.Condition c on COALESCE(REPLACE(NULLIF(JSON_VALUE(c.subject_string, '`$.msftSourceReference'), ''), 'Patient/', ''), NULLIF(JSON_VALUE(c.subject_string, '`$.idOrig'), '')) = p.idOrig. Cancer diagnoses are in JSON_VALUE(c.code_string, '`$.coding[0].display').
 DEVICE-TO-PATIENT LINKING VIA dbo.Basic (CRITICAL):
   The Basic table has 100 DeviceAssociation records. Key columns:
   - code_string: JSON object (NOT array) containing the code. The code value is 'device-assoc' (NOT 'ASSIGNED', NOT 'device-association')
