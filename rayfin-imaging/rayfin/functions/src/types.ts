@@ -45,4 +45,23 @@ export type AppFunctionsSchema = {
     input: Record<string, never>;
     output: { workspaceId: string; workspaceName: string; sqlEndpoint: string; database: string; goldRefreshedAt: null | string; servedAt: string; totalMs: number; subjects: { id: string; initials: string; fullName: null | string; gender: null | string; age: null | number; ageBand: string; careSetting: string; encounterId: string; conditionDisplay: string; attendingRole: null | string; deviceId: null | string; deviceKind: null | string; deviceSerial: null | string; pulseOximeterDeviceId: null | string; refreshedAt: null | string; observations: { [k: string]: null | number }; observedAt: null | string; encounterCount: number; medicationCount: number; imagingStudyCount: number; openCareGaps: number; has3dVolume: boolean; volumeStudyId: null | string }[]; enrollableCount: number };
   };
+  getStandardsMapping: {
+    input: { patientId: string };
+    output: {
+      patientId: string;
+      patient: { [k: string]: null | string | number | false | true };
+      diagnoses: { [k: string]: null | string | number | false | true }[];
+      radiologyStudies: { [k: string]: null | string | number | false | true }[];
+      radiologySeries: { [k: string]: null | string | number | false | true }[];
+      fhir: {
+        patientResource: { [k: string]: unknown };
+        conditionResource: { [k: string]: unknown };
+        mappings: { fhirPath: string; deltaTable: string; deltaColumn: string; description: string }[];
+      };
+      dicom: {
+        tags: { tag: string; name: string; value: null | string | number; mappedTable: string; mappedColumn: string }[];
+        mappings: { dicomTag: string; tagName: string; deltaTable: string; deltaColumn: string }[];
+      };
+    };
+  };
 };

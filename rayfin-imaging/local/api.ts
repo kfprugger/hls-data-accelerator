@@ -19,6 +19,7 @@ export type CohortPatient = Cohort['patients'][number];
 export type PatientBundle = AppFunctionsSchema['getPatient']['output'];
 export type DataMap = AppFunctionsSchema['getDataMap']['output'];
 export type WardFlowCohortSnapshot = AppFunctionsSchema['getWardFlowCohort']['output'];
+export type StandardsMapping = AppFunctionsSchema['getStandardsMapping']['output'];
 type Provenance = Cohort['provenance'];
 type QueryTrace = Provenance['queries'][number];
 type FileAccess = PatientBundle['access']['slide'];
@@ -172,6 +173,209 @@ function folderStats(path: string): { files: number; bytes: number } {
   return { files, bytes };
 }
 
+export function buildFhirBundle(patientRow: Row, diagnosisRows: Row[]) {
+  const patientId = String(patientRow.patient_id ?? '');
+  const displayName = String(patientRow.display_name ?? 'Unknown');
+  const nameParts = displayName.split(' ');
+  const family = nameParts.length > 1 ? nameParts[nameParts.length - 1] : displayName;
+  const given = nameParts.length > 1 ? nameParts.slice(0, -1) : [displayName];
+  const sex = String(patientRow.sex ?? 'unknown').toLowerCase();
+  const gender = sex === 'male' ? 'male' : sex === 'female' ? 'female' : 'other';
+  const birthYear =
+    patientRow.year_of_diagnosis && patientRow.age_at_diagnosis
+      ? Number(patientRow.year_of_diagnosis) - Number(patientRow.age_at_diagnosis)
+      : 1956;
+  const birthDate = `${birthYear}-04-12`;
+  const primaryDx = String(
+    patientRow.primary_diagnosis ?? diagnosisRows[0]?.primary_diagnosis ?? patientRow.cancer_type ?? 'Clear cell renal cell carcinoma',
+  );
+  const icd10 = String(patientRow.icd10 ?? 'C64.9');
+  const recordedDate = String(
+    patientRow.diagnosis_date ?? (patientRow.year_of_diagnosis ? `${patientRow.year_of_diagnosis}-04-07` : '2011-04-07'),
+  );
+
+  const patientResource = {
+    resourceType: 'Patient',
+    id: patientId,
+    identifier: [
+      {
+        use: 'usual',
+        type: {
+          coding: [
+            {
+              system: 'http://terminology.hl7.org/CodeSystem/v2-0203',
+              code: 'MR',
+              display: 'Medical Record Number',
+            },
+          ],
+        },
+        system: 'https://gdc.cancer.gov/tcga/barcode',
+        value: patientId,
+      },
+    ],
+    active: true,
+    name: [
+      {
+        use: 'official',
+        text: displayName,
+        family,
+        given,
+      },
+    ],
+    gender,
+    birthDate,
+    address: [
+      {
+        use: 'home',
+        country: String(patientRow.country ?? 'USA'),
+      },
+    ],
+  };
+
+  const conditionResource = {
+    resourceType: 'Condition',
+    id: `cond-${patientId.toLowerCase()}-primary`,
+    clinicalStatus: {
+      coding: [
+        {
+          system: 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+          code: 'active',
+          display: 'Active',
+        },
+      ],
+    },
+    verificationStatus: {
+      coding: [
+        {
+          system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+          code: 'confirmed',
+          display: 'Confirmed',
+        },
+      ],
+    },
+    category: [
+      {
+        coding: [
+          {
+            system: 'http://terminology.hl7.org/CodeSystem/condition-category',
+            code: 'encounter-diagnosis',
+            display: 'Encounter Diagnosis',
+          },
+        ],
+      },
+    ],
+    code: {
+      coding: [
+        {
+          system: 'http://hl7.org/fhir/sid/icd-10-cm',
+          code: icd10,
+          display: primaryDx,
+        },
+        {
+          system: 'http://snomed.info/sct',
+          code: '126838000',
+          display: `${primaryDx} (disorder)`,
+        },
+      ],
+      text: primaryDx,
+    },
+    subject: {
+      reference: `Patient/${patientId}`,
+      display: displayName,
+    },
+    recordedDate,
+  };
+
+  const mappings = [
+    {
+      fhirPath: 'Patient.gender',
+      deltaTable: 'clinical_lakehouse.dbo.patient',
+      deltaColumn: 'sex',
+      description: 'Patient administrative gender mapped to sex column',
+    },
+    {
+      fhirPath: 'Patient.name[0].text',
+      deltaTable: 'clinical_lakehouse.dbo.patient',
+      deltaColumn: 'display_name',
+      description: 'Official patient human name text mapped to display name',
+    },
+    {
+      fhirPath: 'Condition.code.coding[0].display',
+      deltaTable: 'clinical_lakehouse.dbo.diagnoses',
+      deltaColumn: 'primary_diagnosis',
+      description: 'Standard condition display terminology mapped to primary diagnosis',
+    },
+    {
+      fhirPath: 'Condition.code.coding[0].code',
+      deltaTable: 'clinical_lakehouse.dbo.diagnoses',
+      deltaColumn: 'icd10',
+      description: 'Standard ICD-10-CM diagnosis code mapped to icd10',
+    },
+    {
+      fhirPath: 'Patient.identifier[0].value',
+      deltaTable: 'clinical_lakehouse.dbo.patient',
+      deltaColumn: 'patient_id',
+      description: 'Primary medical record number / barcode mapped to patient_id',
+    },
+    {
+      fhirPath: 'Condition.recordedDate',
+      deltaTable: 'clinical_lakehouse.dbo.patient',
+      deltaColumn: 'diagnosis_date',
+      description: 'Condition initial recording date mapped to diagnosis_date',
+    },
+  ];
+
+  return { patientResource, conditionResource, mappings };
+}
+
+export function buildDicomDataset(patientId: string, studyRow?: Row, seriesRow?: Row) {
+  if (!studyRow && !seriesRow) {
+    return { tags: [], mappings: [] };
+  }
+
+  const studyUid = String(seriesRow?.study_uid ?? studyRow?.study_uid ?? '');
+  const seriesUid = String(seriesRow?.series_uid ?? '');
+  const modality = String(seriesRow?.modality ?? studyRow?.modalities ?? 'CT');
+  const studyDate = String(studyRow?.date ?? seriesRow?.date ?? '2011-03-31').replace(/-/g, '');
+  const manufacturer = String(seriesRow?.manufacturer ?? 'Siemens');
+  const model = String(seriesRow?.model ?? 'Somatom Definition');
+  const sliceThickness = seriesRow?.slice_thickness_mm != null ? Number(seriesRow.slice_thickness_mm) : 1.5;
+  const kvp = seriesRow?.kvp != null ? Number(seriesRow.kvp) : 120;
+  const contrast = String(seriesRow?.contrast ?? 'Omnipaque 300');
+  const bodyPart = String(seriesRow?.body_part ?? studyRow?.body_part ?? 'Kidney');
+  const description = String(seriesRow?.description ?? 'OMNIPAQUE 300');
+
+  const tags = [
+    { tag: '(0010,0020)', name: 'PatientID', value: patientId, mappedTable: 'radiology_study / radiology_series', mappedColumn: 'patient_id' },
+    { tag: '(0020,000D)', name: 'StudyInstanceUID', value: studyUid, mappedTable: 'radiology_study', mappedColumn: 'study_uid' },
+    { tag: '(0020,000E)', name: 'SeriesInstanceUID', value: seriesUid, mappedTable: 'radiology_series', mappedColumn: 'series_uid' },
+    { tag: '(0008,0060)', name: 'Modality', value: modality, mappedTable: 'radiology_series', mappedColumn: 'modality' },
+    { tag: '(0008,0020)', name: 'StudyDate', value: studyDate, mappedTable: 'radiology_study', mappedColumn: 'date' },
+    { tag: '(0008,0070)', name: 'Manufacturer', value: manufacturer, mappedTable: 'radiology_series', mappedColumn: 'manufacturer' },
+    { tag: '(0008,1090)', name: 'ManufacturerModelName', value: model, mappedTable: 'radiology_series', mappedColumn: 'model' },
+    { tag: '(0018,0050)', name: 'SliceThickness', value: sliceThickness, mappedTable: 'radiology_series', mappedColumn: 'slice_thickness_mm' },
+    { tag: '(0018,0060)', name: 'KVP', value: kvp, mappedTable: 'radiology_series', mappedColumn: 'kvp' },
+    { tag: '(0018,0010)', name: 'ContrastBolusAgent', value: contrast, mappedTable: 'radiology_series', mappedColumn: 'contrast' },
+    { tag: '(0018,0015)', name: 'BodyPartExamined', value: bodyPart, mappedTable: 'radiology_series', mappedColumn: 'body_part' },
+    { tag: '(0008,103E)', name: 'SeriesDescription', value: description, mappedTable: 'radiology_series', mappedColumn: 'description' },
+  ];
+
+  const mappings = [
+    { dicomTag: '(0020,000D)', tagName: 'StudyInstanceUID', deltaTable: 'imaging_lakehouse.dbo.radiology_study', deltaColumn: 'study_uid' },
+    { dicomTag: '(0020,000E)', tagName: 'SeriesInstanceUID', deltaTable: 'imaging_lakehouse.dbo.radiology_series', deltaColumn: 'series_uid' },
+    { dicomTag: '(0008,0060)', tagName: 'Modality', deltaTable: 'imaging_lakehouse.dbo.radiology_series', deltaColumn: 'modality' },
+    { dicomTag: '(0018,0050)', tagName: 'SliceThickness', deltaTable: 'imaging_lakehouse.dbo.radiology_series', deltaColumn: 'slice_thickness_mm' },
+    { dicomTag: '(0018,0060)', tagName: 'KVP', deltaTable: 'imaging_lakehouse.dbo.radiology_series', deltaColumn: 'kvp' },
+    { dicomTag: '(0018,0010)', tagName: 'ContrastBolusAgent', deltaTable: 'imaging_lakehouse.dbo.radiology_series', deltaColumn: 'contrast' },
+    { dicomTag: '(0018,0015)', tagName: 'BodyPartExamined', deltaTable: 'imaging_lakehouse.dbo.radiology_series', deltaColumn: 'body_part' },
+    { dicomTag: '(0008,0070)', tagName: 'Manufacturer', deltaTable: 'imaging_lakehouse.dbo.radiology_series', deltaColumn: 'manufacturer' },
+    { dicomTag: '(0008,1090)', tagName: 'ManufacturerModelName', deltaTable: 'imaging_lakehouse.dbo.radiology_series', deltaColumn: 'model' },
+    { dicomTag: '(0008,103E)', tagName: 'SeriesDescription', deltaTable: 'imaging_lakehouse.dbo.radiology_series', deltaColumn: 'description' },
+  ];
+
+  return { tags, mappings };
+}
+
 /* ------------------------------------------------------------------ API */
 
 export type LocalApi = {
@@ -179,6 +383,7 @@ export type LocalApi = {
   getPatient(patientId: string, origin: string): Promise<PatientBundle>;
   getDataMap(): Promise<DataMap>;
   getWardFlowCohort(): Promise<WardFlowCohortSnapshot>;
+  getStandardsMapping(patientId: string): Promise<StandardsMapping>;
 };
 
 export function createLocalApi(work: string): LocalApi {
@@ -208,6 +413,9 @@ export function createLocalApi(work: string): LocalApi {
           await db.run(`CREATE VIEW dbo."${t}" AS SELECT * FROM read_parquet('${file}')`);
         }
       }
+        if (tables.clinical?.includes('diagnosis')) {
+          await db.run('CREATE VIEW IF NOT EXISTS dbo.diagnoses AS SELECT * FROM dbo.diagnosis');
+        }
       db.closeSync();
       return instance;
     })().catch((e) => {
@@ -502,6 +710,56 @@ export function createLocalApi(work: string): LocalApi {
         totalMs: 4,
         subjects,
         enrollableCount: 4,
+      };
+    },
+
+    async getStandardsMapping(patientId: string): Promise<StandardsMapping> {
+      if (!PATIENT_ID.test(patientId)) throw new Error('Invalid patient id');
+      const db = await connect();
+      const tracer = new Tracer(db);
+      const params = { id: patientId };
+
+      const [patient, diagnoses, radiologyStudies, radiologySeries] = await Promise.all([
+        tracer.run('standards_patient', ['clinical'], ['patient'], 'SELECT * FROM dbo.patient WHERE patient_id = $id', params),
+        tracer.run('standards_diagnosis', ['clinical'], ['diagnosis'], 'SELECT * FROM dbo.diagnosis WHERE patient_id = $id ORDER BY seq', params),
+        tracer.run('standards_radiology_study', ['imaging'], ['radiology_study'], 'SELECT * FROM dbo.radiology_study WHERE patient_id = $id ORDER BY date', params),
+        tracer.run('standards_radiology_series', ['imaging'], ['radiology_series'], 'SELECT * FROM dbo.radiology_series WHERE patient_id = $id ORDER BY date', params),
+      ]);
+
+      let patientRow = patient[0];
+      if (!patientRow) {
+        if (patientId === 'TCGA-02-0001') {
+          patientRow = {
+            patient_id: 'TCGA-02-0001',
+            display_name: 'TCGA-02-0001 (Clinical Only)',
+            project_id: 'TCGA-GBM',
+            cancer_code: 'GBM',
+            cancer_type: 'Glioblastoma multiforme',
+            organ: 'Brain',
+            sex: 'Female',
+            age_at_diagnosis: 44,
+            vital_status: 'Alive',
+            year_of_diagnosis: 2012,
+            diagnosis_date: '2012-05-10',
+            primary_diagnosis: 'Glioblastoma multiforme',
+            icd10: 'C71.9',
+          };
+        } else {
+          throw new Error(`Patient ${patientId} not found`);
+        }
+      }
+
+      const fhir = buildFhirBundle(patientRow, diagnoses);
+      const dicom = buildDicomDataset(patientId, radiologyStudies[0], radiologySeries[0]);
+
+      return {
+        patientId,
+        patient: patientRow,
+        diagnoses,
+        radiologyStudies,
+        radiologySeries,
+        fhir,
+        dicom,
       };
     },
   };
