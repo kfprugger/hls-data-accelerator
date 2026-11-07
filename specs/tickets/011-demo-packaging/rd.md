@@ -1,4 +1,4 @@
-# 011: Demo Packaging (HyperFrames Film, Walkthrough Script, Deploy Timer & Synthetic Badge)
+# 011: Demo Packaging (Explainer-Board Film, Walkthrough Script, Deploy Timer & Synthetic Badge)
 
 **Status:** ready
 
@@ -17,23 +17,17 @@ Healthcare technology sales cycles require both asynchronous proof (a broadcast-
 - As a Hospital Privacy / Compliance Officer, I want an unambiguous "100% synthetic / public de-identified data" indicator on every screen, so that I have immediate proof of HIPAA Safe Harbor compliance.
 
 ## Functional requirements
-- **FR-1**: HyperFrames Video Project (`docs/demo/`).
-  - Standard HyperFrames root structure: `index.html`, `SPEC.md`, `package.json`, `assets/`, and `compositions/`.
-  - Implements Storyline A ("Bed 04 at 02:14 AM — One Patient Across Five Worlds") across 7 timed narrative beats spanning 60 seconds (55–65 s constraint, 1920x1080 @ 30 fps):
-    1. Hook (`0–5s`): Bed 04 Masimo bedside SpO2 drop (SpO2 88%, Lactate 3.4 mmol/L) for Marcus Vance (`TCGA-G6-A8L6`).
-    2. Tension (`5–12s`): Hospital silo reality (siloed EHR, PACS, cBioPortal tabs) vs unified OneLake shortcut graph (`patient360`).
-    3. Reveal (`12–18s`): Kinetic typography "One Patient Record. Zero Copies." opening into Rayfin Patient 360.
-    4. Verb 1 (`18–28s`): Multi-modal oncology inspection (Genomics `VHL` mutation, 3D TotalSegmentator CT volume, and OpenSeadragon pathology slide streamed via OneLake SAS).
-    5. Verb 2 (`28–40s`): 7-Beat Cardiology Triage in WardFlow, plotting Stevenson Profile C (Wet-Cold) and pausing at Beat 4 awaiting clinician sign-off.
-    6. Verb 3 (`40–52s`): Clinician approval click (`Approve & Sign`), committing to Fabric SQL in 42 ms with CMS MS-DRG margin protection.
-    7. End Card (`52–60s`): "From bedside waveform to boardroom margin — on Microsoft Fabric" with `hls.jbatl.dev` link.
-  - Video composition uses real screenshots captured from local mode on port `<port>` stored in `docs/demo/assets/screenshots/`.
-  - Validates with zero errors via `npx hyperframes check --json`.
-- **FR-2**: Neural Kokoro Voiceover & Audio Mastering.
-  - Voiceover script declared in `docs/demo/VOICEOVER.md` with explicit phonetic pronunciations for clinical and platform terms: `"HL7/FHIR"` -> `"H-L-Seven Fire"`, `"SQL"` -> `"Sequel"`, `"HIPAA"` -> `"Hippa"`, `"DICOM"` -> `"Die-com"`, `"OneLake"` -> `"One Lake"`.
-  - Synthesized via local Kokoro-82M ONNX model (`/Users/joey/.cache/hyperframes/tts/models/kokoro-v1.0.onnx`, voice `am_michael` / `am_fenrir` blend) sentence-by-sentence with 18 ms raised-cosine fades and -16 LUFS ffmpeg broadcast normalization.
-  - Burned-in captions timed to voiceover (`data-track-kind="captions"`).
-  - Background music bed in `docs/demo/assets/audio/music.mp3` ducked beneath spoken voice.
+- **FR-1**: Explainer-board film (`docs/demo/`), built with Joey's creative suite (`/Users/joey/.agents/skills/joey-creative-suite/SKILL.md`, Video area), NOT HyperFrames:
+  - Preflight (record the output in `docs/demo/PREFLIGHT.md`): `python3 ~/git/huashu-design/scripts/learn.py video demo story`, `python3 ~/git/huashu-design/scripts/design_lint.py ledger`. Joey's taste archive (`~/.huashu-design/experience.md`) currently says: one protagonist and one real task, never a feature list or a card grid per scene (L1); "Clean minimal" explainer boards from `~/git/YouTube-AI-Motion-Graphics` for every video (L2); the rejected look is a dark navy `#080d1a` canvas with cyan/emerald glows and equal cards per scene (L4).
+  - Pipeline, in this order: `joey-youtube-talk-track` (script in Joey's voice) → `explainer-board-brief` (which line gets which board, from `skills/explainer-board-system/references/board-catalog.md`) → `explainer-board-system` (Clean minimal look; read its `checks.md` first) → `board-sync` (Whisper word timing on the voiceover, word-synced boards, QA report, render with `~/git/YouTube-AI-Motion-Graphics/tools/export.py <timeline.json> --chrome -o docs/demo/out/hls-fabric-demo-60s.mp4` using `~/git/YouTube-AI-Motion-Graphics/skills/board-sync/.venv/bin/python`).
+  - Story: Storyline A ("Bed 04 at 02:14 AM — one patient across five worlds") from `/Users/joey/git/.worktrees/wardflow-jb-dev/docs/pocket-demo/STORYLINES.md`, about 60 s, with Marcus Vance (`TCGA-G6-A8L6`) on screen in every beat: bedside SpO2 drop → siloed tabs collapse into one record → Patient 360 genomics / CT / slide → WardFlow Beat 4 sign-off → end card. Claims and numbers only from the running app or ticket evidence (e.g. the measured alert stopwatch); no invented metrics.
+  - Real UI: screenshots captured from the running app in local mode on `<port>` and placed in app-focus boards (e.g. `C242AppFocus`) at their true aspect ratio; no redrawn UI.
+  - Keep the bottom-right camera box empty only if a presenter camera is used; otherwise use the full frame. On-screen text ≥ 28 px.
+- **FR-2**: Voiceover and captions.
+  - Voiceover script in `docs/demo/VOICEOVER.md` (Joey's voice per `joey-youtube-talk-track`), with pronunciations for `FHIR` ("fire"), `SQL` ("sequel"), `HIPAA` ("hippa"), `DICOM` ("die-com"), `OneLake` ("one lake").
+  - Synthesized locally with Kokoro (free; see `macos-tts-podcast-compiler`), mastered to -16 LUFS. No paid or cloud voice.
+  - Burned-in captions from the board-sync word timings, inside the 80% title-safe box.
+  - Optional quiet music bed ducked under the voice; no stock asset that needs a licence check.
 - **FR-3**: Five-Minute Walkthrough Script (`docs/demo/WALKTHROUGH.md`).
   - Five structured presentation phases mapped to real routes, click targets, visual proof points, and spoken narrative:
     1. Minute 0:00–1:00: Executive Context & Bedside Alarm (`/wardflow` — Bed 04 Marcus Vance `TCGA-G6-A8L6` SpO2 drop).
@@ -51,8 +45,9 @@ Healthcare technology sales cycles require both asynchronous proof (a broadcast-
   - Positioned beside workspace metadata with an accessible tooltip explaining: "TCGA open research data de-identified per HIPAA Safe Harbor (§164.514) combined with Synthea algorithmic synthetic profiles. Zero live patient data."
   - Visible in both local and Fabric modes.
 - **FR-6**: Fresh Deployments CLI Script (`docs/demo/render_demo.py`).
-  - Standalone, idempotent CLI script supporting `--dry-run` (validates screenshot assets, voiceover, and runs `npx hyperframes check --json` without rendering MP4) and `--cleanup` mode.
-  - Automatically captures screenshots from local app on `<port>` if missing, generates Kokoro voiceover audio, and verifies composition compliance. Exits 0 on success.
+  - Standalone, idempotent CLI supporting `--dry-run` (validates screenshots, voiceover audio, timeline JSON and board files without rendering) and `--cleanup`.
+  - Captures screenshots from the local app on `<port>` if missing, synthesizes the Kokoro voiceover, runs board-sync timing, and renders with `tools/export.py --chrome`. Exits 0 on success.
+- **FR-7**: Close-out in the creative suite: run `python3 ~/git/huashu-design/scripts/design_lint.py check` on the final boards (fix every red, remove template decoration flagged yellow), add the MP4 to the look ledger with `design_lint.py ledger add docs/demo/out/hls-fabric-demo-60s.mp4 --project hls-fabric-demo`, and add any board fix to `~/git/YouTube-AI-Motion-Graphics/checks.md` on its `joey` branch (that clone is outside this repo: record the exact lines you added in `docs/demo/PREFLIGHT.md`).
 
 ## Non-functional requirements
 - **NFR-1**: Rendered video format: H.264 video + AAC audio, 1920x1080 resolution, 30.0 fps, length between 55.0 and 65.0 seconds, file size under 50 MB.
@@ -62,8 +57,8 @@ Healthcare technology sales cycles require both asynchronous proof (a broadcast-
 - **NFR-5**: Synthetic data badge is fully responsive: concise icon/label on mobile (360 px) and full text on desktop (1280 px).
 
 ## Edge cases & error handling
-- App server offline during screenshot generation: `render_demo.py` utilizes committed fallback screenshots in `docs/demo/assets/screenshots/` and logs a warning.
-- Missing local Kokoro voice model cache: If `/Users/joey/.cache/hyperframes/tts/models/kokoro-v1.0.onnx` is unavailable, script falls back to committed pre-synthesized `voiceover.mp3`.
+- App server offline during screenshot generation: `render_demo.py` uses committed screenshots in `docs/demo/assets/screenshots/` and logs a warning.
+- Kokoro model or board-sync venv missing: `render_demo.py` exits 1 with the exact missing path and the setup command (`bash skills/board-sync/setup.sh` in the motion-graphics clone); it never silently skips the voiceover.
 - Incomplete deployment run in history: If a deployment was terminated or failed before completing, `DeploymentHistory.tsx` renders elapsed time up to the failure point with status color rather than crashing.
 - Timestamp skew or negative elapsed time: Formatter clamps elapsed duration to a minimum of 0 seconds (`Math.max(0, ...)`).
 
@@ -73,14 +68,13 @@ Healthcare technology sales cycles require both asynchronous proof (a broadcast-
 - Editing `orchestrator/activities/addons.py` or `Deploy-All.ps1` (owned by Ticket 012).
 
 ## Affected areas
-- `docs/demo/index.html`: HyperFrames root composition.
-- `docs/demo/SPEC.md`: HyperFrames video specification.
-- `docs/demo/package.json`: HyperFrames configuration.
+- `docs/demo/boards/*`, `docs/demo/timeline.json`: the film's boards and word-synced timeline.
+- `docs/demo/PREFLIGHT.md`: creative-suite preflight output, taste entries used, close-out notes.
 - `docs/demo/render_demo.py`: standalone CLI render and verification script.
 - `docs/demo/WALKTHROUGH.md`: 5-minute presentation click script.
-- `docs/demo/VOICEOVER.md`: phonetic voiceover script.
-- `docs/demo/compositions/*`: sub-composition scene files for the 7 beats.
-- `docs/demo/assets/*`: screenshots, audio files, and fonts.
+- `docs/demo/VOICEOVER.md`: voiceover script.
+- `docs/demo/assets/*`: screenshots and audio.
+- `docs/demo/out/hls-fabric-demo-60s.mp4`: the rendered film (commit it if under 50 MB).
 - `orchestrator-ui/src/pages/PhaseMonitor.tsx`: elapsed deploy time display on completion.
 - `orchestrator-ui/src/pages/DeploymentHistory.tsx`: elapsed time column in history table.
 - `orchestrator-ui/src/AppState.tsx`: elapsed time state propagation.
@@ -97,10 +91,10 @@ Healthcare technology sales cycles require both asynchronous proof (a broadcast-
 - Waits for all other change set tickets except 012: `001-local-demo-dataset`, `002-tcga-synthetic-ingest`, `003-zero-copy-proof`, `004-realtime-alert-stopwatch`, `005-data-agent-qa`, `006-phi-persona-views`, `007-standards-view`, `008-imaging-hero`, `009-plain-language-copy`, `010-databricks-interop`. This ensures video screenshots and walkthrough scripts reflect the final polished interface.
 
 ## Decisions made
-- **Agreed with the user**: Storyline A ("Bed 04 at 02:14 AM") in `docs/demo/` with free local Kokoro voiceover + captions + music; 5-min walkthrough script; orchestrator UI deploy timer; synthetic badge in app shell; waits for all tickets except 012.
-- **Decided by the ticket writer**:
-  - Voice configuration: Kokoro `am_michael` (80%) + `am_liam` (20%) at speed 0.98 for an authoritative, calm clinical informaticist tone.
-  - Video length set to exactly 60.0 seconds (1800 frames at 30 fps).
-  - Screenshots are captured in local mode to maintain 100% offline reproducibility.
-  - Orchestrator UI computes elapsed time directly from `createdTime` and `lastUpdatedTime` / `completedAt` if `durationSeconds` is omitted.
-  - Synthetic data badge uses an emerald/cyan pill badge in `AppShell.tsx` with full tooltip grounding in HIPAA Safe Harbor.
+- **Agreed with the user**: Storyline A in `docs/demo/` with free local Kokoro voiceover + captions; 5-min walkthrough; orchestrator UI deploy timer; synthetic badge in the app shell. **2026-11-07: Joey asked to make every render with his creative suite and his own taste** (`joey-creative-suite`; taste archive `~/.huashu-design/experience.md`), so the film uses the explainer-board pipeline, not HyperFrames.
+- **Decided by the router**:
+  - Voice: Kokoro `am_michael`, speed about 0.98; Joey can swap the voice later.
+  - Length about 60 s (55–65 s).
+  - Screenshots are captured in local mode for offline reproducibility.
+  - Orchestrator UI computes elapsed time from `createdTime` and `lastUpdatedTime` / `completedAt` when `durationSeconds` is missing.
+  - The synthetic-data badge follows the app's existing tokens (no new accent colours).

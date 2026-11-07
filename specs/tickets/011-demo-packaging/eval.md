@@ -1,4 +1,4 @@
-# 011: Demo Packaging (HyperFrames Film, Walkthrough Script, Deploy Timer & Synthetic Badge): Evaluation
+# 011: Demo Packaging (Explainer-Board Film, Walkthrough Script, Deploy Timer & Synthetic Badge): Evaluation
 
 ## Setup
 1. Ensure dependencies and local data are built per `.claude/project.md`:
@@ -25,16 +25,14 @@
 
 ## Acceptance checks
 
-### E-1 [U]: HyperFrames timeline and syntax validation (covers FR-1)
+### E-1 [U]: Board QA and design lint pass (covers FR-1, FR-7)
 - **Type**: CLI
 - **Steps**:
-  1. Navigate to the `docs/demo/` directory:
-     ```bash
-     cd docs/demo && npx hyperframes check --json
-     ```
+  1. Run the board-sync QA report the pipeline produces (see `~/git/YouTube-AI-Motion-Graphics/skills/board-sync/SKILL.md`) on `docs/demo/timeline.json`.
+  2. `python3 ~/git/huashu-design/scripts/design_lint.py check docs/demo/boards`
 - **Expected**:
-  - Exits with status code `0`.
-  - JSON output reports `{"errors": 0, "warnings": 0}` with all composition IDs registered and timelines valid.
+  - The QA report shows no failures (every timed element lands on its word; no text below 28 px; nothing outside the safe zone).
+  - `design_lint.py check` shows zero red findings, and every yellow finding is either fixed or explained in `PREFLIGHT.md`.
 
 ### E-2 [U]: Orchestrator UI elapsed deploy timer on completed deployment (covers FR-4)
 - **Type**: browser
@@ -112,23 +110,23 @@
 - **Expected**:
   - Script catches the missing asset gracefully, prints a clean error message detailing the missing path, and exits with code `1` (does not crash with an unhandled exception).
 
-### E-8 [Q]: Video composition technical specifications validation (covers NFR-1, FR-1)
+### E-8 [Q]: Rendered film meets the technical spec (covers NFR-1, FR-1)
 - **Type**: CLI
 - **Steps**:
-  1. Verify the composition duration and canvas dimensions in `docs/demo/SPEC.md` and `docs/demo/index.html`:
-     ```bash
-     /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -c "
-     import json, pathlib, sys
-     spec = (pathlib.Path('docs/demo/SPEC.md')).read_text()
-     assert '1920' in spec and '1080' in spec, 'Dimensions must be 1920x1080'
-     assert '30 fps' in spec, 'FPS must be 30'
-     assert '60' in spec, 'Target duration must be 60s'
-     print('SPEC validation passed')
-     "
-     ```
+  1. `ffprobe -v error -show_entries format=duration,size:stream=codec_name,width,height,avg_frame_rate -of json docs/demo/out/hls-fabric-demo-60s.mp4`
 - **Expected**:
-  - Prints `SPEC validation passed` and exits `0`.
-  - Composition duration strictly satisfies 55–65 seconds at 1920x1080 30 fps.
+  - One `h264` video stream at 1920×1080, `30/1` fps (or 60/1 if the board system renders 60 fps; state which), one `aac` audio stream, duration 55.0–65.0 s, size < 50 MB. Evidence: the raw JSON.
+
+### E-11 [D]: Frame review against Joey's taste (covers FR-1, FR-2)
+- **Type**: CLI + visual
+- **Steps**:
+  1. Extract one frame per beat (`ffmpeg -ss <t> -i docs/demo/out/hls-fabric-demo-60s.mp4 -frames:v 1 evidence/E-11-<n>.png`) for at least 6 timestamps, and build a contact sheet.
+  2. Review the sheet against `~/.huashu-design/experience.md` entries L1, L2 and L4.
+- **Expected**:
+  - Marcus Vance (`TCGA-G6-A8L6`) is the subject of every beat, and the beats follow hook → tension → reveal → proof → payoff → end card.
+  - The look is the Clean minimal board theme (light paper ground, thin-bordered cards, one accent colour). There are no dark navy glow canvases and no scene that is just a row of equal cards.
+  - Every UI image is a real screenshot of the app; the captions are readable in every sampled frame.
+  - Evidence: the per-beat PNGs and the contact sheet.
 
 ### E-9 [D]: Responsive layout of synthetic badge and timer UI (covers NFR-5, D)
 - **Type**: browser
