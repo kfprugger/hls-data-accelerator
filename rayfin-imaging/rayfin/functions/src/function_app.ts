@@ -1091,3 +1091,200 @@ udf.func(
   },
   [],
 );
+class HttpError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public error?: string,
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
+interface McpContentItem {
+  type: string;
+  text?: string;
+}
+
+interface McpResponse {
+  result?: {
+    content?: McpContentItem[];
+    isError?: boolean;
+  };
+  error?: {
+    code: number;
+    message: string;
+  };
+}
+
+export type AskDataAgentOutput = {
+  question: string;
+  answer: string;
+  generatedQuery: string;
+  queryLanguage: string;
+  executionTimeMs: number;
+  agentName: string;
+};
+
+udf.func(
+  'askDataAgent',
+  async (
+    question: string,
+    ctx: RayfinContext<AppSchema, AudienceType.Fabric>,
+  ): Promise<AskDataAgentOutput> => {
+    const t0 = Date.now();
+    const token = ctx.Tokens.Fabric;
+    if (!token || typeof token !== 'string' || !token.trim()) {
+      throw new HttpError('Invalid or expired delegated token', 401, 'unauthorized');
+    }
+
+    if (typeof question !== 'string') {
+      throw new HttpError('empty_question', 400, 'empty_question');
+    }
+
+    const trimmed = question.trim();
+    if (!trimmed) {
+      throw new HttpError('empty_question', 400, 'empty_question');
+    }
+    if (question.length > 500) {
+      throw new HttpError('question_too_long', 400, 'question_too_long');
+    }
+
+    const wsId = WORKSPACE_ID;
+    let agentId = '9f091d45-2f69-4fa9-961e-64930a02f4b4';
+    if (!agentId || agentId === '00000000-0000-0000-0000-000000000000') {
+      try {
+        const lookupRes = await fetch(`${FABRIC_API}/workspaces/${wsId}/items?type=DataAgent`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-ms-fabric-skill': 'hls-data-agent-mcp-evaluation',
+          },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (lookupRes.ok) {
+          const itemsData = (await lookupRes.json()) as { value?: { id: string; displayName: string }[] };
+          const found = itemsData.value?.find((item) => item.displayName === 'Patient 360');
+          if (found) agentId = found.id;
+        }
+      } catch {
+        // fallback to default agentId
+      }
+    }
+
+    const mcpUrl = `${FABRIC_API}/mcp/workspaces/${wsId}/dataagents/${agentId}/agent`;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'x-ms-fabric-skill': 'hls-data-agent-mcp-evaluation',
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const initRes = await fetch(mcpUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2024-11-05',
+            capabilities: {},
+            clientInfo: { name: 'rayfin-imaging', version: '1.0.0' },
+          },
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (initRes.status === 401) {
+        throw new HttpError('Invalid or expired delegated token', 401, 'unauthorized');
+      }
+      if (initRes.status === 403) {
+        throw new HttpError('User lacks permissions to query source tables', 403, 'forbidden');
+      }
+      if (initRes.status === 503) {
+        throw new HttpError('Data Agent is temporarily warming up. Please retry in a few seconds.', 503, 'service_unavailable');
+      }
+      if (!initRes.ok) {
+        throw new HttpError(`Fabric Data Agent initialization returned ${initRes.status}`, initRes.status);
+      }
+
+      // Complete standard MCP handshake with notifications/initialized
+      await fetch(mcpUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'notifications/initialized',
+          params: {},
+        }),
+        signal: AbortSignal.timeout(15_000),
+      }).catch(() => {});
+
+      const callRes = await fetch(mcpUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/call',
+          params: {
+            name: 'DataAgent_Patient_360',
+            arguments: {
+              userQuestion: question,
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (callRes.status === 401) {
+        throw new HttpError('Invalid or expired delegated token', 401, 'unauthorized');
+      }
+      if (callRes.status === 403) {
+        throw new HttpError('User lacks permissions to query source tables', 403, 'forbidden');
+      }
+      if (callRes.status === 503) {
+        throw new HttpError('Data Agent is temporarily warming up. Please retry in a few seconds.', 503, 'service_unavailable');
+      }
+      if (!callRes.ok) {
+        throw new HttpError(`Fabric Data Agent query returned ${callRes.status}`, callRes.status);
+      }
+
+      const body = (await callRes.json()) as McpResponse;
+      if (body.error) {
+        throw new HttpError(body.error.message || 'Fabric Data Agent error', 500);
+      }
+
+      const textContent = body?.result?.content?.find((c) => c.type === 'text')?.text ?? 'No response returned by agent.';
+      const elapsed = Date.now() - t0;
+
+      console.log(JSON.stringify({
+        questionLength: question.length,
+        executionTimeMs: elapsed,
+        queryLanguage: 'sql+kql',
+        statusCode: 200,
+      }));
+
+      return {
+        question,
+        answer: textContent,
+        generatedQuery: '-- Generated query executed by Fabric Data Agent via delegated token',
+        queryLanguage: 'mixed',
+        executionTimeMs: elapsed,
+        agentName: 'Patient 360',
+      };
+    } catch (e: unknown) {
+      const elapsed = Date.now() - t0;
+      const status = e instanceof HttpError ? e.statusCode : 500;
+      console.log(JSON.stringify({
+        questionLength: question.length,
+        executionTimeMs: elapsed,
+        queryLanguage: 'none',
+        statusCode: status,
+      }));
+      throw e;
+    }
+  },
+  [],
+);

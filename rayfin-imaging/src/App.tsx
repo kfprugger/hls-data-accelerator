@@ -10,6 +10,7 @@ import { AppShell } from '@/components/AppShell';
 import { AuthPage } from '@/components/AuthPage';
 import { useAuth } from '@/hooks/AuthContext';
 import { AuthCallback } from '@/pages/AuthCallback.tsx';
+import { AskDataAgent } from '@/pages/AskDataAgent';
 import { DataMap } from '@/pages/DataMap';
 import { Guide } from '@/pages/Guide';
 import { Overview } from '@/pages/Overview';
@@ -115,6 +116,7 @@ function App() {
           <Route path="data" element={<DataMap />} />
           <Route path="guide" element={<Guide />} />
           <Route path="sources" element={<Sources />} />
+          <Route path="ask" element={<AskDataAgent />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

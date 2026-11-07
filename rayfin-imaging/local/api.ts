@@ -19,6 +19,7 @@ export type CohortPatient = Cohort['patients'][number];
 export type PatientBundle = AppFunctionsSchema['getPatient']['output'];
 export type DataMap = AppFunctionsSchema['getDataMap']['output'];
 export type WardFlowCohortSnapshot = AppFunctionsSchema['getWardFlowCohort']['output'];
+export type AskDataAgentResponse = AppFunctionsSchema['askDataAgent']['output'];
 type Provenance = Cohort['provenance'];
 type QueryTrace = Provenance['queries'][number];
 type FileAccess = PatientBundle['access']['slide'];
@@ -179,8 +180,8 @@ export type LocalApi = {
   getPatient(patientId: string, origin: string): Promise<PatientBundle>;
   getDataMap(): Promise<DataMap>;
   getWardFlowCohort(): Promise<WardFlowCohortSnapshot>;
+  askDataAgent(question: string): Promise<AskDataAgentResponse>;
 };
-
 export function createLocalApi(work: string): LocalApi {
   const tablesDir = resolve(work, 'tables');
   let ready: Promise<DuckDBInstance> | null = null;
@@ -520,6 +521,86 @@ export function createLocalApi(work: string): LocalApi {
         totalMs: 4,
         subjects,
         enrollableCount: 4,
+      };
+    },
+    async askDataAgent(question: string): Promise<AskDataAgentResponse> {
+      const q = question.toLowerCase();
+      // Fixture 1: Marcus Vance vitals + cancer stage
+      if (q.includes('marcus') || q.includes('vance') || q.includes('a8l6')) {
+        return {
+          question,
+          answer:
+            "Patient Marcus Vance (TCGA-G6-A8L6) is a 55-year-old male diagnosed with Stage IV Clear cell renal cell carcinoma (KIRC). Recent Masimo Radius-7 telemetry (device MASIMO-RADIUS7-0101) indicates SpO2 of 96.5% (normal range 95-100%), pulse rate 78 bpm, respiration rate 16 breaths/min, and blood pressure 128/82 mmHg.",
+          generatedQuery:
+`-- Lakehouse SQL Query: Patient demographics & staging
+SELECT p.patient_id, p.display_name, p.cancer_type, d.stage, d.grade, d.tumor_site
+FROM dbo.patient p
+JOIN dbo.diagnosis d ON p.patient_id = d.patient_id
+WHERE p.display_name LIKE '%Marcus Vance%' OR p.patient_id = 'TCGA-G6-A8L6';
+
+-- Eventhouse KQL Query: Masimo Radius-7 Real-Time Telemetry
+TelemetryRaw
+| where DeviceId == 'MASIMO-RADIUS7-0101'
+| where Timestamp >= ago(1h)
+| summarize arg_max(Timestamp, SpO2, PulseRate, RespirationRate, BloodPressure) by DeviceId
+| project Timestamp, DeviceId, SpO2, PulseRate, RespirationRate, BloodPressure`,
+          queryLanguage: 'mixed',
+          executionTimeMs: 420,
+          agentName: 'Patient 360',
+        };
+      }
+
+      // Fixture 2: Active critical alerts / SpO2 alerts
+      if (q.includes('alert') || (q.includes('spo2') && !q.includes('marcus')) || q.includes('critical')) {
+        return {
+          question,
+          answer:
+            "Currently 2 devices have active SpO2 alerts in the last 60 minutes: Device MASIMO-RADIUS7-0033 reported SpO2 drop to 88.4% (Critical threshold: 90.0%), and Device MASIMO-RADIUS7-0012 reported SpO2 drop to 89.1% (Critical threshold: 90.0%). All other monitored subjects are within normal oxygenation parameters.",
+          generatedQuery:
+`TelemetryRaw
+| where Timestamp >= ago(1h)
+| where SpO2 < 90.0
+| summarize MinSpO2 = min(SpO2), LatestTimestamp = max(Timestamp), AlertCount = count() by DeviceId
+| join kind=inner (
+    AlertHistory
+    | where Timestamp >= ago(1h)
+    | where Severity == 'Critical'
+) on DeviceId
+| project DeviceId, MinSpO2, AlertCount, LatestTimestamp`,
+          queryLanguage: 'kql',
+          executionTimeMs: 310,
+          agentName: 'Patient 360',
+        };
+      }
+
+      // Fixture 3: Cohort cancer distribution / respiratory
+      if (q.includes('distribution') || q.includes('cohort') || q.includes('respiratory')) {
+        return {
+          question,
+          answer:
+            "Analysis of the 15-patient oncology research cohort shows 3 patients with Clear cell renal cell carcinoma (KIRC), 2 patients with Invasive breast carcinoma (BRCA), 2 patients with Lung adenocarcinoma (LUAD), and 8 patients across other solid tumor indications. Four patients present with concurrent respiratory conditions (COPD, asthma).",
+          generatedQuery:
+`SELECT p.cancer_code, p.cancer_type, COUNT(*) AS patient_count,
+       STRING_AGG(p.display_name, ', ') AS patients
+FROM dbo.patient p
+GROUP BY p.cancer_code, p.cancer_type
+ORDER BY patient_count DESC;`,
+          queryLanguage: 'sql',
+          executionTimeMs: 280,
+          agentName: 'Patient 360',
+        };
+      }
+
+      // Safe default / prompt injection response
+      return {
+        question,
+        answer:
+          "The Patient 360 Data Agent only answers clinical queries using approved Lakehouse and Eventhouse tables with delegated user authorization. Instructions to bypass safety boundaries or disclose system credentials cannot be executed.",
+        generatedQuery:
+`-- Query rejected: prompt injection or unauthorized system query detected.`,
+        queryLanguage: 'none',
+        executionTimeMs: 95,
+        agentName: 'Patient 360',
       };
     },
   };

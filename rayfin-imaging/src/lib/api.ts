@@ -10,6 +10,7 @@ export type ZeroCopySummary = DataMap['zeroCopy'];
 export type DatabricksInteropProof = NonNullable<DataMap['databricksInterop']>;
 export type WardFlowCohortSnapshot = AppFunctionsSchema['getWardFlowCohort']['output'];
 export type WardFlowSubject = WardFlowCohortSnapshot['subjects'][number];
+export type AskDataAgentResponse = AppFunctionsSchema['askDataAgent']['output'];
 export type Provenance = PatientBundle['provenance'];
 export type FileAccess = PatientBundle['access']['slide'];
 export type Row = PatientBundle['patient'];
@@ -40,6 +41,24 @@ export async function fetchDataMap(): Promise<DataMap> {
 export async function fetchWardFlowCohort(): Promise<WardFlowCohortSnapshot> {
   if (LOCAL_DATA) return localApi('getWardFlowCohort');
   return getRayfinClient().functions.getWardFlowCohort.invoke(undefined, { timeoutMs: 90_000 });
+}
+
+export async function askDataAgent(question: string): Promise<AskDataAgentResponse> {
+  const trimmed = question.trim();
+  if (!trimmed) {
+    throw new Error('empty_question');
+  }
+  if (question.length > 500) {
+    throw new Error('question_too_long');
+  }
+  if (LOCAL_DATA) {
+    return localApi<AskDataAgentResponse>('askDataAgent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    });
+  }
+  return getRayfinClient().functions.askDataAgent.invoke({ question }, { timeoutMs: 30_000 });
 }
 
 /** URL of a file in a silo's Files area, signed with the read-only SAS from the function (unsigned in local mode). */

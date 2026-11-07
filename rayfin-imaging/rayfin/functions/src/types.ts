@@ -45,4 +45,15 @@ export type AppFunctionsSchema = {
     input: Record<string, never>;
     output: { workspaceId: string; workspaceName: string; sqlEndpoint: string; database: string; goldRefreshedAt: null | string; servedAt: string; totalMs: number; subjects: { id: string; initials: string; fullName: null | string; gender: null | string; age: null | number; ageBand: string; careSetting: string; encounterId: string; conditionDisplay: string; attendingRole: null | string; deviceId: null | string; deviceKind: null | string; deviceSerial: null | string; pulseOximeterDeviceId: null | string; refreshedAt: null | string; observations: { [k: string]: null | number }; observedAt: null | string; encounterCount: number; medicationCount: number; imagingStudyCount: number; openCareGaps: number; has3dVolume: boolean; volumeStudyId: null | string }[]; enrollableCount: number };
   };
+  askDataAgent: {
+    input: { question: string };
+    output: {
+      question: string;
+      answer: string;
+      generatedQuery: string;
+      queryLanguage: string;
+      executionTimeMs: number;
+      agentName: string;
+    };
+  };
 };

@@ -15,6 +15,7 @@ const TABS = [
   { to: '/volumes', label: '3D and 4D imaging', active: (p: string) => p.startsWith('/volumes') },
   { to: '/data', label: 'Where the data lives', active: (p: string) => p.startsWith('/data') },
   { to: '/guide', label: 'Guide & Sources', active: (p: string) => p.startsWith('/guide') || p.startsWith('/sources') },
+  { to: '/ask', label: 'Ask Data Agent', active: (p: string) => p.startsWith('/ask') },
 ];
 
 const WORKSPACE_ID = import.meta.env.VITE_FABRIC_WORKSPACE_ID as string | undefined;
