@@ -43,18 +43,67 @@ import fabric_config
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PIPELINE = pathlib.Path(__file__).resolve().parent
-CONFIG = fabric_config.load()
-WORKSPACE_ID = CONFIG["WORKSPACE_ID"]
-LAKEHOUSES = {
-    "clinical": CONFIG["CLINICAL_LH"],
-    "genomics": CONFIG["GENOMICS_LH"],
-    "imaging": CONFIG.get("IMAGING_LH") or CONFIG["LAKEHOUSE_ID"],
-}
-PATIENT360 = CONFIG["PATIENT360_LH"]
-SQL_ENDPOINT = CONFIG["PATIENT360_SQL"]
 FABRIC = "https://api.fabric.microsoft.com/v1"
-CREDENTIAL = AzureCliCredential(process_timeout=30)
+
+_CONFIG: dict[str, str] | None = None
+_CREDENTIAL: AzureCliCredential | None = None
 _TOKEN_CACHE: dict[str, tuple[str, float]] = {}
+
+
+def get_config() -> dict[str, str]:
+    global _CONFIG
+    if _CONFIG is None:
+        _CONFIG = fabric_config.load()
+    return _CONFIG
+
+
+def get_credential() -> AzureCliCredential:
+    global _CREDENTIAL
+    if _CREDENTIAL is None:
+        _CREDENTIAL = AzureCliCredential(process_timeout=30)
+    return _CREDENTIAL
+
+
+class _LazyConfig(dict):
+    def __getitem__(self, key):
+        return get_config()[key]
+
+    def get(self, key, default=None):
+        return get_config().get(key, default)
+
+    def __contains__(self, key):
+        return key in get_config()
+
+    def __repr__(self):
+        if _CONFIG is not None:
+            return repr(_CONFIG)
+        return "<LazyConfig: not loaded>"
+
+
+CONFIG = _LazyConfig()
+
+
+def __getattr__(name: str):
+    if name == "WORKSPACE_ID":
+        return get_config()["WORKSPACE_ID"]
+    if name == "LAKEHOUSES":
+        cfg = get_config()
+        return {
+            "clinical": cfg["CLINICAL_LH"],
+            "genomics": cfg["GENOMICS_LH"],
+            "imaging": cfg.get("IMAGING_LH") or cfg["LAKEHOUSE_ID"],
+        }
+    if name == "PATIENT360":
+        return get_config()["PATIENT360_LH"]
+    if name == "SQL_ENDPOINT":
+        return get_config()["PATIENT360_SQL"]
+    if name == "CREDENTIAL":
+        return get_credential()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return list(globals().keys()) + ["WORKSPACE_ID", "LAKEHOUSES", "PATIENT360", "SQL_ENDPOINT", "CREDENTIAL"]
 
 CANCER_NAMES = {
     "KIRC": "Clear cell renal cell carcinoma",

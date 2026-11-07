@@ -308,12 +308,21 @@ per author.
 
 ## Local development
 
+To run the application locally without an active Fabric capacity or cloud sign-in, generate the offline demo Parquet dataset:
+
+```bash
+# Generate offline Parquet tables for local development (clinical, genomics, imaging)
+python pipeline/build_local_tables.py
+
+# Run Vite with local DuckDB backend over work/tables/
+npm run dev:local
+```
+
+Run tests and type checks:
 ```bash
 npm run dev          # Rayfin local backend + Vite, with a mock sign-in
 npx tsc -b && npm test
 ```
-
-The local backend has no Lakehouse data. Use a deployed app to see images.
 
 ## Repo map
 
