@@ -134,6 +134,18 @@ export function localMode(projectRoot: string): Plugin {
             }
           }
           if (name === 'getAlertStopwatch') return send(res, 200, await api.getAlertStopwatch(url.searchParams.get('patientId') ?? undefined));
+          if (name === 'askDataAgent') {
+            const input = req.method === 'POST' ? await body(req) : { question: url.searchParams.get('question') ?? '' };
+            const rawQuestion = input.question;
+            const question = typeof rawQuestion === 'string' ? rawQuestion : '';
+            if (question.length > 500) {
+              return send(res, 400, { error: 'question_too_long', message: 'Question exceeds 500 character limit' });
+            }
+            if (!question.trim()) {
+              return send(res, 400, { error: 'empty_question', message: 'Please enter a question' });
+            }
+            return send(res, 200, await api.askDataAgent(question));
+          }
           if (name === 'notes' && req.method === 'GET') {
             const patientId = url.searchParams.get('patientId') ?? '';
             if (!PATIENT_ID.test(patientId)) return send(res, 400, { error: 'Invalid patient id' });

@@ -13,6 +13,7 @@ export type WardFlowSubject = WardFlowCohortSnapshot['subjects'][number];
 export type StandardsMapping = AppFunctionsSchema['getStandardsMapping']['output'];
 export type AlertStopwatch = AppFunctionsSchema['getAlertStopwatch']['output'];
 export type AlertStopwatchBeat = AlertStopwatch['beats'][number];
+export type AskDataAgentResponse = AppFunctionsSchema['askDataAgent']['output'];
 export type Provenance = PatientBundle['provenance'];
 export type FileAccess = PatientBundle['access']['slide'];
 export type Row = PatientBundle['patient'];
@@ -78,6 +79,24 @@ export async function fetchAlertStopwatch(patientId?: string): Promise<AlertStop
     return localApi(`getAlertStopwatch${query}`);
   }
   return getRayfinClient().functions.getAlertStopwatch.invoke({ patientId }, { timeoutMs: 90_000 });
+}
+
+export async function askDataAgent(question: string): Promise<AskDataAgentResponse> {
+  const trimmed = question.trim();
+  if (!trimmed) {
+    throw new Error('empty_question');
+  }
+  if (question.length > 500) {
+    throw new Error('question_too_long');
+  }
+  if (LOCAL_DATA) {
+    return localApi<AskDataAgentResponse>('askDataAgent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    });
+  }
+  return getRayfinClient().functions.askDataAgent.invoke({ question }, { timeoutMs: 30_000 });
 }
 
 /** URL of a file in a silo's Files area, signed with the read-only SAS from the function (unsigned in local mode). */

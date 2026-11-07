@@ -86,4 +86,15 @@ export type AppFunctionsSchema = {
       source: string;
     };
   };
+  askDataAgent: {
+    input: { question: string };
+    output: {
+      question: string;
+      answer: string;
+      generatedQuery: string;
+      queryLanguage: string;
+      executionTimeMs: number;
+      agentName: string;
+    };
+  };
 };
