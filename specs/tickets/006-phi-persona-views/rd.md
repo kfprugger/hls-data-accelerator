@@ -1,7 +1,8 @@
 # 006: OneLake Security PHI vs Researcher Persona Views, Server-Side Masking, and Entra Test Identity
 
-**Status:** ready
+**Open check:** E-12 researcher denial needs one interactive sign-in as researcher-demo@jbatl.dev (MFA enrollment).
 
+**Status:** done
 | **Risk** | High: Unmasked PHI data breach to unauthorized researcher persona or OneLake role bypass |
 
 ## Summary

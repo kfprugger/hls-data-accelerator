@@ -7,7 +7,7 @@
 | 010 | Databricks reads the same OneLake tables | done | solo | waits for 003: both change DataMap.tsx and the shared function files |
 | 007 | Standards view (FHIR / DICOM to tables) | done | solo | waits for 010: shared function_app.ts, local/api.ts, App.tsx, AppShell.tsx |
 | 005 | Plain-English Data Agent questions | ready | solo | waits for 007: shared function_app.ts, App.tsx, AppShell.tsx |
-| 006 | Nurse vs researcher PHI views | ready | solo | waits for 005: shared function_app.ts, AppShell.tsx; waits for 002: needs the TCGA records |
+| 006 | Nurse vs researcher PHI views | done | solo | waits for 005: shared function_app.ts, AppShell.tsx; waits for 002: needs the TCGA records |
 | 004 | Real-time alert with a stopwatch | done | solo | waits for 006: shared function_app.ts and local/plugin.ts; waits for 002: needs Marcus Vance's device pairing |
 | 009 | Plain-language copy pass + glossary | ready | solo | waits for 004: it rewrites copy on every page the UI tickets change (003, 004, 005, 006, 007, 008, 010) |
 | 011 | Demo packaging (60 s film, walkthrough, deploy timer, synthetic badge) | ready | solo | waits for 009: the film is captured from the finished UI |
