@@ -74,7 +74,7 @@ describe('src/lib/api.ts Core Rayfin UDFs and helpers (R-2, FR-7)', () => {
       const spy = vi.spyOn(localModeModule, 'localApi').mockResolvedValue(mockResult);
 
       const res = await fetchAlertStopwatch('TCGA-G6-A8L6');
-      expect(spy).toHaveBeenCalledWith('getAlertStopwatch?patientId=TCGA-G6-A8L6');
+      expect(spy).toHaveBeenCalledWith('getAlertStopwatch?patientId=TCGA-G6-A8L6', { headers: { 'x-rayfin-persona': 'nurse' } });
       expect(res.totalElapsedSeconds).toBe(18.4);
       expect(res.patientId).toBe('TCGA-G6-A8L6');
     });

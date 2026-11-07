@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { fetchAlertStopwatch, type AlertStopwatch } from '@/lib/api';
 import { GlossaryTooltip } from '@/components/GlossaryTooltip';
+import { usePersona } from '@/hooks/usePersona';
 interface AlertStopwatchCardProps {
   patientId?: string;
   className?: string;
 }
 
 export function AlertStopwatchCard({ patientId, className = '' }: AlertStopwatchCardProps) {
+  const { persona } = usePersona();
   const [data, setData] = useState<AlertStopwatch | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -14,7 +16,7 @@ export function AlertStopwatchCard({ patientId, className = '' }: AlertStopwatch
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetchAlertStopwatch(patientId)
+    fetchAlertStopwatch(patientId, persona)
       .then((res) => {
         if (active) {
           setData(res);
@@ -31,7 +33,7 @@ export function AlertStopwatchCard({ patientId, className = '' }: AlertStopwatch
     return () => {
       active = false;
     };
-  }, [patientId]);
+  }, [patientId, persona]);
 
   if (loading) {
     return (

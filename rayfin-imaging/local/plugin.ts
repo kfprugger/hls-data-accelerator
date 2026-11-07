@@ -124,7 +124,7 @@ export function localMode(projectRoot: string): Plugin {
             const patientId = url.searchParams.get('patientId') ?? '';
             if (!PATIENT_ID.test(patientId)) return send(res, 400, { error: 'Invalid patient id' });
             try {
-              return send(res, 200, await api.getStandardsMapping(patientId));
+              return send(res, 200, await api.getStandardsMapping(patientId, persona));
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : String(err);
               if (msg.includes('not found')) {
@@ -133,7 +133,7 @@ export function localMode(projectRoot: string): Plugin {
               throw err;
             }
           }
-          if (name === 'getAlertStopwatch') return send(res, 200, await api.getAlertStopwatch(url.searchParams.get('patientId') ?? undefined));
+          if (name === 'getAlertStopwatch') return send(res, 200, await api.getAlertStopwatch(url.searchParams.get('patientId') ?? undefined, persona));
           if (name === 'askDataAgent') {
             const input = req.method === 'POST' ? await body(req) : { question: url.searchParams.get('question') ?? '' };
             const rawQuestion = input.question;
@@ -144,7 +144,7 @@ export function localMode(projectRoot: string): Plugin {
             if (!question.trim()) {
               return send(res, 400, { error: 'empty_question', message: 'Please enter a question' });
             }
-            return send(res, 200, await api.askDataAgent(question));
+            return send(res, 200, await api.askDataAgent(question, persona));
           }
           if (name === 'notes' && req.method === 'GET') {
             const patientId = url.searchParams.get('patientId') ?? '';

@@ -390,11 +390,11 @@ export type LocalApi = {
   getPatient(patientId: string, origin: string, persona?: Persona): Promise<PatientBundle>;
   getDataMap(): Promise<DataMap>;
   getWardFlowCohort(): Promise<WardFlowCohortSnapshot>;
-  getStandardsMapping(patientId: string): Promise<StandardsMapping>;
-  getAlertStopwatch(patientId?: string): Promise<AlertStopwatch>;
+  getStandardsMapping(patientId: string, persona?: Persona): Promise<StandardsMapping>;
+  getAlertStopwatch(patientId?: string, persona?: Persona): Promise<AlertStopwatch>;
   getPersona(): Persona;
   setPersona(persona: Persona): void;
-  askDataAgent(question: string): Promise<AskDataAgentResponse>;
+  askDataAgent(question: string, persona?: Persona): Promise<AskDataAgentResponse>;
 };
 export function createLocalApi(work: string): LocalApi {
   const tablesDir = resolve(work, 'tables');
@@ -764,14 +764,17 @@ export function createLocalApi(work: string): LocalApi {
         enrollableCount: 4,
       };
     },
-    async getStandardsMapping(patientId: string): Promise<StandardsMapping> {
+    async getStandardsMapping(patientId: string, persona?: Persona): Promise<StandardsMapping> {
       if (!PATIENT_ID.test(patientId)) throw new Error('Invalid patient id');
+      const p = persona ?? activePersona;
+      const isResearcher = p === 'researcher';
+      const patientTable = isResearcher ? 'patient_deidentified' : 'patient';
       const db = await connect();
       const tracer = new Tracer(db);
       const params = { id: patientId };
 
       const [patient, diagnoses, radiologyStudies, radiologySeries] = await Promise.all([
-        tracer.run('standards_patient', ['clinical'], ['patient'], 'SELECT * FROM dbo.patient WHERE patient_id = $id', params),
+        tracer.run('standards_patient', ['clinical'], [patientTable], `SELECT * FROM dbo.${patientTable} WHERE patient_id = $id`, params),
         tracer.run('standards_diagnosis', ['clinical'], ['diagnosis'], 'SELECT * FROM dbo.diagnosis WHERE patient_id = $id ORDER BY seq', params),
         tracer.run('standards_radiology_study', ['imaging'], ['radiology_study'], 'SELECT * FROM dbo.radiology_study WHERE patient_id = $id ORDER BY date', params),
         tracer.run('standards_radiology_series', ['imaging'], ['radiology_series'], 'SELECT * FROM dbo.radiology_series WHERE patient_id = $id ORDER BY date', params),
@@ -782,8 +785,7 @@ export function createLocalApi(work: string): LocalApi {
         if (patientId === 'TCGA-02-0001') {
           patientRow = {
             patient_id: 'TCGA-02-0001',
-            display_name: 'TCGA-02-0001 (Clinical Only)',
-            project_id: 'TCGA-GBM',
+            display_name: isResearcher ? 'TCGA-02-0001' : 'TCGA-02-0001 (Clinical Only)',
             cancer_code: 'GBM',
             cancer_type: 'Glioblastoma multiforme',
             organ: 'Brain',
@@ -814,10 +816,12 @@ export function createLocalApi(work: string): LocalApi {
       };
     },
 
-    async getAlertStopwatch(patientId?: string) {
+    async getAlertStopwatch(patientId?: string, persona?: Persona): Promise<AlertStopwatch> {
+      const p = persona ?? activePersona;
+      const isResearcher = p === 'researcher';
       const isMarcus = !patientId || patientId === 'TCGA-G6-A8L6';
       const pId = patientId || 'TCGA-G6-A8L6';
-      const patientName = isMarcus ? 'Marcus Vance' : 'Monitored Patient';
+      const patientName = isResearcher ? pId : (isMarcus ? 'Marcus Vance' : 'Monitored Patient');
       const deviceId = isMarcus ? 'MASIMO-RADIUS7-0101' : 'MASIMO-RADIUS7-0102';
       // Source: Ticket 004 live measured run (specs/tickets/004-realtime-alert-stopwatch/evidence/E-12.txt)
       // Telemetry Emitted: 2026-11-07T16:42:41.000Z (0.0s)
@@ -873,20 +877,30 @@ export function createLocalApi(work: string): LocalApi {
       };
     },
 
-    async askDataAgent(question: string): Promise<AskDataAgentResponse> {
+    async askDataAgent(question: string, persona?: Persona): Promise<AskDataAgentResponse> {
+      const p = persona ?? activePersona;
+      const isResearcher = p === 'researcher';
       const q = question.toLowerCase();
       // Fixture 1: Marcus Vance vitals + cancer stage
       if (q.includes('marcus') || q.includes('vance') || q.includes('a8l6')) {
+        const pTable = isResearcher ? 'patient_deidentified' : 'patient';
+        const pDesc = isResearcher ? 'Patient TCGA-G6-A8L6 (de-identified)' : 'Patient Marcus Vance (TCGA-G6-A8L6)';
+        const sqlFilter = isResearcher
+          ? `WHERE p.patient_id = 'TCGA-G6-A8L6'`
+          : `WHERE p.display_name LIKE '%Marcus Vance%' OR p.patient_id = 'TCGA-G6-A8L6'`;
+        const respQuestion = isResearcher
+          ? question.replace(/Marcus Vance/gi, 'TCGA-G6-A8L6').replace(/Vance/gi, 'TCGA-G6-A8L6').replace(/Marcus/gi, 'TCGA-G6-A8L6')
+          : question;
         return {
-          question,
+          question: respQuestion,
           answer:
-            "Patient Marcus Vance (TCGA-G6-A8L6) is a 55-year-old male diagnosed with Stage IV Clear cell renal cell carcinoma (KIRC). Recent Masimo Radius-7 telemetry (device MASIMO-RADIUS7-0101) indicates SpO2 of 96.5% (normal range 95-100%), pulse rate 78 bpm, respiration rate 16 breaths/min, and blood pressure 128/82 mmHg.",
+            `${pDesc} is a 55-year-old male diagnosed with Stage IV Clear cell renal cell carcinoma (KIRC). Recent Masimo Radius-7 telemetry (device MASIMO-RADIUS7-0101) indicates SpO2 of 96.5% (normal range 95-100%), pulse rate 78 bpm, respiration rate 16 breaths/min, and blood pressure 128/82 mmHg.`,
           generatedQuery:
 `-- Lakehouse SQL Query: Patient demographics & staging
 SELECT p.patient_id, p.display_name, p.cancer_type, d.stage, d.grade, d.tumor_site
-FROM dbo.patient p
+FROM dbo.${pTable} p
 JOIN dbo.diagnosis d ON p.patient_id = d.patient_id
-WHERE p.display_name LIKE '%Marcus Vance%' OR p.patient_id = 'TCGA-G6-A8L6';
+${sqlFilter};
 
 -- Eventhouse KQL Query: Masimo Radius-7 Real-Time Telemetry
 TelemetryRaw

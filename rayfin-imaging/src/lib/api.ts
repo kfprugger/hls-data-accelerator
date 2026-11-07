@@ -68,20 +68,28 @@ export async function fetchWardFlowCohort(): Promise<WardFlowCohortSnapshot> {
   return getRayfinClient().functions.getWardFlowCohort.invoke(undefined, { timeoutMs: 90_000 });
 }
 
-export async function fetchStandardsMapping(patientId: string): Promise<StandardsMapping> {
-  if (LOCAL_DATA) return localApi(`getStandardsMapping?patientId=${encodeURIComponent(patientId)}`);
-  return getRayfinClient().functions.getStandardsMapping.invoke({ patientId }, { timeoutMs: 90_000 });
-}
-
-export async function fetchAlertStopwatch(patientId?: string): Promise<AlertStopwatch> {
+export async function fetchStandardsMapping(patientId: string, persona?: Persona): Promise<StandardsMapping> {
+  const p = persona ?? currentPersona;
   if (LOCAL_DATA) {
-    const query = patientId ? `?patientId=${encodeURIComponent(patientId)}` : '';
-    return localApi(`getAlertStopwatch${query}`);
+    const query = `patientId=${encodeURIComponent(patientId)}${p === 'researcher' ? '&persona=researcher' : ''}`;
+    return localApi(`getStandardsMapping?${query}`, { headers: { 'x-rayfin-persona': p } });
   }
-  return getRayfinClient().functions.getAlertStopwatch.invoke({ patientId }, { timeoutMs: 90_000 });
+  return getRayfinClient().functions.getStandardsMapping.invoke({ patientId, ...(p ? { persona: p } : {}) }, { timeoutMs: 90_000 });
 }
 
-export async function askDataAgent(question: string): Promise<AskDataAgentResponse> {
+export async function fetchAlertStopwatch(patientId?: string, persona?: Persona): Promise<AlertStopwatch> {
+  const p = persona ?? currentPersona;
+  if (LOCAL_DATA) {
+    const parts: string[] = [];
+    if (patientId) parts.push(`patientId=${encodeURIComponent(patientId)}`);
+    if (p === 'researcher') parts.push('persona=researcher');
+    const query = parts.length > 0 ? `?${parts.join('&')}` : '';
+    return localApi(`getAlertStopwatch${query}`, { headers: { 'x-rayfin-persona': p } });
+  }
+  return getRayfinClient().functions.getAlertStopwatch.invoke({ patientId, ...(p ? { persona: p } : {}) }, { timeoutMs: 90_000 });
+}
+
+export async function askDataAgent(question: string, persona?: Persona): Promise<AskDataAgentResponse> {
   const trimmed = question.trim();
   if (!trimmed) {
     throw new Error('empty_question');
@@ -89,11 +97,15 @@ export async function askDataAgent(question: string): Promise<AskDataAgentRespon
   if (question.length > 500) {
     throw new Error('question_too_long');
   }
+  const p = persona ?? currentPersona;
   if (LOCAL_DATA) {
     return localApi<AskDataAgentResponse>('askDataAgent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-rayfin-persona': p,
+      },
+      body: JSON.stringify({ question, persona: p }),
     });
   }
   return getRayfinClient().functions.askDataAgent.invoke({ question }, { timeoutMs: 30_000 });
