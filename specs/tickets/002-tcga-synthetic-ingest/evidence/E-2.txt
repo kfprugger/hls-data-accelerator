@@ -1,3 +1,2 @@
-$ AZURE_CONFIG_DIR=$HOME/.azure-isolated/JBATL HLS_BIND_INTERFACE=en0 /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python synthea/seed_tcga_cohort.py apply --resource-group "rg-med-1103a" --subscription "22222222-2222-2222-2222-222222222222" --emit-baseline-telemetry
 FHIR upsert counts: {"Basic": 15, "Condition": 15, "Coverage": 15, "Device": 15, "MedicationRequest": 47, "Observation": 75, "Patient": 15}
 Emitted 150 baseline telemetry events for devices MASIMO-RADIUS7-0101..0115 to med1103aopulbb4gx2ioc-eh-ns/telemetry-stream

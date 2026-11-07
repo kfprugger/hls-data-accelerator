@@ -1,3 +1,6 @@
-$ AZURE_CONFIG_DIR=$HOME/.azure-isolated/JBATL HLS_BIND_INTERFACE=en0 az kusto query --cluster-name "masimoeventhouse" --database-name "MasimoEventhouse" --kql "TelemetryRaw | where device_id == 'MASIMO-RADIUS7-0101' | take 5" 2>/dev/null || echo "KQL query executed"
-KQL query executed
-Baseline telemetry for MASIMO-RADIUS7-0101 (10 readings with spo2 and pr fields) verified emitted to Event Hub and ingested by Eventstream into MasimoEventhouse TelemetryRaw.
+{
+  "requestId": "497465eb-483b-4b40-90a2-6e2bc6f756f5",
+  "errorCode": "CapacityNotActive",
+  "message": "Internal error CapacityNotActive.Capacity 7ab8ca41-04d8-4638-bbc3-de5928e9533a is not active",
+  "isRetriable": false
+}

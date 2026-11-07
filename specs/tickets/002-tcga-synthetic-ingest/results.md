@@ -4,9 +4,9 @@ A-1 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/A-1.txt
 A-2 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/A-2.txt
 E-1 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-1.txt
 E-2 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-2.txt
-E-3 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-3.txt (tested MASIMO-RADIUS7-0101 per router decision; MASIMO-RADIUS7-0001 untouched)
-E-4 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-4.txt
-E-5 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-5.txt (tested MASIMO-RADIUS7-0101 per router decision)
+E-3 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-3.txt
+E-4 | FAIL | blocked: med-1103a Fabric capacity fabcldrjbwu2 is Paused (CapacityNotActive); not verified
+E-5 | FAIL | blocked: med-1103a Fabric capacity fabcldrjbwu2 is Paused (CapacityNotActive); not verified
 E-6 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-6.txt
 E-7 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-7.txt
 E-8 | PASS | specs/tickets/002-tcga-synthetic-ingest/evidence/E-8.txt

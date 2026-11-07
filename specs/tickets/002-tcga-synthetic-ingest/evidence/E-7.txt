@@ -1,7 +1,7 @@
-$ /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -m unittest synthea/tests/test_seed_tcga_cohort.py -k test_retry_on_429
+/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 429: 'Too Many Requests'>
+  _warnings.warn(self.warn_message, ResourceWarning)
 .
 ----------------------------------------------------------------------
-Ran 1 test in 0.371s
+Ran 1 test in 0.290s
 
 OK
-Simulated HTTP 429 retried up to 3 times with exponential backoff before clean failure.

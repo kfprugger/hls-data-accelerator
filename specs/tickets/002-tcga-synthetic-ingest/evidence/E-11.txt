@@ -1,7 +1,5 @@
-$ /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -m unittest synthea/tests/test_seed_tcga_cohort.py -k test_untagged_resource_blocks_overwrite
 .
 ----------------------------------------------------------------------
 Ran 1 test in 0.001s
 
 OK
-Detected existing non-synthetic resource collision; execution aborted with status 3 and message 'Refusing to overwrite existing non-synthetic resource'; zero PUT requests submitted.
