@@ -40,12 +40,12 @@ class TestSeedTcgaCohort(unittest.TestCase):
         self.assertIsNotNone(marcus_basic)
         self.assertEqual("device-assoc", marcus_basic["code"]["coding"][0]["code"])
         device_ref = marcus_basic["extension"][0]["valueReference"]["reference"]
-        self.assertEqual("Device/MASIMO-RADIUS7-0001", device_ref)
+        self.assertEqual("Device/MASIMO-RADIUS7-0101", device_ref)
 
         # Check Device resource
         devices = [r for r in self.resources if r["resourceType"] == "Device"]
         self.assertEqual(15, len(devices))
-        marcus_device = next((d for d in devices if d["id"] == "MASIMO-RADIUS7-0001"), None)
+        marcus_device = next((d for d in devices if d["id"] == "MASIMO-RADIUS7-0101"), None)
         self.assertIsNotNone(marcus_device)
         self.assertEqual("Radius-7", marcus_device["modelNumber"])
         self.assertEqual("Pulse oximeter", marcus_device["type"]["coding"][0]["display"])

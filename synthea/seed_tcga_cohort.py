@@ -430,8 +430,8 @@ def generate_cohort_resources(patients: list[dict]) -> list[dict]:
         # Coverage
         resources.append(build_coverage(pid, m))
 
-        # Device pairing: Marcus Vance (TCGA-G6-A8L6) is MASIMO-RADIUS7-0001
-        device_id = "MASIMO-RADIUS7-0001" if pid == "TCGA-G6-A8L6" else f"MASIMO-RADIUS7-{idx + 1:04d}"
+        # Device pairing per router decision: Marcus Vance = MASIMO-RADIUS7-0101, others 0102..0115
+        device_id = "MASIMO-RADIUS7-0101" if pid == "TCGA-G6-A8L6" else f"MASIMO-RADIUS7-{101 + idx:04d}"
         resources.append(build_device(device_id))
         resources.append(build_device_association(patient_res_id, patient_display_name, device_id))
 
@@ -751,6 +751,86 @@ def run_apply(client: FHIRClient, resources: list[dict]) -> dict[str, int]:
     print(f"FHIR upsert counts: {json.dumps(applied_counts, sort_keys=True)}")
     return applied_counts
 
+def emit_baseline_telemetry(
+    resource_group: str | None = None,
+    subscription: str | None = None,
+    namespace: str | None = None,
+    eh_name: str = "telemetry-stream",
+) -> int:
+    """Emit 10 baseline telemetry readings per TCGA device (MASIMO-RADIUS7-0101..0115) to Masimo Event Hub."""
+    ns = namespace
+    if not ns:
+        if not resource_group:
+            print("Skipping baseline telemetry emission: no Event Hub namespace or resource group provided")
+            return 0
+        cmd = ["az", "eventhubs", "namespace", "list", "-g", resource_group, "-o", "json"]
+        if subscription:
+            cmd.extend(["--subscription", subscription])
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0 and subscription:
+            cmd = ["az", "eventhubs", "namespace", "list", "-g", resource_group, "-o", "json"]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode == 0:
+            items = json.loads(res.stdout)
+            if items:
+                ns = items[0]["name"]
+        if not ns:
+            raise RuntimeError(f"Could not discover Event Hub namespace in {resource_group}")
+
+    cmd_tok = ["az", "account", "get-access-token", "--resource", "https://eventhubs.azure.net", "-o", "json"]
+    if subscription:
+        cmd_tok.extend(["--subscription", subscription])
+    res_tok = subprocess.run(cmd_tok, capture_output=True, text=True)
+    if res_tok.returncode != 0 and subscription:
+        res_tok = subprocess.run(["az", "account", "get-access-token", "--resource", "https://eventhubs.azure.net", "-o", "json"], capture_output=True, text=True)
+    if res_tok.returncode != 0:
+        try:
+            from azure.identity import AzureCliCredential
+            cred = AzureCliCredential(process_timeout=30)
+            token = cred.get_token("https://eventhubs.azure.net/.default").token
+        except Exception as e:
+            raise RuntimeError(f"Could not acquire Event Hub token: {e}") from e
+    else:
+        token = json.loads(res_tok.stdout)["accessToken"]
+
+    url = f"https://{ns}.servicebus.windows.net/{eh_name}/messages"
+    total_sent = 0
+    now = dt.datetime.now(dt.timezone.utc)
+    for dev_idx in range(15):
+        dev_id = f"MASIMO-RADIUS7-{101 + dev_idx:04d}"
+        for r_idx in range(10):
+            ts = (now - dt.timedelta(seconds=(10 - r_idx) * 2)).isoformat().replace("+00:00", "Z")
+            payload = {
+                "device_id": dev_id,
+                "timestamp": ts,
+                "telemetry": {
+                    "spo2": round(96.0 + (dev_idx % 3) * 0.5 + (r_idx % 3) * 0.2, 1),
+                    "pr": int(68 + (dev_idx % 10) + (r_idx % 4)),
+                    "pi": 2.5,
+                    "pvi": 12,
+                    "sphb": 13.0,
+                    "signal_iq": 98,
+                },
+            }
+            data = json.dumps(payload).encode("utf-8")
+            req = Request(url, data=data, headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            }, method="POST")
+            try:
+                with urlopen(req, timeout=30) as resp:
+                    if resp.status not in (200, 201):
+                        raise RuntimeError(f"Event Hub POST returned {resp.status}")
+                total_sent += 1
+            except HTTPError as err:
+                if err.code in (401, 403):
+                    raise RuntimeError("denied (no Data Sender role)") from err
+                raise
+
+    print(f"Emitted {total_sent} baseline telemetry events for devices MASIMO-RADIUS7-0101..0115 to {ns}/{eh_name}")
+    return total_sent
+
+
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -761,7 +841,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parent.add_argument("--as-of", help="Simulated as-of date (YYYY-MM-DD)")
     parent.add_argument("--cohort-path", help="Path to cohort.json", type=pathlib.Path)
     parent.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
-
+    parent.add_argument("--emit-baseline-telemetry", action="store_true", help="Emit 10 baseline telemetry readings per TCGA device to Masimo Event Hub")
+    parent.add_argument("--eventhub-namespace", help="Masimo Event Hub namespace")
+    parent.add_argument("--eventhub-name", default="telemetry-stream", help="Event Hub name (default: telemetry-stream)")
     parser = argparse.ArgumentParser(
         description="TCGA Cohort Synthetic FHIR, Device, and Claim Ingestion",
         parents=[parent],
@@ -803,6 +885,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "apply":
         run_apply(client, resources)
+        if getattr(args, "emit_baseline_telemetry", False):
+            emit_baseline_telemetry(
+                resource_group=args.resource_group,
+                subscription=args.subscription,
+                namespace=args.eventhub_namespace,
+                eh_name=args.eventhub_name,
+            )
         return 0
     elif args.command == "delete":
         run_delete(client, resources)
