@@ -59,6 +59,8 @@ const SILOS = {
   imaging: { id: /^0{8}-/.test(IMAGING_LH) ? LAKEHOUSE_ID : IMAGING_LH, name: 'imaging_lakehouse', role: 'PACS and digital pathology' },
 } as const;
 const PATIENT360 = { id: PATIENT360_LH, name: 'patient360' };
+const GOLD = { id: GOLD_LH, database: 'healthcare1_reporting_gold' };
+void GOLD;
 const GOLD_DATABASE = 'healthcare1_reporting_gold';
 
 export type AppSchema = Record<string, never>;
@@ -1504,20 +1506,46 @@ class HttpError extends Error {
   }
 }
 
-interface McpContentItem {
-  type: string;
-  text?: string;
+interface AssistantRunStep {
+  id?: string;
+  step_details?: {
+    type?: string;
+    tool_calls?: Array<{
+      id?: string;
+      type?: string;
+      function?: {
+        name?: string;
+        arguments?: string;
+        output?: string;
+      };
+    }>;
+  };
 }
 
-interface McpResponse {
-  result?: {
-    content?: McpContentItem[];
-    isError?: boolean;
-  };
-  error?: {
-    code: number;
-    message: string;
-  };
+interface AssistantMessage {
+  id?: string;
+  role?: string;
+  content?: Array<{
+    type?: string;
+    text?: {
+      value?: string;
+    };
+  }>;
+}
+
+function checkAgentResponseStatus(res: Response, operationName: string): void {
+  if (res.status === 401) {
+    throw new HttpError('Invalid or expired delegated token', 401, 'unauthorized');
+  }
+  if (res.status === 403) {
+    throw new HttpError('User lacks permissions to query source tables', 403, 'forbidden');
+  }
+  if (res.status === 503) {
+    throw new HttpError('Data Agent is temporarily warming up. Please retry in a few seconds.', 503, 'service_unavailable');
+  }
+  if (!res.ok) {
+    throw new HttpError(`Fabric Data Agent ${operationName} returned ${res.status}`, res.status);
+  }
 }
 
 export type AskDataAgentOutput = {
@@ -1529,176 +1557,260 @@ export type AskDataAgentOutput = {
   agentName: string;
 };
 
-udf.func(
-  'askDataAgent',
-  async (
-    question: string,
-    ctx: RayfinContext<AppSchema, AudienceType.Fabric>,
-  ): Promise<AskDataAgentOutput> => {
-    const t0 = Date.now();
-    const token = ctx.Tokens.Fabric;
-    if (!token || typeof token !== 'string' || !token.trim()) {
-      throw new HttpError('Invalid or expired delegated token', 401, 'unauthorized');
-    }
+export async function askDataAgentHandler(
+  question: string,
+  ctx: RayfinContext<AppSchema, AudienceType.Fabric>,
+): Promise<AskDataAgentOutput> {
+  const t0 = Date.now();
+  const token = ctx.Tokens.Fabric;
+  if (!token || typeof token !== 'string' || !token.trim()) {
+    throw new HttpError('Invalid or expired delegated token', 401, 'unauthorized');
+  }
 
-    if (typeof question !== 'string') {
-      throw new HttpError('empty_question', 400, 'empty_question');
-    }
+  if (typeof question !== 'string') {
+    throw new HttpError('empty_question', 400, 'empty_question');
+  }
 
-    const trimmed = question.trim();
-    if (!trimmed) {
-      throw new HttpError('empty_question', 400, 'empty_question');
-    }
-    if (question.length > 500) {
-      throw new HttpError('question_too_long', 400, 'question_too_long');
-    }
+  const trimmed = question.trim();
+  if (!trimmed) {
+    throw new HttpError('empty_question', 400, 'empty_question');
+  }
+  if (question.length > 500) {
+    throw new HttpError('question_too_long', 400, 'question_too_long');
+  }
 
-    const wsId = WORKSPACE_ID;
-    let agentId = '9f091d45-2f69-4fa9-961e-64930a02f4b4';
-    if (!agentId || agentId === '00000000-0000-0000-0000-000000000000') {
-      try {
-        const lookupRes = await fetch(`${FABRIC_API}/workspaces/${wsId}/items?type=DataAgent`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'x-ms-fabric-skill': 'hls-data-agent-mcp-evaluation',
-          },
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (lookupRes.ok) {
-          const itemsData = (await lookupRes.json()) as { value?: { id: string; displayName: string }[] };
-          const found = itemsData.value?.find((item) => item.displayName === 'Patient 360');
-          if (found) agentId = found.id;
-        }
-      } catch {
-        // fallback to default agentId
-      }
-    }
+  const wsId = WORKSPACE_ID;
 
-    const mcpUrl = `${FABRIC_API}/mcp/workspaces/${wsId}/dataagents/${agentId}/agent`;
+  try {
+    // 1. Resolve agent by display name 'Patient 360' in workspace wsId (never a literal item ID)
+    const lookupRes = await fetch(`${FABRIC_API}/workspaces/${wsId}/items?type=DataAgent`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-ms-fabric-skill': 'hls-data-agent-mcp-evaluation',
+      },
+      signal: AbortSignal.timeout(60_000),
+    });
+    checkAgentResponseStatus(lookupRes, 'lookup');
+
+    const itemsData = (await lookupRes.json()) as { value?: { id: string; displayName: string }[] };
+    const foundAgent = itemsData.value?.find((item) => item.displayName === 'Patient 360');
+    if (!foundAgent) {
+      throw new HttpError("Data Agent 'Patient 360' not found in workspace", 404, 'agent_not_found');
+    }
+    const agentId = foundAgent.id;
+
+    // 2. Assistants API setup
+    const baseUrl = `${FABRIC_API}/workspaces/${wsId}/dataagents/${agentId}/aiassistant/openai`;
+    const apiParams = 'api-version=2024-05-01-preview&stage=production';
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       'x-ms-fabric-skill': 'hls-data-agent-mcp-evaluation',
       'Content-Type': 'application/json',
+      'OpenAI-Beta': 'assistants=v2',
     };
 
+    // 2.1 Resolve underlying Assistant ID
+    const asstRes = await fetch(`${baseUrl}/assistants?${apiParams}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model: 'not used' }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    checkAgentResponseStatus(asstRes, 'assistant resolution');
+    const asstData = (await asstRes.json()) as { id?: string };
+    const asstId = asstData.id;
+    if (!asstId) {
+      throw new HttpError('Failed to resolve assistant ID', 500, 'assistant_resolution_failed');
+    }
+
+    // 2.2 Create thread
+    const thRes = await fetch(`${baseUrl}/threads?${apiParams}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({}),
+      signal: AbortSignal.timeout(60_000),
+    });
+    checkAgentResponseStatus(thRes, 'thread creation');
+    const thData = (await thRes.json()) as { id?: string };
+    const thId = thData.id;
+    if (!thId) {
+      throw new HttpError('Failed to create thread', 500, 'thread_creation_failed');
+    }
+
     try {
-      const initRes = await fetch(mcpUrl, {
+      // 2.3 Add user message
+      const msgRes = await fetch(`${baseUrl}/threads/${thId}/messages?${apiParams}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'initialize',
-          params: {
-            protocolVersion: '2024-11-05',
-            capabilities: {},
-            clientInfo: { name: 'rayfin-imaging', version: '1.0.0' },
-          },
-        }),
-        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({ role: 'user', content: question }),
+        signal: AbortSignal.timeout(60_000),
       });
+      checkAgentResponseStatus(msgRes, 'message creation');
 
-      if (initRes.status === 401) {
-        throw new HttpError('Invalid or expired delegated token', 401, 'unauthorized');
-      }
-      if (initRes.status === 403) {
-        throw new HttpError('User lacks permissions to query source tables', 403, 'forbidden');
-      }
-      if (initRes.status === 503) {
-        throw new HttpError('Data Agent is temporarily warming up. Please retry in a few seconds.', 503, 'service_unavailable');
-      }
-      if (!initRes.ok) {
-        throw new HttpError(`Fabric Data Agent initialization returned ${initRes.status}`, initRes.status);
-      }
-
-      // Complete standard MCP handshake with notifications/initialized
-      await fetch(mcpUrl, {
+      // 2.4 Create run
+      const runRes = await fetch(`${baseUrl}/threads/${thId}/runs?${apiParams}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-          params: {},
-        }),
-        signal: AbortSignal.timeout(15_000),
-      }).catch(() => {});
-
-      const callRes = await fetch(mcpUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'tools/call',
-          params: {
-            name: 'DataAgent_Patient_360',
-            arguments: {
-              userQuestion: question,
-            },
-          },
-        }),
-        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({ assistant_id: asstId }),
+        signal: AbortSignal.timeout(60_000),
       });
-
-      if (callRes.status === 401) {
-        throw new HttpError('Invalid or expired delegated token', 401, 'unauthorized');
-      }
-      if (callRes.status === 403) {
-        throw new HttpError('User lacks permissions to query source tables', 403, 'forbidden');
-      }
-      if (callRes.status === 503) {
-        throw new HttpError('Data Agent is temporarily warming up. Please retry in a few seconds.', 503, 'service_unavailable');
-      }
-      if (!callRes.ok) {
-        throw new HttpError(`Fabric Data Agent query returned ${callRes.status}`, callRes.status);
+      checkAgentResponseStatus(runRes, 'run creation');
+      const runData = (await runRes.json()) as { id?: string };
+      const runId = runData.id;
+      if (!runId) {
+        throw new HttpError('Failed to create run', 500, 'run_creation_failed');
       }
 
-      const body = (await callRes.json()) as McpResponse;
-      if (body.error) {
-        throw new HttpError(body.error.message || 'Fabric Data Agent error', 500);
+      // 2.5 Poll run until completion or terminal state
+      const pollStart = Date.now();
+      while (Date.now() - pollStart < 55_000) {
+        const pollRes = await fetch(`${baseUrl}/threads/${thId}/runs/${runId}?${apiParams}`, {
+          headers,
+          signal: AbortSignal.timeout(60_000),
+        });
+        checkAgentResponseStatus(pollRes, 'run poll');
+        const pollData = (await pollRes.json()) as { status?: string };
+        const status = pollData.status;
+        if (
+          status === 'completed' ||
+          status === 'failed' ||
+          status === 'cancelled' ||
+          status === 'expired' ||
+          status === 'requires_action'
+        ) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
-      const textContent = body?.result?.content?.find((c) => c.type === 'text')?.text ?? 'No response returned by agent.';
-      const elapsed = Date.now() - t0;
+      // 2.6 Fetch run steps
+      const stepsRes = await fetch(`${baseUrl}/threads/${thId}/runs/${runId}/steps?${apiParams}`, {
+        headers,
+        signal: AbortSignal.timeout(60_000),
+      });
+      checkAgentResponseStatus(stepsRes, 'fetch steps');
+      const stepsData = (await stepsRes.json()) as { data?: AssistantRunStep[] };
 
-      let cleanAnswer = textContent;
+      // 2.7 Extract query from tool calls only
       let generatedQuery = '';
-      let queryLanguage = 'mixed';
+      let queryLanguage = '';
 
-      const match = /```(sql|kql)\n([\s\S]*?)\n```/i.exec(textContent);
-      if (match) {
-        queryLanguage = match[1].toLowerCase();
-        generatedQuery = match[2].trim();
-        cleanAnswer = textContent.replace(/```(sql|kql)\n[\s\S]*?\n```/gi, '').trim();
-        cleanAnswer = cleanAnswer.replace(/(Here\s+(is|are)|Exact).*?(query|queries|SQL|KQL).*?:?\s*$/i, '').trim();
+      for (const step of stepsData.data ?? []) {
+        const details = step.step_details;
+        for (const tc of details?.tool_calls ?? []) {
+          const fn = tc.function;
+          const name = fn?.name?.toLowerCase() ?? '';
+          const args = fn?.arguments ?? '';
+          const out = fn?.output ?? '';
+
+          if (name.includes('execute') || name.includes('nl2code') || name.includes('sql') || name.includes('kql')) {
+            try {
+              const argsObj = typeof args === 'string' ? (JSON.parse(args) as unknown) : args;
+              if (argsObj && typeof argsObj === 'object') {
+                const record = argsObj as Record<string, unknown>;
+                if ('code' in record && typeof record.code === 'string' && record.code.trim()) {
+                  const candidate = record.code.trim();
+                  generatedQuery = candidate;
+                  queryLanguage = name.includes('kql') || name.includes('kusto') || candidate.includes('|') ? 'kql' : 'sql';
+                  break;
+                }
+                for (const [k, v] of Object.entries(record)) {
+                  if (k.toLowerCase().includes('natural')) continue;
+                  if (['code', 'sql', 'query'].some((sub) => k.toLowerCase().includes(sub))) {
+                    const candidate = typeof v === 'string' ? v.trim() : '';
+                    if (candidate && (candidate.toLowerCase().includes('select') || candidate.includes('|'))) {
+                      generatedQuery = candidate;
+                      queryLanguage = name.includes('kql') || name.includes('kusto') || candidate.includes('|') ? 'kql' : 'sql';
+                      break;
+                    }
+                  }
+                }
+              }
+            } catch {
+              // ignore JSON parse error on tool arguments
+            }
+
+            if (!generatedQuery && typeof out === 'string') {
+              const outLower = out.toLowerCase();
+              if (outLower.includes('select') || outLower.includes('| where') || outLower.includes('from ')) {
+                generatedQuery = out.trim();
+                queryLanguage = outLower.includes('telemetry') || out.includes('| ') ? 'kql' : 'sql';
+              }
+            }
+          }
+          if (generatedQuery) break;
+        }
+        if (generatedQuery) break;
       }
+
+      // Strip markdown fences if present inside step query
+      if (generatedQuery.startsWith('```')) {
+        const lines = generatedQuery.split('\n');
+        if (lines.length >= 2 && lines[0].startsWith('```')) {
+          const endIdx = lines[lines.length - 1].trim() === '```' ? lines.length - 1 : lines.length;
+          generatedQuery = lines.slice(1, endIdx).join('\n').trim();
+        }
+      }
+
+      // 2.8 Get assistant message (natural language answer)
+      const msgsRes = await fetch(`${baseUrl}/threads/${thId}/messages?${apiParams}`, {
+        headers,
+        signal: AbortSignal.timeout(60_000),
+      });
+      checkAgentResponseStatus(msgsRes, 'fetch messages');
+      let answer = '';
+      const msgsData = (await msgsRes.json()) as { data?: AssistantMessage[] };
+      for (const m of msgsData.data ?? []) {
+        if (m.role === 'assistant') {
+          const parts = (m.content ?? [])
+            .filter((c) => c.type === 'text' && c.text?.value)
+            .map((c) => c.text?.value ?? '');
+          answer = parts.join('\n').trim();
+          if (answer) break;
+        }
+      }
+
+      if (!answer) {
+        answer = 'No response returned by agent.';
+      }
+
+      const elapsed = Date.now() - t0;
+      const finalQueryLanguage = queryLanguage || (generatedQuery ? 'sql' : 'mixed');
 
       console.log(JSON.stringify({
         questionLength: question.length,
         executionTimeMs: elapsed,
-        queryLanguage,
+        queryLanguage: finalQueryLanguage,
         statusCode: 200,
       }));
 
       return {
         question,
-        answer: cleanAnswer,
+        answer,
         generatedQuery,
-        queryLanguage,
+        queryLanguage: finalQueryLanguage,
         executionTimeMs: elapsed,
         agentName: 'Patient 360',
       };
-    } catch (e: unknown) {
-      const elapsed = Date.now() - t0;
-      const status = e instanceof HttpError ? e.statusCode : 500;
-      console.log(JSON.stringify({
-        questionLength: question.length,
-        executionTimeMs: elapsed,
-        queryLanguage: 'none',
-        statusCode: status,
-      }));
-      throw e;
+    } finally {
+      // 2.9 Idempotently delete ephemeral thread
+      await fetch(`${baseUrl}/threads/${thId}?${apiParams}`, {
+        method: 'DELETE',
+        headers,
+        signal: AbortSignal.timeout(10_000),
+      }).catch(() => {});
     }
-  },
-  [],
-);
+  } catch (e: unknown) {
+    const elapsed = Date.now() - t0;
+    const status = e instanceof HttpError ? e.statusCode : 500;
+    console.log(JSON.stringify({
+      questionLength: question.length,
+      executionTimeMs: elapsed,
+      queryLanguage: 'none',
+      statusCode: status,
+    }));
+    throw e;
+  }
+}
+
+udf.func('askDataAgent', askDataAgentHandler, []);
