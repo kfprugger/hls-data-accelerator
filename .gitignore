@@ -154,3 +154,10 @@ vendor/microsoft-hds/*/HDS.SourceCode/src/tools/fhirService/patient.json
 vendor/microsoft-hds/*/HDS.SourceCode/src/tools/fhirService/AllergyIntolerance.json
 vendor/microsoft-hds/*/HDS.SourceCode/src/tools/fhirService/Observation.json
 vendor/microsoft-hds/*/HDS.SourceCode/src/tools/fhirService/Procedure.json
+
+# DeepSeek super-agent job files
+# per-worktree job status for agents (.job/status.json, watchdog log and state)
+/.job/
+
+# git worktrees the worker and reproducer agents build in
+/.claude/worktrees/

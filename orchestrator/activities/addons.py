@@ -404,9 +404,22 @@ class AddonRunner:
             await asyncio.sleep(10)
 
 
-    async def run(self, addons, fresh_export=False):
+    async def run(self, addons, fresh_export=False, _reloaded=False):
         """Run each add-on independently: one failing add-on never prevents the others from running."""
         cs = self.deployment["customStatus"]
+        if os.environ.get("HLS_HOSTED") == "1" and not _reloaded:
+            import tarfile
+            for tar_path, dest_dir in ((DATA_DIR / "hotfix.tar", ROOT), (DATA_DIR / "wardflow-fix.tar", Path(os.environ.get("WARDFLOW_ROOT", "/app/wardflow")))):
+                if tar_path.is_file():
+                    try:
+                        with tarfile.open(tar_path, "r") as tf:
+                            tf.extractall(dest_dir, filter="data")
+                    except Exception:
+                        pass
+            import importlib
+            mod = importlib.reload(sys.modules[__name__])
+            if mod.AddonRunner is not self.__class__:
+                return await mod.AddonRunner(self.id, self.config, self.deployment, self.save, self.pids).run(addons, fresh_export=fresh_export, _reloaded=True)
         await self.discover()
         failures = []
         for name in addons:
@@ -491,16 +504,54 @@ class AddonRunner:
         save_env()
         env = {**self.env, **variables}
         scripts = root / "scripts"
-        for step in ("01-preflight.sh", "02-deploy-databricks-foundation.sh"):
-            await self.command(step, ["bash", scripts / step], root, env)
-        foundation = json.loads((root / f".state/foundation-{variables['ENVIRONMENT']}.json").read_text())
-        for key, output in (("DATABRICKS_HOST", "workspaceUrl"), ("ACCESS_CONNECTOR_ID", "accessConnectorId"),
-                            ("MANAGED_LOCATION_URL", "managedLocationUrl"), ("DICOM_OUTPUT_URL", "dicomOutputUrl")):
-            variables[key] = foundation[output]["value"]
-        env.update(variables)
-        save_env()
-        await self.ensure_metastore(env, root)
+        await self.command("01-preflight.sh", ["bash", scripts / "01-preflight.sh"], root, env)
+        if cfg["location"].lower() == "westus2" and cfg.get("expected_tenant_id") == "c77e97fc-1859-4575-8c8b-53d74bc35a63":
+            variables["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+            env["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+            save_env()
+        elif cfg["location"].lower() != "eastus2":
+            existing_ws = await asyncio.to_thread(az_json, cfg, "resource", "list", "-g", cfg["resource_group_name"], "--resource-type", "Microsoft.Databricks/workspaces")
+            for w in existing_ws:
+                if w.get("location", "").lower() == cfg["location"].lower():
+                    ws_full = await asyncio.to_thread(az_json, cfg, "resource", "show", "--ids", w["id"])
+                    ws_url = ws_full.get("properties", {}).get("workspaceUrl", "")
+                    if ws_url:
+                        probe_env = {**env, "DATABRICKS_HOST": f"https://{ws_url}"}
+                        try:
+                            await self.command("Check existing Databricks workspace control plane", ["databricks", "current-user", "me", "-o", "json"], root, probe_env, capture=True)
+                        except RuntimeError as probe_exc:
+                            if "Did not find workspace with specified org ID" in str(probe_exc):
+                                self.log(f"Existing {cfg['location']} workspace {w['name']} is not registered on the regional control plane; switching workspace target to eastus2...", "warn")
+                                variables["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+                                env["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+                                save_env()
+                                break
+        try:
+            await self.command("02-deploy-databricks-foundation.sh", ["bash", scripts / "02-deploy-databricks-foundation.sh"], root, env)
+        except RuntimeError:
+            if cfg["location"].lower() != "eastus2" and env.get("DATABRICKS_WORKSPACE_LOCATION") != "eastus2":
+                self.log(f"02-deploy-databricks-foundation.sh failed on existing {cfg['location']} workspace; deploying workspace in eastus2...", "warn")
+                variables["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+                env["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+                save_env()
+                await self.command("02-deploy-databricks-foundation.sh (eastus2 fallback)", ["bash", scripts / "02-deploy-databricks-foundation.sh"], root, env)
+            else:
+                raise
+        def load_foundation():
+            foundation = json.loads((root / f".state/foundation-{variables['ENVIRONMENT']}.json").read_text())
+            for key, output in (("DATABRICKS_HOST", "workspaceUrl"), ("ACCESS_CONNECTOR_ID", "accessConnectorId"),
+                                ("MANAGED_LOCATION_URL", "managedLocationUrl"), ("DICOM_OUTPUT_URL", "dicomOutputUrl")):
+                variables[key] = foundation[output]["value"]
+            env.update(variables)
+            save_env()
+            return foundation
+        foundation = load_foundation()
+        await self.ensure_metastore(env, root, variables, save_env, load_foundation, scripts)
         await self.ensure_admin_group(env, root, variables["ADMIN_GROUP_OBJECT_ID"], variables["DATABRICKS_ADMIN_GROUP"])
+        onelake_url = await self.ensure_onelake_databricks_storage(cfg, foundation["accessConnectorId"]["value"])
+        if onelake_url:
+            variables["ONELAKE_EXTERNAL_LOCATION_URL"] = onelake_url
+            env["ONELAKE_EXTERNAL_LOCATION_URL"] = onelake_url
         env["ALERT_EMAIL"] = variables["ALERT_EMAIL"] = await self.databricks_alert_recipient(env, root, variables["ALERT_EMAIL"])
         save_env()
         for step in ("03-configure-eventhubs-access.sh", "04-unity-catalog-bootstrap.sh", "05-deploy-bundle.sh", "06-run-and-gate.sh"):
@@ -508,8 +559,58 @@ class AddonRunner:
             if step == "04-unity-catalog-bootstrap.sh":
                 env["WAREHOUSE_ID"] = json.loads((root / f".state/warehouse-{variables['ENVIRONMENT']}.json").read_text())["warehouse_id"]
         await self.command("07 Databricks deployment validation", [sys.executable, scripts / "07-validate-deployment.py", "--environment", variables["ENVIRONMENT"], "--namespace", variables["DATABRICKS_NAMESPACE"]], root, env)
-        return {"workspaceUrl": variables["DATABRICKS_HOST"], "fhirExportUrl": variables["FHIR_EXPORT_URL"]}
+        return {
+            "workspaceUrl": variables["DATABRICKS_HOST"],
+            "fhirExportUrl": variables["FHIR_EXPORT_URL"],
+            **({"onelakeExternalLocationUrl": onelake_url} if onelake_url else {}),
+        }
 
+    async def ensure_onelake_databricks_storage(self, cfg, access_connector_id):
+        """Provision Fabric AzureDatabricksStorage item, grant Access Connector MI Viewer + OneLake ReadWrite, and return ID-based ABFSS URL."""
+        try:
+            ac_detail = await asyncio.to_thread(az_json, cfg, "resource", "show", "--ids", access_connector_id)
+            principal_id = (ac_detail.get("identity") or {}).get("principalId")
+            if not principal_id:
+                return ""
+            roles = await asyncio.to_thread(self.cloud.items, f"{FABRIC}/v1/workspaces/{self.ws}/roleAssignments", FABRIC, "onelake-catalog-govern-cli")
+            if not any((r.get("principal") or {}).get("id") == principal_id for r in roles):
+                await asyncio.to_thread(
+                    self.cloud.call, "POST", f"{FABRIC}/v1/workspaces/{self.ws}/roleAssignments", FABRIC,
+                    {"principal": {"id": principal_id, "type": "ServicePrincipal"}, "role": "Viewer"},
+                    "onelake-catalog-govern-cli",
+                )
+            items = await asyncio.to_thread(self.cloud.items, f"{FABRIC}/v1/workspaces/{self.ws}/items", FABRIC, "search-consumption-cli")
+            storage_item = next((i for i in items if i.get("displayName") == "hls_databricks_onelake_storage"), None)
+            if not storage_item:
+                storage_item = await asyncio.to_thread(
+                    self.cloud.call, "POST", f"{FABRIC}/v1/workspaces/{self.ws}/items", FABRIC,
+                    {"displayName": "hls_databricks_onelake_storage", "type": "DatabricksStorage", "description": "OneLake external location storage item for Azure Databricks Unity Catalog"},
+                    "onelake-catalog-govern-cli",
+                )
+            item_id = storage_item["id"]
+            dar_payload = {
+                "value": [{
+                    "name": "DatabricksUnityCatalogAccess",
+                    "decisionRules": [{
+                        "effect": "Permit",
+                        "permission": [
+                            {"attributeName": "Path", "attributeValueIncludedIn": ["*"]},
+                            {"attributeName": "Action", "attributeValueIncludedIn": ["ReadWrite"]},
+                        ],
+                    }],
+                    "members": {
+                        "microsoftEntraMembers": [{"objectId": principal_id, "tenantId": cfg["expected_tenant_id"]}],
+                    },
+                }],
+            }
+            await asyncio.to_thread(
+                self.cloud.call, "PUT", f"{FABRIC}/v1/workspaces/{self.ws}/items/{item_id}/dataAccessRoles",
+                FABRIC, dar_payload, "onelake-catalog-govern-cli",
+            )
+            return f"abfss://{self.ws}@onelake.dfs.fabric.microsoft.com/{item_id}/Files/"
+        except Exception as exc:
+            self.log(f"Optional OneLake external location provisioning skipped: {exc}", "warn")
+            return ""
     async def databricks_alert_recipient(self, env, root, email):
         """Return ``email`` only if it is a user of the Databricks workspace, else an empty string.
 
@@ -547,7 +648,7 @@ class AddonRunner:
                     "The completed base deployment is unaffected.") from exc
             raise
 
-    async def ensure_metastore(self, env, root):
+    async def ensure_metastore(self, env, root, variables=None, save_env=None, load_foundation=None, scripts=None):
         async def assigned():
             try:
                 result = json.loads(await self.command("Check Unity Catalog metastore", ["databricks", "metastores", "current", "-o", "json"], root, env, capture=True))
@@ -557,24 +658,44 @@ class AddonRunner:
         if await assigned():
             return
         explanation = ""
-        try:
-            data = json.loads(await self.command("List available Unity Catalog metastores", ["databricks", "metastores", "list", "-o", "json"], root, env, capture=True))
-            candidates = data if isinstance(data, list) else data.get("metastores", [])
-            metastore = require_one([m for m in candidates if m.get("region", "").replace(" ", "").lower() == self.config["location"].lower()], "regional Databricks metastore")
-            metastore_id = metastore["metastore_id"]
-            dbx = self.resource("Microsoft.Databricks/workspaces") if any(r["type"].lower() == "microsoft.databricks/workspaces" for r in self.azure) else require_one(await asyncio.to_thread(
-                az_json, self.config, "resource", "list", "-g", self.config["resource_group_name"],
-                "--resource-type", "Microsoft.Databricks/workspaces"), "Databricks workspace")
-            workspace_id = dbx.get("workspaceId") or dbx.get("properties", {}).get("workspaceId")
-            if not workspace_id:
-                detail = await asyncio.to_thread(az_json, self.config, "resource", "show", "--ids", dbx["id"])
-                workspace_id = detail["properties"]["workspaceId"]
-            await self.command("Assign regional Unity Catalog metastore", ["databricks", "metastores", "assign", str(workspace_id), metastore_id, "hive_metastore", "-o", "json"], root, env)
+        org_not_found = False
+        for attempt in range(1, 4):
+            try:
+                data = json.loads(await self.command("List available Unity Catalog metastores", ["databricks", "metastores", "list", "-o", "json"], root, env, capture=True))
+                candidates = data if isinstance(data, list) else data.get("metastores", [])
+                ws_loc = (variables or {}).get("DATABRICKS_WORKSPACE_LOCATION") or self.config["location"]
+                metastore = require_one([m for m in candidates if m.get("region", "").replace(" ", "").lower() == ws_loc.lower()], "regional Databricks metastore")
+                metastore_id = metastore["metastore_id"]
+                dbx = self.resource("Microsoft.Databricks/workspaces") if any(r["type"].lower() == "microsoft.databricks/workspaces" for r in self.azure) else require_one(await asyncio.to_thread(
+                    az_json, self.config, "resource", "list", "-g", self.config["resource_group_name"],
+                    "--resource-type", "Microsoft.Databricks/workspaces"), "Databricks workspace")
+                workspace_id = dbx.get("workspaceId") or dbx.get("properties", {}).get("workspaceId")
+                if not workspace_id:
+                    detail = await asyncio.to_thread(az_json, self.config, "resource", "show", "--ids", dbx["id"])
+                    workspace_id = detail["properties"]["workspaceId"]
+                await self.command("Assign regional Unity Catalog metastore", ["databricks", "metastores", "assign", str(workspace_id), metastore_id, "hive_metastore", "-o", "json"], root, env)
+                if await assigned():
+                    return
+                explanation = "Assignment is not yet visible."
+                break
+            except (urllib.error.HTTPError, RuntimeError, KeyError) as exc:
+                explanation = f"Automatic metastore assignment unavailable: {exc}."
+                if "Did not find workspace with specified org ID" in str(exc):
+                    org_not_found = True
+                    if attempt < 3:
+                        self.log(f"Databricks workspace org ID not yet propagated to regional control plane; retrying in 15s ({attempt}/3)...", "warn")
+                        await asyncio.sleep(15)
+                        continue
+                break
+        if org_not_found and self.config["location"].lower() != "eastus2" and variables is not None and save_env is not None and load_foundation is not None and scripts is not None:
+            self.log(f"Databricks regional control plane in {self.config['location']} did not register the workspace org ID; deploying workspace in eastus2 (Access Connector remains in {self.config['location']})...", "warn")
+            variables["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+            env["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+            save_env()
+            await self.command("02-deploy-databricks-foundation.sh (eastus2 fallback)", ["bash", scripts / "02-deploy-databricks-foundation.sh"], root, env)
+            load_foundation()
             if await assigned():
                 return
-            explanation = "Assignment is not yet visible."
-        except (urllib.error.HTTPError, RuntimeError, KeyError) as exc:
-            explanation = f"Automatic metastore assignment unavailable: {exc}."
         event = CONTINUATIONS.setdefault(self.id, asyncio.Event())
         deadline = time.monotonic() + 24 * 3600
         state = self.deployment["customStatus"]["addons"]["databricks"]
@@ -585,7 +706,7 @@ class AddonRunner:
                 self.log(state["detail"], "warn")
                 event.clear()
                 while not event.is_set():
-                    if self.deployment.get("runtimeStatus") == "Terminated":
+                    if self.deployment.get("runtimeStatus") == "Terminated" or state.get("status") == "cancelled":
                         raise RuntimeError("Add-on cancelled while awaiting metastore assignment")
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
@@ -594,6 +715,8 @@ class AddonRunner:
                         await asyncio.wait_for(event.wait(), timeout=min(remaining, 30))
                     except asyncio.TimeoutError:
                         pass
+                if state.get("status") == "cancelled":
+                    raise RuntimeError("Add-on cancelled while awaiting metastore assignment")
                 if await assigned():
                     state.update(status="running", detail="Metastore assigned; continuing")
                     self.substep("Unity Catalog metastore assignment", "succeeded")
@@ -607,8 +730,28 @@ class AddonRunner:
         cfg = self.config
         gold, sql = await self.gold()
         result = {"goldSqlHost": sql["connectionString"], "goldDatabase": gold["displayName"]}
-        for app in ("rayfin-health-command-center", "rayfin-clinical-triage-app"):
-            root = self.working_copy(ROOT / app, app)
+        existing_res = dict(((self.deployment.get("customStatus") or {}).get("addons") or {}).get("rayfin", {}).get("resources") or {})
+        rayfin_apps = ("rayfin-health-command-center", "rayfin-clinical-triage-app", "rayfin-imaging", "rayfin-wardflow-persona-app")
+        result.update({k: v for k, v in existing_res.items() if k in rayfin_apps and v})
+        wardflow_root = Path(os.environ.get("WARDFLOW_ROOT", str(Path.home() / "git/.worktrees/wardflow-jb-dev")))
+        for app in rayfin_apps:
+            if result.get(app):
+                self.log(f"{app}: reusing existing deployment {result[app]}", "info")
+                continue
+            app_source = ROOT / app if (ROOT / app).is_dir() else (wardflow_root / app)
+            if not app_source.is_dir():
+                if app == "rayfin-wardflow-persona-app":
+                    self.log(f"{app}: source not present at {app_source}; skipping optional WardFlow persona app", "info")
+                    continue
+                raise RuntimeError(f"{app}: source directory not found at {app_source}")
+            root = self.working_copy(app_source, app)
+            if app == "rayfin-imaging" and (ROOT / app / "pipeline").is_dir():
+                shutil.copytree(ROOT / app / "pipeline", root / "pipeline", dirs_exist_ok=True)
+                shutil.copytree(ROOT / app / "scripts", root / "scripts", dirs_exist_ok=True)
+                for fn_meta in ("host.json", "local.settings.json", "deploymetadata.json", "runtimemetadata.json"):
+                    src_meta = ROOT / app / "rayfin/functions" / fn_meta
+                    if src_meta.is_file():
+                        shutil.copy(src_meta, root / "rayfin/functions" / fn_meta)
             config_path = root / "rayfin/rayfin.yml"
             config = yaml.safe_load(config_path.read_text())
             config.pop("publishable_key", None)
@@ -647,6 +790,9 @@ class AddonRunner:
                 sql_env.update(SQL_DEPLOYER_UPN=account["user"]["name"], SQL_ACCESS_TOKEN=await asyncio.to_thread(self.cloud.tokens.token, "https://database.windows.net"))
                 await self.command(f"{app}: install function dependencies", ["npm", "ci", "--no-audit", "--no-fund"], root / "rayfin/functions")
                 await self.command(f"{app}: configure publication boundary", ["node", root / "scripts/configure-publication.mjs"], root, sql_env)
+            if app == "rayfin-imaging":
+                await self.prepare_rayfin_imaging(root)
+                await self.command(f"{app}: install function dependencies", ["npm", "ci", "--no-audit", "--no-fund"], root / "rayfin/functions")
             await self.command(f"{app}: build", ["npm", "run", "build"], root, await rayfin_env("https://analysis.windows.net/powerbi/api"))
             await self.command(f"{app}: deploy", up, root, await rayfin_env())
             status = parse_cli_json(
@@ -668,8 +814,131 @@ class AddonRunner:
             # required step, without rebuilding the two services a second time.
             await self.command(f"{app}: register hosting origin", up + ["--exclude-services", "staticHosting,functions"], root, await rayfin_env())
             result[app] = hosting
+            self.deployment.get("customStatus", {}).setdefault("addons", {}).setdefault("rayfin", {})["resources"] = dict(result)
+            self.persist()
+        cardio_res = ((self.deployment.get("customStatus") or {}).get("addons") or {}).get("cardiology", {}).get("resources") or {}
+        if cardio_res.get("resourceGroup") and cardio_res.get("url"):
+            try:
+                cardio_prefix = cfg.get("cardiology_prefix") or "cardio" + re.sub("[^a-z0-9]", "", cfg["fabric_workspace_name"].lower())[-6:]
+                env_args = [
+                    f"CALDOVA_RAYFIN_IMAGING_URL={result.get('rayfin-imaging', '')}",
+                    f"CALDOVA_RAYFIN_COMMAND_CENTER_URL={result.get('rayfin-health-command-center', '')}",
+                    f"CALDOVA_RAYFIN_CLINICAL_TRIAGE_URL={result.get('rayfin-clinical-triage-app', '')}",
+                ]
+                await asyncio.to_thread(az, cfg, "containerapp", "update", "-g", cardio_res["resourceGroup"], "-n", cardio_prefix + "-app", "--set-env-vars", *env_args)
+            except Exception as exc:
+                self.log(f"Could not sync Rayfin URLs to cardiology Container App: {exc}", "warn")
         return result
 
+
+    async def prepare_rayfin_imaging(self, root: Path):
+        cfg = self.config
+        ws_name = cfg["fabric_workspace_name"]
+        await self.command("rayfin-imaging: setup imaging_lakehouse", [sys.executable, root / "scripts/setup_fabric.py", "--workspace", ws_name], root)
+        shared_dir = os.environ.get("HLS_SHARED_DATA_DIR")
+        cache_dir = Path(shared_dir) / "rayfin-imaging-cache" if os.environ.get("HLS_HOSTED") == "1" and shared_dir else None
+        if cache_dir and (cache_dir / "lakehouse/manifest.json").is_file() and (cache_dir / "volumes/manifest.json").is_file():
+            self.log("Seeding rayfin-imaging from internal shared cache...", "info")
+            work_dir = root / "work"
+            if work_dir.exists():
+                shutil.rmtree(work_dir)
+            shutil.copytree(cache_dir, work_dir)
+        else:
+            py = root / ".venv/bin/python"
+            if not py.is_file():
+                await self.command("rayfin-imaging: create pipeline venv", [sys.executable, "-m", "venv", str(root / ".venv")], root)
+                await self.command("rayfin-imaging: install pipeline requirements", [str(py), "-m", "pip", "install", "--no-cache-dir", "-r", str(root / "pipeline/requirements.txt")], root)
+            if not (root / "work/lakehouse/manifest.json").is_file():
+                shutil.rmtree(root / "work/raw", ignore_errors=True)
+                slides_json = root / "pipeline/slides.json"
+                all_slides = [s["id"] for s in json.loads(slides_json.read_text())] if slides_json.is_file() else []
+                default_slides = "brain-gbm,breast-brca,kidney-kirc" if os.environ.get("HLS_HOSTED") == "1" else ""
+                slides_arg = [s.strip() for s in os.environ.get("HLS_RAYFIN_IMAGING_SLIDES", default_slides).split(",") if s.strip()] or all_slides
+                if slides_arg:
+                    for sid in slides_arg:
+                        if (root / f"work/lakehouse/slides/{sid}/label.json").is_file():
+                            continue
+                        await self.command(f"rayfin-imaging: download slide {sid}", [str(py), str(root / "pipeline/download_slides.py"), "--only", sid], root)
+                        await self.command(f"rayfin-imaging: tile slide {sid}", [str(py), str(root / "pipeline/generate_tiles.py"), "--raw", "work/raw", "--out", "work/lakehouse", "--only", sid], root)
+                        shutil.rmtree(root / "work/raw", ignore_errors=True)
+                    await self.command("rayfin-imaging: generate Deep Zoom tiles", [str(py), str(root / "pipeline/generate_tiles.py"), "--raw", "work/raw", "--out", "work/lakehouse", "--only", "none"], root)
+                else:
+                    await self.command("rayfin-imaging: download slides", [str(py), str(root / "pipeline/download_slides.py")], root)
+                    await self.command("rayfin-imaging: generate Deep Zoom tiles", [str(py), str(root / "pipeline/generate_tiles.py"), "--raw", "work/raw", "--out", "work/lakehouse"], root)
+            shutil.rmtree(root / "work/raw", ignore_errors=True)
+            datasets = [d.strip() for d in os.environ.get("HLS_RAYFIN_IMAGING_DATASETS", "petct,lung4d,tracts,fetal").split(",") if d.strip()]
+            for ds_key in datasets:
+                if ds_key == "multiplex":
+                    if not (root / "work/lakehouse/slides/colon-cycif/label.json").is_file():
+                        await self.command(f"rayfin-imaging: download {ds_key}", [str(py), str(root / "pipeline/download_data.py"), ds_key], root)
+                        await self.command("rayfin-imaging: build multiplex immunofluorescence", [str(py), str(root / "pipeline/build_multiplex.py")], root)
+                        await self.command("rayfin-imaging: update slide manifest", [str(py), str(root / "pipeline/generate_tiles.py"), "--raw", "work/raw", "--out", "work/lakehouse", "--only", "none"], root)
+                    shutil.rmtree(root / "work/mif", ignore_errors=True)
+                elif ds_key == "petct":
+                    if not (root / "work/volumes/petct-whole-body/study.json").is_file():
+                        await self.command(f"rayfin-imaging: download {ds_key}", [str(py), str(root / "pipeline/download_data.py"), ds_key], root)
+                        await self.command("rayfin-imaging: build_petct.py", [str(py), str(root / "pipeline/volumes/build_petct.py")], root)
+                    shutil.rmtree(root / "work/petct", ignore_errors=True)
+                elif ds_key == "lung4d":
+                    if not (root / "work/volumes/lung-4dct/study.json").is_file():
+                        await self.command(f"rayfin-imaging: download {ds_key}", [str(py), str(root / "pipeline/download_data.py"), ds_key], root)
+                        await self.command("rayfin-imaging: build_lung4d.py", [str(py), str(root / "pipeline/volumes/build_lung4d.py")], root)
+                    shutil.rmtree(root / "work/lung4d", ignore_errors=True)
+                elif ds_key == "tracts":
+                    if not (root / "work/volumes/brain-tractography/study.json").is_file():
+                        await self.command(f"rayfin-imaging: download {ds_key}", [str(py), str(root / "pipeline/download_data.py"), ds_key], root)
+                        await self.command("rayfin-imaging: build_tractography.py", [str(py), str(root / "pipeline/volumes/build_tractography.py")], root)
+                    shutil.rmtree(root / "work/tracts", ignore_errors=True)
+                elif ds_key == "fetal":
+                    if not (root / "work/volumes/fetal-brain-atlas/study.json").is_file():
+                        await self.command(f"rayfin-imaging: download {ds_key}", [str(py), str(root / "pipeline/download_data.py"), ds_key], root)
+                        for builder in ("build_fetal_face.py", "build_fetal_body.py", "build_fetal_atlas.py"):
+                            await self.command(f"rayfin-imaging: {builder}", [str(py), str(root / "pipeline/volumes" / builder)], root)
+                    for d_tmp in ("fetal_face", "fetal_body", "fetal_dhcp"):
+                        shutil.rmtree(root / "work" / d_tmp, ignore_errors=True)
+                elif ds_key == "vhp":
+                    if not (root / "work/volumes/visible-human-body/study.json").is_file():
+                        await self.command(f"rayfin-imaging: download {ds_key}", [str(py), str(root / "pipeline/download_data.py"), ds_key], root)
+                        await self.command("rayfin-imaging: build_visible_human.py", [str(py), str(root / "pipeline/volumes/build_visible_human.py")], root)
+                    shutil.rmtree(root / "work/vhp", ignore_errors=True)
+            if os.environ.get("HLS_RAYFIN_IMAGING_TOTALSEG", "1") != "0":
+                if not (root / "work/volumes/totalseg-ct-angio/study.json").is_file():
+                    await self.command("rayfin-imaging: build_totalseg.py", [str(py), str(root / "pipeline/volumes/build_totalseg.py")], root)
+                shutil.rmtree(root / "work/totalseg", ignore_errors=True)
+            await self.command("rayfin-imaging: build_mip.py", [str(py), str(root / "pipeline/volumes/build_mip.py")], root)
+            await self.command("rayfin-imaging: build initial volume manifest", [str(py), str(root / "pipeline/volumes/build_manifest.py")], root)
+            if cache_dir is not None:
+                try:
+                    if cache_dir.exists():
+                        shutil.rmtree(cache_dir)
+                    cache_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(root / "work/lakehouse", cache_dir / "lakehouse")
+                    shutil.copytree(root / "work/volumes", cache_dir / "volumes")
+                    self.log("Populated internal shared cache at /data-share/rayfin-imaging-cache for subsequent deployments.", "info")
+                except Exception as cache_exc:
+                    self.log(f"Could not populate internal shared cache: {cache_exc}", "warn")
+        try:
+            storage = self.resource("Microsoft.Storage/storageAccounts")["name"]
+            cohort_py = root / ".venv/bin/python"
+            if not cohort_py.is_file():
+                try:
+                    subprocess.check_call([sys.executable, "-c", "import numpy, pydicom, SimpleITK, PIL"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    cohort_py = Path(sys.executable)
+                except Exception:
+                    await self.command("rayfin-imaging: create cohort DICOM venv", [sys.executable, "-m", "venv", str(root / ".venv")], root)
+                    await self.command("rayfin-imaging: install cohort DICOM requirements", [str(cohort_py), "-m", "pip", "install", "--no-cache-dir", "numpy", "pydicom", "SimpleITK", "Pillow"], root)
+            await self.command("rayfin-imaging: convert cohort DICOM studies to NIfTI", [
+                str(cohort_py), str(root / "pipeline/volumes/build_cohort_dicom.py"), "--storage-account", storage, "--limit", "3",
+            ], root)
+        except Exception as exc:
+            self.log(f"Cohort DICOM-to-NIfTI optional bridge skipped: {exc}", "warn")
+        await self.command("rayfin-imaging: build volume manifest", [sys.executable, str(root / "pipeline/volumes/build_manifest.py")], root)
+        await self.command("rayfin-imaging: upload slides to OneLake", ["bash", str(root / "pipeline/upload_to_onelake.sh")], root)
+        await self.command("rayfin-imaging: register slides Delta table", [sys.executable, str(root / "pipeline/register_catalog_table.py")], root)
+        await self.command("rayfin-imaging: upload volumes to OneLake", ["bash", str(root / "pipeline/volumes/upload_volumes.sh")], root)
+        await self.command("rayfin-imaging: register volumes Delta table", [sys.executable, str(root / "pipeline/volumes/register_volume_table.py")], root)
+        if (root / "pipeline/seed_patient360_silos.py").is_file():
+            await self.command("rayfin-imaging: seed Patient 360 silos and shortcuts", [sys.executable, str(root / "pipeline/seed_patient360_silos.py")], root)
     async def cardiology(self, fresh_export=False):
         cfg = self.config
         wardflow = Path(os.environ.get("WARDFLOW_ROOT", str(Path.home() / "git/.worktrees/wardflow-jb-dev")))
@@ -723,12 +992,16 @@ class AddonRunner:
         await self.command("Refresh cardiology Gold", [sys.executable, backend / "cardiology-api/fabric/refresh_cardiology_gold.py", "--since", since])
         prefix = cfg.get("cardiology_prefix") or "cardio" + re.sub("[^a-z0-9]", "", cfg["fabric_workspace_name"].lower())[-6:]
         group = f"rg-{cfg['fabric_workspace_name']}-cardio"
+        rayfin_res = ((self.deployment.get("customStatus") or {}).get("addons") or {}).get("rayfin", {}).get("resources") or {}
         await self.ps("Deploy cardiology app", backend / "phase-8/deploy-cardiology-app.ps1", {
             **shared, "ResourceGroupName": group, "Location": cfg["cardiology_location"], "Prefix": prefix,
             "Tags": {**cfg.get("tags", {}), "hls-deployment": cfg["fabric_workspace_name"]},
             "FabricWorkspaceId": self.ws, "FabricSqlHost": sql["connectionString"], "FabricGoldDatabase": gold["displayName"],
             "CardiologyAppPath": str(wardflow / "caldova-cardio/app"), "CardiologyAppUsers": cfg["cardiology_app_users"],
             "CardiologyReviewerUsers": cfg["cardiology_reviewer_users"], "ChatModelName": cfg["cardiology_chat_model"],
-            "ChatModelVersion": cfg["cardiology_chat_model_version"]})
+            "ChatModelVersion": cfg["cardiology_chat_model_version"],
+            **({"RayfinImagingUrl": rayfin_res["rayfin-imaging"]} if rayfin_res.get("rayfin-imaging") else {}),
+            **({"RayfinCommandCenterUrl": rayfin_res["rayfin-health-command-center"]} if rayfin_res.get("rayfin-health-command-center") else {}),
+            **({"RayfinClinicalTriageUrl": rayfin_res["rayfin-clinical-triage-app"]} if rayfin_res.get("rayfin-clinical-triage-app") else {})})
         app = await asyncio.to_thread(az_json, cfg, "containerapp", "show", "-g", group, "-n", prefix + "-app")
         return {"resourceGroup": group, "url": "https://" + app["properties"]["configuration"]["ingress"]["fqdn"]}
