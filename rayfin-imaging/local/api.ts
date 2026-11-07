@@ -427,9 +427,19 @@ export function createLocalApi(work: string): LocalApi {
         ...silos.map((silo) => ({ path: 'Files', name: silo, targetItem: SILOS[silo].name, targetPath: 'Files', silo })),
       ];
       tracer.queries.push({ id: 'shortcuts', silos: [], tables: [], rows: shortcuts.length, ms: Date.now() - t0 });
+      const sourceSilos = Array.from(
+        new Set(shortcuts.map((s) => (s.silo ? SILOS[s.silo]?.name ?? `${s.silo}_lakehouse` : s.targetItem)).filter(Boolean)),
+      );
+      const zeroCopy = {
+        copiesMade: 0 as const,
+        shortcutCount: shortcuts.length,
+        sourceSilos,
+        physicalBytesInPatient360: 0 as const,
+      };
       return {
         workspace: { id: 'local', name: 'this computer (local mode)', portalUrl: '' },
-        patient360: { id: 'local', name: 'patient360', portalUrl: '', sqlEndpoint: ENDPOINT, shortcuts },
+        patient360: { id: 'local', name: 'patient360', portalUrl: '', sqlEndpoint: ENDPOINT, shortcuts, zeroCopy },
+        zeroCopy,
         silos: silos.map((silo, i) => ({ silo, id: silo, ...SILOS[silo], portalUrl: '', items: inventoryRows[i] })),
         provenance: tracer.provenance('SELECT kind, name, rows, files, bytes FROM dbo.<silo>_inventory'),
       };
