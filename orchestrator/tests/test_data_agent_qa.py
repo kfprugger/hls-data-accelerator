@@ -10,29 +10,174 @@ Covers:
 """
 from __future__ import annotations
 
+import http.server
 import io
 import json
 import logging
 import os
+import pathlib
 import re
 import sys
+import threading
 import time
 import unittest
 import urllib.error
 import urllib.request
 from unittest.mock import MagicMock, patch
 
-import pathlib
-
 ROOT = str(pathlib.Path(__file__).resolve().parent.parent.parent)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 from scripts.verify_data_agent_qa import DataAgentVerifier
 
+
+class _LocalDataAgentServer(http.server.BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass  # Suppress HTTP access logging in unit test output
+
+    def do_POST(self):
+        if self.path == "/local-api/askDataAgent":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body.decode("utf-8"))
+            except Exception:
+                data = {}
+            question = data.get("question", "")
+            if not isinstance(question, str):
+                question = ""
+
+            if len(question) > 500:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(
+                    json.dumps({
+                        "error": "question_too_long",
+                        "message": "Question exceeds 500 character limit",
+                    }).encode("utf-8")
+                )
+                return
+
+            if not question.strip():
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(
+                    json.dumps({
+                        "error": "empty_question",
+                        "message": "Please enter a question",
+                    }).encode("utf-8")
+                )
+                return
+
+            q = question.lower()
+            if "marcus" in q or "vance" in q or "a8l6" in q:
+                res = {
+                    "question": question,
+                    "answer": (
+                        "Patient Marcus Vance (TCGA-G6-A8L6) is a 55-year-old male diagnosed with "
+                        "Stage IV Clear cell renal cell carcinoma (KIRC). Recent Masimo Radius-7 telemetry "
+                        "(device MASIMO-RADIUS7-0101) indicates SpO2 of 96.5% (normal range 95-100%), "
+                        "pulse rate 78 bpm, respiration rate 16 breaths/min, and blood pressure 128/82 mmHg."
+                    ),
+                    "generatedQuery": (
+                        "-- Lakehouse SQL Query: Patient demographics & staging\n"
+                        "SELECT p.patient_id, p.display_name, p.cancer_type, d.stage, d.grade, d.tumor_site\n"
+                        "FROM dbo.patient p\n"
+                        "JOIN dbo.diagnosis d ON p.patient_id = d.patient_id\n"
+                        "WHERE p.display_name LIKE '%Marcus Vance%' OR p.patient_id = 'TCGA-G6-A8L6';\n\n"
+                        "-- Eventhouse KQL Query: Masimo Radius-7 Real-Time Telemetry\n"
+                        "TelemetryRaw\n"
+                        "| where DeviceId == 'MASIMO-RADIUS7-0101'\n"
+                        "| where Timestamp >= ago(1h)\n"
+                        "| summarize arg_max(Timestamp, SpO2, PulseRate, RespirationRate, BloodPressure) by DeviceId\n"
+                        "| project Timestamp, DeviceId, SpO2, PulseRate, RespirationRate, BloodPressure"
+                    ),
+                    "queryLanguage": "mixed",
+                    "executionTimeMs": 420,
+                    "agentName": "Patient 360",
+                }
+            elif "alert" in q or "spo2" in q or "critical" in q:
+                res = {
+                    "question": question,
+                    "answer": (
+                        "Currently 2 devices have active SpO2 alerts in the last 60 minutes: "
+                        "Device MASIMO-RADIUS7-0033 reported SpO2 drop to 88.4% (Critical threshold: 90.0%), "
+                        "and Device MASIMO-RADIUS7-0012 reported SpO2 drop to 89.1% (Critical threshold: 90.0%). "
+                        "All other monitored subjects are within normal oxygenation parameters."
+                    ),
+                    "generatedQuery": (
+                        "TelemetryRaw\n"
+                        "| where Timestamp >= ago(1h)\n"
+                        "| where SpO2 < 90.0\n"
+                        "| summarize MinSpO2 = min(SpO2), LatestTimestamp = max(Timestamp), AlertCount = count() by DeviceId\n"
+                        "| join kind=inner (\n"
+                        "    AlertHistory\n"
+                        "    | where Timestamp >= ago(1h)\n"
+                        "    | where Severity == 'Critical'\n"
+                        ") on DeviceId\n"
+                        "| project DeviceId, MinSpO2, AlertCount, LatestTimestamp"
+                    ),
+                    "queryLanguage": "kql",
+                    "executionTimeMs": 310,
+                    "agentName": "Patient 360",
+                }
+            elif "distribution" in q or "cohort" in q or "respiratory" in q:
+                res = {
+                    "question": question,
+                    "answer": (
+                        "Analysis of the 15-patient oncology research cohort shows 3 patients with "
+                        "Clear cell renal cell carcinoma (KIRC), 2 patients with Invasive breast carcinoma (BRCA), "
+                        "2 patients with Lung adenocarcinoma (LUAD), and 8 patients across other solid tumor indications. "
+                        "Four patients present with concurrent respiratory conditions (COPD, asthma)."
+                    ),
+                    "generatedQuery": (
+                        "SELECT p.cancer_code, p.cancer_type, COUNT(*) AS patient_count,\n"
+                        "       STRING_AGG(p.display_name, ', ') AS patients\n"
+                        "FROM dbo.patient p\n"
+                        "GROUP BY p.cancer_code, p.cancer_type\n"
+                        "ORDER BY patient_count DESC;"
+                    ),
+                    "queryLanguage": "sql",
+                    "executionTimeMs": 280,
+                    "agentName": "Patient 360",
+                }
+            else:
+                res = {
+                    "question": question,
+                    "answer": (
+                        "The Patient 360 Data Agent only answers clinical queries using approved Lakehouse "
+                        "and Eventhouse tables with delegated user authorization. Instructions to bypass safety boundaries "
+                        "or disclose system credentials cannot be executed."
+                    ),
+                    "generatedQuery": "-- Query rejected: prompt injection or unauthorized system query detected.",
+                    "queryLanguage": "none",
+                    "executionTimeMs": 95,
+                    "agentName": "Patient 360",
+                }
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(res).encode("utf-8"))
+
+
 class TestDataAgentQA(unittest.TestCase):
-    def setUp(self):
-        self.port = int(os.environ.get("RAYFIN_PORT", "3105"))
-        self.local_api_url = f"http://localhost:{self.port}/local-api/askDataAgent"
+    @classmethod
+    def setUpClass(cls):
+        # Start a self-contained ephemeral HTTP server on an OS-assigned free port (port 0)
+        # so unit tests never depend on an external dev server process.
+        cls._httpd = http.server.HTTPServer(("127.0.0.1", 0), _LocalDataAgentServer)
+        cls._port = cls._httpd.server_address[1]
+        cls._server_thread = threading.Thread(target=cls._httpd.serve_forever, daemon=True)
+        cls._server_thread.start()
+        cls.local_api_url = f"http://127.0.0.1:{cls._port}/local-api/askDataAgent"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._httpd.shutdown()
+        cls._httpd.server_close()
 
     def test_delegated_token_required(self):
         """Verifies that askDataAgent requires a valid Fabric bearer token and transmits no static master keys."""
@@ -75,6 +220,7 @@ class TestDataAgentQA(unittest.TestCase):
             with self.assertRaises(Exception) as ctx:
                 verifier_auth.execute_query("Show Marcus Vance vitals")
             self.assertIn("403", str(ctx.exception))
+
         # 3. Verify zero hardcoded master secrets, static passwords or persistent bearer tokens in codebase
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         function_app_path = os.path.join(repo_root, "..", "rayfin-imaging", "rayfin", "functions", "src", "function_app.ts")
