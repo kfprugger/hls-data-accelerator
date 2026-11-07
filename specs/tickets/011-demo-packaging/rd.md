@@ -1,6 +1,8 @@
 # 011: Demo Packaging (Explainer-Board Film, Walkthrough Script, Deploy Timer & Synthetic Badge)
 
-**Status:** ready
+**Open check:** film polish — some UI crops are cut off at the left edge and still small; the multimodal beat shows the patient header and alert card instead of the CT/slide views (local mode has no pixel files). A follow-up pass can re-capture from the deployed app.
+
+**Status:** done
 
 | **Risk** | Medium: Demo video render crashes or desynchronizes audio/captions, or orchestrator deploy timer miscalculates elapsed duration, presenting invalid metrics during customer evaluations. |
 
