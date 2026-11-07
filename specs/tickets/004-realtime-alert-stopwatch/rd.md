@@ -1,7 +1,8 @@
 # 004: Real-Time Bedside Alert Trigger, Email Notification, and Measured Stopwatch
 
-**Status:** ready
+**Open check:** E-12 email arrival in joey@jbatl.dev needs a human inbox check (Graph Mail.Read blocked by tenant consent).
 
+**Status:** done
 | **Risk** | High: Acute SpO2 drop notification failure or unauthorized recipient dispatch in bedside monitoring |
 
 ## Summary
