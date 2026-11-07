@@ -19,6 +19,7 @@ export type CohortPatient = Cohort['patients'][number];
 export type PatientBundle = AppFunctionsSchema['getPatient']['output'];
 export type DataMap = AppFunctionsSchema['getDataMap']['output'];
 export type WardFlowCohortSnapshot = AppFunctionsSchema['getWardFlowCohort']['output'];
+export type AlertStopwatch = AppFunctionsSchema['getAlertStopwatch']['output'];
 type Provenance = Cohort['provenance'];
 type QueryTrace = Provenance['queries'][number];
 type FileAccess = PatientBundle['access']['slide'];
@@ -179,6 +180,7 @@ export type LocalApi = {
   getPatient(patientId: string, origin: string): Promise<PatientBundle>;
   getDataMap(): Promise<DataMap>;
   getWardFlowCohort(): Promise<WardFlowCohortSnapshot>;
+  getAlertStopwatch(patientId?: string): Promise<AlertStopwatch>;
 };
 
 export function createLocalApi(work: string): LocalApi {
@@ -520,6 +522,61 @@ export function createLocalApi(work: string): LocalApi {
         totalMs: 4,
         subjects,
         enrollableCount: 4,
+      };
+    },
+
+    async getAlertStopwatch(patientId?: string) {
+      const isMarcus = !patientId || patientId === 'TCGA-G6-A8L6';
+      const pId = patientId || 'TCGA-G6-A8L6';
+      const patientName = isMarcus ? 'Marcus Vance' : 'Monitored Patient';
+      const deviceId = isMarcus ? 'MASIMO-RADIUS7-0101' : 'MASIMO-RADIUS7-0102';
+      const now = new Date();
+      const t0 = new Date(now.getTime() - 18_400).toISOString();
+      const t1 = new Date(now.getTime() - 16_100).toISOString();
+      const t2 = new Date(now.getTime() - 10_300).toISOString();
+      const t3 = now.toISOString();
+
+      return {
+        patientId: pId,
+        patientName,
+        deviceId,
+        alertTier: 'CRITICAL',
+        spo2: 84.0,
+        pulseRate: 115,
+        totalElapsedSeconds: 18.4,
+        totalElapsedFormatted: '18.4s',
+        beats: [
+          {
+            id: 'telemetry_emitted',
+            name: 'Telemetry Emitted',
+            timestamp: t0,
+            elapsedSeconds: 0.0,
+            status: 'completed' as const,
+          },
+          {
+            id: 'eventstream_enqueued',
+            name: 'Eventstream Enqueued',
+            timestamp: t1,
+            elapsedSeconds: 2.3,
+            status: 'completed' as const,
+          },
+          {
+            id: 'kql_detected',
+            name: 'KQL Detected',
+            timestamp: t2,
+            elapsedSeconds: 8.1,
+            status: 'completed' as const,
+          },
+          {
+            id: 'activator_dispatched',
+            name: 'Activator Dispatched',
+            timestamp: t3,
+            elapsedSeconds: 18.4,
+            status: 'completed' as const,
+          },
+        ],
+        measuredAt: t3,
+        source: 'Recorded local benchmark fixture (fn_ClinicalAlerts / MasimoEventhouse)',
       };
     },
   };

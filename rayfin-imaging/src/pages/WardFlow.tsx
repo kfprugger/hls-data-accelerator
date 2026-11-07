@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 
 import { DocSection, DocSpec } from '@/components/Doc';
 import { ListColumn, PanelRow, PanelSection, WorkspaceHeader } from '@/components/Panel';
+import { AlertStopwatchCard } from '@/components/AlertStopwatchCard';
 import { useWardFlowReviews, type ReviewRow } from '@/hooks/useWardFlowReviews';
 import { fetchWardFlowCohort, type WardFlowCohortSnapshot, type WardFlowSubject } from '@/lib/api';
 import { fmtMs, fmtNum } from '@/lib/format';
@@ -351,6 +352,7 @@ export function WardFlow() {
 
   return (
     <div className="flex h-full">
+      <div className="hidden md:flex shrink-0">
       <ListColumn
         label="Cardiology"
         query={query}
@@ -405,6 +407,7 @@ export function WardFlow() {
           </button>
         ))}
       </ListColumn>
+      </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <WorkspaceHeader
@@ -543,6 +546,10 @@ function CohortTab({
           <div className="t-display num mt-1 text-[30px]">{kpis.pendingReviews}</div>
           <div className="t-faint text-[12px]">Rayfin Fabric SQL gate</div>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <AlertStopwatchCard />
       </div>
 
       <div className="mt-6 overflow-x-auto">

@@ -10,6 +10,8 @@ export type ZeroCopySummary = DataMap['zeroCopy'];
 export type DatabricksInteropProof = NonNullable<DataMap['databricksInterop']>;
 export type WardFlowCohortSnapshot = AppFunctionsSchema['getWardFlowCohort']['output'];
 export type WardFlowSubject = WardFlowCohortSnapshot['subjects'][number];
+export type AlertStopwatch = AppFunctionsSchema['getAlertStopwatch']['output'];
+export type AlertStopwatchBeat = AlertStopwatch['beats'][number];
 export type Provenance = PatientBundle['provenance'];
 export type FileAccess = PatientBundle['access']['slide'];
 export type Row = PatientBundle['patient'];
@@ -40,6 +42,14 @@ export async function fetchDataMap(): Promise<DataMap> {
 export async function fetchWardFlowCohort(): Promise<WardFlowCohortSnapshot> {
   if (LOCAL_DATA) return localApi('getWardFlowCohort');
   return getRayfinClient().functions.getWardFlowCohort.invoke(undefined, { timeoutMs: 90_000 });
+}
+
+export async function fetchAlertStopwatch(patientId?: string): Promise<AlertStopwatch> {
+  if (LOCAL_DATA) {
+    const query = patientId ? `?patientId=${encodeURIComponent(patientId)}` : '';
+    return localApi(`getAlertStopwatch${query}`);
+  }
+  return getRayfinClient().functions.getAlertStopwatch.invoke({ patientId }, { timeoutMs: 90_000 });
 }
 
 /** URL of a file in a silo's Files area, signed with the read-only SAS from the function (unsigned in local mode). */
