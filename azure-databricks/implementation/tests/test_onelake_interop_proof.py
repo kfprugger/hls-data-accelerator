@@ -22,12 +22,11 @@ spec.loader.exec_module(interop_mod)
 class TestOneLakeInteropProof(unittest.TestCase):
     def test_dry_run_statement_construction(self):
         """Test SQL query construction and dry-run output formatting."""
-        catalog = "hls_stfhiropulbb4gx2ioc_onelake"
         expected_statement = (
-            f"SELECT count(DISTINCT patient_id) AS tcga_patient_count FROM {catalog}.clinical.patient"
+            "SELECT count(DISTINCT patient_id) AS tcga_patient_count FROM fabric_clinical.dbo.patient"
         )
         self.assertIn("SELECT count(DISTINCT patient_id) AS tcga_patient_count", expected_statement)
-        self.assertIn("clinical.patient", expected_statement)
+        self.assertIn("fabric_clinical.dbo.patient", expected_statement)
 
     @patch("time.sleep", return_value=None)
     @patch("requests.get")
@@ -71,6 +70,8 @@ class TestOneLakeInteropProof(unittest.TestCase):
             "statement",
             "warehouseId",
             "rowCount",
+            "fabricP360Count",
+            "deltaTableVersion",
             "executionTimeMs",
             "oneLakeExternalLocation",
             "status",
@@ -78,8 +79,10 @@ class TestOneLakeInteropProof(unittest.TestCase):
         }
         self.assertEqual(set(data.keys()), required_keys)
         self.assertEqual(data["rowCount"], 15)
+        self.assertEqual(data["fabricP360Count"], 15)
         self.assertEqual(data["status"], "SUCCEEDED")
         self.assertTrue(data["zeroCopyVerified"])
+        self.assertIn("cbfa78a2-37ee-47b2-9476-14f23815eaa3", data["oneLakeExternalLocation"])
 
         payload_str = json.dumps(data)
         forbidden_terms = [
@@ -115,12 +118,42 @@ class TestOneLakeInteropProof(unittest.TestCase):
         row_count, latency_ms, status = interop_mod.execute_sql_statement(
             host="https://fake-dbx.azuredatabricks.net",
             warehouse_id="wh-123",
-            statement="SELECT count(DISTINCT patient_id) AS tcga_patient_count FROM hls_dev.clinical.patient",
+            statement="SELECT count(DISTINCT patient_id) AS tcga_patient_count FROM fabric_clinical.dbo.patient",
             token="fake-token",
         )
         self.assertEqual(row_count, 15)
         self.assertEqual(status, "SUCCEEDED")
         self.assertGreaterEqual(latency_ms, 0)
+
+    @patch("requests.post")
+    def test_get_table_metadata(self, mock_post):
+        """Test retrieving location and Delta table version."""
+        desc_resp = MagicMock()
+        desc_resp.status_code = 200
+        desc_resp.json.return_value = {
+            "result": {
+                "data_array": [
+                    ["Location", "abfss://ws@onelake.dfs.fabric.microsoft.com/item/Tables/patient"],
+                    ["Provider", "delta"],
+                ]
+            }
+        }
+        hist_resp = MagicMock()
+        hist_resp.status_code = 200
+        hist_resp.json.return_value = {
+            "result": {
+                "data_array": [["3", "2026-11-07T00:00:00Z"]]
+            }
+        }
+        mock_post.side_effect = [desc_resp, hist_resp]
+
+        location, version = interop_mod.get_table_metadata(
+            host="https://fake-dbx.azuredatabricks.net",
+            warehouse_id="wh-123",
+            token="fake-token",
+        )
+        self.assertIn("Tables/patient", location)
+        self.assertEqual(version, 3)
 
     @patch.object(interop_mod, "get_entra_token", return_value="fake-token")
     @patch("requests.delete")

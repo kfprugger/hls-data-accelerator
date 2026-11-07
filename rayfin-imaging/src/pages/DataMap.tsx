@@ -345,7 +345,11 @@ export function DataMap() {
                       <div className="mt-2 text-[24px] font-semibold tracking-tight text-[var(--ink)]">
                         {map.databricksInterop.rowCount} TCGA patients
                       </div>
-                      <div className="t-muted mt-1 text-[12px]">Direct zero-copy read</div>
+                      <div className="t-muted mt-1 text-[12px]">
+                        {map.databricksInterop.fabricP360Count !== undefined
+                          ? `Fabric patient360 parity: ${map.databricksInterop.fabricP360Count} (0 copies)`
+                          : 'Direct zero-copy read'}
+                      </div>
                     </div>
 
                     <div className="rounded border border-[var(--line)] bg-[var(--well)] p-4">
@@ -359,7 +363,7 @@ export function DataMap() {
 
                   <div className="rounded border border-[var(--line)] bg-[var(--well)] p-3 flex flex-wrap items-center justify-between gap-2 text-[12px] min-w-0">
                     <span className="t-muted break-all">
-                      Verified at: <span className="mono text-[var(--ink)]">{map.databricksInterop.timestamp}</span>
+                      Delta table: <span className="mono text-[var(--ink)]">v{map.databricksInterop.deltaTableVersion ?? 0}</span> · Verified at: <span className="mono text-[var(--ink)]">{map.databricksInterop.timestamp}</span>
                     </span>
                     <span className="mono font-medium text-[var(--c-good)]">
                       Status: {map.databricksInterop.status}

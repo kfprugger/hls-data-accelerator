@@ -353,6 +353,8 @@ export type DatabricksInteropProof = {
   statement: string;
   warehouseId: string;
   rowCount: number;
+  fabricP360Count?: number;
+  deltaTableVersion?: number;
   executionTimeMs: number;
   oneLakeExternalLocation: string;
   status: string;
