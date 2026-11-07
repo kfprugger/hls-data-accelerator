@@ -1,6 +1,6 @@
 | # | Title | Status | Mode | Runs |
 |---|---|---|---|---|
-| 001 | Local demo dataset (offline 15-patient tables) | ready | solo | alongside |
+| 001 | Local demo dataset (offline 15-patient tables) | done | solo | alongside |
 | 002 | TCGA patients through the synthetic HLS pipeline | ready | solo | alongside |
 | 003 | Zero-copy proof on the data map | ready | solo | waits for 001: local data map needs the 001 tables |
 | 008 | Imaging hero (CT + slide + genomics side by side) | ready | solo | waits for 001: patient view needs the 001 tables |

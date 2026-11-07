@@ -1,6 +1,6 @@
 # 001: Local Demo Dataset Parquet Builder
 
-**Status:** ready
+**Status:** done
 
 | **Risk** | Medium: Local mode lacks required Parquet tables and returns 500 on cohort or patient views |
 
