@@ -174,6 +174,7 @@ class DataAgentVerifier:
         self.verify_publication()
 
         mcp_url = f"{FABRIC_API}/mcp/workspaces/{ws_id}/dataagents/{agent_id}/agent"
+        prompt = f"{question}\n\nPlease include the exact SQL or KQL query you executed in a markdown code block (```sql or ```kql)."
         call_payload = {
             "jsonrpc": "2.0",
             "id": 3,
@@ -181,7 +182,7 @@ class DataAgentVerifier:
             "params": {
                 "name": f"DataAgent_{self.agent_name.replace(' ', '_')}",
                 "arguments": {
-                    "userQuestion": question,
+                    "userQuestion": prompt,
                 },
             },
         }
@@ -195,9 +196,23 @@ class DataAgentVerifier:
         content = data.get("result", {}).get("content", [])
         text_content = next((c.get("text") for c in content if c.get("type") == "text"), "")
 
+        import re
+        query_match = re.search(r"```(sql|kql)\n(.*?)\n```", text_content, re.DOTALL | re.IGNORECASE)
+        if query_match:
+            lang = query_match.group(1).upper()
+            gen_query = query_match.group(2).strip()
+            clean_answer = re.sub(r"```(sql|kql)\n.*?\n```", "", text_content, flags=re.DOTALL | re.IGNORECASE).strip()
+            clean_answer = re.sub(r"(Here\s+(is|are)|Exact).*?(query|queries|SQL|KQL).*?:?\s*$", "", clean_answer, flags=re.IGNORECASE).strip()
+        else:
+            lang = "SQL"
+            gen_query = ""
+            clean_answer = text_content
+
         return {
             "question": question,
-            "answer": text_content,
+            "answer": clean_answer,
+            "generatedQuery": gen_query,
+            "queryLanguage": lang,
             "execution_time_ms": elapsed_ms,
             "is_error": data.get("result", {}).get("isError", False),
         }

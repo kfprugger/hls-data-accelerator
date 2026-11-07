@@ -1221,6 +1221,7 @@ udf.func(
         signal: AbortSignal.timeout(15_000),
       }).catch(() => {});
 
+      const prompt = `${question}\n\nPlease include the exact SQL or KQL query you executed in a markdown code block (\`\`\`sql or \`\`\`kql).`;
       const callRes = await fetch(mcpUrl, {
         method: 'POST',
         headers,
@@ -1231,7 +1232,7 @@ udf.func(
           params: {
             name: 'DataAgent_Patient_360',
             arguments: {
-              userQuestion: question,
+              userQuestion: prompt,
             },
           },
         }),
@@ -1259,18 +1260,30 @@ udf.func(
       const textContent = body?.result?.content?.find((c) => c.type === 'text')?.text ?? 'No response returned by agent.';
       const elapsed = Date.now() - t0;
 
+      let cleanAnswer = textContent;
+      let generatedQuery = '';
+      let queryLanguage = 'mixed';
+
+      const match = /```(sql|kql)\n([\s\S]*?)\n```/i.exec(textContent);
+      if (match) {
+        queryLanguage = match[1].toLowerCase();
+        generatedQuery = match[2].trim();
+        cleanAnswer = textContent.replace(/```(sql|kql)\n[\s\S]*?\n```/gi, '').trim();
+        cleanAnswer = cleanAnswer.replace(/(Here\s+(is|are)|Exact).*?(query|queries|SQL|KQL).*?:?\s*$/i, '').trim();
+      }
+
       console.log(JSON.stringify({
         questionLength: question.length,
         executionTimeMs: elapsed,
-        queryLanguage: 'sql+kql',
+        queryLanguage,
         statusCode: 200,
       }));
 
       return {
         question,
-        answer: textContent,
-        generatedQuery: '-- Generated query executed by Fabric Data Agent via delegated token',
-        queryLanguage: 'mixed',
+        answer: cleanAnswer,
+        generatedQuery,
+        queryLanguage,
         executionTimeMs: elapsed,
         agentName: 'Patient 360',
       };
