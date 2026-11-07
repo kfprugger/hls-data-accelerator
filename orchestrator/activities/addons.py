@@ -101,7 +101,7 @@ class Cloud:
         self.tokens = AzureCliTokens(config["expected_subscription_id"])
         self.expected_tenant = config["expected_tenant_id"]
 
-    def call(self, method: str, url: str, resource: str = FABRIC, body=None, skill="search-consumption-cli"):
+    def request(self, method: str, url: str, resource: str = FABRIC, body=None, skill="search-consumption-cli"):
         token = self.tokens.token(resource)
         if self.tokens.tenant_id != self.expected_tenant:
             raise RuntimeError("Add-on token tenant differs from the deployment tenant")
@@ -111,10 +111,13 @@ class Cloud:
         req = urllib.request.Request(url, method=method, headers=headers,
                                      data=json.dumps(body).encode() if body is not None else None)
         try:
-            response = urllib.request.urlopen(req, timeout=120)
+            return urllib.request.urlopen(req, timeout=120)
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")[:800]
             raise RuntimeError(f"{method} {url.split('?', 1)[0]} -> HTTP {error.code}: {detail}") from None
+
+    def call(self, method: str, url: str, resource: str = FABRIC, body=None, skill="search-consumption-cli"):
+        response = self.request(method, url, resource, body, skill)
         with response:
             raw = response.read()
             if not raw:
@@ -294,17 +297,29 @@ class AddonRunner:
             raise RuntimeError("Add-on cancelled")
         self.substep(title, "running")
         self.log(title)
+        for arg in args[1:]:
+            arg_str = str(arg)
+            if arg_str.endswith((".py", ".sh", ".ps1")) and not arg_str.startswith("-"):
+                script_path = Path(arg_str)
+                if not script_path.is_absolute():
+                    script_path = Path(cwd or ROOT) / script_path
+                if not script_path.is_file():
+                    err = FileNotFoundError(f"Script file not found: {script_path}")
+                    self.substep(title, "failed", str(err))
+                    raise err
+                break
         process = await asyncio.create_subprocess_exec(*map(str, args), cwd=str(cwd or ROOT), env=env or self.env,
             stdin=asyncio.subprocess.PIPE if input_text is not None else asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE if capture else asyncio.subprocess.STDOUT,
             start_new_session=True)
         self.pids[self.id] = process.pid
+        script_name = next((Path(str(a)).name for a in args if str(a).endswith((".py", ".sh", ".ps1"))), Path(str(args[0])).name)
         try:
             if capture:
                 output, errors = await process.communicate(input_text.encode() if input_text is not None else None)
                 text = output.decode(errors="replace")
                 if process.returncode:
-                    raise RuntimeError(f"{title}: {errors.decode(errors='replace')[:1500]}")
+                    raise RuntimeError(f"{title} ({script_name}): {errors.decode(errors='replace')[:1500]}")
             else:
                 if input_text is not None:
                     process.stdin.write(input_text.encode())
@@ -315,7 +330,7 @@ class AddonRunner:
                 await process.wait()
                 text = ""
                 if process.returncode:
-                    raise RuntimeError(f"{title} exited with code {process.returncode}")
+                    raise RuntimeError(f"{title} ({script_name}) exited with code {process.returncode}")
             self.substep(title, "succeeded")
             return text
         except BaseException as exc:
@@ -357,6 +372,40 @@ class AddonRunner:
         if not sql.get("connectionString") or not sql.get("id"):
             raise RuntimeError("Gold SQL endpoint is not provisioned")
         return gold, sql
+
+    async def run_fabric_job(self, item_type: str, item_name: str, job_type: str, timeout_sec: int = 3600):
+        item = self.item(item_type, item_name)
+        skill = "spark-cli" if item_type == "Notebook" else "pipeline-migration"
+        post_url = f"{FABRIC}/v1/workspaces/{self.ws}/items/{item['id']}/jobs/instances?jobType={job_type}"
+        resp = await asyncio.to_thread(self.cloud.request, "POST", post_url, FABRIC, {}, skill)
+        with resp:
+            job_url = resp.headers.get("Location") if hasattr(resp, "headers") and resp.headers else None
+            if not job_url:
+                raw = resp.read() if hasattr(resp, "read") else b""
+                body = json.loads(raw.decode("utf-8", errors="replace") or "{}") if raw else {}
+                inst_id = body.get("id")
+                if not inst_id:
+                    raise RuntimeError(f"Fabric job {item_name} response omitted Location and job id")
+                job_url = f"{FABRIC}/v1/workspaces/{self.ws}/items/{item['id']}/jobs/instances/{inst_id}"
+        deadline = time.monotonic() + timeout_sec
+        while True:
+            if self.deployment.get("runtimeStatus") == "Terminated":
+                raise RuntimeError(f"Add-on cancelled while running {item_name}")
+            data = await asyncio.to_thread(self.cloud.call, "GET", job_url, FABRIC, None, skill)
+            status = str(data.get("status") or "").lower()
+            if status in {"completed", "succeeded"}:
+                return data
+            if status in {"failed", "cancelled", "canceled", "deduped"}:
+                reason = data.get("failureReason") or data
+                raise RuntimeError(f"Fabric job {item_name} failed: {reason}")
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"Fabric job {item_name} timed out after {timeout_sec}s")
+            await asyncio.sleep(10)
+
+    async def refresh_gold_sql_metadata(self):
+        gold, sql = await self.gold()
+        url = f"{FABRIC}/v1/workspaces/{self.ws}/sqlEndpoints/{sql['id']}/refreshMetadata"
+        await asyncio.to_thread(self.cloud.call, "POST", url, FABRIC, {}, "sqldw-cli")
 
     async def ensure_eventstream_running(self, display_name: str) -> None:
         """Resume a paused base-deployment Eventstream before an add-on consumes it."""
@@ -559,6 +608,15 @@ class AddonRunner:
             if step == "04-unity-catalog-bootstrap.sh":
                 env["WAREHOUSE_ID"] = json.loads((root / f".state/warehouse-{variables['ENVIRONMENT']}.json").read_text())["warehouse_id"]
         await self.command("07 Databricks deployment validation", [sys.executable, scripts / "07-validate-deployment.py", "--environment", variables["ENVIRONMENT"], "--namespace", variables["DATABRICKS_NAMESPACE"]], root, env)
+        interop_flag = self.config.get("verify_databricks_interop", True)
+        interop_enabled = interop_flag is True or (isinstance(interop_flag, str) and interop_flag.strip().lower() in ("true", "1", "yes")) if interop_flag is not None else True
+        if interop_enabled:
+            await self.command(
+                "databricks: verify OneLake Unity Catalog interop",
+                [sys.executable, str(ROOT / "azure-databricks/implementation/scripts/09-onelake-interop-proof.py"), "--live", "--workspace-id", self.ws],
+                root,
+                env,
+            )
         return {
             "workspaceUrl": variables["DATABRICKS_HOST"],
             "fhirExportUrl": variables["FHIR_EXPORT_URL"],
@@ -939,6 +997,74 @@ class AddonRunner:
         await self.command("rayfin-imaging: register volumes Delta table", [sys.executable, str(root / "pipeline/volumes/register_volume_table.py")], root)
         if (root / "pipeline/seed_patient360_silos.py").is_file():
             await self.command("rayfin-imaging: seed Patient 360 silos and shortcuts", [sys.executable, str(root / "pipeline/seed_patient360_silos.py")], root)
+        if (root / "pipeline/seed_patient360_silos.py").is_file() or cfg.get("resource_group_name"):
+            # 1. TCGA Synthetic FHIR cohort seeding (ticket 002, default True)
+            tcga_flag = self.config.get("seed_tcga_cohort", True)
+            tcga_enabled = tcga_flag is True or (isinstance(tcga_flag, str) and tcga_flag.strip().lower() in ("true", "1", "yes")) if tcga_flag is not None else True
+            if tcga_enabled:
+                await self.command(
+                    "rayfin-imaging: seed TCGA synthetic FHIR cohort",
+                    [
+                        sys.executable,
+                        str(ROOT / "synthea/seed_tcga_cohort.py"),
+                        "apply",
+                        "--emit-baseline-telemetry",
+                        "--resource-group",
+                        cfg.get("resource_group_name", ""),
+                        "--subscription",
+                        cfg.get("expected_subscription_id", ""),
+                    ],
+                    root,
+                )
+                await self.run_fabric_job(
+                    "DataPipeline",
+                    "healthcare1_msft_clinical_data_foundation_ingestion",
+                    "Pipeline",
+                    timeout_sec=3600,
+                )
+                await self.run_fabric_job(
+                    "Notebook",
+                    "materialize_reporting_tables",
+                    "RunNotebook",
+                    timeout_sec=3600,
+                )
+                await self.refresh_gold_sql_metadata()
+
+            # 2. Researcher persona & de-identified clinical silo (ticket 006, opt-in only)
+            researcher_flag = self.config.get("enable_researcher_persona", False)
+            researcher_enabled = researcher_flag is True or (isinstance(researcher_flag, str) and researcher_flag.strip().lower() in ("true", "1", "yes"))
+            if researcher_enabled:
+                await self.command(
+                    "rayfin-imaging: manage researcher persona",
+                    [sys.executable, str(ROOT / "scripts/manage_researcher_persona.py"), "--create", "--workspace-id", self.ws],
+                )
+                await self.command(
+                    "rayfin-imaging: seed de-identified clinical silo",
+                    [sys.executable, str(root / "pipeline/seed_deidentified_clinical.py"), "--live"],
+                )
+
+            # 3. SpO2 alert stopwatch & clinical activator (ticket 004, default True if alert_email set)
+            alert_flag = self.config.get("enable_alert_stopwatch", True)
+            alert_enabled = alert_flag is True or (isinstance(alert_flag, str) and alert_flag.strip().lower() in ("true", "1", "yes")) if alert_flag is not None else True
+            alert_email = str(self.config.get("alert_email") or "").strip()
+            if alert_enabled:
+                if alert_email:
+                    alert_env = {**self.env, "HLS_ALERT_EMAIL": alert_email}
+                    await self.command(
+                        "rayfin-imaging: deploy clinical activator reflex",
+                        [sys.executable, str(ROOT / "scripts/deploy_clinical_activator.py"), "--live", "--workspace", cfg.get("fabric_workspace_name", "")],
+                        root,
+                        env=alert_env,
+                    )
+                    await self.command(
+                        "rayfin-imaging: trigger SpO2 alert stopwatch",
+                        [sys.executable, str(ROOT / "scripts/trigger_spo2_alert.py"), "--live", "--workspace", cfg.get("fabric_workspace_name", "")],
+                        root,
+                        env=alert_env,
+                    )
+                else:
+                    self.substep("rayfin-imaging: deploy clinical activator reflex", "skipped", "skipped: no alert_email configured")
+                    self.log("rayfin-imaging: alert stopwatch skipped: no alert_email configured", "info")
     async def cardiology(self, fresh_export=False):
         cfg = self.config
         wardflow = Path(os.environ.get("WARDFLOW_ROOT", str(Path.home() / "git/.worktrees/wardflow-jb-dev")))
