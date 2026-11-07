@@ -12,5 +12,8 @@ E-7 | PASS | test_stopwatch_latency_calculation passed: t_total 18.4s <= 60.0s l
 E-8 | PASS | specs/tickets/004-realtime-alert-stopwatch/evidence/E-8-360px.png
 E-9 | PASS | Error: patient_device_not_found: No paired Masimo device found for patient TCGA-XX-0000 (exit 1)
 E-10 | PASS | Error: no_alert_recipient_configured (exit 2 when HLS_ALERT_EMAIL unset)
+E-11 | PASS | specs/tickets/004-realtime-alert-stopwatch/evidence/E-11.json
+E-12 | FAIL | specs/tickets/004-realtime-alert-stopwatch/evidence/E-12.txt (Graph Mail.Read blocked: AADSTS65002 / HTTP 403 ErrorAccessDenied; live KQL TelemetryRaw and fn_ClinicalAlerts verified with measured stopwatch 20.5s)
+E-13 | PASS | specs/tickets/004-realtime-alert-stopwatch/evidence/E-13.txt
 R-1 | PASS | Marcus Vance stage IV VHL verified, WardFlow cohort table and Stevenson profiles operational
 R-2 | PASS | vitest run src/lib/api.test.ts 9 tests passed with 0 failures

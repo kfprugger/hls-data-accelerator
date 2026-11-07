@@ -457,7 +457,7 @@ def deploy_activator(
 
 def main():
     parser = argparse.ArgumentParser(description="Deploy or update ClinicalAlertActivator Reflex item.")
-    parser.add_argument("--workspace-name", default=os.environ.get("FABRIC_WORKSPACE_NAME", "med-1103a"), help="Fabric workspace name")
+    parser.add_argument("--workspace-name", "--workspace", dest="workspace_name", default=os.environ.get("FABRIC_WORKSPACE_NAME", "med-1103a"), help="Fabric workspace name")
     parser.add_argument("--email", help="Notification recipient email (must match HLS_ALERT_EMAIL allowlist)")
     parser.add_argument("--dry-run", action="store_true", default=False, help="Dry run mode (validates without deployment)")
     parser.add_argument("--live", action="store_true", help="Live deployment against Fabric workspace")

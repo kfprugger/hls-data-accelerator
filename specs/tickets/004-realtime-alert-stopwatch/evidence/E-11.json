@@ -1,0 +1,179 @@
+[
+  {
+    "uniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884",
+    "payload": {
+      "name": "Clinical Alerts",
+      "type": "kqlQueries"
+    },
+    "type": "container-v1"
+  },
+  {
+    "uniqueIdentifier": "b93f8a6d-b497-4b0d-bae9-65dd890e1803",
+    "payload": {
+      "name": "fn_ClinicalAlerts",
+      "runSettings": {
+        "isStopped": false,
+        "executionIntervalInSeconds": 60
+      },
+      "query": {
+        "queryString": "fn_ClinicalAlerts(10) | where alert_tier in ('CRITICAL', 'URGENT') | project device_id, alert_tier, spo2, pr, patient_name, message, alert_time"
+      },
+      "eventhouseItem": {
+        "itemId": "bf7ee3b0-0423-4111-a295-9f62afd6216f",
+        "workspaceId": "f306e105-78fd-4b16-bfbe-2b556d493cb7",
+        "itemType": "KustoDatabase"
+      },
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      }
+    },
+    "type": "kqlSource-v1"
+  },
+  {
+    "uniqueIdentifier": "feb7032b-b37c-4b71-8e25-45f131675bb7",
+    "payload": {
+      "name": "Clinical alert events",
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      },
+      "definition": {
+        "type": "Event",
+        "instance": "{\"templateId\": \"SourceEvent\", \"templateVersion\": \"1.1\", \"steps\": [{\"name\": \"SourceEventStep\", \"id\": \"a79d039c-6dc6-4281-9d24-0d555302567a\", \"rows\": [{\"name\": \"SourceSelector\", \"kind\": \"SourceReference\", \"arguments\": [{\"name\": \"entityId\", \"type\": \"string\", \"value\": \"b93f8a6d-b497-4b0d-bae9-65dd890e1803\"}]}]}]}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "1abc17aa-246f-49fd-b866-29a22368ee90",
+    "payload": {
+      "name": "Device",
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      },
+      "definition": {
+        "type": "Object"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "32c9db9c-3068-4d9d-aa34-d2cd43e18d2e",
+    "payload": {
+      "name": "device_id",
+      "parentObject": {
+        "targetUniqueIdentifier": "1abc17aa-246f-49fd-b866-29a22368ee90"
+      },
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"templateId\": \"IdentityPartAttribute\", \"templateVersion\": \"1.1\", \"steps\": [{\"name\": \"IdPartStep\", \"id\": \"f2f17750-e4cb-4d2b-938f-62093656a4d5\", \"rows\": [{\"name\": \"TypeAssertion\", \"kind\": \"TypeAssertion\", \"arguments\": [{\"name\": \"op\", \"type\": \"string\", \"value\": \"Text\"}, {\"name\": \"format\", \"type\": \"string\", \"value\": \"\"}]}]}]}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "4db59ac1-461f-4c8c-ae87-33d54dd47786",
+    "payload": {
+      "name": "alert_tier",
+      "parentObject": {
+        "targetUniqueIdentifier": "1abc17aa-246f-49fd-b866-29a22368ee90"
+      },
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"templateId\": \"BasicEventAttribute\", \"templateVersion\": \"1.1\", \"steps\": [{\"name\": \"EventSelectStep\", \"id\": \"484992af-b867-4be5-984d-e0bcaa961e18\", \"rows\": [{\"name\": \"EventSelector\", \"kind\": \"Event\", \"arguments\": [{\"kind\": \"EventReference\", \"type\": \"complex\", \"arguments\": [{\"name\": \"entityId\", \"type\": \"string\", \"value\": \"feb7032b-b37c-4b71-8e25-45f131675bb7\"}], \"name\": \"event\"}]}, {\"name\": \"EventFieldSelector\", \"kind\": \"EventField\", \"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"alert_tier\"}]}]}, {\"name\": \"EventComputeStep\", \"id\": \"9178a7b0-dfa6-45eb-a675-4f5a96dd2c84\", \"rows\": [{\"name\": \"TypeAssertion\", \"kind\": \"TypeAssertion\", \"arguments\": [{\"name\": \"op\", \"type\": \"string\", \"value\": \"Text\"}, {\"name\": \"format\", \"type\": \"string\", \"value\": \"\"}]}]}]}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "cebb34b4-dc16-4610-b3e1-fd7346dd58c7",
+    "payload": {
+      "name": "spo2",
+      "parentObject": {
+        "targetUniqueIdentifier": "1abc17aa-246f-49fd-b866-29a22368ee90"
+      },
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"templateId\": \"BasicEventAttribute\", \"templateVersion\": \"1.1\", \"steps\": [{\"name\": \"EventSelectStep\", \"id\": \"e6c999cb-176b-4834-882c-a891378b73bc\", \"rows\": [{\"name\": \"EventSelector\", \"kind\": \"Event\", \"arguments\": [{\"kind\": \"EventReference\", \"type\": \"complex\", \"arguments\": [{\"name\": \"entityId\", \"type\": \"string\", \"value\": \"feb7032b-b37c-4b71-8e25-45f131675bb7\"}], \"name\": \"event\"}]}, {\"name\": \"EventFieldSelector\", \"kind\": \"EventField\", \"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"spo2\"}]}]}, {\"name\": \"EventComputeStep\", \"id\": \"5a3632a1-12a5-4431-99d4-485963aff706\", \"rows\": [{\"name\": \"TypeAssertion\", \"kind\": \"TypeAssertion\", \"arguments\": [{\"name\": \"op\", \"type\": \"string\", \"value\": \"Number\"}, {\"name\": \"format\", \"type\": \"string\", \"value\": \"\"}]}]}]}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "7cce7a31-e18c-4488-a422-61daa7cdaef8",
+    "payload": {
+      "name": "pr",
+      "parentObject": {
+        "targetUniqueIdentifier": "1abc17aa-246f-49fd-b866-29a22368ee90"
+      },
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"templateId\": \"BasicEventAttribute\", \"templateVersion\": \"1.1\", \"steps\": [{\"name\": \"EventSelectStep\", \"id\": \"8b943511-e956-4889-9c21-d11379b624a8\", \"rows\": [{\"name\": \"EventSelector\", \"kind\": \"Event\", \"arguments\": [{\"kind\": \"EventReference\", \"type\": \"complex\", \"arguments\": [{\"name\": \"entityId\", \"type\": \"string\", \"value\": \"feb7032b-b37c-4b71-8e25-45f131675bb7\"}], \"name\": \"event\"}]}, {\"name\": \"EventFieldSelector\", \"kind\": \"EventField\", \"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"pr\"}]}]}, {\"name\": \"EventComputeStep\", \"id\": \"2f6d10b3-1b2f-448b-a0b6-6a7dc401310d\", \"rows\": [{\"name\": \"TypeAssertion\", \"kind\": \"TypeAssertion\", \"arguments\": [{\"name\": \"op\", \"type\": \"string\", \"value\": \"Number\"}, {\"name\": \"format\", \"type\": \"string\", \"value\": \"\"}]}]}]}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "27a61c57-ddf4-47f2-848b-9b97fefb9c99",
+    "payload": {
+      "name": "patient_name",
+      "parentObject": {
+        "targetUniqueIdentifier": "1abc17aa-246f-49fd-b866-29a22368ee90"
+      },
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"templateId\": \"BasicEventAttribute\", \"templateVersion\": \"1.1\", \"steps\": [{\"name\": \"EventSelectStep\", \"id\": \"e2cfd23d-90dd-4d93-a0a9-3eba210553dc\", \"rows\": [{\"name\": \"EventSelector\", \"kind\": \"Event\", \"arguments\": [{\"kind\": \"EventReference\", \"type\": \"complex\", \"arguments\": [{\"name\": \"entityId\", \"type\": \"string\", \"value\": \"feb7032b-b37c-4b71-8e25-45f131675bb7\"}], \"name\": \"event\"}]}, {\"name\": \"EventFieldSelector\", \"kind\": \"EventField\", \"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"patient_name\"}]}]}, {\"name\": \"EventComputeStep\", \"id\": \"dca83832-1990-4dde-b1bb-0cf90636efb4\", \"rows\": [{\"name\": \"TypeAssertion\", \"kind\": \"TypeAssertion\", \"arguments\": [{\"name\": \"op\", \"type\": \"string\", \"value\": \"Text\"}, {\"name\": \"format\", \"type\": \"string\", \"value\": \"\"}]}]}]}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "f1f862f5-71ca-4638-af9d-04e980a716fa",
+    "payload": {
+      "name": "message",
+      "parentObject": {
+        "targetUniqueIdentifier": "1abc17aa-246f-49fd-b866-29a22368ee90"
+      },
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      },
+      "definition": {
+        "type": "Attribute",
+        "instance": "{\"templateId\": \"BasicEventAttribute\", \"templateVersion\": \"1.1\", \"steps\": [{\"name\": \"EventSelectStep\", \"id\": \"2e2d6b4a-0250-409f-9e21-4110bcce6bbd\", \"rows\": [{\"name\": \"EventSelector\", \"kind\": \"Event\", \"arguments\": [{\"kind\": \"EventReference\", \"type\": \"complex\", \"arguments\": [{\"name\": \"entityId\", \"type\": \"string\", \"value\": \"feb7032b-b37c-4b71-8e25-45f131675bb7\"}], \"name\": \"event\"}]}, {\"name\": \"EventFieldSelector\", \"kind\": \"EventField\", \"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"message\"}]}]}, {\"name\": \"EventComputeStep\", \"id\": \"a0e3887d-5680-4dda-bc30-69237b86310e\", \"rows\": [{\"name\": \"TypeAssertion\", \"kind\": \"TypeAssertion\", \"arguments\": [{\"name\": \"op\", \"type\": \"string\", \"value\": \"Text\"}, {\"name\": \"format\", \"type\": \"string\", \"value\": \"\"}]}]}]}"
+      }
+    },
+    "type": "timeSeriesView-v1"
+  },
+  {
+    "uniqueIdentifier": "baf31fcb-f219-450e-bef1-c8368b394cca",
+    "payload": {
+      "name": "Clinical alert events alert",
+      "parentContainer": {
+        "targetUniqueIdentifier": "bc4c1d81-6c63-4d37-90d0-5b33055dc884"
+      },
+      "definition": {
+        "type": "Rule",
+        "instance": "{\"templateId\": \"EventTrigger\", \"templateVersion\": \"1.2.4\", \"steps\": [{\"id\": \"964b337a-b8da-4e41-9bc2-5c5956fa8735\", \"name\": \"FieldsDefaultsStep\", \"rows\": [{\"arguments\": [{\"arguments\": [{\"name\": \"entityId\", \"type\": \"string\", \"value\": \"feb7032b-b37c-4b71-8e25-45f131675bb7\"}], \"kind\": \"EventReference\", \"name\": \"event\", \"type\": \"complex\"}], \"kind\": \"Event\", \"name\": \"EventSelector\"}]}, {\"id\": \"a98b805f-3536-4912-ba4f-079ab9c5d726\", \"name\": \"EventDetectStep\", \"rows\": [{\"arguments\": [], \"kind\": \"OnEveryValue\", \"name\": \"OnEveryValue\"}]}, {\"id\": \"d3dd773d-cc52-4193-bf3a-f4fc1a46d20c\", \"name\": \"ActStep\", \"rows\": [{\"arguments\": [{\"name\": \"messageLocale\", \"type\": \"string\", \"value\": \"en-us\"}, {\"name\": \"sentTo\", \"type\": \"array\", \"values\": [{\"type\": \"string\", \"value\": \"joey@jbatl.dev\"}]}, {\"name\": \"copyTo\", \"type\": \"array\", \"values\": []}, {\"name\": \"bCCTo\", \"type\": \"array\", \"values\": []}, {\"name\": \"subject\", \"type\": \"array\", \"values\": [{\"name\": \"string\", \"type\": \"string\", \"value\": \"CLINICAL ALERT - SpO2 low on \"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"device_id\"}], \"kind\": \"EventFieldReference\", \"type\": \"complex\"}]}, {\"name\": \"headline\", \"type\": \"array\", \"values\": [{\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"alert_tier\"}], \"kind\": \"EventFieldReference\", \"type\": \"complex\"}, {\"name\": \"string\", \"type\": \"string\", \"value\": \" ALERT: \"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"patient_name\"}], \"kind\": \"EventFieldReference\", \"type\": \"complex\"}, {\"name\": \"string\", \"type\": \"string\", \"value\": \" - SpO2 \"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"spo2\"}], \"kind\": \"EventFieldReference\", \"type\": \"complex\"}]}, {\"name\": \"optionalMessage\", \"type\": \"array\", \"values\": [{\"name\": \"string\", \"type\": \"string\", \"value\": \"SpO2: \"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"spo2\"}], \"kind\": \"EventFieldReference\", \"type\": \"complex\"}, {\"name\": \"string\", \"type\": \"string\", \"value\": \"% | PR: \"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"pr\"}], \"kind\": \"EventFieldReference\", \"type\": \"complex\"}, {\"name\": \"string\", \"type\": \"string\", \"value\": \" bpm | \"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"message\"}], \"kind\": \"EventFieldReference\", \"type\": \"complex\"}]}, {\"name\": \"additionalInformation\", \"type\": \"array\", \"values\": [{\"arguments\": [{\"name\": \"name\", \"type\": \"string\", \"value\": \"device_id\"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"device_id\"}], \"kind\": \"EventFieldReference\", \"name\": \"reference\", \"type\": \"complexReference\"}], \"kind\": \"NameReferencePair\", \"type\": \"complex\"}, {\"arguments\": [{\"name\": \"name\", \"type\": \"string\", \"value\": \"alert_tier\"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"alert_tier\"}], \"kind\": \"EventFieldReference\", \"name\": \"reference\", \"type\": \"complexReference\"}], \"kind\": \"NameReferencePair\", \"type\": \"complex\"}, {\"arguments\": [{\"name\": \"name\", \"type\": \"string\", \"value\": \"spo2\"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"spo2\"}], \"kind\": \"EventFieldReference\", \"name\": \"reference\", \"type\": \"complexReference\"}], \"kind\": \"NameReferencePair\", \"type\": \"complex\"}, {\"arguments\": [{\"name\": \"name\", \"type\": \"string\", \"value\": \"pr\"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"pr\"}], \"kind\": \"EventFieldReference\", \"name\": \"reference\", \"type\": \"complexReference\"}], \"kind\": \"NameReferencePair\", \"type\": \"complex\"}, {\"arguments\": [{\"name\": \"name\", \"type\": \"string\", \"value\": \"patient_name\"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"patient_name\"}], \"kind\": \"EventFieldReference\", \"name\": \"reference\", \"type\": \"complexReference\"}], \"kind\": \"NameReferencePair\", \"type\": \"complex\"}, {\"arguments\": [{\"name\": \"name\", \"type\": \"string\", \"value\": \"message\"}, {\"arguments\": [{\"name\": \"fieldName\", \"type\": \"string\", \"value\": \"message\"}], \"kind\": \"EventFieldReference\", \"name\": \"reference\", \"type\": \"complexReference\"}], \"kind\": \"NameReferencePair\", \"type\": \"complex\"}]}], \"kind\": \"EmailMessage\", \"name\": \"EmailBinding\"}]}]}",
+        "settings": {
+          "shouldRun": true,
+          "shouldApplyRuleOnUpdate": true
+        }
+      }
+    },
+    "type": "timeSeriesView-v1"
+  }
+]
