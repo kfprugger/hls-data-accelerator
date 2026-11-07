@@ -1,6 +1,6 @@
 # 013: Patient 360 Data Agent answers TCGA cohort questions live
 
-**Status:** ready
+**Status:** done
 | **Risk** | High: a broken publish leaves every Data Agent user (Rayfin /ask, Copilot, Foundry) with no working agent, or the agent answers from the wrong data |
 
 ## Summary
