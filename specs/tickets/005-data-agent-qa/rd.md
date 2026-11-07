@@ -1,7 +1,8 @@
 # 005: Rayfin Plain-Language Data Agent Q&A Interface with Delegated Auth and Query Inspection
 
-**Status:** ready
+**Open check:** E-10 live answer blocked by the published Patient 360 agent returning invalid_prompt; ticket 013 fixes the agent.
 
+**Status:** done
 | **Risk** | High: Unauthorized clinical data exfiltration, LLM prompt injection, or token leakage in conversational interface |
 
 ## Summary
