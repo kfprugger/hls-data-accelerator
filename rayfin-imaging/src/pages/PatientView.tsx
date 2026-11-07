@@ -10,6 +10,7 @@ import { MeasurementsPanel, PrimaryCareGlance } from '@/components/patient/Prima
 import { buildModel, LifeTimeline, noteMarks, type Mark, type Model, type Orientation } from '@/components/patient/Timeline';
 import { TimelineDetail } from '@/components/patient/TimelineDetail';
 import { Scrubber, type ScrubItem } from '@/components/Scrubber';
+import { AlertStopwatchCard } from '@/components/AlertStopwatchCard';
 import { usePatient } from '@/hooks/useCohort';
 import { useNotes, type NotesState } from '@/hooks/useNotes';
 import { num, parseJson, SILO_NAMES, str, type PatientBundle, type Silo } from '@/lib/api';
@@ -869,6 +870,11 @@ const TabPane = memo(function TabPane({
     return (
       <div className="rec-pane">
         <Overview b={b} loadMs={loadMs} onProvenance={onProvenance} />
+        {str(b.patient?.patient_id) === 'TCGA-G6-A8L6' && (
+          <div className="my-6">
+            <AlertStopwatchCard patientId={str(b.patient.patient_id) as string} />
+          </div>
+        )}
         <Summary b={b} />
         <div className="hair mt-8 border-t pt-6">
           <PrimaryCareGlance b={b} />

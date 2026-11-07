@@ -64,4 +64,26 @@ export type AppFunctionsSchema = {
       };
     };
   };
+  getAlertStopwatch: {
+    input: { patientId?: string };
+    output: {
+      patientId: string;
+      patientName: string;
+      deviceId: string;
+      alertTier: string;
+      spo2: number;
+      pulseRate: number;
+      totalElapsedSeconds: number;
+      totalElapsedFormatted: string;
+      beats: {
+        id: string;
+        name: string;
+        timestamp: string;
+        elapsedSeconds: number;
+        status: 'completed' | 'in_progress' | 'pending';
+      }[];
+      measuredAt: string;
+      source: string;
+    };
+  };
 };

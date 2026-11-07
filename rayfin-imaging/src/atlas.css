@@ -88,8 +88,15 @@
   --font-mono: 'Fira Mono', ui-monospace, Menlo, monospace;
 }
 
+html {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body.atlas {
   background: var(--bg);
+  max-width: 100%;
+  overflow-x: hidden;
   color: var(--ink);
   font-family: var(--font);
   font-size: 14px;

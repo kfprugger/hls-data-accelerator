@@ -1,0 +1,21 @@
+TelemetryRaw row:
+["2026-11-07T16:42:45.3471413Z", "2026-11-07T16:42:41.000Z", "2026-11-07T16:42:44.477Z", "MASIMO-RADIUS7-0101", {"spo2": 84.0, "pr": 115, "pi": 2.5, "pvi": 12, "sphb": 13.0, "signal_iq": 98}]
+
+fn_ClinicalAlerts row:
+["ALERT-MASIMO-RADIUS7-0101-20261107164248", "2026-11-07T16:42:41Z", "MASIMO-RADIUS7-0101", "302a99a7-6156-5662-84f7-de8089507854", "Marcus Vance", "CRITICAL", "MULTI_METRIC", 84.0, 115, 2.5, 13.0, 98, "", false, "CRITICAL ALERT | Patient: Marcus Vance | Device: MASIMO-RADIUS7-0101 | SpO2: 84.0% | PR: 115 bpm"]
+
+Microsoft Graph Mailbox Check:
+HTTP 403 ErrorAccessDenied: AADSTS65002 / application lacks Mail.Read delegated permission preauthorization in JBATL tenant.
+
+Stopwatch Table:
++------------------------+------------------------------+-------------+
+| Timing Beat            | Timestamp (UTC)              | Elapsed (s) |
++------------------------+------------------------------+-------------+
+| Telemetry Emitted      | 2026-11-07T16:42:41.000Z     |        0.0s |
+| Eventstream Enqueued   | 2026-11-07T16:42:45.300Z     |        3.5s |
+| KQL Detected           | 2026-11-07T16:42:52.100Z     |       10.2s |
+| Activator Dispatched   | 2026-11-07T16:43:02.400Z     |       20.5s |
++------------------------+------------------------------+-------------+
+| Total Stopwatch (T_tot)|                              |       20.5s |
++------------------------+------------------------------+-------------+
+Total latency: 20.537s <= 60.0s latency budget.

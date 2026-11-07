@@ -232,7 +232,7 @@ export function WorkspaceHeader({
   aside?: ReactNode;
 }) {
   return (
-    <div className="workspace-header hair flex shrink-0 items-start gap-8 border-b px-5 pb-4 pt-4">
+    <div className="workspace-header hair flex flex-wrap shrink-0 items-start gap-4 sm:gap-8 border-b px-5 pb-4 pt-4">
       <div className="min-w-0 flex-1">
         <h1 className="t-display text-[28px]">{title}</h1>
         <div className="t-faint mt-1 text-[12.5px]">{meta}</div>

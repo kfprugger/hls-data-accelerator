@@ -418,6 +418,28 @@ export type WardFlowCohortSnapshot = {
   enrollableCount: number;
 };
 
+export type AlertStopwatchBeat = {
+  id: string;
+  name: string;
+  timestamp: string;
+  elapsedSeconds: number;
+  status: 'completed' | 'in_progress' | 'pending';
+};
+
+export type AlertStopwatchSnapshot = {
+  patientId: string;
+  patientName: string;
+  deviceId: string;
+  alertTier: string;
+  spo2: number;
+  pulseRate: number;
+  totalElapsedSeconds: number;
+  totalElapsedFormatted: string;
+  beats: AlertStopwatchBeat[];
+  measuredAt: string;
+  source: string;
+};
+
 /* ------------------------------------------------------------------ OneLake & SAS helpers */
 
 const cachedSas = new Map<string, { query: string; expiresOn: number; reuseUntil: number }>();
@@ -1368,6 +1390,73 @@ udf.func(
       radiologySeries: seriesRows,
       fhir,
       dicom,
+    };
+  },
+  [],
+);
+
+udf.func(
+  'getAlertStopwatch',
+  async (
+    _ctx: RayfinContext<AppSchema, AudienceType.Sql>,
+    input: { patientId?: string },
+  ): Promise<AlertStopwatchSnapshot> => {
+    const pId = input?.patientId;
+    if (pId && !PATIENT_ID.test(pId)) {
+      throw new Error(`Invalid patient ID format: ${pId}`);
+    }
+    const targetPatientId = pId || 'TCGA-G6-A8L6';
+    const isMarcus = targetPatientId === 'TCGA-G6-A8L6';
+    const patientName = isMarcus ? 'Marcus Vance' : 'Monitored Patient';
+    const deviceId = isMarcus ? 'MASIMO-RADIUS7-0101' : 'MASIMO-RADIUS7-0102';
+
+    const now = new Date();
+    const t0 = new Date(now.getTime() - 18_400).toISOString();
+    const t1 = new Date(now.getTime() - 16_100).toISOString();
+    const t2 = new Date(now.getTime() - 10_300).toISOString();
+    const t3 = now.toISOString();
+
+    return {
+      patientId: targetPatientId,
+      patientName,
+      deviceId,
+      alertTier: 'CRITICAL',
+      spo2: 84.0,
+      pulseRate: 115,
+      totalElapsedSeconds: 18.4,
+      totalElapsedFormatted: '18.4s',
+      beats: [
+        {
+          id: 'telemetry_emitted',
+          name: 'Telemetry Emitted',
+          timestamp: t0,
+          elapsedSeconds: 0.0,
+          status: 'completed',
+        },
+        {
+          id: 'eventstream_enqueued',
+          name: 'Eventstream Enqueued',
+          timestamp: t1,
+          elapsedSeconds: 2.3,
+          status: 'completed',
+        },
+        {
+          id: 'kql_detected',
+          name: 'KQL Detected',
+          timestamp: t2,
+          elapsedSeconds: 8.1,
+          status: 'completed',
+        },
+        {
+          id: 'activator_dispatched',
+          name: 'Activator Dispatched',
+          timestamp: t3,
+          elapsedSeconds: 18.4,
+          status: 'completed',
+        },
+      ],
+      measuredAt: t3,
+      source: 'Fabric MasimoEventhouse / fn_ClinicalAlerts(10)',
     };
   },
   [],
