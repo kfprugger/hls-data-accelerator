@@ -54,6 +54,14 @@ def get_config() -> dict[str, str]:
     global _CONFIG
     if _CONFIG is None:
         _CONFIG = fabric_config.load()
+        globals()["WORKSPACE_ID"] = _CONFIG["WORKSPACE_ID"]
+        globals()["LAKEHOUSES"] = {
+            "clinical": _CONFIG["CLINICAL_LH"],
+            "genomics": _CONFIG["GENOMICS_LH"],
+            "imaging": _CONFIG.get("IMAGING_LH") or _CONFIG["LAKEHOUSE_ID"],
+        }
+        globals()["PATIENT360"] = _CONFIG["PATIENT360_LH"]
+        globals()["SQL_ENDPOINT"] = _CONFIG["PATIENT360_SQL"]
     return _CONFIG
 
 
@@ -396,7 +404,7 @@ def token(scope: str) -> str:
                 return body["access_token"]
         except Exception:
             pass
-    tok = CREDENTIAL.get_token(scope)
+    tok = get_credential().get_token(scope)
     _TOKEN_CACHE[scope] = (tok.token, float(tok.expires_on))
     return tok.token
 
@@ -770,12 +778,14 @@ def write_delta_table(silo: str, name: str, rows: list[dict], tmp_root: pathlib.
     ]
     (table_dir / "_delta_log" / "00000000000000000000.json").write_text("\n".join(log_entries) + "\n")
 
-    silo_id = LAKEHOUSES[silo]
+    cfg = get_config()
+    silo_id = cfg["CLINICAL_LH"] if silo == "clinical" else (cfg["GENOMICS_LH"] if silo == "genomics" else (cfg.get("IMAGING_LH") or cfg["LAKEHOUSE_ID"]))
+    workspace_id = cfg["WORKSPACE_ID"]
     st_tok = token("https://storage.azure.com/.default")
     for rel_path in (pq_name, "_delta_log/00000000000000000000.json"):
         local_f = table_dir / rel_path
         data = local_f.read_bytes()
-        dfs_base = f"https://onelake.dfs.fabric.microsoft.com/{WORKSPACE_ID}/{silo_id}/Tables/{name}/{rel_path}"
+        dfs_base = f"https://onelake.dfs.fabric.microsoft.com/{workspace_id}/{silo_id}/Tables/{name}/{rel_path}"
         headers = {"Authorization": f"Bearer {st_tok}", "x-ms-version": "2023-11-03"}
         r1 = requests.put(f"{dfs_base}?resource=file", headers={**headers, "Content-Length": "0"}, timeout=60)
         r1.raise_for_status()

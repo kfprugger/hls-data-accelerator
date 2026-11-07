@@ -174,24 +174,39 @@ def seed_fabric(dry_run: bool = False) -> int:
     )
     seed_patient360_silos.wait_lro(resp)
     print("Registered OneLake shortcut patient360.patient_deidentified")
+
+    # Refresh SQL endpoint metadata so table is immediately queryable via SQL endpoint
+    try:
+        lh_detail = seed_patient360_silos.fabric_call(
+            "GET", f"/workspaces/{seed_patient360_silos.WORKSPACE_ID}/lakehouses/{seed_patient360_silos.PATIENT360}"
+        ).json()
+        sql_id = (lh_detail.get("properties", {}).get("sqlEndpointProperties") or {}).get("id")
+        if sql_id:
+            r = seed_patient360_silos.fabric_call(
+                "POST", f"/workspaces/{seed_patient360_silos.WORKSPACE_ID}/sqlEndpoints/{sql_id}/refreshMetadata", json={}
+            )
+            seed_patient360_silos.wait_lro(r)
+            print("Refreshed patient360 SQL endpoint metadata")
+    except Exception as exc:
+        print(f"Warning: SQL metadata refresh on patient360: {exc}")
+
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Derive de-identified clinical Delta table and OneLake shortcut.")
     parser.add_argument("--tables-dir", type=pathlib.Path, default=DEFAULT_TABLES_DIR, help="Path to local tables directory")
-    parser.add_argument("--fabric", action="store_true", help="Deploy live to Fabric Lakehouse and register OneLake shortcut")
+    parser.add_argument("--live", "--fabric", action="store_true", dest="live", help="Deploy live to Fabric Lakehouse and register OneLake shortcut")
     parser.add_argument("--local", action="store_true", help="Generate local parquet table in work/tables/clinical/")
     parser.add_argument("--dry-run", action="store_true", help="Show planned operations without modifying files or Fabric")
 
     args = parser.parse_args(argv)
 
-    if args.fabric:
+    if args.live:
         return seed_fabric(dry_run=args.dry_run)
     else:
         # Default or explicit --local
         return seed_local_tables(args.tables_dir, dry_run=args.dry_run)
-
 
 if __name__ == "__main__":
     sys.exit(main())

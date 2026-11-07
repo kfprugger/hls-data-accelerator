@@ -235,12 +235,8 @@ class ResearcherPersonaManager:
             created = res.json()
             researcher_id = created["id"]
             print(f"Created Entra user {RESEARCHER_UPN} (ID: {researcher_id})")
-            print("=" * 60)
-            print("EPHEMERAL CREDENTIAL NOTICE:")
-            print(f"User: {RESEARCHER_UPN}")
-            print(f"Initial key: {ephemeral_credential}")
-            print("NOTICE: This ephemeral key is NEVER written to disk, config files, or git.")
-            print("=" * 60)
+            self._ephemeral_secret = ephemeral_credential
+            print("[PersonaManager] Ephemeral credential kept in process memory only. Never printed, written to disk, or committed.")
 
         # Get nurse object ID
         nurse_user = self.find_user(NURSE_UPN)
@@ -252,14 +248,32 @@ class ResearcherPersonaManager:
         nurse_id = nurse_user["id"]
 
         # Update OneLake data access security roles
-        roles_payload = build_data_access_roles(nurse_id, researcher_id, self.tenant_id)
-        for item_name, item_id in [("patient360", self.patient360_id), ("clinical_lakehouse", self.clinical_id)]:
-            url = f"/workspaces/{self.workspace_id}/items/{item_id}/dataAccessRoles"
-            resp = self.fabric_request("PUT", url, roles_payload)
-            if resp.status_code in (200, 201):
-                print(f"Successfully configured dataAccessRoles on {item_name} ({item_id})")
-            else:
-                resp.raise_for_status()
+        # Physical tables are in clinical_lakehouse: enforces table-level RBAC
+        clinical_roles = build_data_access_roles(nurse_id, researcher_id, self.tenant_id)
+        url_clin = f"/workspaces/{self.workspace_id}/items/{self.clinical_id}/dataAccessRoles"
+        resp_clin = self.fabric_request("PUT", url_clin, clinical_roles)
+        resp_clin.raise_for_status()
+        print(f"Successfully configured dataAccessRoles on clinical_lakehouse ({self.clinical_id})")
+
+        # patient360 holds shortcuts: binds researcher role with shortcut passthrough
+        p360_roles = {
+            "value": [
+                {
+                    "name": "DefaultReader",
+                    "decisionRules": [{"effect": "Permit", "permission": [{"attributeName": "Action", "attributeValueIncludedIn": ["Read"]}, {"attributeName": "Path", "attributeValueIncludedIn": ["*"]}]}],
+                    "members": {"fabricItemMembers": [{"sourcePath": f"{self.workspace_id}/{self.patient360_id}", "itemAccess": ["ReadAll"]}]},
+                },
+                {
+                    "name": "ClinicalResearcherRole",
+                    "decisionRules": [{"effect": "Permit", "permission": [{"attributeName": "Action", "attributeValueIncludedIn": ["Read"]}, {"attributeName": "Path", "attributeValueIncludedIn": ["*"]}]}],
+                    "members": {"microsoftEntraMembers": [{"objectId": researcher_id, "tenantId": self.tenant_id}]},
+                },
+            ]
+        }
+        url_p360 = f"/workspaces/{self.workspace_id}/items/{self.patient360_id}/dataAccessRoles"
+        resp_p360 = self.fabric_request("PUT", url_p360, p360_roles)
+        resp_p360.raise_for_status()
+        print(f"Successfully configured dataAccessRoles on patient360 ({self.patient360_id})")
 
         return 0
 
@@ -336,6 +350,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--create", action="store_true", help="Idempotently create Entra test user and assign OneLake security roles")
     parser.add_argument("--delete", "--cleanup", action="store_true", dest="delete", help="Deprovision Entra test user and revoke OneLake roles")
     parser.add_argument("--verify", action="store_true", help="Query Graph API and Fabric REST to verify configuration")
+    parser.add_argument("--live", action="store_true", help="Execute live operations against Entra and Fabric")
     parser.add_argument("--dry-run", action="store_true", help="Report planned operations without making changes")
     parser.add_argument("--tenant-id", default=os.environ.get("AZURE_TENANT_ID", DEFAULT_TENANT_ID), help="Entra tenant ID")
     parser.add_argument("--workspace-id", default=os.environ.get("FABRIC_WORKSPACE_ID", DEFAULT_WORKSPACE_ID), help="Fabric workspace ID")
