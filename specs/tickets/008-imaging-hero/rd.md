@@ -1,6 +1,6 @@
 # 008: Multimodal Imaging Hero View
 
-**Status:** ready
+**Status:** done
 | **Risk** | Medium: Multimodal imaging hero crashes when DICOM or SVS files are missing or stalls browser on large asset streaming |
 
 ## Summary
