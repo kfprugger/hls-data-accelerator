@@ -6,6 +6,7 @@ export type Cohort = AppFunctionsSchema['getCohort']['output'];
 export type CohortPatient = Cohort['patients'][number];
 export type PatientBundle = AppFunctionsSchema['getPatient']['output'];
 export type DataMap = AppFunctionsSchema['getDataMap']['output'];
+export type ZeroCopySummary = DataMap['zeroCopy'];
 export type WardFlowCohortSnapshot = AppFunctionsSchema['getWardFlowCohort']['output'];
 export type WardFlowSubject = WardFlowCohortSnapshot['subjects'][number];
 export type Provenance = PatientBundle['provenance'];

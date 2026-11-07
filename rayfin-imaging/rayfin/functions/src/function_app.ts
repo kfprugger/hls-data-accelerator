@@ -340,6 +340,13 @@ export type SiloInventory = {
 
 export type ShortcutInfo = { path: string; name: string; targetItem: string; targetPath: string; silo: Silo | null };
 
+export type ZeroCopySummary = {
+  copiesMade: 0;
+  shortcutCount: number;
+  sourceSilos: string[];
+  physicalBytesInPatient360: 0;
+};
+
 export type DataMap = {
   workspace: { id: string; name: string; portalUrl: string };
   patient360: {
@@ -348,8 +355,10 @@ export type DataMap = {
     portalUrl: string;
     sqlEndpoint: string;
     shortcuts: ShortcutInfo[];
+    zeroCopy?: ZeroCopySummary;
     error?: string;
   };
+  zeroCopy: ZeroCopySummary;
   silos: SiloInventory[];
   provenance: Provenance;
 };
@@ -946,6 +955,15 @@ udf.func(
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     }
+    const sourceSilos = Array.from(
+      new Set(shortcuts.map((s) => (s.silo ? SILOS[s.silo]?.name ?? `${s.silo}_lakehouse` : s.targetItem)).filter(Boolean)),
+    );
+    const zeroCopy: ZeroCopySummary = {
+      copiesMade: 0,
+      shortcutCount: shortcuts.length,
+      sourceSilos,
+      physicalBytesInPatient360: 0,
+    };
     return {
       workspace: { id: WORKSPACE_ID, name: WORKSPACE_NAME, portalUrl: `https://app.fabric.microsoft.com/groups/${WORKSPACE_ID}` },
       patient360: {
@@ -953,8 +971,10 @@ udf.func(
         portalUrl: `https://app.fabric.microsoft.com/groups/${WORKSPACE_ID}/lakehouses/${PATIENT360.id}`,
         sqlEndpoint: SQL_SERVER,
         shortcuts,
+        zeroCopy,
         ...(error ? { error } : {}),
       },
+      zeroCopy,
       silos: silos.map((silo, i) => ({
         silo,
         ...SILOS[silo],
