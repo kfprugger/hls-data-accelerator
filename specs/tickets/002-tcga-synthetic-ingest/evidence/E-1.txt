@@ -1,0 +1,10 @@
+$ /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python synthea/seed_tcga_cohort.py plan --fhir-url "https://mock-fhir.azurehealthcareapis.com" --subscription "22222222-2222-2222-2222-222222222222"
+Planned FHIR resources for TCGA cohort:
+  Patient: 15
+  Condition: 15
+  MedicationRequest: 47
+  Observation: 75
+  Coverage: 15
+  Device: 15
+  Basic (DeviceAssociation): 15
+Dry-run plan mode: 0 resources written or modified.

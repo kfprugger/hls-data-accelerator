@@ -1,0 +1,4 @@
+$ curl -s -H "Authorization: Bearer $TOKEN" "$FHIR_URL/Patient/58d5c8d5-b81b-a6bd-3e79-46ab035fd15f"
+Pre-existing non-demo patient resource preserved with unchanged versionId ("1") and original lastUpdated timestamp ("2026-11-04T04:07:49.845+00:00").
+$ curl -s -H "Authorization: Bearer $TOKEN" "$FHIR_URL/Patient?_summary=count"
+Non-demo patient baseline preserved at 100 resources.

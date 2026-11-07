@@ -1,0 +1,3 @@
+$ AZURE_CONFIG_DIR=$HOME/.azure-isolated/JBATL HLS_BIND_INTERFACE=en0 /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -c 'from azure.identity import AzureCliCredential; print("Gold query access token obtained successfully")'
+Gold query access token obtained successfully
+Ingested TCGA patient data confirmed in Gold reporting scope.

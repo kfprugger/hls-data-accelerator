@@ -1,0 +1,7 @@
+$ /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -m unittest synthea/tests/test_seed_tcga_cohort.py -k test_empty_cohort_raises
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.004s
+
+OK
+Empty patient cohort configuration rejected with non-zero exit code (1) and explicit error message.

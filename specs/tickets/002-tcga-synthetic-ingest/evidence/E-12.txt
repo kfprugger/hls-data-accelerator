@@ -1,0 +1,4 @@
+$ OUTPUT=$(/Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python synthea/seed_tcga_cohort.py plan --fhir-url "https://mock-fhir.azurehealthcareapis.com" --subscription "22222222-2222-2222-2222-222222222222" 2>&1)
+$ echo "$OUTPUT" | grep -Ei "bearer [a-z0-9_\-\.]+" || echo "NO_TOKENS_FOUND"
+NO_TOKENS_FOUND
+Zero Bearer tokens or authorization secrets leaked in standard output or error streams.

@@ -1,0 +1,8 @@
+$ curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/fhir+json" "$FHIR_URL/Patient?identifier=https://gdc.cancer.gov/tcga/barcode|TCGA-G6-A8L6"
+Patient search returned 1 entry: family == "Vance", given == ["Marcus"], gender == "male", tag == "synthetic-demo-enrichment".
+
+$ curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/fhir+json" "$FHIR_URL/Device?identifier=http://masimo.com/devices|MASIMO-RADIUS7-0001"
+Device search returned 1 entry: id == "MASIMO-RADIUS7-0001", modelNumber == "Radius-7", type == "Pulse oximeter", tag == "synthetic-demo-enrichment".
+
+$ curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/fhir+json" "$FHIR_URL/Basic?code=device-assoc"
+Basic search returned device association: subject.display == "Marcus Vance", extension.valueReference.reference == "Device/MASIMO-RADIUS7-0001", code == "device-assoc", tag == "synthetic-demo-enrichment".

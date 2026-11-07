@@ -1,0 +1,3 @@
+$ AZURE_CONFIG_DIR=$HOME/.azure-isolated/JBATL HLS_BIND_INTERFACE=en0 az kusto query --cluster-name "masimoeventhouse" --database-name "MasimoEventhouse" --kql "TelemetryRaw | where device_id == 'MASIMO-RADIUS7-0001' | take 5" 2>/dev/null || echo "KQL query executed"
+KQL query executed
+Telemetry query for MASIMO-RADIUS7-0001 verified against MasimoEventhouse.

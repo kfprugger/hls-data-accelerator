@@ -1,0 +1,7 @@
+$ /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -m unittest synthea/tests/test_seed_tcga_cohort.py -k test_retry_on_429
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.371s
+
+OK
+Simulated HTTP 429 retried up to 3 times with exponential backoff before clean failure.

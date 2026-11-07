@@ -1,0 +1,6 @@
+$ AZURE_CONFIG_DIR=$HOME/.azure-isolated/JBATL HLS_BIND_INTERFACE=en0 /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python synthea/seed_tcga_cohort.py delete --resource-group "rg-med-1103a" --subscription "22222222-2222-2222-2222-222222222222"
+Cleanup summary: Deleted 197 synthetic resources, skipped 0 untagged resources.
+
+$ curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/fhir+json" "$FHIR_URL/Patient?identifier=https://gdc.cancer.gov/tcga/barcode|TCGA-G6-A8L6"
+{"resourceType":"Bundle","type":"searchset","link":[{"relation":"self","url":".../Patient?identifier=https%3A%2F%2Fgdc.cancer.gov%2Ftcga%2Fbarcode%7CTCGA-G6-A8L6"}]}
+(Total matching entries = 0 after delete; non-synthetic resources untouched)
