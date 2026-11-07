@@ -1,6 +1,6 @@
 # 007: Standards View (FHIR R4 & DICOM to HDS Lineage)
 
-**Status:** ready
+**Status:** done
 
 | **Risk** | Medium: Standards mapping fails to query or parse FHIR/DICOM tables, rendering an unhandled exception or blank screen on /standards during an executive demo. |
 
