@@ -46,7 +46,7 @@ export type AppFunctionsSchema = {
     output: { workspaceId: string; workspaceName: string; sqlEndpoint: string; database: string; goldRefreshedAt: null | string; servedAt: string; totalMs: number; subjects: { id: string; initials: string; fullName: null | string; gender: null | string; age: null | number; ageBand: string; careSetting: string; encounterId: string; conditionDisplay: string; attendingRole: null | string; deviceId: null | string; deviceKind: null | string; deviceSerial: null | string; pulseOximeterDeviceId: null | string; refreshedAt: null | string; observations: { [k: string]: null | number }; observedAt: null | string; encounterCount: number; medicationCount: number; imagingStudyCount: number; openCareGaps: number; has3dVolume: boolean; volumeStudyId: null | string }[]; enrollableCount: number };
   };
   getStandardsMapping: {
-    input: { patientId: string };
+    input: { patientId: string; persona?: 'nurse' | 'researcher' };
     output: {
       patientId: string;
       patient: { [k: string]: null | string | number | false | true };
@@ -65,7 +65,7 @@ export type AppFunctionsSchema = {
     };
   };
   getAlertStopwatch: {
-    input: { patientId?: string };
+    input: { patientId?: string; persona?: 'nurse' | 'researcher' };
     output: {
       patientId: string;
       patientName: string;

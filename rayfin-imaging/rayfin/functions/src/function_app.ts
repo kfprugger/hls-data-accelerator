@@ -1375,17 +1375,20 @@ udf.func(
   async (
     patientId: string,
     ctx: RayfinContext<AppSchema, AudienceType.Sql>,
+    input?: { persona?: 'nurse' | 'researcher' },
   ): Promise<StandardsMapping> => {
     if (!PATIENT_ID.test(patientId)) {
       throw new Error('Invalid patient id');
     }
 
+    const isResearcher = isResearcherPersona(ctx?.Tokens?.Sql) || input?.persona === 'researcher';
+    const patientTable = isResearcher ? 'patient_deidentified' : 'patient';
     const pool = await getPool(ctx.Tokens.Sql, PATIENT360.name);
     const tracer = new Tracer(pool);
     const params = { id: patientId };
 
     const [patientRows, diagnosisRows, studyRows, seriesRows] = await Promise.all([
-      tracer.run('standards_patient', ['clinical'], ['patient'], 'SELECT * FROM dbo.patient WHERE patient_id = @id', params),
+      tracer.run('standards_patient', ['clinical'], [patientTable], `SELECT * FROM dbo.${patientTable} WHERE patient_id = @id`, params),
       tracer.run('standards_diagnosis', ['clinical'], ['diagnosis'], 'SELECT * FROM dbo.diagnosis WHERE patient_id = @id ORDER BY seq', params),
       tracer.run('standards_radiology_study', ['imaging'], ['radiology_study'], 'SELECT * FROM dbo.radiology_study WHERE patient_id = @id ORDER BY date', params),
       tracer.run('standards_radiology_series', ['imaging'], ['radiology_series'], 'SELECT * FROM dbo.radiology_series WHERE patient_id = @id ORDER BY date', params),
@@ -1396,7 +1399,7 @@ udf.func(
       if (patientId === 'TCGA-02-0001') {
         patientRow = {
           patient_id: 'TCGA-02-0001',
-          display_name: 'TCGA-02-0001 (Clinical Only)',
+          display_name: isResearcher ? 'TCGA-02-0001' : 'TCGA-02-0001 (Clinical Only)',
           project_id: 'TCGA-GBM',
           cancer_code: 'GBM',
           cancer_type: 'Glioblastoma multiforme',
@@ -1432,16 +1435,17 @@ udf.func(
 udf.func(
   'getAlertStopwatch',
   async (
-    _ctx: RayfinContext<AppSchema, AudienceType.Sql>,
-    input: { patientId?: string },
+    ctx: RayfinContext<AppSchema, AudienceType.Sql>,
+    input: { patientId?: string; persona?: 'nurse' | 'researcher' },
   ): Promise<AlertStopwatchSnapshot> => {
     const pId = input?.patientId;
     if (pId && !PATIENT_ID.test(pId)) {
       throw new Error(`Invalid patient ID format: ${pId}`);
     }
+    const isResearcher = isResearcherPersona(ctx?.Tokens?.Sql) || input?.persona === 'researcher';
     const targetPatientId = pId || 'TCGA-G6-A8L6';
     const isMarcus = targetPatientId === 'TCGA-G6-A8L6';
-    const patientName = isMarcus ? 'Marcus Vance' : 'Monitored Patient';
+    const patientName = isResearcher ? targetPatientId : (isMarcus ? 'Marcus Vance' : 'Monitored Patient');
     const deviceId = isMarcus ? 'MASIMO-RADIUS7-0101' : 'MASIMO-RADIUS7-0102';
 
     const now = new Date();
@@ -1813,4 +1817,13 @@ export async function askDataAgentHandler(
   }
 }
 
-udf.func('askDataAgent', askDataAgentHandler, []);
+udf.func(
+  'askDataAgent',
+  async (
+    question: string,
+    ctx: RayfinContext<AppSchema, AudienceType.Fabric>,
+  ): Promise<AskDataAgentOutput> => {
+    return askDataAgentHandler(question, ctx);
+  },
+  [],
+);
