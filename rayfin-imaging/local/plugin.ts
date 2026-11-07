@@ -105,8 +105,19 @@ export function localMode(projectRoot: string): Plugin {
         const origin = `http://${req.headers.host}`;
         const [, name, id] = url.pathname.split('/');
         try {
-          if (name === 'getCohort') return send(res, 200, await api.getCohort(origin));
-          if (name === 'getPatient') return send(res, 200, await api.getPatient(url.searchParams.get('patientId') ?? '', origin));
+          if (name === 'persona' && req.method === 'GET') {
+            return send(res, 200, { persona: api.getPersona() });
+          }
+          if (name === 'persona' && req.method === 'POST') {
+            const input = await body(req);
+            const p = input.persona === 'researcher' ? 'researcher' : 'nurse';
+            api.setPersona(p);
+            return send(res, 200, { ok: true, persona: p });
+          }
+          const reqPersona = (req.headers['x-rayfin-persona'] as string) || url.searchParams.get('persona') || api.getPersona();
+          const persona = reqPersona === 'researcher' ? 'researcher' : 'nurse';
+          if (name === 'getCohort') return send(res, 200, await api.getCohort(origin, persona));
+          if (name === 'getPatient') return send(res, 200, await api.getPatient(url.searchParams.get('patientId') ?? '', origin, persona));
           if (name === 'getDataMap') return send(res, 200, await api.getDataMap());
           if (name === 'getWardFlowCohort') return send(res, 200, await api.getWardFlowCohort());
           if (name === 'notes' && req.method === 'GET') {

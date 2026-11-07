@@ -128,6 +128,9 @@ FROM dbo.patient p                                            -- clinical_lakeho
 JOIN dbo.molecular_profile m ON m.patient_id = p.patient_id   -- genomics_lakehouse
 JOIN dbo.pathology_slide s  ON s.patient_id = p.patient_id AND s.role = 'diagnostic'  -- imaging_lakehouse
 WHERE p.patient_id = $id`;
+const COHORT_SQL_DEIDENTIFIED = COHORT_SQL.replace('FROM dbo.patient p', 'FROM dbo.patient_deidentified p');
+const HEADER_SQL_DEIDENTIFIED = HEADER_SQL.replace('FROM dbo.patient p', 'FROM dbo.patient_deidentified p');
+
 
 /* ------------------------------------------------------------------ Inventory (as upload_onelake.py builds it) */
 
@@ -174,11 +177,15 @@ function folderStats(path: string): { files: number; bytes: number } {
 
 /* ------------------------------------------------------------------ API */
 
+export type Persona = 'nurse' | 'researcher';
+
 export type LocalApi = {
-  getCohort(origin: string): Promise<Cohort>;
-  getPatient(patientId: string, origin: string): Promise<PatientBundle>;
+  getCohort(origin: string, persona?: Persona): Promise<Cohort>;
+  getPatient(patientId: string, origin: string, persona?: Persona): Promise<PatientBundle>;
   getDataMap(): Promise<DataMap>;
   getWardFlowCohort(): Promise<WardFlowCohortSnapshot>;
+  getPersona(): Persona;
+  setPersona(persona: Persona): void;
 };
 
 export function createLocalApi(work: string): LocalApi {
@@ -186,6 +193,7 @@ export function createLocalApi(work: string): LocalApi {
   let ready: Promise<DuckDBInstance> | null = null;
   const tables: Record<Silo, string[]> = { clinical: [], genomics: [], imaging: [] };
 
+  let activePersona: Persona = 'nurse';
   const connect = () =>
     (ready ??= (async () => {
       if (!existsSync(tablesDir)) {
@@ -250,13 +258,17 @@ export function createLocalApi(work: string): LocalApi {
     }));
 
   return {
-    async getCohort(origin) {
+    async getCohort(origin, persona) {
+      const p = persona ?? activePersona;
+      const isResearcher = p === 'researcher';
+      const cohortSql = isResearcher ? COHORT_SQL_DEIDENTIFIED : COHORT_SQL;
+      const patientTable = isResearcher ? 'patient_deidentified' : 'patient';
       const tracer = new Tracer(await connect());
       const list = await tracer.run(
         'cohort',
         ['clinical', 'genomics', 'imaging'],
-        ['patient', 'molecular_profile', 'pathology_slide', 'somatic_mutation', 'radiology_series'],
-        COHORT_SQL
+        [patientTable, 'molecular_profile', 'pathology_slide', 'somatic_mutation', 'radiology_series'],
+        cohortSql
       );
       const patients = list.map((r) => {
         const thumb = r.thumbnail_path ? String(r.thumbnail_path) : null;
@@ -268,11 +280,20 @@ export function createLocalApi(work: string): LocalApi {
           thumbnailUrl: thumb ? `${origin}/local-files/imaging/${thumb}` : null,
         } satisfies CohortPatient;
       });
-      return { patients, provenance: tracer.provenance(COHORT_SQL) };
+      return {
+        patients,
+        provenance: tracer.provenance(cohortSql),
+        isDeidentified: isResearcher,
+        persona: p,
+      };
     },
 
-    async getPatient(patientId, origin) {
+    async getPatient(patientId, origin, persona) {
       if (!PATIENT_ID.test(patientId)) throw new Error('Invalid patient id');
+      const p = persona ?? activePersona;
+      const isResearcher = p === 'researcher';
+      const headerSql = isResearcher ? HEADER_SQL_DEIDENTIFIED : HEADER_SQL;
+      const patientTable = isResearcher ? 'patient_deidentified' : 'patient';
       const tracer = new Tracer(await connect());
       const params = { id: patientId };
       const q = (id: string, silo: Silo, table: string, text: string) => tracer.run(id, [silo], [table], text, params);
@@ -286,11 +307,11 @@ export function createLocalApi(work: string): LocalApi {
         tracer.run(
           'header',
           ['clinical', 'genomics', 'imaging'],
-          ['patient', 'molecular_profile', 'pathology_slide', 'radiology_study', 'radiology_series', 'observation'],
-          HEADER_SQL,
+          [patientTable, 'molecular_profile', 'pathology_slide', 'radiology_study', 'radiology_series', 'observation'],
+          headerSql,
           params
         ),
-        q('patient', 'clinical', 'patient', `SELECT * FROM dbo.patient ${where}`),
+        q('patient', 'clinical', patientTable, `SELECT * FROM dbo.${patientTable} ${where}`),
         q('diagnoses', 'clinical', 'diagnosis', `SELECT * FROM dbo.diagnosis ${where} ORDER BY day`),
         q('treatments', 'clinical', 'treatment', `SELECT * FROM dbo.treatment ${where} ORDER BY start_day`),
         q('followUps', 'clinical', 'follow_up', `SELECT * FROM dbo.follow_up ${where} ORDER BY day`),
@@ -393,8 +414,18 @@ export function createLocalApi(work: string): LocalApi {
           radiology: access(origin, 'imaging', `radiology/${id}`),
           report: access(origin, 'clinical', String(reportRow?.pdf_path ?? `reports/${patientId}.pdf`)),
         },
-        provenance: tracer.provenance(HEADER_SQL),
+        provenance: tracer.provenance(headerSql),
+        isDeidentified: isResearcher,
+        persona: p,
       };
+    },
+
+    getPersona() {
+      return activePersona;
+    },
+
+    setPersona(p: Persona) {
+      activePersona = p;
     },
 
     async getDataMap() {

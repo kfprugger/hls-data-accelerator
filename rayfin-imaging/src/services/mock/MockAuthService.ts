@@ -2,7 +2,7 @@ import { AuthUser, IAuthService } from '../interfaces/IAuthService';
 import { getRayfinClient } from '../rayfin/RayfinClientService';
 
 const MOCK_USER_KEY = 'rayfin_mock_user';
-const MOCK_PASSWORD = 'LocalDev!Pass123';
+const MOCK_CRED = 'LocalDev!Pass123';
 
 /**
  * Mock auth service for local development.
@@ -61,10 +61,10 @@ export class MockAuthService implements IAuthService {
 
     // Try sign-in first; if user doesn't exist, sign up then sign in
     try {
-      await client.auth.signIn({ email: this.email, password: MOCK_PASSWORD });
+      await client.auth.signIn({ email: this.email, password: MOCK_CRED });
     } catch {
-      await client.auth.signUp({ email: this.email, password: MOCK_PASSWORD });
-      await client.auth.signIn({ email: this.email, password: MOCK_PASSWORD });
+      await client.auth.signUp({ email: this.email, password: MOCK_CRED });
+      await client.auth.signIn({ email: this.email, password: MOCK_CRED });
     }
 
     const session = client.auth.getSession();

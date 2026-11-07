@@ -121,6 +121,11 @@ def build_local_tables(
 
     t0 = time.time()
     all_tables = seed_patient360_silos.build_tables()
+    if "clinical" in all_tables and "patient" in all_tables["clinical"]:
+        import seed_deidentified_clinical
+        all_tables["clinical"]["patient_deidentified"] = seed_deidentified_clinical.derive_deidentified_patient_rows(
+            all_tables["clinical"]["patient"]
+        )
 
     total_tables = 0
     total_rows = 0

@@ -6,6 +6,8 @@ import { useAuth } from '@/hooks/AuthContext';
 import { CatalogProvider, useCatalog, VolumeCatalogProvider } from '@/hooks/useCatalog';
 import { CohortProvider } from '@/hooks/useCohort';
 import { LOCAL_DATA } from '@/lib/localMode';
+import { PersonaBanner } from '@/components/PersonaBanner';
+import { PersonaProvider } from '@/hooks/usePersona';
 
 const TABS = [
   { to: '/', label: 'Overview', active: (p: string) => p === '/' },
@@ -75,14 +77,17 @@ export function AppShell() {
   return (
     <CatalogProvider>
       <VolumeCatalogProvider>
-        <CohortProvider>
-          <div className="flex h-screen flex-col">
-            <ShellHeader />
-            <div className="min-h-0 flex-1">
-              <Outlet />
+        <PersonaProvider>
+          <CohortProvider>
+            <div className="flex h-screen flex-col">
+              <PersonaBanner />
+              <ShellHeader />
+              <div className="min-h-0 flex-1">
+                <Outlet />
+              </div>
             </div>
-          </div>
-        </CohortProvider>
+          </CohortProvider>
+        </PersonaProvider>
       </VolumeCatalogProvider>
     </CatalogProvider>
   );
