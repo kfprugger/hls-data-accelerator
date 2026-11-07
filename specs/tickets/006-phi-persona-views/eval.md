@@ -133,6 +133,29 @@
   2. Verify the application ignores the unpermitted view parameter, enforces the de-identified server response, and displays the de-identified patient header.
 - **Expected**: Client does not crash, does not display unmasked PHI, and remains bounded by researcher security tier.
 
+## Live checks (added by the router; JBATL / med-1103a, capacity Active)
+
+### E-10 [U] Live: the de-identified table and patient360 shortcut exist (covers FR-1)
+- **Type**: CLI
+- **Steps**:
+  1. Run `<python> rayfin-imaging/pipeline/seed_deidentified_clinical.py --live` twice (or the live flag the script defines).
+  2. Query the workspace SQL endpoint: `SELECT patient_id, display_name FROM patient360.dbo.patient_deidentified WHERE patient_id = 'TCGA-G6-A8L6'` and `SELECT COUNT(*) FROM patient360.dbo.patient_deidentified`.
+- **Expected**: Both runs exit 0 and the second changes nothing. The query returns 15 rows in total, and Marcus's row has `display_name` = `TCGA-G6-A8L6`. No row anywhere in the table contains `Vance`. Evidence: raw query output.
+
+### E-11 [S] Live: the researcher user and the OneLake security roles exist as specified (covers FR-2, FR-3)
+- **Type**: CLI
+- **Steps**:
+  1. Run `<python> scripts/manage_researcher_persona.py --create --live` (or the script's live flags) twice.
+  2. Read the user from Graph (`GET /v1.0/users/researcher-demo@jbatl.dev?$select=id,userPrincipalName,accountEnabled`) and the patient360 OneLake data access roles (`GET /v1/workspaces/f306e105-78fd-4b16-bfbe-2b556d493cb7/items/83729d21-d933-4a62-9f5e-fbd85a44bda0/dataAccessRoles`).
+- **Expected**: Both runs exit 0 and the second creates nothing new. The user exists exactly once. A researcher role grants that user `Tables/patient_deidentified` (and the other non-identifying tables the rd allows) and does NOT grant `Tables/patient` or any other identified table. No password appears in stdout, stderr, git or any file. Evidence: raw JSON (ids, paths, members; no secrets).
+
+### E-12 [S] Live attack: the researcher identity is denied the identified table (covers FR-2, FR-4)
+- **Type**: CLI
+- **Steps**:
+  1. Get a token for `researcher-demo@jbatl.dev` non-interactively, with the password held only in process memory (for example ROPC at the moment of creation). Do not weaken any tenant policy to make this work.
+  2. With that token, read `Tables/patient` in patient360 (OneLake DFS list or read, and the SQL endpoint `SELECT TOP 1 display_name FROM dbo.patient`). Then read `Tables/patient_deidentified` the same way.
+- **Expected**: Reading the identified table is denied (HTTP 403 / SQL permission error), and reading the de-identified table succeeds. Evidence: raw status codes and error text. If tenant policy blocks every non-interactive sign-in for the new user, record the raw AADSTS error, mark E-12 FAIL, and set step blocked with that note.
+
 ## Regression checks
 
 ### R-1 [R] Oncology genomics and WardFlow cardiology features remain functional across persona switches
