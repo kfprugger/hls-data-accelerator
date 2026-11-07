@@ -29,9 +29,9 @@ function ShellHeader() {
 
   return (
     <header className="hair w-full max-w-full shrink-0 overflow-x-hidden border-b">
-      <div className="flex h-14 w-full max-w-full items-center gap-3 px-3 sm:gap-6 sm:px-5">
+      <div className="flex h-14 w-full max-w-full min-w-0 items-center gap-2 sm:gap-6 px-2.5 sm:px-5">
         <Wordmark compact />
-        <nav className="flex h-full min-w-0 flex-1 items-stretch gap-3 overflow-x-auto sm:gap-5" aria-label="Sections">
+        <nav className="flex h-full min-w-0 flex-1 items-stretch gap-3 sm:gap-5 overflow-x-auto" aria-label="Sections">
           {TABS.map((t) => (
             <Link key={t.to} to={t.to} className={`tab whitespace-nowrap ${t.active(pathname) ? 'active' : ''}`}>
               {t.label}

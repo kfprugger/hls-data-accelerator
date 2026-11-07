@@ -35,12 +35,18 @@ export function fmtDay(day: number | null | undefined): string {
   return `day ${day < 0 ? '−' : ''}${Math.abs(Math.round(day)).toLocaleString('en-GB')}`;
 }
 
-export function fmtBytes(bytes: number | null | undefined): string {
+export function fmtBytes(bytes: number | null | undefined, digits?: number): string {
   if (!bytes) return '0 B';
-  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(2)} TB`;
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
-  if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(0)} KB`;
+  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(digits ?? 2)} TB`;
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(digits ?? 1)} GB`;
+  if (bytes >= 1e6) {
+    const d = digits !== undefined ? digits : (bytes / 1e6) % 1 === 0 ? 0 : 1;
+    return `${(bytes / 1e6).toFixed(d)} MB`;
+  }
+  if (bytes >= 1e3) {
+    const d = digits !== undefined ? digits : (bytes / 1e3) % 1 === 0 ? 0 : 1;
+    return `${(bytes / 1e3).toFixed(d)} KB`;
+  }
   return `${bytes} B`;
 }
 
