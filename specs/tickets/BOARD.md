@@ -12,3 +12,4 @@
 | 009 | Plain-language copy pass + glossary | ready | solo | waits for 004: it rewrites copy on every page the UI tickets change (003, 004, 005, 006, 007, 008, 010) |
 | 011 | Demo packaging (60 s film, walkthrough, deploy timer, synthetic badge) | ready | solo | waits for 009: the film is captured from the finished UI |
 | 012 | Orchestrator wiring for fresh deployments | ready | solo | waits for 004: calls the CLI scripts from 002, 004, 006 and 010 |
+| 013 | Patient 360 Data Agent answers TCGA cohort questions live | ready | solo | waits for 005: uses its verify_data_agent_qa.py live check |
