@@ -1221,7 +1221,6 @@ udf.func(
         signal: AbortSignal.timeout(15_000),
       }).catch(() => {});
 
-      const prompt = `${question}\n\nPlease include the exact SQL or KQL query you executed in a markdown code block (\`\`\`sql or \`\`\`kql).`;
       const callRes = await fetch(mcpUrl, {
         method: 'POST',
         headers,
@@ -1232,7 +1231,7 @@ udf.func(
           params: {
             name: 'DataAgent_Patient_360',
             arguments: {
-              userQuestion: prompt,
+              userQuestion: question,
             },
           },
         }),

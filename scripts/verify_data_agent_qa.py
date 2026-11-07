@@ -170,53 +170,128 @@ class DataAgentVerifier:
         agent = self.resolve_agent()
         agent_id = agent["id"]
 
-        # Ensure initialized
-        self.verify_publication()
+        base_url = f"{FABRIC_API}/workspaces/{ws_id}/aiskills/{agent_id}/aiassistant/openai"
+        params = {"api-version": "2024-05-01-preview"}
 
-        mcp_url = f"{FABRIC_API}/mcp/workspaces/{ws_id}/dataagents/{agent_id}/agent"
-        prompt = f"{question}\n\nPlease include the exact SQL or KQL query you executed in a markdown code block (```sql or ```kql)."
-        call_payload = {
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
-            "params": {
-                "name": f"DataAgent_{self.agent_name.replace(' ', '_')}",
-                "arguments": {
-                    "userQuestion": prompt,
-                },
-            },
-        }
         t0 = time.time()
-        call_res = requests.post(mcp_url, headers=self.headers, json=call_payload, timeout=60)
-        elapsed_ms = int((time.time() - t0) * 1000)
-        call_res.raise_for_status()
-        data = call_res.json()
-        if "error" in data:
-            raise RuntimeError(f"MCP tools/call error: {data['error']}")
-        content = data.get("result", {}).get("content", [])
-        text_content = next((c.get("text") for c in content if c.get("type") == "text"), "")
+        # 1. Create thread
+        r_th = requests.post(f"{base_url}/threads", params=params, headers=self.headers, json={}, timeout=30)
+        r_th.raise_for_status()
+        th_id = r_th.json()["id"]
 
-        import re
-        query_match = re.search(r"```(sql|kql)\n(.*?)\n```", text_content, re.DOTALL | re.IGNORECASE)
-        if query_match:
-            lang = query_match.group(1).upper()
-            gen_query = query_match.group(2).strip()
-            clean_answer = re.sub(r"```(sql|kql)\n.*?\n```", "", text_content, flags=re.DOTALL | re.IGNORECASE).strip()
-            clean_answer = re.sub(r"(Here\s+(is|are)|Exact).*?(query|queries|SQL|KQL).*?:?\s*$", "", clean_answer, flags=re.IGNORECASE).strip()
-        else:
-            lang = "SQL"
-            gen_query = ""
-            clean_answer = text_content
+        # 2. Add message (sending user question unchanged without extra prompt instructions)
+        r_msg = requests.post(
+            f"{base_url}/threads/{th_id}/messages",
+            params=params,
+            headers=self.headers,
+            json={"role": "user", "content": question},
+            timeout=30,
+        )
+        r_msg.raise_for_status()
+
+        # 3. Create run
+        r_run = requests.post(
+            f"{base_url}/threads/{th_id}/runs",
+            params=params,
+            headers=self.headers,
+            json={"assistant_id": agent_id},
+            timeout=30,
+        )
+        r_run.raise_for_status()
+        run_data = r_run.json()
+        run_id = run_data["id"]
+
+        # 4. Poll run until completion or terminal state
+        terminal_status: Optional[Dict[str, Any]] = None
+        for _ in range(45):
+            time.sleep(2)
+            r_poll = requests.get(
+                f"{base_url}/threads/{th_id}/runs/{run_id}",
+                params=params,
+                headers=self.headers,
+                timeout=30,
+            )
+            if r_poll.status_code == 200:
+                p_data = r_poll.json()
+                st = p_data.get("status")
+                if st in ("completed", "failed", "cancelled", "expired", "requires_action"):
+                    terminal_status = p_data
+                    break
+
+        elapsed_ms = int((time.time() - t0) * 1000)
+
+        # 5. Fetch run steps
+        r_steps = requests.get(
+            f"{base_url}/threads/{th_id}/runs/{run_id}/steps",
+            params=params,
+            headers=self.headers,
+            timeout=30,
+        )
+        steps_data = r_steps.json() if r_steps.status_code == 200 else {}
+
+        # 6. Extract tool-call steps containing executed SQL or KQL
+        generated_query = ""
+        query_language = ""
+
+        for step in steps_data.get("data", []):
+            details = step.get("step_details", {})
+            for tc in details.get("tool_calls", []):
+                fn = tc.get("function", {})
+                name = fn.get("name", "")
+                args = fn.get("arguments", "")
+                out = fn.get("output", "")
+                if "execute" in name.lower() or "nl2code" in name.lower() or "sql" in name.lower() or "kql" in name.lower():
+                    try:
+                        args_obj = json.loads(args) if isinstance(args, str) else args
+                        if isinstance(args_obj, dict):
+                            for k, v in args_obj.items():
+                                if any(sub in k.lower() for sub in ("query", "code", "sql")):
+                                    generated_query = str(v).strip()
+                                    query_language = "KQL" if "kql" in name.lower() or "kusto" in name.lower() else "SQL"
+                    except Exception:
+                        pass
+                    if not generated_query and isinstance(out, str) and ("select" in out.lower() or "| where" in out.lower()):
+                        generated_query = out.strip()
+                        query_language = "KQL" if "telemetry" in out.lower() or "| " in out else "SQL"
+
+        # 7. Get final assistant message
+        r_msgs = requests.get(
+            f"{base_url}/threads/{th_id}/messages",
+            params=params,
+            headers=self.headers,
+            timeout=30,
+        )
+        answer = ""
+        if r_msgs.status_code == 200:
+            for m in r_msgs.json().get("data", []):
+                if m.get("role") == "assistant":
+                    for c in m.get("content", []):
+                        if c.get("type") == "text":
+                            answer += c.get("text", {}).get("value", "")
+
+        # If steps returned no query text, report raw steps response
+        if not generated_query:
+            return {
+                "question": question,
+                "answer": answer,
+                "generatedQuery": "",
+                "queryLanguage": "",
+                "execution_time_ms": elapsed_ms,
+                "is_error": True,
+                "error": "no query text in run steps",
+                "raw_steps": steps_data,
+                "run_status": terminal_status.get("status") if terminal_status else "unknown",
+                "last_error": terminal_status.get("last_error") if terminal_status else None,
+            }
 
         return {
             "question": question,
-            "answer": clean_answer,
-            "generatedQuery": gen_query,
-            "queryLanguage": lang,
+            "answer": answer,
+            "generatedQuery": generated_query,
+            "queryLanguage": query_language or "SQL",
             "execution_time_ms": elapsed_ms,
-            "is_error": data.get("result", {}).get("isError", False),
+            "is_error": False,
         }
-
     def cleanup(self) -> Dict[str, Any]:
         """Idempotently clean up any temporary verification artifacts."""
         return {"status": "clean", "cleaned_artifacts": 0}
@@ -266,11 +341,17 @@ def main() -> int:
             if args.json:
                 print(json.dumps(res, indent=2))
             else:
-                print(f"✓ Query executed in {res['execution_time_ms']} ms:")
-                print(f"  Question: {res['question']}")
-                print(f"  Answer: {res['answer']}")
-            return 0
-
+                if res.get("is_error"):
+                    print(f"FAIL: {res.get('error', 'Execution failed')}", file=sys.stderr)
+                    print(f"Run status: {res.get('run_status')}", file=sys.stderr)
+                    print(f"Raw steps: {json.dumps(res.get('raw_steps'), indent=2)}", file=sys.stderr)
+                else:
+                    print(f"✓ Query executed in {res['execution_time_ms']} ms:")
+                    print(f"  Question: {res['question']}")
+                    print(f"  Answer: {res['answer']}")
+                    print(f"  Query Language: {res['queryLanguage']}")
+                    print(f"  Generated Query:\n    {res['generatedQuery']}")
+            return 1 if res.get("is_error") else 0
         # Default action: verify publication
         res = verifier.verify_publication()
         if args.json:
