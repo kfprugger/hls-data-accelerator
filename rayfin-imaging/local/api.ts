@@ -7,7 +7,7 @@
  * the same queries as rayfin/functions/src/function_app.ts (translated from T-SQL). Keep the two in step:
  * the response shapes are checked against the generated function types.
  */
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { resolve } from 'path';
 
 import type { DuckDBInstance } from '@duckdb/node-api';
@@ -436,10 +436,28 @@ export function createLocalApi(work: string): LocalApi {
         sourceSilos,
         physicalBytesInPatient360: 0 as const,
       };
+      let databricksInterop: DataMap['databricksInterop'] = null;
+      const candidatePaths = [
+        resolve(work, '..', 'local', 'fixtures', 'databricks_proof.json'),
+        resolve(work, 'fixtures', 'databricks_proof.json'),
+        resolve(process.cwd(), 'local', 'fixtures', 'databricks_proof.json'),
+        resolve(process.cwd(), 'rayfin-imaging', 'local', 'fixtures', 'databricks_proof.json'),
+      ];
+      for (const p of candidatePaths) {
+        if (existsSync(p)) {
+          try {
+            databricksInterop = JSON.parse(readFileSync(p, 'utf-8'));
+            break;
+          } catch {
+            databricksInterop = null;
+          }
+        }
+      }
       return {
         workspace: { id: 'local', name: 'this computer (local mode)', portalUrl: '' },
         patient360: { id: 'local', name: 'patient360', portalUrl: '', sqlEndpoint: ENDPOINT, shortcuts, zeroCopy },
         zeroCopy,
+        databricksInterop,
         silos: silos.map((silo, i) => ({ silo, id: silo, ...SILOS[silo], portalUrl: '', items: inventoryRows[i] })),
         provenance: tracer.provenance('SELECT kind, name, rows, files, bytes FROM dbo.<silo>_inventory'),
       };

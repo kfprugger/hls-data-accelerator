@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-11-07T15:43:29Z",
+  "engine": "Azure Databricks Serverless SQL",
+  "statement": "SELECT count(DISTINCT patient_id) AS tcga_patient_count FROM hls_stfhiropulbb4gx2ioc_onelake.clinical.patient",
+  "warehouseId": "379ac7291980ef47",
+  "rowCount": 15,
+  "executionTimeMs": 681,
+  "oneLakeExternalLocation": "abfss://f306e105-78fd-4b16-bfbe-2b556d493cb7@onelake.dfs.fabric.microsoft.com/328852ec-d574-4ce2-a0e4-c2bb44162933/Files",
+  "status": "SUCCEEDED",
+  "zeroCopyVerified": true
+}
