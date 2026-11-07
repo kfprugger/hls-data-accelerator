@@ -247,33 +247,42 @@ class ResearcherPersonaManager:
             )
         nurse_id = nurse_user["id"]
 
-        # Update OneLake data access security roles
-        # Physical tables are in clinical_lakehouse: enforces table-level RBAC
-        clinical_roles = build_data_access_roles(nurse_id, researcher_id, self.tenant_id)
+        # Update OneLake data access security roles using strict read-modify-write
+        # Physical tables are in clinical_lakehouse: preserves external roles like DatabricksClinicalRead
         url_clin = f"/workspaces/{self.workspace_id}/items/{self.clinical_id}/dataAccessRoles"
-        resp_clin = self.fabric_request("PUT", url_clin, clinical_roles)
+        curr_clin_resp = self.fabric_request("GET", url_clin)
+        curr_clin_roles = curr_clin_resp.json().get("value", []) if curr_clin_resp.status_code == 200 else []
+        preserved_clin = [
+            r for r in curr_clin_roles
+            if r.get("name") not in ("ClinicalNurseRole", "ClinicalResearcherRole")
+        ]
+        our_clin_roles = build_data_access_roles(nurse_id, researcher_id, self.tenant_id).get("value", [])
+        resp_clin = self.fabric_request("PUT", url_clin, {"value": preserved_clin + our_clin_roles})
         resp_clin.raise_for_status()
-        print(f"Successfully configured dataAccessRoles on clinical_lakehouse ({self.clinical_id})")
+        print(f"Successfully configured dataAccessRoles on clinical_lakehouse ({self.clinical_id}) (preserved {len(preserved_clin)} existing roles)")
 
-        # patient360 holds shortcuts: binds researcher role with shortcut passthrough
-        p360_roles = {
-            "value": [
-                {
-                    "name": "DefaultReader",
-                    "decisionRules": [{"effect": "Permit", "permission": [{"attributeName": "Action", "attributeValueIncludedIn": ["Read"]}, {"attributeName": "Path", "attributeValueIncludedIn": ["*"]}]}],
-                    "members": {"fabricItemMembers": [{"sourcePath": f"{self.workspace_id}/{self.patient360_id}", "itemAccess": ["ReadAll"]}]},
-                },
-                {
-                    "name": "ClinicalResearcherRole",
-                    "decisionRules": [{"effect": "Permit", "permission": [{"attributeName": "Action", "attributeValueIncludedIn": ["Read"]}, {"attributeName": "Path", "attributeValueIncludedIn": ["*"]}]}],
-                    "members": {"microsoftEntraMembers": [{"objectId": researcher_id, "tenantId": self.tenant_id}]},
-                },
-            ]
-        }
+        # patient360 holds shortcuts: read-modify-write preserving DefaultReader and other roles
         url_p360 = f"/workspaces/{self.workspace_id}/items/{self.patient360_id}/dataAccessRoles"
-        resp_p360 = self.fabric_request("PUT", url_p360, p360_roles)
+        curr_p360_resp = self.fabric_request("GET", url_p360)
+        curr_p360_roles = curr_p360_resp.json().get("value", []) if curr_p360_resp.status_code == 200 else []
+        preserved_p360 = [
+            r for r in curr_p360_roles
+            if r.get("name") != "ClinicalResearcherRole"
+        ]
+        if not any(r.get("name") == "DefaultReader" for r in preserved_p360):
+            preserved_p360.insert(0, {
+                "name": "DefaultReader",
+                "decisionRules": [{"effect": "Permit", "permission": [{"attributeName": "Action", "attributeValueIncludedIn": ["Read"]}, {"attributeName": "Path", "attributeValueIncludedIn": ["*"]}]}],
+                "members": {"fabricItemMembers": [{"sourcePath": f"{self.workspace_id}/{self.patient360_id}", "itemAccess": ["ReadAll"]}]},
+            })
+        our_p360_role = {
+            "name": "ClinicalResearcherRole",
+            "decisionRules": [{"effect": "Permit", "permission": [{"attributeName": "Action", "attributeValueIncludedIn": ["Read"]}, {"attributeName": "Path", "attributeValueIncludedIn": ["*"]}]}],
+            "members": {"microsoftEntraMembers": [{"objectId": researcher_id, "tenantId": self.tenant_id}]},
+        }
+        resp_p360 = self.fabric_request("PUT", url_p360, {"value": preserved_p360 + [our_p360_role]})
         resp_p360.raise_for_status()
-        print(f"Successfully configured dataAccessRoles on patient360 ({self.patient360_id})")
+        print(f"Successfully configured dataAccessRoles on patient360 ({self.patient360_id}) (preserved {len(preserved_p360)} existing roles)")
 
         return 0
 
@@ -287,16 +296,17 @@ class ResearcherPersonaManager:
             print("[DRY-RUN] Delete operations validated successfully. No live modifications performed.")
             return 0
 
-        # Revoke OneLake roles
+        # Revoke OneLake roles using read-modify-write (pruning only owned roles)
         for item_name, item_id in [("patient360", self.patient360_id), ("clinical_lakehouse", self.clinical_id)]:
             url = f"/workspaces/{self.workspace_id}/items/{item_id}/dataAccessRoles"
             curr_resp = self.fabric_request("GET", url)
             if curr_resp.status_code == 200:
                 curr_roles = curr_resp.json().get("value", [])
-                filtered = [r for r in curr_roles if r.get("name") != "ClinicalResearcherRole"]
+                filtered = [r for r in curr_roles if r.get("name") not in ("ClinicalResearcherRole", "ClinicalNurseRole")]
                 if len(filtered) != len(curr_roles):
-                    self.fabric_request("PUT", url, {"value": filtered})
-                    print(f"Revoked ClinicalResearcherRole on {item_name}")
+                    del_resp = self.fabric_request("PUT", url, {"value": filtered})
+                    del_resp.raise_for_status()
+                    print(f"Revoked owned roles on {item_name} (preserved {len(filtered)} existing roles)")
 
         # Delete Entra user
         user = self.find_user(RESEARCHER_UPN)

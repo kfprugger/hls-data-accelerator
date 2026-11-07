@@ -8,7 +8,7 @@ E-3 | PASS | test_researcher_denied_on_identified_patient_table exited 0 (HTTP 4
 E-4 | PASS | specs/tickets/006-phi-persona-views/evidence/E-4.png
 E-5 | PASS | dry-run exited 0; 0 password leaks found in repo files or logs
 E-6 | PASS | manage_researcher_persona.py --dry-run and --delete --dry-run exited 0
-E-7 | PASS | toggle latency 1.10ms (< 200ms) without window reload
+E-7 | PASS | toggle latency 0.70ms (< 200ms) without window reload
 E-8 | PASS | specs/tickets/006-phi-persona-views/evidence/E-8-1280px.png
 E-9 | PASS | specs/tickets/006-phi-persona-views/evidence/E-4.png
 E-10 | PASS | seed_deidentified_clinical.py --live idempotent (exit 0); SQL query: 15 rows, Marcus Vance display_name='TCGA-G6-A8L6', 0 rows with 'Vance'
