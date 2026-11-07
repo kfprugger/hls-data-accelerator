@@ -1,0 +1,8 @@
+{
+  "question": "How many distinct patients are in the Patient table?",
+  "answer": "There are 115 distinct patients in the Patient table.",
+  "generatedQuery": "SELECT COUNT(DISTINCT idOrig) AS patient_count\nFROM dbo.Patient;",
+  "queryLanguage": "SQL",
+  "execution_time_ms": 20518,
+  "is_error": false
+}

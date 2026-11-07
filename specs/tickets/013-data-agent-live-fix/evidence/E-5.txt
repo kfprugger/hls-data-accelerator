@@ -1,0 +1,18 @@
+Restore source: specs/tickets/013-data-agent-live-fix/evidence/patient360-before.json
+Found 15 parts:
+  [ 1] Files/Config/data_agent.json (InlineBase64, 168 bytes)
+  [ 2] Files/Config/draft/stage_config.json (InlineBase64, 19524 bytes)
+  [ 3] Files/Config/draft/lakehouse-tables-healthcare1_msft_silver/datasource.json (InlineBase64, 243580 bytes)
+  [ 4] Files/Config/draft/lakehouse-tables-healthcare1_msft_silver/fewshots.json (InlineBase64, 14516 bytes)
+  [ 5] Files/Config/draft/kusto-MasimoEventhouse/datasource.json (InlineBase64, 14632 bytes)
+  [ 6] Files/Config/draft/kusto-MasimoEventhouse/fewshots.json (InlineBase64, 5104 bytes)
+  [ 7] Files/Config/draft/ontologies/ClinicalDeviceOntology/ontology.json (InlineBase64, 468 bytes)
+  [ 8] Files/Config/publish_info.json (InlineBase64, 252 bytes)
+  [ 9] Files/Config/published/stage_config.json (InlineBase64, 19524 bytes)
+  [10] Files/Config/published/lakehouse-tables-healthcare1_msft_silver/datasource.json (InlineBase64, 243580 bytes)
+  [11] Files/Config/published/lakehouse-tables-healthcare1_msft_silver/fewshots.json (InlineBase64, 14516 bytes)
+  [12] Files/Config/published/kusto-MasimoEventhouse/datasource.json (InlineBase64, 14632 bytes)
+  [13] Files/Config/published/kusto-MasimoEventhouse/fewshots.json (InlineBase64, 5104 bytes)
+  [14] Files/Config/published/ontologies/ClinicalDeviceOntology/ontology.json (InlineBase64, 468 bytes)
+  [15] .platform (InlineBase64, 644 bytes)
+Dry-run: Would write 15 definition parts to 'Patient 360'. Exiting 0.
