@@ -154,6 +154,30 @@ print("PASSED: All injection attempts blocked")
      ```
 - **Expected**: Both commands exit with returncode 2 and print `Error: no_alert_recipient_configured`. No network connection is attempted.
 
+## Live checks (added by the router; med-1103a, capacity Active, `HLS_ALERT_EMAIL=joey@jbatl.dev`)
+
+### E-11 [U] Live: the Activator exists with the right rule (covers FR-3)
+- **Type**: CLI
+- **Steps**:
+  1. `AZURE_CONFIG_DIR=$HOME/.azure-isolated/JBATL HLS_BIND_INTERFACE=en0 HLS_ALERT_EMAIL=joey@jbatl.dev <python> scripts/deploy_clinical_activator.py --live --workspace med-1103a`, run twice.
+  2. Read the Reflex definition back with `POST /v1/workspaces/f306e105-78fd-4b16-bfbe-2b556d493cb7/items/<id>/getDefinition` and decode it.
+- **Expected**: Both runs exit 0; the second run reports no change or an update, never a second item. Exactly one Reflex named `ClinicalAlertActivator` exists. The decoded definition has `kqlSource-v1` with `executionIntervalInSeconds` = 60, no `isStopped`, and an email action whose only recipient is `joey@jbatl.dev`. Evidence: the raw decoded JSON (secrets, if any, removed).
+
+### E-12 [U] Live: a real SpO2 drop produces a real alert email, with a measured stopwatch (covers FR-1, FR-5, NFR-1)
+- **Type**: CLI
+- **Steps**:
+  1. Record `T0` and run `<python> scripts/trigger_spo2_alert.py --live --workspace med-1103a` (Marcus Vance, `MASIMO-RADIUS7-0101`, SpO2 84).
+  2. Query `MasimoEventhouse`: `TelemetryRaw | where tostring(device_id) == 'MASIMO-RADIUS7-0101' and todouble(spo2) == 84.0 | project ingestion_time(), * | top 1 by ingestion_time() desc` for `T1`, and `fn_ClinicalAlerts(10) | where tostring(device_id) == 'MASIMO-RADIUS7-0101'` for the alert row.
+  3. Read the joey@jbatl.dev mailbox with Microsoft Graph (`GET /me/messages?$filter=receivedDateTime ge <T0>&$orderby=receivedDateTime desc&$top=5`, delegated token for the signed-in user) for `T3` = the Activator email's `receivedDateTime`. Wait at most 5 minutes.
+- **Expected**: The telemetry row and the alert row exist. Exactly one Activator email for this alert arrives. The script prints the stopwatch computed from these real timestamps (`T0`, `T1`, `T3`), and `T3 − T0` is printed as measured (report the number; it passes if an email arrived within 5 minutes; NFR-1's 60 s target is reported, not faked). Evidence: raw KQL output, the Graph message metadata (subject, from, receivedDateTime only; no body), and the script's stopwatch table.
+
+### E-13 [S] Live: a second drop within 10 minutes sends no second email (covers FR-4)
+- **Type**: CLI
+- **Steps**:
+  1. Within 10 minutes of E-12, run the trigger again.
+  2. Wait 3 minutes and read the mailbox the same way.
+- **Expected**: The second telemetry row exists in `TelemetryRaw`, `fn_ClinicalAlerts` returns no new alert row for the device, and no second Activator email arrives. Evidence: raw KQL output and the Graph message list.
+
 ## Regression checks
 
 ### R-1 [R] Existing WardFlow and Patient 360 flows remain operational
