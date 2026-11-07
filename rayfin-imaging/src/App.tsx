@@ -18,6 +18,7 @@ import { Patients } from '@/pages/Patients';
 import { Sources } from '@/pages/Sources';
 import { Volumes } from '@/pages/Volumes';
 import { WardFlow } from '@/pages/WardFlow';
+import { Standards } from '@/pages/Standards';
 
 interface AuthRedirectState {
   from?: string;
@@ -115,6 +116,7 @@ function App() {
           <Route path="data" element={<DataMap />} />
           <Route path="guide" element={<Guide />} />
           <Route path="sources" element={<Sources />} />
+          <Route path="standards" element={<Standards />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

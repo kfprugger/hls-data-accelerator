@@ -109,6 +109,19 @@ export function localMode(projectRoot: string): Plugin {
           if (name === 'getPatient') return send(res, 200, await api.getPatient(url.searchParams.get('patientId') ?? '', origin));
           if (name === 'getDataMap') return send(res, 200, await api.getDataMap());
           if (name === 'getWardFlowCohort') return send(res, 200, await api.getWardFlowCohort());
+          if (name === 'getStandardsMapping') {
+            const patientId = url.searchParams.get('patientId') ?? '';
+            if (!PATIENT_ID.test(patientId)) return send(res, 400, { error: 'Invalid patient id' });
+            try {
+              return send(res, 200, await api.getStandardsMapping(patientId));
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              if (msg.includes('not found')) {
+                return send(res, 404, { error: 'Patient not found in standards catalog' });
+              }
+              throw err;
+            }
+          }
           if (name === 'notes' && req.method === 'GET') {
             const patientId = url.searchParams.get('patientId') ?? '';
             if (!PATIENT_ID.test(patientId)) return send(res, 400, { error: 'Invalid patient id' });
