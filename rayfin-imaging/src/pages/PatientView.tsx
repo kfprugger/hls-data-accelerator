@@ -43,13 +43,24 @@ export function diseaseLine(b: PatientBundle): string {
   return `${str(p.cancer_type)}${head ? `, ${head}` : ''}${where ? `, ${where}` : ''}`;
 }
 
+export function conditionSubtitle(b: PatientBundle): string {
+  const p = b.patient;
+  const stage = str(p.stage);
+  const stg = stage ? `Stage ${shortStage(stage)}` : null;
+  const cancer = str(p.cancer_type);
+  const prettyCancer = cancer === 'Clear cell renal cell carcinoma'
+    ? 'Clear Cell Renal Carcinoma'
+    : (cancer ? cancer.charAt(0).toUpperCase() + cancer.slice(1) : '');
+  if (stg && prettyCancer) return `${stg} ${prettyCancer}`;
+  return stg || prettyCancer || 'Clinical Case';
+}
+
 export function outcomeText(b: PatientBundle): { label: string; value: string; alert: boolean } {
   const p = b.patient;
   const days = num(p.days_to_last_contact) ?? 0;
   if (str(p.vital_status) === 'Dead') return { label: 'Died', value: `${fmtSpan(num(p.days_to_death))} after diagnosis`, alert: true };
   return { label: 'Last contact', value: `Alive, ${fmtSpan(days)} after diagnosis`, alert: false };
 }
-
 function Modality({ silo, label, children, synthetic }: { silo: string; label: string; children: ReactNode; synthetic?: boolean }) {
   return (
     <div className="min-w-0">
@@ -118,13 +129,13 @@ function Overview({ b, onProvenance, loadMs }: { b: PatientBundle; onProvenance:
         </dl>
       </div>
       <div className="hair mt-5 grid grid-cols-2 gap-x-8 gap-y-3 border-t pt-4 md:grid-cols-3 xl:grid-cols-6">
-        <Modality silo="clinical" label="Cancer registry">
+        <Modality silo="clinical" label="Clinical Registry & Demographics">
           {b.diagnoses.length} diagnoses · {b.treatments.filter((t) => t.given).length} treatments · {b.followUps.length} follow-ups
         </Modality>
         <Modality silo="clinical" label="Primary care" synthetic>
           {b.encounters.length} visits · {fmtNum(b.observations.filter((o) => o.synthetic).length, 0)} results
         </Modality>
-        <Modality silo="genomics" label="Tumour genome">
+        <Modality silo="genomics" label="Somatic Mutations & Molecular Drivers">
           {fmtNum(num(prof.mutation_count), 0)} mutations · {b.segments.length} CN segments
         </Modality>
         <Modality silo="pathology" label={slideCount > 1 ? 'H&E slides' : 'Diagnostic slide'}>
@@ -298,11 +309,18 @@ function measuredVisits(b: PatientBundle): Set<string> {
 function RecordHead({ b, controlsRef }: { b: PatientBundle; controlsRef: (el: HTMLDivElement | null) => void }) {
   const p = b.patient;
   return (
-    <div className="rec-head flex-wrap overflow-hidden max-w-full">
-      <h1 className="t-display text-[20px] sm:text-[26px] leading-none truncate max-w-[200px] sm:max-w-none">{str(p.display_name)}</h1>
-      <span className="mono t-faint text-[12px]">{str(p.patient_id)}</span>
-      <span className="syn-tag hidden sm:inline" title="TCGA publishes no names. The display name is generated.">name is synthetic</span>
-      <span className="t-muted min-w-0 truncate text-[13.5px] hidden sm:inline">{barLine(b)}</span>
+    <div className="rec-head flex-wrap items-baseline gap-x-4 gap-y-1 overflow-hidden max-w-full">
+      <div className="flex flex-col sm:flex-row sm:items-baseline gap-x-3 gap-y-0.5 min-w-0">
+        <div className="flex items-baseline gap-2 min-w-0">
+          <h1 className="t-display text-[20px] sm:text-[26px] leading-tight truncate">{str(p.display_name)}</h1>
+          <span className="mono t-faint text-[12px] shrink-0" title="De-identified TCGA patient identifier">{str(p.patient_id)}</span>
+          <span className="syn-tag hidden md:inline" title="TCGA publishes no names. The display name is generated.">synthetic name</span>
+        </div>
+        <div className="patient-subtitle text-[14px] text-[var(--ink-2)] font-medium truncate">
+          {conditionSubtitle(b)}
+        </div>
+      </div>
+      <span className="t-muted min-w-0 truncate text-[12.5px] hidden xl:inline">{barLine(b)}</span>
       <div ref={controlsRef} className="rec-head-controls" aria-label="Timeline controls" />
     </div>
   );

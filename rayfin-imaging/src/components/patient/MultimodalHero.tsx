@@ -10,6 +10,7 @@ import {
   type PatientBundle,
 } from '@/lib/api';
 import { fmtBytes, fmtMonth, fmtNum } from '@/lib/format';
+import { LOCAL_DATA } from '@/lib/localMode';
 
 /**
  * Safely constructs a file URL ensuring:
@@ -141,6 +142,11 @@ function SummaryHeaderBar({ b }: { b: PatientBundle }) {
 /* ------------------------------------------------------------------ Streaming Badge */
 
 function StreamBadge({ sizeLabel }: { sizeLabel: string }) {
+  const prefix = LOCAL_DATA ? 'Cataloged in OneLake: ' : 'Streamed from OneLake, never copied: ';
+  const title = LOCAL_DATA
+    ? 'Cataloged in Microsoft OneLake; rendered from local cache without dataset replication'
+    : 'Streamed on demand from Microsoft OneLake without local dataset replication';
+
   return (
     <div
       className="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] mono font-medium shadow-xs"
@@ -149,11 +155,11 @@ function StreamBadge({ sizeLabel }: { sizeLabel: string }) {
         borderColor: 'var(--line)',
         color: 'var(--ink)',
       }}
-      title="Streamed on demand from Microsoft OneLake without local dataset replication"
+      title={title}
     >
       <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
       <span>
-        Streamed from OneLake, never copied: <strong>{sizeLabel}</strong>
+        {prefix}<strong>{sizeLabel}</strong>
       </span>
     </div>
   );

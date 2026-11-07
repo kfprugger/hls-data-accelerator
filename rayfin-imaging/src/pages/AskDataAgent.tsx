@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { askDataAgent, type AskDataAgentResponse } from '@/lib/api';
-
+import { GlossaryTooltip } from '@/components/GlossaryTooltip';
 const PRESET_QUERIES = [
   "Show Marcus Vance's vital signs and cancer stage",
   'Which devices have SpO2 alerts right now?',
@@ -115,14 +115,14 @@ export function AskDataAgent() {
       {/* Header */}
       <div className="max-w-4xl mx-auto">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--foreground)]">
-          Ask Data Agent
+          <GlossaryTooltip term="Data Agent">Ask Data Agent</GlossaryTooltip>
         </h1>
         <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-          Plain-language Q&amp;A over unified FHIR clinical records and Masimo real-time telemetry powered by Fabric Patient 360 Data Agent.
+          Plain-language Q&amp;A over unified FHIR clinical records and Masimo real-time telemetry powered by Fabric Patient 360{' '}
+          <GlossaryTooltip term="Data Agent">Data Agent</GlossaryTooltip> grounded in clinical{' '}
+          <GlossaryTooltip term="Ontology">Ontology</GlossaryTooltip>.
         </p>
       </div>
-
-      {/* Search Input Box */}
       <div className="max-w-4xl mx-auto">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="relative">

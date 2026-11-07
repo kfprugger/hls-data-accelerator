@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { DicomMappingCard } from '@/components/standards/DicomMappingCard';
 import { FhirMappingCard } from '@/components/standards/FhirMappingCard';
+import { GlossaryTooltip } from '@/components/GlossaryTooltip';
 import { useCohort } from '@/hooks/useCohort';
 import { fetchStandardsMapping, type StandardsMapping } from '@/lib/api';
 
@@ -95,7 +96,7 @@ export function Standards() {
               Standards Interoperability Lineage
             </h1>
             <p className="text-[13px] text-[var(--ink-muted)] mt-1">
-              Field-level transformation proof: FHIR R4 clinical resources &amp; DICOM radiology tags to conformed Microsoft Fabric Delta Lake tables.
+              Field-level transformation proof: FHIR R4 clinical resources &amp; DICOM radiology tags to conformed Microsoft Fabric Delta Lake tables via healthcare semantic <GlossaryTooltip term="Ontology">Ontology</GlossaryTooltip>.
             </p>
           </div>
 
