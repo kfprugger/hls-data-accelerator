@@ -1,6 +1,6 @@
 # 012: Orchestrator Add-on Wiring for Healthcare Demonstration Capabilities
 
-**Status:** ready
+**Status:** done
 
 | **Risk** | High: Pipeline failure, unhandled exception in core deployment, or unintended execution of identity creation / email dispatch |
 
