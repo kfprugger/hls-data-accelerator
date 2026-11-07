@@ -25,7 +25,8 @@ The HLS Data Accelerator orchestrator automates end-to-end multi-service healthc
 - **FR-2 (Command Execution & Sequencing in Rayfin Add-on)**:
   In `AddonRunner.prepare_rayfin_imaging(root: Path)`, after `pipeline/seed_patient360_silos.py` completes:
   1. If `self.config.get("seed_tcga_cohort", True)`:
-     - Invokes `[sys.executable, str(ROOT / "synthea/seed_tcga_cohort.py"), "apply", "--resource-group", cfg["resource_group_name"], "--subscription", cfg["expected_subscription_id"]]`.
+     - Invokes `[sys.executable, str(ROOT / "synthea/seed_tcga_cohort.py"), "apply", "--emit-baseline-telemetry", "--resource-group", cfg["resource_group_name"], "--subscription", cfg["expected_subscription_id"]]`.
+     - Then, so the patients reach Silver and Gold on a fresh deployment (the base HDS run happened before seeding), runs the workspace's existing `healthcare1_msft_clinical_data_foundation_ingestion` pipeline, then the existing `materialize_reporting_tables` notebook, each as a Fabric job with a bounded poll (max 60 min each; failure raises), then refreshes the `healthcare1_reporting_gold` SQL endpoint metadata. Router verification on med-1103a (2026-11-07): after these two jobs, `healthcare1_reporting_gold.dbo.PatientReporting` went from 100 to 115 rows and contains Marcus Vance. Unit tests assert this order.
   2. If `self.config.get("enable_researcher_persona")`:
      - Invokes `[sys.executable, str(ROOT / "scripts/manage_researcher_persona.py"), "--create", "--workspace", cfg["fabric_workspace_name"]]`.
      - Followed by `[sys.executable, str(root / "pipeline/seed_deidentified_clinical.py")]`.
