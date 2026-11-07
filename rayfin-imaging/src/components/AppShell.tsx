@@ -28,10 +28,10 @@ function ShellHeader() {
   const portalLabel = catalog ? `${catalog.lakehouse.workspaceName}/${catalog.lakehouse.lakehouseName}` : WORKSPACE_NAME;
 
   return (
-    <header className="hair shrink-0 border-b">
-      <div className="flex h-14 items-center gap-6 px-5">
+    <header className="hair shrink-0 border-b max-w-full overflow-hidden">
+      <div className="flex h-14 items-center gap-2 sm:gap-6 px-2.5 sm:px-5 max-w-full min-w-0">
         <Wordmark compact />
-        <nav className="flex h-full items-stretch gap-5 overflow-x-auto" aria-label="Sections">
+        <nav className="flex h-full items-stretch gap-3 sm:gap-5 overflow-x-auto min-w-0 flex-1" aria-label="Sections">
           {TABS.map((t) => (
             <Link key={t.to} to={t.to} className={`tab whitespace-nowrap ${t.active(pathname) ? 'active' : ''}`}>
               {t.label}

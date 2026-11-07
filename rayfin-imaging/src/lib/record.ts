@@ -7,6 +7,7 @@ import type { Mark, MarkKind } from '@/components/patient/Timeline';
  */
 export type TabId =
   | 'summary'
+  | 'multimodal'
   | 'visits'
   | 'measurements'
   | 'conditions'
@@ -36,6 +37,15 @@ export interface TabDef {
 
 export const TABS: TabDef[] = [
   { id: 'summary', label: 'Summary', group: 'overview', kinds: [], noun: '', plural: '' },
+  {
+    id: 'multimodal',
+    label: 'Multimodal hero',
+    group: 'overview',
+    kinds: [],
+    noun: 'modality',
+    plural: 'modalities',
+    hint: 'Side-by-side 3D CT scan, digital pathology, and genomic drivers',
+  },
   { id: 'visits', label: 'Visits', group: 'primary', kinds: ['visit'], noun: 'visit', plural: 'visits' },
   { id: 'measurements', label: 'Measurements', group: 'primary', kinds: ['visit'], noun: 'visit with results', plural: 'visits with results' },
   { id: 'conditions', label: 'Conditions', group: 'primary', kinds: ['condition'], noun: 'condition', plural: 'conditions' },

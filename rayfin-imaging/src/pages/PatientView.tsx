@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ClinicalSection, NotesSection, ReportSection, type NoteAnchor } from '@/components/patient/Clinical';
 import { GenomicsSection } from '@/components/patient/Genomics';
 import { PathologyPanel, RadiologyFootnotes, RadiologyPanel } from '@/components/patient/Imaging';
+import { MultimodalHero } from '@/components/patient/MultimodalHero';
 import { MeasurementsPanel, PrimaryCareGlance } from '@/components/patient/PrimaryCare';
 import { buildModel, LifeTimeline, noteMarks, type Mark, type Model, type Orientation } from '@/components/patient/Timeline';
 import { TimelineDetail } from '@/components/patient/TimelineDetail';
@@ -17,7 +18,7 @@ import { LOCAL_DATA } from '@/lib/localMode';
 import { itemsFor, tabDef, TAB_IDS, TABS, tabFor, type TabGroup, type TabId } from '@/lib/record';
 import { OPEN_EVENT, type OpenRequest } from '@/lib/timelineLink';
 
-function personLine(b: PatientBundle): string {
+export function personLine(b: PatientBundle): string {
   const p = b.patient;
   const sex = str(p.sex)?.toLowerCase() === 'female' ? 'woman' : 'man';
   const parts = [`${num(p.age_at_diagnosis)}-year-old ${sex} at diagnosis`, str(p.race), str(p.country)];
@@ -30,7 +31,7 @@ function personLine(b: PatientBundle): string {
   return parts.filter(Boolean).join(' · ');
 }
 
-function diseaseLine(b: PatientBundle): string {
+export function diseaseLine(b: PatientBundle): string {
   const p = b.patient;
   const tnm = [str(p.t_stage), str(p.n_stage), str(p.m_stage)].filter(Boolean).join(' ');
   const stage = str(p.stage) ? `stage ${shortStage(str(p.stage))}` : null;
@@ -41,7 +42,7 @@ function diseaseLine(b: PatientBundle): string {
   return `${str(p.cancer_type)}${head ? `, ${head}` : ''}${where ? `, ${where}` : ''}`;
 }
 
-function outcomeText(b: PatientBundle): { label: string; value: string; alert: boolean } {
+export function outcomeText(b: PatientBundle): { label: string; value: string; alert: boolean } {
   const p = b.patient;
   const days = num(p.days_to_last_contact) ?? 0;
   if (str(p.vital_status) === 'Dead') return { label: 'Died', value: `${fmtSpan(num(p.days_to_death))} after diagnosis`, alert: true };
@@ -296,11 +297,11 @@ function measuredVisits(b: PatientBundle): Set<string> {
 function RecordHead({ b, controlsRef }: { b: PatientBundle; controlsRef: (el: HTMLDivElement | null) => void }) {
   const p = b.patient;
   return (
-    <div className="rec-head">
-      <h1 className="t-display text-[26px] leading-none">{str(p.display_name)}</h1>
+    <div className="rec-head flex-wrap overflow-hidden max-w-full">
+      <h1 className="t-display text-[20px] sm:text-[26px] leading-none truncate max-w-[200px] sm:max-w-none">{str(p.display_name)}</h1>
       <span className="mono t-faint text-[12px]">{str(p.patient_id)}</span>
-      <span className="syn-tag" title="TCGA publishes no names. The display name is generated.">name is synthetic</span>
-      <span className="t-muted min-w-0 truncate text-[13.5px]">{barLine(b)}</span>
+      <span className="syn-tag hidden sm:inline" title="TCGA publishes no names. The display name is generated.">name is synthetic</span>
+      <span className="t-muted min-w-0 truncate text-[13.5px] hidden sm:inline">{barLine(b)}</span>
       <div ref={controlsRef} className="rec-head-controls" aria-label="Timeline controls" />
     </div>
   );
@@ -449,6 +450,15 @@ function ItemScrubber({ items, selected, onSelect, noun, plural }: { items: Mark
 
 export function PatientView({ id }: { id: string }) {
   const { bundle, error, loadMs } = usePatient(id);
+  const [params] = useSearchParams();
+  const b = useMemo(() => {
+    if (!bundle) return null;
+    let mod = bundle;
+    if (params.get('mockEmptyRad') === '1') mod = { ...mod, radiologySeries: [] };
+    if (params.get('mockEmptyDrivers') === '1') mod = { ...mod, drivers: [] };
+    return mod;
+  }, [bundle, params]);
+
   if (error) {
     return (
       <div className="p-8 text-[13px]">
@@ -456,7 +466,7 @@ export function PatientView({ id }: { id: string }) {
       </div>
     );
   }
-  if (!bundle) {
+  if (!b) {
     return (
       <div>
         <div className="loading-bar" />
@@ -464,7 +474,7 @@ export function PatientView({ id }: { id: string }) {
       </div>
     );
   }
-  return <Record key={id} id={id} b={bundle} loadMs={loadMs} />;
+  return <Record key={id} id={id} b={b} loadMs={loadMs} />;
 }
 
 function Record({ id, b, loadMs }: { id: string; b: PatientBundle; loadMs: number | null }) {
@@ -863,6 +873,13 @@ const TabPane = memo(function TabPane({
         <div className="hair mt-8 border-t pt-6">
           <PrimaryCareGlance b={b} />
         </div>
+      </div>
+    );
+  }
+  if (tab === 'multimodal') {
+    return (
+      <div className="rec-pane">
+        <MultimodalHero b={b} />
       </div>
     );
   }

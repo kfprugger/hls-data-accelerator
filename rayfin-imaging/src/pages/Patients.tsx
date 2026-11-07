@@ -153,9 +153,10 @@ function CohortOverview() {
 const LIST_KEY = 'p360.list';
 
 export function Patients() {
-  const { id } = useParams();
-  // Switching patient keeps the open tab, so the same view can be compared across patients.
+  const { id: paramId } = useParams();
   const [params] = useSearchParams();
+  const id = paramId ?? params.get('id') ?? undefined;
+  // Switching patient keeps the open tab, so the same view can be compared across patients.
   const keepTab = params.get('tab') ? `?tab=${encodeURIComponent(params.get('tab')!)}` : '';
   const { cohort, loading, getPatient } = useCohort();
   const [query, setQuery] = useState('');
