@@ -303,6 +303,78 @@ export function DataMap() {
           </div>
         </DocSection>
 
+        <DocSection
+          title="Azure Databricks Interoperability"
+          intro="Cross-engine zero-copy validation: Azure Databricks Serverless SQL querying OneLake Delta tables in place without data duplication."
+        >
+          {!map.databricksInterop ? (
+            <div className="rounded border border-[var(--line)] bg-[var(--surface)] p-6 text-[13.5px] text-[var(--ink-2)]" role="status">
+              Awaiting Databricks verification (run scripts/09-onelake-interop-proof.py)
+            </div>
+          ) : (
+            <div className="rounded border border-[var(--line)] bg-[var(--surface)] p-5 sm:p-6 min-w-0">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[17px] font-semibold text-[var(--ink)]">{map.databricksInterop.engine}</div>
+                  <div className="t-muted mono text-[12px] mt-0.5">Warehouse ID: {map.databricksInterop.warehouseId}</div>
+                </div>
+                <div>
+                  <span className="inline-flex items-center rounded-full border border-[var(--c-good)] bg-[var(--well)] px-3 py-1 text-[12px] font-medium text-[var(--c-good)]">
+                    Zero-copy read verified
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2 min-w-0">
+                <div className="flex flex-col justify-between rounded border border-[var(--line)] bg-[var(--well)] p-4 min-w-0">
+                  <div>
+                    <div className="t-label text-[11px]">Verified SQL Query</div>
+                    <pre className="mono mt-2 text-[12.5px] text-[var(--ink)] whitespace-pre-wrap break-all leading-relaxed">
+                      {map.databricksInterop.statement}
+                    </pre>
+                  </div>
+                  <div className="t-muted mt-3 border-t border-[var(--line)] pt-2 text-[11.5px] break-all">
+                    Target location: <span className="mono text-[var(--ink)]">{map.databricksInterop.oneLakeExternalLocation}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 min-w-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+                    <div className="rounded border border-[var(--line)] bg-[var(--well)] p-4">
+                      <div className="t-label text-[11px]">Validated Result</div>
+                      <div className="mt-2 text-[24px] font-semibold tracking-tight text-[var(--ink)]">
+                        {map.databricksInterop.rowCount} TCGA patients
+                      </div>
+                      <div className="t-muted mt-1 text-[12px]">
+                        {map.databricksInterop.fabricP360Count !== undefined
+                          ? `Fabric patient360 parity: ${map.databricksInterop.fabricP360Count} (0 copies)`
+                          : 'Direct zero-copy read'}
+                      </div>
+                    </div>
+
+                    <div className="rounded border border-[var(--line)] bg-[var(--well)] p-4">
+                      <div className="t-label text-[11px]">Execution Latency</div>
+                      <div className="mt-2 text-[24px] font-semibold tracking-tight text-[var(--ink)]">
+                        {fmtMs(map.databricksInterop.executionTimeMs)}
+                      </div>
+                      <div className="t-muted mt-1 text-[12px]">Serverless SQL execution</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded border border-[var(--line)] bg-[var(--well)] p-3 flex flex-wrap items-center justify-between gap-2 text-[12px] min-w-0">
+                    <span className="t-muted break-all">
+                      Delta table: <span className="mono text-[var(--ink)]">v{map.databricksInterop.deltaTableVersion ?? 0}</span> · Verified at: <span className="mono text-[var(--ink)]">{map.databricksInterop.timestamp}</span>
+                    </span>
+                    <span className="mono font-medium text-[var(--c-good)]">
+                      Status: {map.databricksInterop.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DocSection>
+
         <DocSection title="Why it matters">
           <dl>
             {[
