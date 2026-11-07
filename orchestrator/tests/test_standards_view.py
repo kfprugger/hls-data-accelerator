@@ -38,13 +38,24 @@ class TestStandardsViewVerification(unittest.TestCase):
         for col in expected_cols:
             self.assertIn(col, verified_cols, f"Missing verified column: {col}")
 
+        import pyarrow.parquet as pq
+
+        work_tables = ROOT / "rayfin-imaging" / "work" / "tables"
+        studies = pq.read_table(str(work_tables / "imaging" / "radiology_study.parquet")).to_pylist()
+        series = pq.read_table(str(work_tables / "imaging" / "radiology_series.parquet")).to_pylist()
+        patients = pq.read_table(str(work_tables / "clinical" / "patient.parquet")).to_pylist()
+
+        expected_study = next(s for s in studies if s["patient_id"] == "TCGA-G6-A8L6")
+        expected_series = next(r for r in series if r["patient_id"] == "TCGA-G6-A8L6")
+        expected_patient = next(p for p in patients if p["patient_id"] == "TCGA-G6-A8L6")
+
         fhir_mapping = data.get("fhir_mapping", {})
-        self.assertEqual(fhir_mapping.get("display_name"), "Marcus Vance")
-        self.assertEqual(fhir_mapping.get("primary_diagnosis"), "Clear cell renal cell carcinoma")
+        self.assertEqual(fhir_mapping.get("display_name"), expected_patient.get("display_name"))
+        self.assertEqual(fhir_mapping.get("primary_diagnosis"), expected_patient.get("primary_diagnosis"))
 
         dicom_mapping = data.get("dicom_mapping", {})
-        self.assertEqual(dicom_mapping.get("study_uid"), "1.3.6.1.4.1.14519.5.2.1.4872083899")
-        self.assertEqual(dicom_mapping.get("series_uid"), "1.3.6.1.4.1.14519.5.2.1.4872083899.1")
+        self.assertEqual(dicom_mapping.get("study_uid"), expected_study.get("study_uid"))
+        self.assertEqual(dicom_mapping.get("series_uid"), expected_series.get("series_uid"))
 
     def test_verify_standards_view_invalid_patient_format(self):
         """Test that verify_standards_view.py rejects malicious or malformed patient IDs."""

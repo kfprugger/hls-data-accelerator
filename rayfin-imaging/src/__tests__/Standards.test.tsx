@@ -140,8 +140,10 @@ describe('DicomMappingCard component', () => {
     expect(screen.getByText('(0020,000D)')).toBeDefined();
     expect(screen.getAllByText(/Modality/).length).toBeGreaterThan(0);
 
-    expect(screen.getAllByText('1.3.6.1.4.1.14519.5.2.1.4872083899').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('1.3.6.1.4.1.14519.5.2.1.4872083899.1').length).toBeGreaterThan(0);
+    const expectedStudyUid = String(mockMapping.radiologyStudies[0].study_uid);
+    const expectedSeriesUid = String(mockMapping.radiologySeries[0].series_uid);
+    expect(screen.getAllByText(expectedStudyUid).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(expectedSeriesUid).length).toBeGreaterThan(0);
   });
 
   it('renders empty state when no radiology study exists', () => {
