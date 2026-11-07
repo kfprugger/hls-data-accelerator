@@ -9,10 +9,13 @@ param (
     [string]$SpnTenantId = "",
     [string]$FabricWorkspaceName = "",
     [switch]$SkipTelemetry,
-    [switch]$SkipEmulator
+    [switch]$SkipEmulator,
+    [bool]$SeedTcgaCohort = $true,
+    [int]$DeviceCount = 0
 )
 
 $ErrorActionPreference = "Stop"
+$effectiveDeviceCount = if ($DeviceCount -gt 0) { $DeviceCount } elseif ($SeedTcgaCohort) { 115 } else { 100 }
 
 # Sanitize and truncate FabricWorkspaceName to form appNamePrefix
 $appNamePrefix = "masimo"
@@ -637,6 +640,7 @@ if (-not $skipEmulatorAndBuild -and -not $SkipTelemetry) {
             "imageName=$fullImageTag",
             "eventHubName=$ehName",
             "eventHubNamespace=$ehNamespace",
+            "deviceCount=$effectiveDeviceCount",
             "--parameters", $tagsParamRef
         )
 

@@ -115,6 +115,9 @@ param (
     [string]$PayerOpsEmail = "",    # Email for payer operations alerts; falls back to -AlertEmail only when empty
     [int]$ClaimEventRatePerMinute = 60,
 
+    # ── Demonstration Capabilities ──
+    [bool]$SeedTcgaCohort = $true,
+    [int]$DeviceCount = 0,
     # ── SPN Credentials ──
     [string]$SpnClientId = "",
     [string]$SpnClientSecret = "",
@@ -1909,6 +1912,9 @@ if (-not $Phase3 -and -not $Phase4 -and -not $Phase5 -and -not $Phase7 -and -not
     }
     if ($SkipFabric) { $deployArgs['SkipTelemetry'] = $true }
     if ($ScaffoldingOnly) { $deployArgs['SkipEmulator'] = $true }
+    $effectiveDeviceCount = if ($DeviceCount -gt 0) { $DeviceCount } elseif ($SeedTcgaCohort) { 115 } else { 100 }
+    $deployArgs['DeviceCount'] = $effectiveDeviceCount
+    $deployArgs['SeedTcgaCohort'] = [bool]$SeedTcgaCohort
     if ($ScaffoldingOnly) {
         foreach ($producerName in @("masimo-emulator-grp", "synthea-generator-job", "fhir-loader-job", "dicom-loader-job", "claim-emulator-grp")) {
             $producerState = az container show --resource-group $ResourceGroupName --name $producerName --query "instanceView.state" -o tsv 2>$null
@@ -3162,277 +3168,24 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
             return
         }
 
-        function Get-FabricTokenLocal {
-            $t = Get-CachedAccessToken "https://api.fabric.microsoft.com"
-            if ($t -is [System.Security.SecureString]) {
-                $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($t)
-                try { return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-                finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-            }
-            return $t
+        if ($ScaffoldingOnly) {
+            Write-Host "  ⚠ Skipping Activator deployment for scaffolding-only mode" -ForegroundColor Yellow
+            return
         }
 
         if (-not $AlertEmail) {
             Write-Host "  ⚠ No -AlertEmail specified — skipping Activator deployment" -ForegroundColor Yellow
             Write-Host "    Re-run with -AlertEmail 'nurse@hospital.com' to enable email alerts" -ForegroundColor DarkGray
         } else {
-            Write-Host "  Alert email:     $AlertEmail" -ForegroundColor White
-            Write-Host "  Tier threshold:  $AlertTierThreshold" -ForegroundColor White
-            Write-Host "  Cooldown:        $AlertCooldownMinutes min" -ForegroundColor White
-
-            $p4Token = Get-FabricTokenLocal
-            $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
-            $p4Base = "https://api.fabric.microsoft.com/v1"
-
-            function Test-FabricTransientError {
-                param([object]$StatusCode, [string]$ErrorText = "")
-                $status = $null
-                try { if ($null -ne $StatusCode) { $status = [int]$StatusCode } } catch { return $false }
-                if ($status -in @(429, 500, 502, 503, 504)) { return $true }
-                return ($status -eq 403 -and $ErrorText -match 'RequestDeniedByInboundPolicy|inbound communication policy|Forbidden')
+            Write-Host "  Alert email: $AlertEmail" -ForegroundColor White
+            $py = if ($script:deploymentPython) { $script:deploymentPython } else { "python3" }
+            $activatorScript = Join-Path $ScriptDir "scripts/deploy_clinical_activator.py"
+            $env:HLS_ALERT_EMAIL = $AlertEmail
+            & $py $activatorScript --workspace $FabricWorkspaceName --email $AlertEmail --live
+            if ($LASTEXITCODE -ne 0) {
+                throw "deploy_clinical_activator.py failed with exit code $LASTEXITCODE"
             }
-
-            function Invoke-P4ActivatorRest {
-                param(
-                    [Parameter(Mandatory)][string]$Uri,
-                    [string]$Method = 'GET',
-                    [object]$Body = $null,
-                    [string]$Label = 'Fabric request'
-                )
-                for ($attempt = 1; $attempt -le 8; $attempt++) {
-                    try {
-                        $token = Get-FabricTokenLocal
-                        $headers = @{ Authorization = "Bearer $token"; "Content-Type" = "application/json" }
-                        if ($Body -ne $null) { return Invoke-RestMethod -Uri $Uri -Headers $headers -Method $Method -Body $Body -ErrorAction Stop }
-                        return Invoke-RestMethod -Uri $Uri -Headers $headers -Method $Method -ErrorAction Stop
-                    } catch {
-                        $statusCode = $null
-                        try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
-                        $errBody = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
-                        if ((Test-FabricTransientError -StatusCode $statusCode -ErrorText $errBody) -and $attempt -lt 8) {
-                            $delay = [Math]::Min(15 * $attempt, 90)
-                            Write-Host "  $Label transient HTTP ${statusCode}; retrying in ${delay}s... ($attempt/8)" -ForegroundColor Yellow
-                            if ($errBody) { Write-Host "    $errBody" -ForegroundColor DarkGray }
-                            Start-Sleep -Seconds $delay
-                            continue
-                        }
-                        throw
-                    }
-                }
-            }
-
-            function Invoke-P4ActivatorWeb {
-                param(
-                    [Parameter(Mandatory)][string]$Uri,
-                    [string]$Method = 'GET',
-                    [object]$Body = $null,
-                    [string]$Label = 'Fabric request'
-                )
-                for ($attempt = 1; $attempt -le 8; $attempt++) {
-                    try {
-                        $token = Get-FabricTokenLocal
-                        $headers = @{ Authorization = "Bearer $token"; "Content-Type" = "application/json" }
-                        if ($Body -ne $null) { return Invoke-WebRequest -Uri $Uri -Headers $headers -Method $Method -Body $Body -UseBasicParsing -ErrorAction Stop }
-                        return Invoke-WebRequest -Uri $Uri -Headers $headers -Method $Method -UseBasicParsing -ErrorAction Stop
-                    } catch {
-                        $statusCode = $null
-                        try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
-                        $errBody = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
-                        if ((Test-FabricTransientError -StatusCode $statusCode -ErrorText $errBody) -and $attempt -lt 8) {
-                            $delay = [Math]::Min(15 * $attempt, 90)
-                            Write-Host "  $Label transient HTTP ${statusCode}; retrying in ${delay}s... ($attempt/8)" -ForegroundColor Yellow
-                            if ($errBody) { Write-Host "    $errBody" -ForegroundColor DarkGray }
-                            Start-Sleep -Seconds $delay
-                            continue
-                        }
-                        throw
-                    }
-                }
-            }
-
-            # Resolve workspace ID
-            $p4Workspaces = (Invoke-P4ActivatorRest -Uri "$p4Base/workspaces" -Label 'List workspaces').value
-            $p4Ws = $p4Workspaces | Where-Object { $_.displayName -eq $FabricWorkspaceName } | Select-Object -First 1
-            if (-not $p4Ws) {
-                throw "Workspace '$FabricWorkspaceName' not found — cannot deploy Activator"
-            }
-            $p4WsId = $p4Ws.id
-
-            $reflexName = "ClinicalAlertActivator"
-
-            # Check for existing Reflex
-            $p4Items = (Invoke-P4ActivatorRest -Uri "$p4Base/workspaces/$p4WsId/items" -Label 'List workspace items').value
-            $existingReflex = $p4Items | Where-Object { $_.displayName -eq $reflexName -and $_.type -eq 'Reflex' }
-
-            $reflexId = $null
-            if ($existingReflex) {
-                if ($existingReflex -is [array]) { $existingReflex = $existingReflex[0] }
-                $reflexId = $existingReflex.id
-                Write-Host "  ✓ Reflex '$reflexName' already exists ($reflexId)" -ForegroundColor Yellow
-            }
-
-            # Discover KQL Database for KQL source (itemId must be KQL DB, not Eventhouse)
-            $p4KqlDbs = (Invoke-P4ActivatorRest -Uri "$p4Base/workspaces/$p4WsId/kqlDatabases" -Label 'List KQL databases').value
-            $p4KqlDb = $p4KqlDbs | Where-Object { $_.displayName -match 'Masimo' } | Select-Object -First 1
-            if (-not $p4KqlDb) { $p4KqlDb = $p4KqlDbs | Select-Object -First 1 }
-            if ($p4KqlDb -is [array]) { $p4KqlDb = $p4KqlDb[0] }
-
-            if (-not $p4KqlDb) {
-                throw "No KQL Database found — cannot configure ClinicalAlertActivator data source"
-            } else {
-                Write-Host "  ✓ KQL Database: $($p4KqlDb.displayName) ($($p4KqlDb.id))" -ForegroundColor Green
-
-                # Generate GUIDs for entities
-                $containerId   = [guid]::NewGuid().ToString()
-                $kqlSourceId   = [guid]::NewGuid().ToString()
-                $eventViewId   = [guid]::NewGuid().ToString()
-                $objectViewId  = [guid]::NewGuid().ToString()
-                $attrDeviceId  = [guid]::NewGuid().ToString()
-                $attrAlertTier = [guid]::NewGuid().ToString()
-                $attrSpo2Id    = [guid]::NewGuid().ToString()
-                $attrPrId      = [guid]::NewGuid().ToString()
-                $attrPatientId = [guid]::NewGuid().ToString()
-                $attrMessageId = [guid]::NewGuid().ToString()
-
-                $ruleApplied = $false
-                $kqlQuery = "fn_ClinicalAlerts($AlertCooldownMinutes) | where alert_tier in ('CRITICAL', 'URGENT') | project device_id, alert_tier, spo2, pr, patient_name, message, alert_time"
-
-                # Build instance strings as raw JSON (PowerShell ConvertTo-Json corrupts nested instance strings)
-                $srcEvtInst = '{"templateId":"SourceEvent","templateVersion":"1.1","steps":[{"name":"SourceEventStep","id":"' + [guid]::NewGuid().ToString() + '","rows":[{"name":"SourceSelector","kind":"SourceReference","arguments":[{"name":"entityId","type":"string","value":"' + $kqlSourceId + '"}]}]}]}'
-                $idPartInst = '{"templateId":"IdentityPartAttribute","templateVersion":"1.1","steps":[{"name":"IdPartStep","id":"' + [guid]::NewGuid().ToString() + '","rows":[{"name":"TypeAssertion","kind":"TypeAssertion","arguments":[{"name":"op","type":"string","value":"Text"},{"name":"format","type":"string","value":""}]}]}]}'
-
-                function New-BasicAttrInstance([string]$evId, [string]$fieldName, [string]$dataType) {
-                    '{"templateId":"BasicEventAttribute","templateVersion":"1.1","steps":[{"name":"EventSelectStep","id":"' + [guid]::NewGuid().ToString() + '","rows":[{"name":"EventSelector","kind":"Event","arguments":[{"kind":"EventReference","type":"complex","arguments":[{"name":"entityId","type":"string","value":"' + $evId + '"}],"name":"event"}]},{"name":"EventFieldSelector","kind":"EventField","arguments":[{"name":"fieldName","type":"string","value":"' + $fieldName + '"}]}]},{"name":"EventComputeStep","id":"' + [guid]::NewGuid().ToString() + '","rows":[{"name":"TypeAssertion","kind":"TypeAssertion","arguments":[{"name":"op","type":"string","value":"' + $dataType + '"},{"name":"format","type":"string","value":""}]}]}]}'
-                }
-
-                # Build entities array (KQL source uses itemId+workspaceId, NOT targetUniqueIdentifier)
-                $entities = @(
-                    @{uniqueIdentifier=$containerId; payload=@{name="Clinical Alerts";type="kqlQueries"}; type="container-v1"},
-                    @{uniqueIdentifier=$kqlSourceId; payload=@{name="fn_ClinicalAlerts"; runSettings=@{executionIntervalInSeconds=($AlertCooldownMinutes*60)}; query=@{queryString=$kqlQuery}; eventhouseItem=@{itemId=$p4KqlDb.id; workspaceId=$p4WsId; itemType="KustoDatabase"}; parentContainer=@{targetUniqueIdentifier=$containerId}}; type="kqlSource-v1"},
-                    @{uniqueIdentifier=$eventViewId; payload=@{name="Clinical alert events"; parentContainer=@{targetUniqueIdentifier=$containerId}; definition=@{type="Event"; instance=$srcEvtInst}}; type="timeSeriesView-v1"},
-                    @{uniqueIdentifier=$objectViewId; payload=@{name="Device"; parentContainer=@{targetUniqueIdentifier=$containerId}; definition=@{type="Object"}}; type="timeSeriesView-v1"},
-                    @{uniqueIdentifier=$attrDeviceId; payload=@{name="device_id"; parentObject=@{targetUniqueIdentifier=$objectViewId}; parentContainer=@{targetUniqueIdentifier=$containerId}; definition=@{type="Attribute"; instance=$idPartInst}}; type="timeSeriesView-v1"},
-                    @{uniqueIdentifier=$attrAlertTier; payload=@{name="alert_tier"; parentObject=@{targetUniqueIdentifier=$objectViewId}; parentContainer=@{targetUniqueIdentifier=$containerId}; definition=@{type="Attribute"; instance=(New-BasicAttrInstance $eventViewId "alert_tier" "Text")}}; type="timeSeriesView-v1"},
-                    @{uniqueIdentifier=$attrSpo2Id; payload=@{name="spo2"; parentObject=@{targetUniqueIdentifier=$objectViewId}; parentContainer=@{targetUniqueIdentifier=$containerId}; definition=@{type="Attribute"; instance=(New-BasicAttrInstance $eventViewId "spo2" "Number")}}; type="timeSeriesView-v1"},
-                    @{uniqueIdentifier=$attrPrId; payload=@{name="pr"; parentObject=@{targetUniqueIdentifier=$objectViewId}; parentContainer=@{targetUniqueIdentifier=$containerId}; definition=@{type="Attribute"; instance=(New-BasicAttrInstance $eventViewId "pr" "Number")}}; type="timeSeriesView-v1"},
-                    @{uniqueIdentifier=$attrPatientId; payload=@{name="patient_name"; parentObject=@{targetUniqueIdentifier=$objectViewId}; parentContainer=@{targetUniqueIdentifier=$containerId}; definition=@{type="Attribute"; instance=(New-BasicAttrInstance $eventViewId "patient_name" "Text")}}; type="timeSeriesView-v1"},
-                    @{uniqueIdentifier=$attrMessageId; payload=@{name="message"; parentObject=@{targetUniqueIdentifier=$objectViewId}; parentContainer=@{targetUniqueIdentifier=$containerId}; definition=@{type="Attribute"; instance=(New-BasicAttrInstance $eventViewId "message" "Text")}}; type="timeSeriesView-v1"}
-                )
-
-                $entitiesJson = ConvertTo-Json -InputObject $entities -Depth 30 -Compress
-
-                # Build rule entity as raw JSON using EventTrigger v1.2.4 (reverse-engineered from portal-created rule)
-                # Key differences from docs: EventTrigger not AttributeTrigger, OnEveryValue not EachTime,
-                # no parentObject, email fields use EventFieldReference arrays, context uses NameReferencePair
-                function FR([string]$f) { '{"arguments":[{"name":"fieldName","type":"string","value":"'+$f+'"}],"kind":"EventFieldReference","type":"complex"}' }
-                function NR([string]$f) { '{"arguments":[{"name":"name","type":"string","value":"'+$f+'"},{"arguments":[{"name":"fieldName","type":"string","value":"'+$f+'"}],"kind":"EventFieldReference","name":"reference","type":"complexReference"}],"kind":"NameReferencePair","type":"complex"}' }
-
-                $ruleInst = '{"templateId":"EventTrigger","templateVersion":"1.2.4","steps":[' +
-                    '{"id":"' + [guid]::NewGuid().ToString() + '","name":"FieldsDefaultsStep","rows":[{"arguments":[{"arguments":[{"name":"entityId","type":"string","value":"' + $eventViewId + '"}],"kind":"EventReference","name":"event","type":"complex"}],"kind":"Event","name":"EventSelector"}]},' +
-                    '{"id":"' + [guid]::NewGuid().ToString() + '","name":"EventDetectStep","rows":[{"arguments":[],"kind":"OnEveryValue","name":"OnEveryValue"}]},' +
-                    '{"id":"' + [guid]::NewGuid().ToString() + '","name":"ActStep","rows":[{"arguments":[' +
-                        '{"name":"messageLocale","type":"string","value":"en-us"},' +
-                        '{"name":"sentTo","type":"array","values":[{"type":"string","value":"' + $AlertEmail + '"}]},' +
-                        '{"name":"copyTo","type":"array","values":[]},' +
-                        '{"name":"bCCTo","type":"array","values":[]},' +
-                        '{"name":"subject","type":"array","values":[{"name":"string","type":"string","value":"CLINICAL ALERT - SpO2 low on "},' + (FR 'device_id') + ']},' +
-                        '{"name":"headline","type":"array","values":[' + (FR 'alert_tier') + ',{"name":"string","type":"string","value":" ALERT: "},' + (FR 'patient_name') + ',{"name":"string","type":"string","value":" - SpO2 "},' + (FR 'spo2') + ']},' +
-                        '{"name":"optionalMessage","type":"array","values":[{"name":"string","type":"string","value":"SpO2: "},' + (FR 'spo2') + ',{"name":"string","type":"string","value":"% | PR: "},' + (FR 'pr') + ',{"name":"string","type":"string","value":" bpm | "},' + (FR 'message') + ']},' +
-                        '{"name":"additionalInformation","type":"array","values":[' + (NR 'device_id') + ',' + (NR 'alert_tier') + ',' + (NR 'spo2') + ',' + (NR 'pr') + ',' + (NR 'patient_name') + ',' + (NR 'message') + ']}' +
-                    '],"kind":"EmailMessage","name":"EmailBinding"}]}' +
-                ']}'
-
-                $ruleEntityJson = '{"uniqueIdentifier":"' + [guid]::NewGuid().ToString() + '","payload":{"name":"Clinical alert events alert","parentContainer":{"targetUniqueIdentifier":"' + $containerId + '"},"definition":{"type":"Rule","instance":"' + ($ruleInst -replace '"', '\"') + '","settings":{"shouldRun":true,"shouldApplyRuleOnUpdate":true}}},"type":"timeSeriesView-v1"}'
-
-                # Append rule entity to the serialized array
-                $fullEntitiesJson = $entitiesJson.TrimEnd(']') + ',' + $ruleEntityJson + ']'
-
-                # Serialize data pipeline entities without rule (Create Item rejects EventTrigger rules)
-                $entitiesNoRuleB64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($entitiesJson))
-
-                if (-not $reflexId) {
-                    # Step 1: Create Reflex with data pipeline only
-                    $createBody = @{
-                        displayName = $reflexName
-                        description = "Clinical alert activator: emails $AlertEmail on $AlertTierThreshold+ alerts from fn_ClinicalAlerts($AlertCooldownMinutes)."
-                        type = "Reflex"
-                        definition = @{ parts = @(@{path="ReflexEntities.json"; payload=$entitiesNoRuleB64; payloadType="InlineBase64"}) }
-                    } | ConvertTo-Json -Depth 10
-
-                    try {
-                        $rResp = Invoke-P4ActivatorWeb -Uri "$p4Base/workspaces/$p4WsId/items" `
-                            -Method POST -Body $createBody -Label 'Create ClinicalAlertActivator'
-                        if ($rResp.StatusCode -eq 201) {
-                            $reflexId = ($rResp.Content | ConvertFrom-Json).id
-                            Write-Host "  ✓ Reflex created with KQL pipeline: $reflexName ($reflexId)" -ForegroundColor Green
-                        } elseif ($rResp.StatusCode -eq 202) {
-                            $rOpId = $rResp.Headers["x-ms-operation-id"]
-                            if ($rOpId -is [array]) { $rOpId = $rOpId[0] }
-                            Write-Host "  Provisioning..." -ForegroundColor DarkGray
-                            for ($poll = 0; $poll -lt 30; $poll++) {
-                                Start-Sleep 5
-                                $p4Token = Get-FabricTokenLocal
-                                $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
-                                $op = Invoke-P4ActivatorRest -Uri "$p4Base/operations/$rOpId" -Label 'Poll Reflex create operation'
-                                if ($op.status -ne 'Running') { break }
-                            }
-                            Start-Sleep 3
-                            $p4Items2 = (Invoke-P4ActivatorRest -Uri "$p4Base/workspaces/$p4WsId/items" -Label 'Refresh workspace items').value
-                            $reflex = $p4Items2 | Where-Object { $_.displayName -eq $reflexName -and $_.type -eq 'Reflex' }
-                            if ($reflex -is [array]) { $reflex = $reflex[0] }
-                            if ($reflex) {
-                                $reflexId = $reflex.id
-                                Write-Host "  ✓ Reflex created with KQL pipeline: $reflexName ($reflexId)" -ForegroundColor Green
-                            } else {
-                                throw "Reflex create operation completed but '$reflexName' was not found"
-                            }
-                        }
-                    } catch {
-                        $errMsg = $_.Exception.Message
-                        try { $errMsg = ($_.ErrorDetails.Message | ConvertFrom-Json).message } catch {}
-                        throw "Could not create Reflex: $errMsg"
-                    }
-                }
-                if (-not $reflexId) { throw "Reflex '$reflexName' was not created" }
-
-                # Step 2: Add email rule via updateDefinition (Create Item rejects EventTrigger with KQL source)
-                if ($reflexId) {
-                    Write-Host "  Adding email rule (EventTrigger v1.2.4 → $AlertEmail)..." -ForegroundColor White
-                    Start-Sleep 5
-                    try {
-                        $p4Token = Get-FabricTokenLocal
-                        $p4Headers = @{ Authorization = "Bearer $p4Token"; "Content-Type" = "application/json" }
-                        $fullB64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($fullEntitiesJson))
-                        $updateBody = @{ definition = @{ parts = @(@{path="ReflexEntities.json"; payload=$fullB64; payloadType="InlineBase64"}) } } | ConvertTo-Json -Depth 10
-                        $ruleResp = Invoke-P4ActivatorWeb -Method POST `
-                            -Uri "$p4Base/workspaces/$p4WsId/items/$reflexId/updateDefinition" `
-                            -Body $updateBody -Label 'Update ClinicalAlertActivator definition'
-                        if ($ruleResp.StatusCode -notin @(200, 202)) { throw "Rule update returned HTTP $($ruleResp.StatusCode)" }
-                        $ruleApplied = $true
-                        Write-Host "  ✓ Email rule added (shouldRun=true)" -ForegroundColor Green
-                    } catch {
-                        $ruleErr = $_.Exception.Message
-                        try { $ruleErr = ($_.ErrorDetails.Message | ConvertFrom-Json).message } catch {}
-                        throw "Could not push rule: $ruleErr"
-                    }
-                }
-            }
-
-            if ($reflexId -and $ruleApplied) {
-                Write-Host ""
-                Write-Host "  ╔═══════════════════════════════════════════════════════╗" -ForegroundColor Green
-                Write-Host "  ║  ✓ Data Activator deployed!                          ║" -ForegroundColor Green
-                Write-Host "  ╚═══════════════════════════════════════════════════════╝" -ForegroundColor Green
-                Write-Host ""
-                Write-Host "  Reflex:     $reflexName ($reflexId)" -ForegroundColor White
-                Write-Host "  KQL source: fn_ClinicalAlerts($AlertCooldownMinutes) every ${AlertCooldownMinutes}min" -ForegroundColor White
-                Write-Host "  Object:     Device (keyed by device_id)" -ForegroundColor White
-                Write-Host "  Attributes: alert_tier, spo2, pr, patient_name, message" -ForegroundColor White
-                Write-Host "  Rule:       Email $AlertEmail on every alert event" -ForegroundColor White
-            }
-            else {
-                throw "ClinicalAlertActivator was not fully deployed"
-            }
+            Write-Host "  ✓ Data Activator deployed successfully." -ForegroundColor Green
         }
 
         Write-Host ""
