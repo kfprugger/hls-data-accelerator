@@ -13,7 +13,7 @@ In Microsoft Fabric healthcare demonstrations for semi-technical healthcare IT l
 ## User stories
 - As a healthcare solutions architect, I want the 15 TCGA patients ingested into FHIR R4 with standard identifiers (`TCGA-G6-A8L6`), cancer diagnoses, treatment lines, baseline vitals, and paired Masimo devices, so that live FHIR searches, Fabric Healthcare Data Solutions (HDS) pipelines, and Rayfin UI views query identical clinical records.
 - As a healthcare IT security officer, I want synthetic ingestion to strictly refuse overwriting any existing resource that lacks the `synthetic-demo-enrichment` tag, and require `delete` to remove only tagged resources, so that live clinical or non-demo records are never corrupted or removed.
-- As a clinical demo presenter, I want Marcus Vance paired deterministically to Masimo device `MASIMO-RADIUS7-0001`, so that live SpO2 alerts and Eventhouse telemetry correspond directly to Marcus Vance in the Rayfin UI.
+- As a clinical demo presenter, I want Marcus Vance paired deterministically to his own Masimo device `MASIMO-RADIUS7-0101`, so that live SpO2 alerts and Eventhouse telemetry correspond directly to Marcus Vance in the Rayfin UI without re-pointing any device another patient uses.
 - As an automated test harness or operations engineer, I want `seed_tcga_cohort.py` to default to a read-only `plan` dry-run, support idempotent re-runs, and never leak Azure CLI tokens or credentials in logs or stdout.
 
 ## Functional requirements
@@ -44,7 +44,7 @@ In Microsoft Fabric healthcare demonstrations for semi-technical healthcare IT l
   - Beneficiary: `{"reference": f"Patient/{patient_resource_id}"}`.
 - **FR-7 (FHIR R4 Device & Basic DeviceAssociation)**:
   - Generates a `Device` resource representing a Masimo Radius-7 pulse oximeter:
-    - Identifier: `http://masimo.com/devices`, value: `MASIMO-RADIUS7-0001` for Marcus Vance (`TCGA-G6-A8L6`), and sequential IDs for other cohort patients.
+    - Identifier: `http://masimo.com/devices`, values `MASIMO-RADIUS7-0101` .. `MASIMO-RADIUS7-0115` in `PATIENT_META` order (Marcus Vance `TCGA-G6-A8L6` = `MASIMO-RADIUS7-0101`). These are outside the emulator's existing `0001`–`0100` range, so no pre-existing Device or device association is created, changed or deleted.
     - Type: Pulse oximeter (SNOMED `706767009`), model: `Radius-7`.
   - Generates a `Basic` resource linking the device to the patient:
     - Code: `device-assoc` (system `http://terminology.hl7.org/CodeSystem/basic-resource-type`).
@@ -67,7 +67,7 @@ In Microsoft Fabric healthcare demonstrations for semi-technical healthcare IT l
   - The `delete` subcommand must verify the `synthetic-demo-enrichment` tag on every candidate resource before issuing a DELETE request. Resources without the tag must be skipped and reported in the cleanup summary.
 - **FR-11 (Platform Lineage Settlement)**:
   - FHIR to Gold: FHIR resources reach `healthcare1_reporting_gold` through the HDS pipeline (Azure Health Data Services -> FHIR export to Bronze -> HDS Silver Delta tables -> Phase 5 / `materialize_claims_quality.py` into Gold star-schema tables).
-  - Telemetry: Masimo emulator (`emulator.py`) emits readings for `MASIMO-RADIUS7-0001` to Event Hub, ingested by Eventstream into Eventhouse table `TelemetryRaw`, linked to Marcus Vance via `Basic` device-association and the `DeviceAssociation` table.
+  - Telemetry: `apply --emit-baseline-telemetry` sends a short deterministic baseline burst (10 readings per TCGA device, normal SpO2/PR) to the Masimo Event Hub in the same message shape as `emulator.py`, so `TelemetryRaw` holds rows for `MASIMO-RADIUS7-0101`..`0115`, linked to the TCGA patients via the `Basic` device association. Continuous streaming for fresh deployments comes from the emulator's `DEVICE_COUNT` = 115, which ticket 012 sets.
   - Claims: Claim emulator (`phase-7/claim-emulator/claim_emulator.py`) simulates claim events into `claims_events` in Eventhouse and `fact_claim` in `healthcare1_reporting_gold`.
 - **FR-12 (Fresh deployments / Idempotency)**:
   - `synthea/seed_tcga_cohort.py` must be completely standalone and idempotent:
@@ -112,4 +112,4 @@ In Microsoft Fabric healthcare demonstrations for semi-technical healthcare IT l
 
 ## Decisions made
 - **Agreed with the user**: `synthea/seed_tcga_cohort.py` CLI supports `plan` (default dry-run), `apply`, and `delete`. Generates FHIR R4 Patient (identifier = TCGA barcode, fictional names from `PATIENT_META`), Condition, MedicationRequest, Observation, Coverage, Device (Masimo, paired to Patient) with deterministic `resource_id` IDs and `synthetic-demo-enrichment` tag. Refuses overwrite of untagged resources; delete removes only tagged resources.
-- **Decided by the ticket writer**: Device pairing links Marcus Vance (`TCGA-G6-A8L6`) to `MASIMO-RADIUS7-0001` and generates a FHIR `Basic` resource with code `device-assoc` conforming to `create-device-association-table.ipynb`, ensuring that the `DeviceAssociation` table in Gold and `DevicePayerOntology` automatically recognize the patient-device relationship.
+- **Decided by the router (supersedes the earlier writer decision)**: TCGA patients get new devices `MASIMO-RADIUS7-0101`..`0115` (Marcus Vance = `0101`), never the existing `0001`–`0100` devices, because pairing to those re-points devices that the original Synthea patients use. The script never PUTs over, tags or deletes a resource it did not generate. The `Basic` association follows `create-device-association-table.ipynb` so the Gold `DeviceAssociation` table and `DevicePayerOntology` recognise the pairing.

@@ -51,6 +51,7 @@ The HLS Data Accelerator orchestrator automates end-to-end multi-service healthc
   - Substep status transitions (`running`, `succeeded`, `failed`) and stdout/stderr lines must stream into orchestrator JSONL logs.
 - **FR-6 (Base Deployment Script Alignment)**:
   - If `Deploy-All.ps1` runs in non-scaffolding mode with `-AlertEmail` supplied, it must invoke `scripts/deploy_clinical_activator.py` during Step 9 using standard PowerShell parameter passing.
+  - When the Masimo emulator is deployed (`phase-1/deploy.ps1` / `Deploy-All.ps1` emulator step), its `DEVICE_COUNT` must be at least 115 whenever `seed_tcga_cohort` is on (the default), so the emulator also streams the TCGA devices `MASIMO-RADIUS7-0101`..`0115` from ticket 002. With `seed_tcga_cohort` off, `DEVICE_COUNT` stays at its current default of 100. A unit or Pester-free text test asserts the value passed for both cases.
 - **FR-7 (Comprehensive Unit Testing)**:
   - `orchestrator/tests/test_addons.py` must include a dedicated test case class `WowDemoAddonWiringTests` verifying:
     - Defaults when omitted from config: `seed_tcga_cohort` and `verify_databricks_interop` run; `enable_researcher_persona` never runs; the alert step runs only when `alert_email` is set.
@@ -79,6 +80,7 @@ The HLS Data Accelerator orchestrator automates end-to-end multi-service healthc
 - `orchestrator/activities/addons.py`: Wire CLI tool invocations into `AddonRunner` with config flag checks and error bubbling.
 - `orchestrator/tests/test_addons.py`: Unit tests asserting command ordering, flag defaults, and error handling.
 - `Deploy-All.ps1`: Optional wiring of activator deployment during base deployment if `-AlertEmail` is provided.
+- `phase-1/deploy.ps1` (and the emulator `DEVICE_COUNT` it passes): raise to 115 when `seed_tcga_cohort` is on.
 
 ## Do not touch
 - `rayfin-imaging/src/App.tsx`

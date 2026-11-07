@@ -35,7 +35,7 @@
      ```
 - **Expected**: Command exits 0 and prints output containing:
   - `Patient: Marcus Vance (TCGA-G6-A8L6)`
-  - `Associated Device: MASIMO-RADIUS7-0001`
+  - `Associated Device: MASIMO-RADIUS7-0101`
   - `SpO2: 84.0% (CRITICAL)`
   - `Pulse Rate: 115 bpm`
   - `Recipient: joey@jbatl.dev`
@@ -46,7 +46,7 @@
 - **Steps**:
   1. Open `http://localhost:<port>/wardflow` in the browser.
   2. Locate the `AlertStopwatchCard` in the bedside monitoring section.
-  3. Verify the card displays patient `Marcus Vance (TCGA-G6-A8L6)`, device `MASIMO-RADIUS7-0001`, and alert tier `CRITICAL`.
+  3. Verify the card displays patient `Marcus Vance (TCGA-G6-A8L6)`, device `MASIMO-RADIUS7-0101`, and alert tier `CRITICAL`.
   4. Verify the 4 timing beats are displayed: `Telemetry Emitted`, `Eventstream Enqueued`, `KQL Detected`, and `Activator Dispatched`.
   5. Verify the total elapsed stopwatch badge displays `18.4s` (local fixture value).
   6. Save screenshot to `specs/tickets/004-realtime-alert-stopwatch/evidence/E-2.png`.
@@ -68,7 +68,7 @@
      ```bash
      /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -m unittest orchestrator/tests/test_alert_stopwatch.py -k test_ten_minute_deduplication
      ```
-  2. In the test, simulate a drop at $T = 0$, followed by a second drop for `MASIMO-RADIUS7-0001` at $T = 180\text{ s}$ (3 minutes).
+  2. In the test, simulate a drop at $T = 0$, followed by a second drop for `MASIMO-RADIUS7-0101` at $T = 180\text{ s}$ (3 minutes).
 - **Expected**: Test passes, confirming:
   - First alert generates status `DISPATCHED` with email queued.
   - Second alert generates status `SUPPRESSED_DEDUPE` with zero new email actions queued.

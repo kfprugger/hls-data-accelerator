@@ -77,7 +77,7 @@
   3. Query the FHIR service for the paired Masimo device:
      ```bash
      curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/fhir+json" \
-       "https://fhirmed1103a.fhir.azurehealthcareapis.com/Device?identifier=http://masimo.com/devices|MASIMO-RADIUS7-0001"
+       "https://fhirmed1103a.fhir.azurehealthcareapis.com/Device?identifier=http://masimo.com/devices|MASIMO-RADIUS7-0101"
      ```
   4. Query the FHIR service for the device association:
      ```bash
@@ -87,7 +87,7 @@
 - **Expected**:
   - Patient search returns 1 entry with `resource.name[0].family == "Vance"` and `resource.name[0].given[0] == "Marcus"`.
   - Device search returns 1 entry with `resource.id` and model `Radius-7`.
-  - Basic search returns association linking Marcus Vance's patient ID to `Device/MASIMO-RADIUS7-0001`.
+  - Basic search returns association linking Marcus Vance's patient ID to `Device/MASIMO-RADIUS7-0101`, and `Device/MASIMO-RADIUS7-0001` is unchanged from before the run (same `meta.versionId`, no synthetic tag).
   - All returned resources contain `meta.tag` with code `synthetic-demo-enrichment`.
 
 ### E-4 [U]: Gold SQL query confirms ingested patient row in healthcare1_reporting_gold (covers FR-11)
@@ -109,17 +109,17 @@
   - Queries `SELECT COUNT(*) FROM dbo.dim_diagnosis WHERE patient_id = 'TCGA-G6-A8L6'` or `fact_claim`.
   - Confirms TCGA patient rows exist in Gold reporting tables.
 
-### E-5 [U]: Eventhouse KQL query verifies device telemetry rows for MASIMO-RADIUS7-0001 (covers FR-7, FR-11)
+### E-5 [U]: Eventhouse KQL query verifies device telemetry rows for MASIMO-RADIUS7-0101 (covers FR-7, FR-11)
 - **Type**: CLI
 - **Steps**:
   1. Execute a KQL query against the `MasimoEventhouse` database via Azure CLI / REST:
      ```bash
      AZURE_CONFIG_DIR=$HOME/.azure-isolated/JBATL HLS_BIND_INTERFACE=en0 \
        az kusto query --cluster-name "masimoeventhouse" --database-name "MasimoEventhouse" \
-       --kql "TelemetryRaw | where device_id == 'MASIMO-RADIUS7-0001' | take 5" 2>/dev/null || echo "KQL query executed"
+       --kql "TelemetryRaw | where device_id == 'MASIMO-RADIUS7-0101' | take 5" 2>/dev/null || echo "KQL query executed"
      ```
 - **Expected**:
-  - Query succeeds and returns telemetry records showing `device_id: MASIMO-RADIUS7-0001` with `spo2` and `pr` fields.
+  - After `apply --emit-baseline-telemetry`, the query returns at least 10 telemetry records showing `device_id: MASIMO-RADIUS7-0101` with `spo2` and `pr` fields.
 
 ### E-6 [U]: CLI delete removes only tagged synthetic resources (covers FR-1, FR-10)
 - **Type**: CLI

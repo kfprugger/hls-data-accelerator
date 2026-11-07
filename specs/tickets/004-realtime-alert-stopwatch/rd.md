@@ -16,10 +16,10 @@ Healthcare IT leaders evaluating Microsoft Fabric need concrete evidence that Re
 - As a health system executive, I want to view a measured stopwatch breakdown (event timestamp to notification delivery) in both the CLI and the Rayfin UI, so that I have objective proof of Fabric's sub-minute alerting latency.
 
 ## Functional requirements
-- **FR-1**: Standalone CLI script `scripts/trigger_spo2_alert.py` must locate Marcus Vance's associated pulse oximeter (`MASIMO-RADIUS7-0001`, verified against `dbo.Basic` device-patient associations from ticket 002) and inject a deterministic telemetry reading with SpO2 = 84.0% (< 88.0% CRITICAL threshold) and pulse rate = 115 bpm with UTC timestamp $T_0$.
+- **FR-1**: Standalone CLI script `scripts/trigger_spo2_alert.py` must locate Marcus Vance's associated pulse oximeter (`MASIMO-RADIUS7-0101`, read from the FHIR `Basic` device association that ticket 002 creates, never hard-coded) and inject a deterministic telemetry reading with SpO2 = 84.0% (< 88.0% CRITICAL threshold) and pulse rate = 115 bpm with UTC timestamp $T_0$.
 - **FR-2**: The CLI scripts and Activator configuration must enforce a single-address recipient allowlist read from the environment variable `HLS_ALERT_EMAIL` (the deployment's existing `-AlertEmail` value; `joey@jbatl.dev` for med-1103a). The value must be one plain `local@domain` address (no display name, comma, semicolon, CR/LF or URL-encoded characters). If `HLS_ALERT_EMAIL` is unset or invalid, exit 2 with `Error: no_alert_recipient_configured` before any network call. Supplying any other address via `--email`, environment or config must exit 2 with `Error: unauthorized_alert_recipient: Recipient must be <HLS_ALERT_EMAIL>` before any network call.
 - **FR-3**: Standalone CLI script `scripts/deploy_clinical_activator.py` must idempotently create or update the Fabric Activator (`ClinicalAlertActivator` Reflex item) using `kqlSource-v1` querying `fn_ClinicalAlerts(10)` with `runSettings.executionIntervalInSeconds = 60` and an email action targeting the `HLS_ALERT_EMAIL` address. The 10-minute dedupe is enforced in the KQL source (a device that already alerted in the previous 10 minutes returns no new row), not by the evaluation interval. The script must correctly handle HTTP 202 Long Running Operation (LRO) polling on `POST /items` and `POST /items/{id}/updateDefinition`, and must never emit rejected fields such as `isStopped` in `runSettings`.
-- **FR-4**: The alerting mechanism must enforce a 10-minute deduplication cooldown per device: injecting repeated SpO2 drops for `MASIMO-RADIUS7-0001` within 10 minutes of an initial alert must generate at most one email notification and record a deduplicated status in the alert history.
+- **FR-4**: The alerting mechanism must enforce a 10-minute deduplication cooldown per device: injecting repeated SpO2 drops for `MASIMO-RADIUS7-0101` within 10 minutes of an initial alert must generate at most one email notification and record a deduplicated status in the alert history.
 - **FR-5**: Standalone CLI script `scripts/trigger_spo2_alert.py` must measure and report the end-to-end stopwatch:
   - $t_{\text{ingest}}$: Telemetry emission time $T_0$ to Eventstream/Eventhouse insertion $T_1$.
   - $t_{\text{detect}}$: $T_1$ to KQL query evaluation time $T_2$ via `fn_ClinicalAlerts`.
@@ -68,13 +68,13 @@ Healthcare IT leaders evaluating Microsoft Fabric need concrete evidence that Re
 - `emulator.py`: Base Masimo emulator container code.
 
 ## Dependencies
-- `002-tcga-synthetic-ingest`: Ingests Marcus Vance (`TCGA-G6-A8L6`) and pairs the patient to device `MASIMO-RADIUS7-0001` in `SilverBasic` / `dbo.Basic`.
+- `002-tcga-synthetic-ingest`: Ingests Marcus Vance (`TCGA-G6-A8L6`) and pairs the patient to device `MASIMO-RADIUS7-0101` via a FHIR `Basic` device association (surfaced as `dbo.Basic` / `DeviceAssociation`).
 - Workspace `med-1103a` with deployed Eventhouse and KQL database.
 - Python packages in orchestrator virtual environment (`azure-identity`, `azure-eventhub`, `requests`).
 
 ## Decisions made
 - **Agreed with the user**: The SpO2 drop targets Marcus Vance's device, the Activator rule emails only the single configured alert address (`HLS_ALERT_EMAIL`; `joey@jbatl.dev` on med-1103a) with a 10-minute dedupe, and the recipient allowlist is strictly enforced in code. Fresh deployments in other tenants use their own `-AlertEmail`.
 - **Decided by the ticket writer**: The measured stopwatch is surfaced in both places: in the CLI output table for terminal/script automation and as a visual `AlertStopwatchCard` in the Rayfin UI (`/wardflow` and `/p/TCGA-G6-A8L6`) backed by UDF `getAlertStopwatch`.
-- **Decided by the ticket writer**: Marcus Vance's paired device is established as `MASIMO-RADIUS7-0001` per ticket 002's deterministic assignment.
+- **Decided by the router**: Marcus Vance's paired device is `MASIMO-RADIUS7-0101` per ticket 002 (the TCGA devices are `0101`–`0115`, outside the original emulator range).
 - **Decided by the ticket writer**: `scripts/trigger_spo2_alert.py` runs with `--dry-run` by default to avoid unintended telemetry injection during test walks.
 - **Decided by the ticket writer**: Fabric Activator definition uses `executionIntervalInSeconds = 60` on `kqlSource-v1` (so the stopwatch can stay under 60 s), puts the 10-minute dedupe in the KQL source, and omits `isStopped` to satisfy live Fabric schema constraints.
