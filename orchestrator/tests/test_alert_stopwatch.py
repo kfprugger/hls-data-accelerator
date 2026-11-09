@@ -155,6 +155,42 @@ class TestAlertStopwatch(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             activator_mod.poll_lro("op-timeout", "dummy-tok", deadline_seconds=0.05)
 
+    def test_live_requires_explicit_targets_and_fails_when_beats_not_observed(self):
+        with self.assertRaises(SystemExit) as cm:
+            trigger_mod.run_trigger(
+                patient_id="TCGA-G6-A8L6",
+                email="joey@jbatl.dev",
+                dry_run=False,
+                live=True,
+                eventhub_namespace="",
+                resource_group="rg-test",
+                eventhouse_query_uri="",
+            )
+        self.assertEqual(cm.exception.code, 2)
+
+        eh_resp = MagicMock()
+        eh_resp.status_code = 201
+        kql_resp = MagicMock()
+        kql_resp.status_code = 500
+        with patch("scripts.trigger_spo2_alert.get_msal_token", return_value="tok"), \
+             patch("scripts.trigger_spo2_alert.requests.post", side_effect=lambda url, **kw: eh_resp if "servicebus" in url else kql_resp), \
+             patch("scripts.trigger_spo2_alert.requests.get", return_value=kql_resp), \
+             patch("scripts.trigger_spo2_alert.time.sleep"), \
+             patch("scripts.trigger_spo2_alert.time.time", side_effect=[100.0, 100.0, 200.0, 100.0, 200.0]):
+            res = trigger_mod.run_trigger(
+                patient_id="TCGA-G6-A8L6",
+                email="joey@jbatl.dev",
+                dry_run=False,
+                live=True,
+                eventhub_namespace="ns-test",
+                resource_group="rg-test",
+                eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
+            )
+        beats_by_id = {b["id"]: b for b in res["beats"]}
+        self.assertEqual(beats_by_id["eventstream_enqueued"]["status"], "not_observed")
+        self.assertEqual(beats_by_id["kql_detected"]["status"], "not_observed")
+        self.assertIsNone(res["t_ingest"])
+        self.assertIsNone(res["t_detect"])
 
 if __name__ == "__main__":
     unittest.main()

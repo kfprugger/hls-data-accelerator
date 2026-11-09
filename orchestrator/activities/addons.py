@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
 import os
+import tempfile
 from pathlib import Path
 import re
 import shlex
@@ -17,7 +20,9 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
+from shared.continuations import CONTINUATIONS
 from shared.full_teardown import AzureCliTokens, ARM, FABRIC, GRAPH, DATABRICKS
+from shared.hotfix import apply_hotfixes, default_targets
 from shared.runtime_paths import DATA_DIR
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,7 +31,6 @@ MODEL_CANDIDATES = [("gpt-5.6-luna", "2026-07-09"), ("gpt-5.5", "2026-04-24")]
 CARDIOLOGY_FALLBACK_REGIONS = ("eastus2", "eastus", "westus", "westus3", "northcentralus", "southcentralus", "centralus", "swedencentral")
 DATABRICKS_PROVIDERS = ("Microsoft.Databricks", "Microsoft.Storage", "Microsoft.EventHub", "Microsoft.KeyVault", "Microsoft.EventGrid")
 CARDIOLOGY_PROVIDERS = ("Microsoft.App", "Microsoft.CognitiveServices", "Microsoft.OperationalInsights")
-CONTINUATIONS: dict[str, asyncio.Event] = {}
 
 
 def now() -> str:
@@ -95,6 +99,28 @@ def _check_cardiology_region_quota(config: dict, location: str, candidates: list
     return None
 
 
+class TransientHttpError(RuntimeError):
+    """HTTP 429/5xx from a cloud API; ``retry_after`` is the server's Retry-After in seconds, if any."""
+
+    def __init__(self, message: str, status: int, retry_after: float | None):
+        super().__init__(message)
+        self.status = status
+        self.retry_after = retry_after
+
+
+def _retry_after_seconds(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        return max(0.0, (parsedate_to_datetime(value) - datetime.now(timezone.utc)).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
 
 class Cloud:
     def __init__(self, config: dict):
@@ -114,7 +140,10 @@ class Cloud:
             return urllib.request.urlopen(req, timeout=120)
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")[:800]
-            raise RuntimeError(f"{method} {url.split('?', 1)[0]} -> HTTP {error.code}: {detail}") from None
+            message = f"{method} {url.split('?', 1)[0]} -> HTTP {error.code}: {detail}"
+            if error.code == 429 or error.code >= 500:
+                raise TransientHttpError(message, error.code, _retry_after_seconds(error.headers.get("Retry-After") if error.headers else None)) from None
+            raise RuntimeError(message) from None
 
     def call(self, method: str, url: str, resource: str = FABRIC, body=None, skill="search-consumption-cli"):
         response = self.request(method, url, resource, body, skill)
@@ -361,10 +390,41 @@ class AddonRunner:
 
     def resource(self, kind):
         return require_one([r for r in self.azure if r["type"].lower() == kind.lower()], kind)
-
     def item(self, kind, name):
         return require_one([i for i in self.items if i["type"] == kind and i["displayName"] == name], name)
 
+    def _deployer_upn(self) -> str:
+        """Resolve the signed-in user's UPN from the pinned subscription's ARM token claims."""
+        try:
+            payload = self.cloud.tokens.token(ARM).split(".")[1]
+            claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        except Exception:
+            return ""
+        for key in ("upn", "preferred_username", "unique_name", "email"):
+            value = claims.get(key)
+            if isinstance(value, str) and "@" in value:
+                return value.strip()
+        return ""
+
+    async def verify_silver_tcga_patients(self) -> int:
+        """Verify the HDS Silver Lakehouse SQL endpoint has at least one seeded TCGA patient."""
+        from scripts.verify_data_agent_qa import execute_sql_query
+        silver = require_one(
+            [i for i in self.items if i.get("type") == "Lakehouse" and str(i.get("displayName") or "").lower().endswith("_silver")],
+            "Silver Lakehouse",
+        )
+        detail = await asyncio.to_thread(self.cloud.call, "GET", f"{FABRIC}/v1/workspaces/{self.ws}/lakehouses/{silver['id']}")
+        sql = (detail.get("properties") or {}).get("sqlEndpointProperties") or {}
+        host = sql.get("connectionString")
+        if not host:
+            raise RuntimeError("Silver Lakehouse SQL endpoint is not provisioned")
+        token = await asyncio.to_thread(self.cloud.tokens.token, "https://database.windows.net")
+        query = "SELECT COUNT(*) AS tcga_count FROM dbo.Patient WHERE id_orig LIKE 'tcga-%' OR LOWER(CAST(text_div AS VARCHAR(MAX))) LIKE '%tcga-%'"
+        rows = await asyncio.to_thread(execute_sql_query, host, silver["displayName"], query, token)
+        count = int((rows[0] if rows else {}).get("tcga_count") or 0)
+        if count <= 0:
+            raise RuntimeError(f"Silver Lakehouse {silver['displayName']} dbo.Patient has 0 TCGA patients after FHIR export and HDS ingestion")
+        return count
     async def gold(self):
         gold = self.item("Lakehouse", "healthcare1_reporting_gold")
         detail = await asyncio.to_thread(self.cloud.call, "GET", f"{FABRIC}/v1/workspaces/{self.ws}/lakehouses/{gold['id']}")
@@ -388,10 +448,25 @@ class AddonRunner:
                     raise RuntimeError(f"Fabric job {item_name} response omitted Location and job id")
                 job_url = f"{FABRIC}/v1/workspaces/{self.ws}/items/{item['id']}/jobs/instances/{inst_id}"
         deadline = time.monotonic() + timeout_sec
+        transient = 0
         while True:
             if self.deployment.get("runtimeStatus") == "Terminated":
                 raise RuntimeError(f"Add-on cancelled while running {item_name}")
-            data = await asyncio.to_thread(self.cloud.call, "GET", job_url, FABRIC, None, skill)
+            try:
+                data = await asyncio.to_thread(self.cloud.call, "GET", job_url, FABRIC, None, skill)
+            except (TransientHttpError, urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+                # Throttling, 5xx and network blips are expected over an hour-long poll: back off and keep
+                # polling until the job's own deadline instead of abandoning a running job.
+                transient += 1
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(f"Fabric job {item_name} status unknown at its {timeout_sec}s deadline: {exc}") from exc
+                hinted = getattr(exc, "retry_after", None)
+                delay = min(remaining, hinted if hinted is not None else min(10 * 2 ** (transient - 1), 120))
+                self.log(f"Polling Fabric job {item_name} failed transiently ({exc}); retrying in {delay:.0f}s", "warn")
+                await asyncio.sleep(delay)
+                continue
+            transient = 0
             status = str(data.get("status") or "").lower()
             if status in {"completed", "succeeded"}:
                 return data
@@ -457,18 +532,13 @@ class AddonRunner:
         """Run each add-on independently: one failing add-on never prevents the others from running."""
         cs = self.deployment["customStatus"]
         if os.environ.get("HLS_HOSTED") == "1" and not _reloaded:
-            import tarfile
-            for tar_path, dest_dir in ((DATA_DIR / "hotfix.tar", ROOT), (DATA_DIR / "wardflow-fix.tar", Path(os.environ.get("WARDFLOW_ROOT", "/app/wardflow")))):
-                if tar_path.is_file():
-                    try:
-                        with tarfile.open(tar_path, "r") as tf:
-                            tf.extractall(dest_dir, filter="data")
-                    except Exception:
-                        pass
-            import importlib
-            mod = importlib.reload(sys.modules[__name__])
-            if mod.AddonRunner is not self.__class__:
-                return await mod.AddonRunner(self.id, self.config, self.deployment, self.save, self.pids).run(addons, fresh_export=fresh_export, _reloaded=True)
+            # Only new tars from this sandbox's own data dir whose marker matches the image commit; boot
+            # already re-applied earlier ones. An unpack failure raises HotfixError and fails the run.
+            if await asyncio.to_thread(apply_hotfixes, DATA_DIR, default_targets(), reapply_applied=False):
+                import importlib
+                mod = importlib.reload(sys.modules[__name__])
+                if mod.AddonRunner is not self.__class__:
+                    return await mod.AddonRunner(self.id, self.config, self.deployment, self.save, self.pids).run(addons, fresh_export=fresh_export, _reloaded=True)
         await self.discover()
         failures = []
         for name in addons:
@@ -554,14 +624,19 @@ class AddonRunner:
         env = {**self.env, **variables}
         scripts = root / "scripts"
         await self.command("01-preflight.sh", ["bash", scripts / "01-preflight.sh"], root, env)
-        if cfg["location"].lower() == "westus2" and cfg.get("expected_tenant_id") == "c77e97fc-1859-4575-8c8b-53d74bc35a63":
-            variables["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
-            env["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
-            save_env()
-        elif cfg["location"].lower() != "eastus2":
+        # Record any pre-existing workspace in the primary region before an eastus2 fallback creates a
+        # second one: it is logged for operator teardown, never deleted automatically.
+        orphan_workspaces: list[str] = []
+        if cfg["location"].lower() != "eastus2":
             existing_ws = await asyncio.to_thread(az_json, cfg, "resource", "list", "-g", cfg["resource_group_name"], "--resource-type", "Microsoft.Databricks/workspaces")
-            for w in existing_ws:
-                if w.get("location", "").lower() == cfg["location"].lower():
+            primary_ws = [w for w in existing_ws if w.get("location", "").lower() == cfg["location"].lower()]
+            if cfg["location"].lower() == "westus2" and cfg.get("expected_tenant_id") == "c77e97fc-1859-4575-8c8b-53d74bc35a63":
+                orphan_workspaces.extend(w["id"] for w in primary_ws if w.get("id"))
+                variables["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+                env["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
+                save_env()
+            else:
+                for w in primary_ws:
                     ws_full = await asyncio.to_thread(az_json, cfg, "resource", "show", "--ids", w["id"])
                     ws_url = ws_full.get("properties", {}).get("workspaceUrl", "")
                     if ws_url:
@@ -570,7 +645,8 @@ class AddonRunner:
                             await self.command("Check existing Databricks workspace control plane", ["databricks", "current-user", "me", "-o", "json"], root, probe_env, capture=True)
                         except RuntimeError as probe_exc:
                             if "Did not find workspace with specified org ID" in str(probe_exc):
-                                self.log(f"Existing {cfg['location']} workspace {w['name']} is not registered on the regional control plane; switching workspace target to eastus2...", "warn")
+                                self.log(f"Existing {cfg['location']} workspace {w['name']} ({w['id']}) is not registered on the regional control plane; switching workspace target to eastus2 (orphan kept for teardown)...", "warn")
+                                orphan_workspaces.append(w["id"])
                                 variables["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
                                 env["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
                                 save_env()
@@ -579,6 +655,8 @@ class AddonRunner:
             await self.command("02-deploy-databricks-foundation.sh", ["bash", scripts / "02-deploy-databricks-foundation.sh"], root, env)
         except RuntimeError:
             if cfg["location"].lower() != "eastus2" and env.get("DATABRICKS_WORKSPACE_LOCATION") != "eastus2":
+                existing_ws = await asyncio.to_thread(az_json, cfg, "resource", "list", "-g", cfg["resource_group_name"], "--resource-type", "Microsoft.Databricks/workspaces")
+                orphan_workspaces.extend(w["id"] for w in existing_ws if w.get("location", "").lower() == cfg["location"].lower() and w.get("id") and w["id"] not in orphan_workspaces)
                 self.log(f"02-deploy-databricks-foundation.sh failed on existing {cfg['location']} workspace; deploying workspace in eastus2...", "warn")
                 variables["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
                 env["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
@@ -591,13 +669,30 @@ class AddonRunner:
             for key, output in (("DATABRICKS_HOST", "workspaceUrl"), ("ACCESS_CONNECTOR_ID", "accessConnectorId"),
                                 ("MANAGED_LOCATION_URL", "managedLocationUrl"), ("DICOM_OUTPUT_URL", "dicomOutputUrl")):
                 variables[key] = foundation[output]["value"]
+            for key, output in (("DATABRICKS_WORKSPACE_RESOURCE_ID", "workspaceId"), ("DATABRICKS_WORKSPACE_NAME", "workspaceName"),
+                                ("ACCESS_CONNECTOR_PRINCIPAL_ID", "accessConnectorPrincipalId")):
+                if isinstance(foundation.get(output), dict) and foundation[output].get("value"):
+                    variables[key] = foundation[output]["value"]
             env.update(variables)
             save_env()
+            # Persist the resolved workspaceUrl immediately so the add-on record names the live workspace
+            # even if a later step (metastore pause, bundle, or interop verification) is still running.
+            state_res = (
+                self.deployment.setdefault("customStatus", {})
+                .setdefault("addons", {})
+                .setdefault("databricks", {})
+                .setdefault("resources", {})
+            )
+            state_res["workspaceUrl"] = variables["DATABRICKS_HOST"]
+            state_res["fhirExportUrl"] = variables["FHIR_EXPORT_URL"]
+            if orphan_workspaces:
+                state_res["orphanWorkspaces"] = list(dict.fromkeys(orphan_workspaces))
+            self.persist()
             return foundation
         foundation = load_foundation()
-        await self.ensure_metastore(env, root, variables, save_env, load_foundation, scripts)
+        await self.ensure_metastore(env, root, variables, save_env, load_foundation, scripts, orphan_workspaces)
         await self.ensure_admin_group(env, root, variables["ADMIN_GROUP_OBJECT_ID"], variables["DATABRICKS_ADMIN_GROUP"])
-        onelake_url = await self.ensure_onelake_databricks_storage(cfg, foundation["accessConnectorId"]["value"])
+        onelake_url = await self.ensure_onelake_databricks_storage(cfg, variables["ACCESS_CONNECTOR_ID"])
         if onelake_url:
             variables["ONELAKE_EXTERNAL_LOCATION_URL"] = onelake_url
             env["ONELAKE_EXTERNAL_LOCATION_URL"] = onelake_url
@@ -611,9 +706,23 @@ class AddonRunner:
         interop_flag = self.config.get("verify_databricks_interop", True)
         interop_enabled = interop_flag is True or (isinstance(interop_flag, str) and interop_flag.strip().lower() in ("true", "1", "yes")) if interop_flag is not None else True
         if interop_enabled:
+            clinical_id = self.item("Lakehouse", "clinical_lakehouse")["id"]
+            imaging_id = self.item("Lakehouse", "imaging_lakehouse")["id"]
+            patient360_id = self.item("Lakehouse", "patient360")["id"]
             await self.command(
                 "databricks: verify OneLake Unity Catalog interop",
-                [sys.executable, str(ROOT / "azure-databricks/implementation/scripts/09-onelake-interop-proof.py"), "--live", "--workspace-id", self.ws],
+                [
+                    sys.executable,
+                    str(ROOT / "azure-databricks/implementation/scripts/09-onelake-interop-proof.py"),
+                    "--live",
+                    "--workspace-id", self.ws,
+                    "--clinical-id", clinical_id,
+                    "--imaging-id", imaging_id,
+                    "--patient360-id", patient360_id,
+                    "--access-connector-id", variables["ACCESS_CONNECTOR_ID"],
+                    "--tenant-id", cfg["expected_tenant_id"],
+                    "--namespace", variables["DATABRICKS_NAMESPACE"],
+                ],
                 root,
                 env,
             )
@@ -621,6 +730,7 @@ class AddonRunner:
             "workspaceUrl": variables["DATABRICKS_HOST"],
             "fhirExportUrl": variables["FHIR_EXPORT_URL"],
             **({"onelakeExternalLocationUrl": onelake_url} if onelake_url else {}),
+            **({"orphanWorkspaces": list(dict.fromkeys(orphan_workspaces))} if orphan_workspaces else {}),
         }
 
     async def ensure_onelake_databricks_storage(self, cfg, access_connector_id):
@@ -706,7 +816,41 @@ class AddonRunner:
                     "The completed base deployment is unaffected.") from exc
             raise
 
-    async def ensure_metastore(self, env, root, variables=None, save_env=None, load_foundation=None, scripts=None):
+    async def _databricks_workspace_id(self, variables: dict | None, ws_loc: str) -> tuple[str, str]:
+        """Return ``(numeric_workspace_id, arm_resource_id)`` for the target Databricks workspace."""
+        vars_map = variables or {}
+        arm_id = vars_map.get("DATABRICKS_WORKSPACE_RESOURCE_ID", "")
+        expected_name = vars_map.get("DATABRICKS_WORKSPACE_NAME", "")
+        if not expected_name and vars_map.get("STORAGE_ACCOUNT_NAME") and vars_map.get("ENVIRONMENT"):
+            suffix = f"-{ws_loc}-ws" if ws_loc.lower() != self.config["location"].lower() else "-ws"
+            expected_name = f"hls-{vars_map['STORAGE_ACCOUNT_NAME']}-{vars_map['ENVIRONMENT']}{suffix}"
+        if arm_id:
+            detail = await asyncio.to_thread(az_json, self.config, "resource", "show", "--ids", arm_id)
+            return str(detail["properties"]["workspaceId"]), arm_id
+        candidates = [r for r in self.azure if r["type"].lower() == "microsoft.databricks/workspaces"]
+        if not candidates or (expected_name and not any(r.get("name") == expected_name for r in candidates)):
+            candidates = await asyncio.to_thread(
+                az_json, self.config, "resource", "list", "-g", self.config["resource_group_name"],
+                "--resource-type", "Microsoft.Databricks/workspaces",
+            )
+        by_name = [r for r in candidates if expected_name and r.get("name") == expected_name]
+        by_loc = [r for r in candidates if (r.get("location") or "").lower() == ws_loc.lower()]
+        dbx = by_name[0] if len(by_name) == 1 else (by_loc[0] if len(by_loc) == 1 else require_one(by_name or by_loc or candidates, "Databricks workspace"))
+        workspace_id = dbx.get("workspaceId") or (dbx.get("properties") or {}).get("workspaceId")
+        if not workspace_id:
+            detail = await asyncio.to_thread(az_json, self.config, "resource", "show", "--ids", dbx["id"])
+            workspace_id = detail["properties"]["workspaceId"]
+        return str(workspace_id), dbx["id"]
+
+    async def _assign_regional_metastore(self, env, root, variables: dict | None, ws_loc: str) -> str:
+        data = json.loads(await self.command("List available Unity Catalog metastores", ["databricks", "metastores", "list", "-o", "json"], root, env, capture=True))
+        candidates = data if isinstance(data, list) else data.get("metastores", [])
+        metastore = require_one([m for m in candidates if m.get("region", "").replace(" ", "").lower() == ws_loc.lower()], "regional Databricks metastore")
+        workspace_id, _ = await self._databricks_workspace_id(variables, ws_loc)
+        await self.command("Assign regional Unity Catalog metastore", ["databricks", "metastores", "assign", workspace_id, metastore["metastore_id"], "hive_metastore", "-o", "json"], root, env)
+        return workspace_id
+
+    async def ensure_metastore(self, env, root, variables=None, save_env=None, load_foundation=None, scripts=None, orphan_workspaces=None):
         async def assigned():
             try:
                 result = json.loads(await self.command("Check Unity Catalog metastore", ["databricks", "metastores", "current", "-o", "json"], root, env, capture=True))
@@ -717,21 +861,10 @@ class AddonRunner:
             return
         explanation = ""
         org_not_found = False
+        ws_loc = (variables or {}).get("DATABRICKS_WORKSPACE_LOCATION") or self.config["location"]
         for attempt in range(1, 4):
             try:
-                data = json.loads(await self.command("List available Unity Catalog metastores", ["databricks", "metastores", "list", "-o", "json"], root, env, capture=True))
-                candidates = data if isinstance(data, list) else data.get("metastores", [])
-                ws_loc = (variables or {}).get("DATABRICKS_WORKSPACE_LOCATION") or self.config["location"]
-                metastore = require_one([m for m in candidates if m.get("region", "").replace(" ", "").lower() == ws_loc.lower()], "regional Databricks metastore")
-                metastore_id = metastore["metastore_id"]
-                dbx = self.resource("Microsoft.Databricks/workspaces") if any(r["type"].lower() == "microsoft.databricks/workspaces" for r in self.azure) else require_one(await asyncio.to_thread(
-                    az_json, self.config, "resource", "list", "-g", self.config["resource_group_name"],
-                    "--resource-type", "Microsoft.Databricks/workspaces"), "Databricks workspace")
-                workspace_id = dbx.get("workspaceId") or dbx.get("properties", {}).get("workspaceId")
-                if not workspace_id:
-                    detail = await asyncio.to_thread(az_json, self.config, "resource", "show", "--ids", dbx["id"])
-                    workspace_id = detail["properties"]["workspaceId"]
-                await self.command("Assign regional Unity Catalog metastore", ["databricks", "metastores", "assign", str(workspace_id), metastore_id, "hive_metastore", "-o", "json"], root, env)
+                await self._assign_regional_metastore(env, root, variables, ws_loc)
                 if await assigned():
                     return
                 explanation = "Assignment is not yet visible."
@@ -746,12 +879,26 @@ class AddonRunner:
                         continue
                 break
         if org_not_found and self.config["location"].lower() != "eastus2" and variables is not None and save_env is not None and load_foundation is not None and scripts is not None:
+            orphan_id = variables.get("DATABRICKS_WORKSPACE_RESOURCE_ID")
+            if not orphan_id:
+                for r in self.azure:
+                    if r["type"].lower() == "microsoft.databricks/workspaces" and (r.get("location") or "").lower() == self.config["location"].lower():
+                        orphan_id = r.get("id")
+                        break
+            if orphan_id:
+                if orphan_workspaces is not None and orphan_id not in orphan_workspaces:
+                    orphan_workspaces.append(orphan_id)
+                self.log(f"Recording orphan {self.config['location']} Databricks workspace {orphan_id} for teardown (not deleted automatically).", "warn")
             self.log(f"Databricks regional control plane in {self.config['location']} did not register the workspace org ID; deploying workspace in eastus2 (Access Connector remains in {self.config['location']})...", "warn")
             variables["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
             env["DATABRICKS_WORKSPACE_LOCATION"] = "eastus2"
             save_env()
             await self.command("02-deploy-databricks-foundation.sh (eastus2 fallback)", ["bash", scripts / "02-deploy-databricks-foundation.sh"], root, env)
             load_foundation()
+            try:
+                await self._assign_regional_metastore(env, root, variables, "eastus2")
+            except (urllib.error.HTTPError, RuntimeError, KeyError) as exc:
+                explanation = f"Automatic eastus2 metastore assignment unavailable: {exc}."
             if await assigned():
                 return
         event = CONTINUATIONS.setdefault(self.id, asyncio.Event())
@@ -894,13 +1041,22 @@ class AddonRunner:
         ws_name = cfg["fabric_workspace_name"]
         await self.command("rayfin-imaging: setup imaging_lakehouse", [sys.executable, root / "scripts/setup_fabric.py", "--workspace", ws_name], root)
         shared_dir = os.environ.get("HLS_SHARED_DATA_DIR")
-        cache_dir = Path(shared_dir) / "rayfin-imaging-cache" if os.environ.get("HLS_HOSTED") == "1" and shared_dir else None
-        if cache_dir and (cache_dir / "lakehouse/manifest.json").is_file() and (cache_dir / "volumes/manifest.json").is_file():
-            self.log("Seeding rayfin-imaging from internal shared cache...", "info")
+        default_slides = "brain-gbm,breast-brca,kidney-kirc" if os.environ.get("HLS_HOSTED") == "1" else ""
+        slides_spec = ",".join(s.strip() for s in os.environ.get("HLS_RAYFIN_IMAGING_SLIDES", default_slides).split(",") if s.strip())
+        datasets_spec = ",".join(d.strip() for d in os.environ.get("HLS_RAYFIN_IMAGING_DATASETS", "petct,lung4d,tracts,fetal").split(",") if d.strip())
+        totalseg_spec = "0" if os.environ.get("HLS_RAYFIN_IMAGING_TOTALSEG", "1") == "0" else "1"
+        cache_key = hashlib.sha256(f"slides={slides_spec}|datasets={datasets_spec}|totalseg={totalseg_spec}".encode("utf-8")).hexdigest()[:12]
+        cache_dir = Path(shared_dir) / "rayfin-imaging-cache" / cache_key if os.environ.get("HLS_HOSTED") == "1" and shared_dir else None
+        default_hosted = slides_spec == "brain-gbm,breast-brca,kidney-kirc" and datasets_spec == "petct,lung4d,tracts,fetal" and totalseg_spec == "1"
+        legacy_cache = Path(shared_dir) / "rayfin-imaging-cache" if cache_dir and default_hosted else None
+        seed_dir = next((d for d in (cache_dir, legacy_cache) if d and (d / "lakehouse/manifest.json").is_file() and (d / "volumes/manifest.json").is_file()), None)
+        if seed_dir is not None:
+            self.log(f"Seeding rayfin-imaging from internal shared cache ({seed_dir})...", "info")
             work_dir = root / "work"
             if work_dir.exists():
                 shutil.rmtree(work_dir)
-            shutil.copytree(cache_dir, work_dir)
+            shutil.copytree(seed_dir / "lakehouse", work_dir / "lakehouse")
+            shutil.copytree(seed_dir / "volumes", work_dir / "volumes")
         else:
             py = root / ".venv/bin/python"
             if not py.is_file():
@@ -910,8 +1066,7 @@ class AddonRunner:
                 shutil.rmtree(root / "work/raw", ignore_errors=True)
                 slides_json = root / "pipeline/slides.json"
                 all_slides = [s["id"] for s in json.loads(slides_json.read_text())] if slides_json.is_file() else []
-                default_slides = "brain-gbm,breast-brca,kidney-kirc" if os.environ.get("HLS_HOSTED") == "1" else ""
-                slides_arg = [s.strip() for s in os.environ.get("HLS_RAYFIN_IMAGING_SLIDES", default_slides).split(",") if s.strip()] or all_slides
+                slides_arg = [s for s in slides_spec.split(",") if s] or all_slides
                 if slides_arg:
                     for sid in slides_arg:
                         if (root / f"work/lakehouse/slides/{sid}/label.json").is_file():
@@ -924,7 +1079,7 @@ class AddonRunner:
                     await self.command("rayfin-imaging: download slides", [str(py), str(root / "pipeline/download_slides.py")], root)
                     await self.command("rayfin-imaging: generate Deep Zoom tiles", [str(py), str(root / "pipeline/generate_tiles.py"), "--raw", "work/raw", "--out", "work/lakehouse"], root)
             shutil.rmtree(root / "work/raw", ignore_errors=True)
-            datasets = [d.strip() for d in os.environ.get("HLS_RAYFIN_IMAGING_DATASETS", "petct,lung4d,tracts,fetal").split(",") if d.strip()]
+            datasets = [d for d in datasets_spec.split(",") if d]
             for ds_key in datasets:
                 if ds_key == "multiplex":
                     if not (root / "work/lakehouse/slides/colon-cycif/label.json").is_file():
@@ -959,22 +1114,28 @@ class AddonRunner:
                         await self.command(f"rayfin-imaging: download {ds_key}", [str(py), str(root / "pipeline/download_data.py"), ds_key], root)
                         await self.command("rayfin-imaging: build_visible_human.py", [str(py), str(root / "pipeline/volumes/build_visible_human.py")], root)
                     shutil.rmtree(root / "work/vhp", ignore_errors=True)
-            if os.environ.get("HLS_RAYFIN_IMAGING_TOTALSEG", "1") != "0":
+            if totalseg_spec != "0":
                 if not (root / "work/volumes/totalseg-ct-angio/study.json").is_file():
                     await self.command("rayfin-imaging: build_totalseg.py", [str(py), str(root / "pipeline/volumes/build_totalseg.py")], root)
                 shutil.rmtree(root / "work/totalseg", ignore_errors=True)
             await self.command("rayfin-imaging: build_mip.py", [str(py), str(root / "pipeline/volumes/build_mip.py")], root)
             await self.command("rayfin-imaging: build initial volume manifest", [str(py), str(root / "pipeline/volumes/build_manifest.py")], root)
             if cache_dir is not None:
+                staging: Path | None = None
                 try:
-                    if cache_dir.exists():
-                        shutil.rmtree(cache_dir)
-                    cache_dir.mkdir(parents=True, exist_ok=True)
-                    shutil.copytree(root / "work/lakehouse", cache_dir / "lakehouse")
-                    shutil.copytree(root / "work/volumes", cache_dir / "volumes")
-                    self.log("Populated internal shared cache at /data-share/rayfin-imaging-cache for subsequent deployments.", "info")
+                    cache_dir.parent.mkdir(parents=True, exist_ok=True)
+                    staging = Path(tempfile.mkdtemp(prefix=f".{cache_dir.name}-tmp-", dir=str(cache_dir.parent)))
+                    shutil.copytree(root / "work/lakehouse", staging / "lakehouse")
+                    shutil.copytree(root / "work/volumes", staging / "volumes")
+                    if not cache_dir.exists():
+                        os.replace(staging, cache_dir)
+                        staging = None
+                    self.log(f"Populated internal shared cache at {cache_dir} for subsequent deployments.", "info")
                 except Exception as cache_exc:
                     self.log(f"Could not populate internal shared cache: {cache_exc}", "warn")
+                finally:
+                    if staging is not None:
+                        shutil.rmtree(staging, ignore_errors=True)
         try:
             storage = self.resource("Microsoft.Storage/storageAccounts")["name"]
             cohort_py = root / ".venv/bin/python"
@@ -1016,6 +1177,14 @@ class AddonRunner:
                     ],
                     root,
                 )
+                # HDS clinical ingestion reads NDJSON from the fhir-export container, not the FHIR API.
+                await self.ps("rayfin-imaging: export TCGA FHIR cohort to ADLS", ROOT / "phase-1/deploy-fhir.ps1", {
+                    "ResourceGroupName": cfg.get("resource_group_name", ""),
+                    "ExpectedSubscriptionId": cfg.get("expected_subscription_id", ""),
+                    "ExportOnly": True,
+                    "ExportContainerName": "fhir-export",
+                    "DeploymentPython": sys.executable,
+                })
                 await self.run_fabric_job(
                     "DataPipeline",
                     "healthcare1_msft_clinical_data_foundation_ingestion",
@@ -1028,16 +1197,24 @@ class AddonRunner:
                     "RunNotebook",
                     timeout_sec=3600,
                 )
+                await self.verify_silver_tcga_patients()
                 await self.refresh_gold_sql_metadata()
 
             # 2. Researcher persona & de-identified clinical silo (ticket 006, opt-in only)
             researcher_flag = self.config.get("enable_researcher_persona", False)
             researcher_enabled = researcher_flag is True or (isinstance(researcher_flag, str) and researcher_flag.strip().lower() in ("true", "1", "yes"))
             if researcher_enabled:
-                await self.command(
-                    "rayfin-imaging: manage researcher persona",
-                    [sys.executable, str(ROOT / "scripts/manage_researcher_persona.py"), "--create", "--workspace-id", self.ws],
-                )
+                nurse_upn = str(cfg.get("researcher_persona_nurse_upn") or "").strip() or self._deployer_upn()
+                persona_cmd = [
+                    sys.executable,
+                    str(ROOT / "scripts/manage_researcher_persona.py"),
+                    "--create",
+                    "--tenant-id", cfg["expected_tenant_id"],
+                    "--workspace-id", self.ws,
+                ]
+                if nurse_upn:
+                    persona_cmd.extend(["--nurse-upn", nurse_upn])
+                await self.command("rayfin-imaging: manage researcher persona", persona_cmd)
                 await self.command(
                     "rayfin-imaging: seed de-identified clinical silo",
                     [sys.executable, str(root / "pipeline/seed_deidentified_clinical.py"), "--live"],
@@ -1056,12 +1233,36 @@ class AddonRunner:
                         root,
                         env=alert_env,
                     )
-                    await self.command(
-                        "rayfin-imaging: trigger SpO2 alert stopwatch",
-                        [sys.executable, str(ROOT / "scripts/trigger_spo2_alert.py"), "--live", "--workspace", cfg.get("fabric_workspace_name", "")],
-                        root,
-                        env=alert_env,
-                    )
+                    # The stopwatch is a live demo probe; an uncooperative Eventstream or Activator is logged
+                    # and recorded on the add-on rather than aborting the Rayfin deployment.
+                    try:
+                        eh_ns = self.resource("Microsoft.EventHub/namespaces")["name"]
+                        kql = self.item("KQLDatabase", "MasimoEventhouse")
+                        kql_detail = await asyncio.to_thread(
+                            self.cloud.call, "GET", f"{FABRIC}/v1/workspaces/{self.ws}/kqlDatabases/{kql['id']}", FABRIC, None, "eventhouse-cli",
+                        )
+                        eh_query_uri = ((kql_detail.get("properties") or {}).get("queryServiceUri") or "").strip()
+                        if not eh_query_uri:
+                            raise RuntimeError("MasimoEventhouse has no queryServiceUri")
+                        await self.command(
+                            "rayfin-imaging: trigger SpO2 alert stopwatch",
+                            [
+                                sys.executable,
+                                str(ROOT / "scripts/trigger_spo2_alert.py"),
+                                "--live",
+                                "--workspace", cfg.get("fabric_workspace_name", ""),
+                                "--eventhub-namespace", eh_ns,
+                                "--resource-group", cfg.get("resource_group_name", ""),
+                                "--eventhouse-query-uri", eh_query_uri,
+                            ],
+                            root,
+                            env=alert_env,
+                        )
+                    except Exception as probe_exc:
+                        warning = f"SpO2 alert stopwatch probe warning (non-fatal): {probe_exc}"
+                        self.log(warning, "warn")
+                        self.deployment.setdefault("customStatus", {}).setdefault("addons", {}).setdefault("rayfin", {}).setdefault("warnings", []).append(str(probe_exc))
+                        self.persist()
                 else:
                     self.substep("rayfin-imaging: deploy clinical activator reflex", "skipped", "skipped: no alert_email configured")
                     self.log("rayfin-imaging: alert stopwatch skipped: no alert_email configured", "info")

@@ -215,6 +215,8 @@ def _az_run(args: list[str], **kwargs) -> subprocess.CompletedProcess:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan hook for startup background tasks."""
+    global _MAIN_LOOP
+    _MAIN_LOOP = asyncio.get_running_loop()
     _install_asyncio_crash_diagnostics()
     if SESSION_LOG_FILE is not None:
         logger.info("Session scoped log active: %s", SESSION_LOG_FILE)
@@ -781,12 +783,12 @@ class DeployRequest(BaseModel):
     cardiology_reviewer_users: list[str] = []
     cardiology_chat_model: str = ""
     cardiology_chat_model_version: str = ""
-
+    researcher_persona_nurse_upn: str = ""
     @model_validator(mode="after")
     def validate_addons(self) -> "DeployRequest":
         if self.databricks_environment not in {"dev", "test", "prod"}:
             raise ValueError("databricks_environment must be dev, test or prod")
-        for field in ("databricks_admin_group", "cardiology_prefix", "cardiology_chat_model", "cardiology_chat_model_version"):
+        for field in ("databricks_admin_group", "cardiology_prefix", "cardiology_chat_model", "cardiology_chat_model_version", "researcher_persona_nurse_upn"):
             value = getattr(self, field)
             if value and not re.fullmatch(r"[A-Za-z0-9_. @-]{1,128}", value):
                 raise ValueError(f"{field} contains unsupported characters")
@@ -1385,11 +1387,32 @@ async def run_preflight(req: DeployRequest):
     return func_response(result, status_code)
 
 
-_addon_tasks: dict[str, asyncio.Task] = {}
+# Every live add-on task per deployment: a run started while Databricks is paused runs beside it.
+_addon_tasks: dict[str, set[asyncio.Task]] = {}
+
+
+def _track_addon_task(instance_id: str, task: asyncio.Task) -> None:
+    _addon_tasks.setdefault(instance_id, set()).add(task)
+
+
+def _release_addon_task(instance_id: str, task: asyncio.Task | None) -> bool:
+    """Forget ``task``; return True when no other add-on task for the deployment is still live."""
+    tasks = _addon_tasks.get(instance_id)
+    if tasks is None:
+        return True
+    tasks.discard(task)
+    tasks.difference_update({other for other in tasks if other.done()})
+    if tasks:
+        return False
+    _addon_tasks.pop(instance_id, None)
+    return True
+
+
 _ADDON_OPTIONS = {
     "deploy_databricks", "databricks_environment", "databricks_admin_group", "deploy_rayfin_apps",
     "deploy_cardiology", "cardiology_location", "cardiology_prefix", "cardiology_app_users",
     "cardiology_reviewer_users", "cardiology_chat_model", "cardiology_chat_model_version",
+    "researcher_persona_nurse_upn",
 }
 
 
@@ -1417,11 +1440,14 @@ async def _run_later_addons(
             if state.get("status") in {"pending", "running", "paused"}:
                 state.update(status="failed", detail=str(exc))
     finally:
-        if deployment.get("runtimeStatus") != "Terminated":
+        # Only the last live add-on task of this deployment settles it; a sibling (e.g. a paused
+        # Databricks run) may still be working.
+        last = _release_addon_task(instance_id, asyncio.current_task())
+        if last and deployment.get("runtimeStatus") != "Terminated":
             deployment["runtimeStatus"] = "Completed"
             cs["status"] = "succeeded"
             cs["currentPhase"] = "Deployment Complete"
-        if pause_capacity and deployment.get("runtimeStatus") == "Completed":
+        if last and pause_capacity and deployment.get("runtimeStatus") == "Completed":
             try:
                 await asyncio.get_running_loop().run_in_executor(None, _pause_capacity_sync, *pause_capacity)
                 cs["capacityPaused"] = True
@@ -1429,8 +1455,6 @@ async def _run_later_addons(
                 logger.warning("Failed to auto-pause capacity '%s' after add-ons: %s", pause_capacity[2], exc)
                 cs["capacityPauseError"] = str(exc)
         deployment["lastUpdatedTime"] = now_iso()
-        if _addon_tasks.get(instance_id) is asyncio.current_task():
-            _addon_tasks.pop(instance_id, None)
         save_state()
         try:
             from shared.hosted import touch_hosted_activity
@@ -1453,11 +1477,13 @@ async def start_addons(instance_id: str, body: dict):
     addons_map = cs.get("addons") or {}
     dbx_paused_only = (
         instance_id in _addon_tasks
+        and deployment.get("runtimeStatus") == "Running"
         and "databricks" not in names
         and (addons_map.get("databricks") or {}).get("status") == "paused"
         and all((addons_map.get(n) or {}).get("status") not in {"running", "pending"} for n in names)
     )
-    if deployment.get("runtimeStatus") != "Completed" or (instance_id in _addon_tasks and not dbx_paused_only):
+    idle_completed = deployment.get("runtimeStatus") == "Completed" and instance_id not in _addon_tasks
+    if not (idle_completed or dbx_paused_only):
         raise HTTPException(409, "Add-ons require a completed deployment with no active run")
     names = [name for name in ADDON_FLAGS if name in names]
     if set(body) - _ADDON_OPTIONS - {"addons"}:
@@ -1467,6 +1493,8 @@ async def start_addons(instance_id: str, body: dict):
     if not config.get("expected_subscription_id") or not config.get("expected_tenant_id"):
         raise HTTPException(409, "This legacy deployment has no pinned tenant/subscription configuration")
     for other in deployments.values():
+        if other is deployment:
+            continue
         other_cs = other.get("customStatus") or {}
         if other.get("runtimeStatus") in {"Running", "Pending"} and (
             other_cs.get("workspaceName") == cs.get("workspaceName") or other_cs.get("resourceGroupName") == cs.get("resourceGroupName")
@@ -1482,6 +1510,8 @@ async def start_addons(instance_id: str, body: dict):
         raise HTTPException(422, str(exc)) from exc
     # Reserve before awaiting preflight so simultaneous clicks cannot start twice.
     cs["addonRunBaseCompleted"] = True
+    # A paused Databricks sibling keeps the run Running; it may finish (and settle Completed) meanwhile.
+    status_before = deployment["runtimeStatus"]
     deployment["runtimeStatus"] = "Pending"
     save_state()
     try:
@@ -1490,7 +1520,7 @@ async def start_addons(instance_id: str, body: dict):
         if failures:
             raise HTTPException(422, "; ".join(failures))
     except BaseException:
-        deployment["runtimeStatus"] = "Completed"
+        deployment["runtimeStatus"] = status_before if instance_id in _addon_tasks else "Completed"
         save_state()
         raise
     cs.setdefault("addons", {}).update({name: {**({} if not isinstance(cs.get("addons", {}).get(name), dict) else {k: v for k, v in cs["addons"][name].items() if k == "resources" and v}), "status": "pending"} for name in names})
@@ -1502,14 +1532,13 @@ async def start_addons(instance_id: str, body: dict):
     save_state()
     record_deployment_form_history(deployment)
     task = asyncio.create_task(_run_later_addons(instance_id, config, names, fresh_export=("databricks" in names)))
-    if not dbx_paused_only:
-        _addon_tasks[instance_id] = task
+    _track_addon_task(instance_id, task)
     return {"instanceId": instance_id, "addons": names}
 
 
 @app.post("/api/deploy/{instance_id}/addons/databricks/continue")
 async def continue_databricks_addon(instance_id: str):
-    from activities.addons import CONTINUATIONS
+    from shared.continuations import CONTINUATIONS
     deployment = deployments.get(instance_id)
     if not deployment:
         raise HTTPException(404, "Deployment not found")
@@ -1712,12 +1741,16 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
         ).strip()
         cursor = deployments.get(parent_id) if parent_id else None
 
-    phase_entries: list[tuple[dict, dict]] = []
-    for dep_item in reversed(chain):
-        dep_phases = ((dep_item.get("output") or {}).get("phases") or [])
-        for ph in dep_phases:
-            phase_entries.append((dep_item, ph))
-
+    # Keep only the latest entry per phase name across the continuation chain: an earlier attempt's
+    # failure does not block a phase that a newer attempt completed, and an earlier attempt's success
+    # does not hide a re-run that failed.
+    latest_by_phase: dict[str, tuple[dict, dict]] = {}
+    for dep_item in chain:
+        for ph in reversed((dep_item.get("output") or {}).get("phases") or []):
+            key = str(ph.get("phase") or "").strip().upper()
+            if key and key not in latest_by_phase:
+                latest_by_phase[key] = (dep_item, ph)
+    phase_entries: list[tuple[dict, dict]] = list(reversed(list(latest_by_phase.values())))
     if not phase_entries:
         return False
     live_evidence = _live_resume_prerequisites(req, cloud_state)
@@ -2492,10 +2525,10 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
 
         if requested_addons:
             # Add-ons start after the base is Completed; they pause the capacity when they finish.
-            _addon_tasks[instance_id] = asyncio.create_task(_run_later_addons(
+            _track_addon_task(instance_id, asyncio.create_task(_run_later_addons(
                 instance_id, config, requested_addons, fresh_export=False,
                 pause_capacity=(req.capacity_subscription_id, req.capacity_resource_group, req.capacity_name)
-                if req.pause_capacity_after_deploy and req.capacity_name else None))
+                if req.pause_capacity_after_deploy and req.capacity_name else None)))
         elif req.pause_capacity_after_deploy and req.capacity_name:
             try:
                 _pause_capacity_sync(
@@ -4115,17 +4148,52 @@ def _query_fhir_counts(rg_name: str) -> dict:
 
 
 def _active_hosted_runs() -> int:
+    # Peer-sandbox runs imported as history are read-only here and never block this sandbox.
     return sum(dep.get("runtimeStatus") in {"Running", "Pending"}
                for dep in deployments.values()
-               if (dep.get("customStatus") or {}).get("runType") != "teardownBatch") + sum(
-        not task.done() for task in _addon_tasks.values())
+               if (dep.get("customStatus") or {}).get("runType") != "teardownBatch"
+               and not (dep.get("customStatus") or {}).get("importedFrom")) + sum(
+        not task.done() for tasks in _addon_tasks.values() for task in tasks)
+
+
+# The server's event loop; history imports finishing on worker threads hand their results to it.
+_MAIN_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _merge_imported_deployments(records: list[dict]) -> int:
+    """Add imported history to the live registry on the event loop thread.
+
+    Only unknown IDs, or entries that are themselves imported read-only history, are (re)placed: a run
+    this process owns is a live object other coroutines mutate and must never be swapped out.
+    """
+    merged = 0
+    for dep in records:
+        current = deployments.get(dep["instanceId"])
+        if current is not None and not (current.get("customStatus") or {}).get("importedFrom"):
+            continue
+        deployments[dep["instanceId"]] = dep
+        merged += 1
+    return merged
+
 
 def _sync_authenticated_target_history(tenant_id: str, subscription_id: str) -> dict[str, int]:
-    """Import prior runs, ledgers, and form_history for a verified authenticated target."""
+    """Import prior runs, ledgers, and form_history for a verified authenticated target.
+
+    Runs on a worker thread (blocking SQLite and share I/O); the registry mutation is scheduled onto the
+    event loop so it never races coroutines that hold the live deployment objects.
+    """
     outcome = import_target_history_from_shared_storage(tenant_id, subscription_id)
     if outcome.get("importedDeployments") or outcome.get("reconstructedLedgers"):
-        for dep in db_list_deployments():
-            deployments[dep["instanceId"]] = dep
+        records = db_list_deployments()
+        loop = _MAIN_LOOP
+        try:
+            on_loop = asyncio.get_running_loop() is loop
+        except RuntimeError:
+            on_loop = False
+        if loop is not None and loop.is_running() and not on_loop:
+            loop.call_soon_threadsafe(_merge_imported_deployments, records)
+        else:
+            _merge_imported_deployments(records)
     return outcome
 
 

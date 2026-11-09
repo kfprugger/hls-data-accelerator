@@ -362,25 +362,219 @@ class PersistentDatabaseTests(unittest.TestCase):
                 self.assertNotIn(b"refresh-secret-value", raw_seal)
                 self.assertNotIn(b"must-be-stripped", raw_seal)
 
-                # Simulate container reap (wipe cli_dir AND rotate HLS_GATEWAY_KEY) and restore
+                # Same sandbox container re-reads its seal with its own gateway key
                 for f in cli_dir.iterdir():
                     f.unlink()
                 self.assertFalse((cli_dir / "msal_token_cache.json").exists())
-                with patch.dict(os.environ, {"HLS_GATEWAY_KEY": "rotated-gateway-key-after-reap"}):
-                    self.assertTrue(hosted.restore_azure_auth_cache())
+                self.assertTrue(hosted.restore_azure_auth_cache())
                 restored_msal = json.loads((cli_dir / "msal_token_cache.json").read_text())
                 self.assertEqual(restored_msal["AccessToken"], {})
                 self.assertEqual(restored_msal["IdToken"], {})
                 self.assertEqual(restored_msal["RefreshToken"]["rt-1"]["secret"], "refresh-secret-value")
-                # Verify wrong identity cannot decrypt the seal
+
+                # Another sandbox that only knows (tid, oid) — or has a different gateway key — cannot decrypt
                 for f in cli_dir.iterdir():
                     f.unlink()
+                with patch.dict(os.environ, {"HLS_GATEWAY_KEY": "different-sandbox-gateway-key"}):
+                    self.assertFalse(hosted.restore_azure_auth_cache())
+                    self.assertFalse((cli_dir / "msal_token_cache.json").exists())
                 with patch.dict(os.environ, {"HLS_SANDBOX_USER_OID": "00000000-0000-0000-0000-000000000000"}):
                     self.assertFalse(hosted.restore_azure_auth_cache())
                     self.assertFalse((cli_dir / "msal_token_cache.json").exists())
 
+                # Legacy tid:oid-only seal migrates once and is re-sealed under the gateway-key secret
+                legacy_salt = hosted.hashlib.sha256(f"{env['HLS_SANDBOX_USER_TID']}:{env['HLS_SANDBOX_USER_OID']}".encode()).digest()
+                legacy_key = hosted._hkdf(f"hls-seal-v2:{env['HLS_SANDBOX_USER_TID']}:{env['HLS_SANDBOX_USER_OID']}".encode(), legacy_salt, b"hls-sandbox-azure-auth-seal-v1")
+                nonce = b"123456789012"
+                legacy_payload = hosted.zlib.compress(json.dumps({
+                    "azureProfile": {"subscriptions": []},
+                    "msalTokenCache": {"RefreshToken": {"rt-legacy": {"secret": "migrated-secret"}}, "Account": {}, "AppMetadata": {}, "AccessToken": {}, "IdToken": {}},
+                }).encode())
+                seal_file.write_bytes(b"HLS1" + nonce + hosted.AESGCM(legacy_key).encrypt(nonce, legacy_payload, b"hls-azure-auth-v1"))
+                self.assertTrue(hosted.restore_azure_auth_cache())
+                self.assertEqual(json.loads((cli_dir / "msal_token_cache.json").read_text())["RefreshToken"]["rt-legacy"]["secret"], "migrated-secret")
+                with self.assertRaises(Exception):
+                    hosted.AESGCM(legacy_key).decrypt(seal_file.read_bytes()[4:16], seal_file.read_bytes()[16:], b"hls-azure-auth-v1")
+
                 # Verify logout clears the seal
                 hosted.clear_azure_auth_seal()
                 self.assertFalse(seal_file.exists())
+
+    def test_hotfix_tar_requires_matching_image_commit_and_never_runs_from_shared_dir(self):
+        import io
+        import tarfile
+        from shared.hotfix import HotfixError, apply_hotfixes
+
+        def make_tar(path: Path, files: dict[str, bytes]) -> None:
+            with tarfile.open(path, "w") as tf:
+                for name, data in files.items():
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    tf.addfile(info, io.BytesIO(data))
+
+        commit = "a" * 40
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            data_dir, shared_dir, dest = base / "data", base / "share", base / "dest"
+            data_dir.mkdir()
+            shared_dir.mkdir()
+            dest.mkdir()
+            make_tar(data_dir / "hotfix.tar", {"evil.py": b"owned = True\n"})
+            with patch.dict(os.environ, {"HLS_IMAGE_COMMIT": commit, "HLS_SHARED_DATA_DIR": str(shared_dir)}):
+                self.assertEqual(apply_hotfixes(data_dir, [("hotfix.tar", dest)], reapply_applied=True), [])
+            self.assertFalse((dest / "evil.py").exists())
+            self.assertTrue((data_dir / "hotfix.tar.rejected").is_file())
+            make_tar(data_dir / "hotfix.tar", {".hls-hotfix-commit": commit.encode(), "patched.txt": b"ok"})
+            with patch.dict(os.environ, {"HLS_IMAGE_COMMIT": commit, "HLS_SHARED_DATA_DIR": str(shared_dir)}):
+                self.assertEqual(apply_hotfixes(data_dir, [("hotfix.tar", dest)], reapply_applied=False), [dest])
+            self.assertEqual((dest / "patched.txt").read_bytes(), b"ok")
+            self.assertFalse((data_dir / "hotfix.tar").exists())
+            self.assertTrue((data_dir / "hotfix.tar.applied").is_file())
+            (data_dir / "hotfix.tar").write_bytes(b"not a tar")
+            with patch.dict(os.environ, {"HLS_IMAGE_COMMIT": commit, "HLS_SHARED_DATA_DIR": str(shared_dir)}):
+                with self.assertRaises(HotfixError):
+                    apply_hotfixes(data_dir, [("hotfix.tar", dest)], reapply_applied=False)
+                with self.assertRaises(HotfixError):
+                    apply_hotfixes(shared_dir / "peer", [("hotfix.tar", dest)], reapply_applied=False)
+
+    def test_history_import_preserves_live_deployments_schedules_on_loop_and_excludes_peer_active_runs(self):
+        import local_server
+        live_obj = {"instanceId": "live-1", "runtimeStatus": "Running", "customStatus": {"workspaceName": "med-live"}}
+        saved_deployments = dict(local_server.deployments)
+        saved_tasks = dict(local_server._addon_tasks)
+        saved_loop = local_server._MAIN_LOOP
+        try:
+            local_server.deployments.clear()
+            local_server._addon_tasks.clear()
+            local_server.deployments["live-1"] = live_obj
+            imported_records = [
+                {"instanceId": "live-1", "runtimeStatus": "Completed", "customStatus": {"importedFrom": "peer-a"}},
+                {"instanceId": "peer-running", "runtimeStatus": "Running", "customStatus": {"importedFrom": "peer-a"}},
+            ]
+            scheduled: list[tuple] = []
+
+            class FakeLoop:
+                def is_running(self):
+                    return True
+
+                def call_soon_threadsafe(self, fn, *args):
+                    scheduled.append((fn, args))
+                    fn(*args)
+
+            local_server._MAIN_LOOP = FakeLoop()
+            with patch.object(local_server, "import_target_history_from_shared_storage", return_value={"importedDeployments": 2, "reconstructedLedgers": 0}), \
+                 patch.object(local_server, "db_list_deployments", return_value=imported_records):
+                local_server._sync_authenticated_target_history("tid", "sub")
+
+            # Mutation was handed to the event loop via call_soon_threadsafe, and the live object identity is untouched.
+            self.assertEqual(len(scheduled), 1)
+            self.assertIs(local_server.deployments["live-1"], live_obj)
+            self.assertEqual(local_server.deployments["live-1"]["runtimeStatus"], "Running")
+            # Peer's Running record is present as read-only history, but excluded from _active_hosted_runs().
+            self.assertEqual(local_server.deployments["peer-running"]["customStatus"]["importedFrom"], "peer-a")
+            self.assertEqual(local_server._active_hosted_runs(), 1)
+        finally:
+            local_server.deployments.clear()
+            local_server.deployments.update(saved_deployments)
+            local_server._addon_tasks.clear()
+            local_server._addon_tasks.update(saved_tasks)
+            local_server._MAIN_LOOP = saved_loop
+
+    def test_continuation_reload_preserves_event_and_parallel_addon_tasks_settle_only_when_empty(self):
+        import importlib
+        import local_server
+        from activities import addons
+        from shared.continuations import CONTINUATIONS
+
+        async def scenario():
+            saved_deployments = dict(local_server.deployments)
+            saved_tasks = dict(local_server._addon_tasks)
+            try:
+                # P2-7: reloading activities.addons does not reset CONTINUATIONS
+                ev = asyncio.Event()
+                CONTINUATIONS["inst-pause"] = ev
+                importlib.reload(addons)
+                self.assertIs(CONTINUATIONS.get("inst-pause"), ev)
+
+                # P2-8: a second add-on finishing while Databricks is still paused leaves runtimeStatus Running
+                dep = {
+                    "instanceId": "inst-pause",
+                    "runtimeStatus": "Running",
+                    "customStatus": {"status": "running", "currentPhase": "Add-on: Databricks", "addons": {"databricks": {"status": "paused"}, "rayfin": {"status": "running"}}},
+                    "output": {"phases": [], "resources": {}},
+                }
+                local_server.deployments["inst-pause"] = dep
+                local_server._addon_tasks.clear()
+                dbx_gate = asyncio.Event()
+                dbx_task = asyncio.create_task(dbx_gate.wait())
+                rayfin_done = asyncio.Event()
+                rayfin_task = asyncio.create_task(rayfin_done.wait())
+                local_server._track_addon_task("inst-pause", dbx_task)
+                local_server._track_addon_task("inst-pause", rayfin_task)
+                self.assertEqual(local_server._active_hosted_runs(), 3)
+
+                rayfin_done.set()
+                await rayfin_task
+                self.assertFalse(local_server._release_addon_task("inst-pause", rayfin_task))
+                self.assertIn("inst-pause", local_server._addon_tasks)
+
+                dbx_gate.set()
+                await dbx_task
+                self.assertTrue(local_server._release_addon_task("inst-pause", dbx_task))
+                self.assertNotIn("inst-pause", local_server._addon_tasks)
+            finally:
+                CONTINUATIONS.pop("inst-pause", None)
+                local_server.deployments.clear()
+                local_server.deployments.update(saved_deployments)
+                local_server._addon_tasks.clear()
+                local_server._addon_tasks.update(saved_tasks)
+
+        asyncio.run(scenario())
+
+    def test_continuation_skips_use_latest_phase_outcome_across_chain(self):
+        import local_server
+        saved_deployments = dict(local_server.deployments)
+        try:
+            local_server.deployments.clear()
+            # Run 1: Phase 4 Ontology succeeded, Phase 2 failed.
+            local_server.deployments["run-1"] = {
+                "instanceId": "run-1",
+                "customStatus": {},
+                "output": {"phases": [
+                    {"phase": "Phase 1: Base Azure Infrastructure", "status": "succeeded"},
+                    {"phase": "Phase 2: Fabric RTI", "status": "failed"},
+                    {"phase": "Phase 4: Ontology", "status": "succeeded"},
+                ]},
+            }
+            # Run 2 (continued from run-1): Phase 2 now succeeded, but Phase 4 Ontology was re-run and failed.
+            run_2 = {
+                "instanceId": "run-2",
+                "customStatus": {"continuedFrom": "run-1"},
+                "output": {"phases": [
+                    {"phase": "Phase 2: Fabric RTI", "status": "succeeded"},
+                    {"phase": "Phase 4: Ontology", "status": "failed"},
+                ]},
+            }
+            local_server.deployments["run-2"] = run_2
+            req = local_server.DeployRequest(
+                expected_tenant_id="11111111-1111-1111-1111-111111111111",
+                expected_subscription_id="22222222-2222-2222-2222-222222222222",
+                resource_group_name="rg-med-test",
+                fabric_workspace_name="med-test",
+                admin_security_group="sg-admins",
+                skip_quality_measures=True,
+            )
+            with patch.object(local_server, "_cloud_state_sync", return_value={"workspace": {"exists": True}, "resourceGroup": {"exists": True}}), \
+                 patch.object(local_server, "_live_resume_prerequisites", return_value={"workspaceExists": True, "resourceGroupExists": True}), \
+                 patch.object(local_server, "_phase_live_prerequisites_ok", return_value=(True, "ok")), \
+                 patch.object(local_server, "_phase_has_blocking_logs", return_value=False):
+                applied = local_server._apply_success_skips_from_deployment(req, run_2, "Continue")
+            self.assertTrue(applied)
+            # Phase 2's latest outcome is succeeded -> reuse_fabric_rti; Phase 4's latest outcome is failed -> NOT skipped.
+            self.assertTrue(req.reuse_fabric_rti)
+            self.assertFalse(req.skip_ontology)
+        finally:
+            local_server.deployments.clear()
+            local_server.deployments.update(saved_deployments)
 if __name__ == "__main__":
     unittest.main()

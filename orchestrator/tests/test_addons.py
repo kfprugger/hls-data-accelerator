@@ -411,14 +411,23 @@ class WowDemoAddonWiringTests(unittest.IsolatedAsyncioTestCase):
         }
         runner.log = Mock()
         runner.persist = Mock()
-        runner.resource = Mock(return_value={"name": "sttest"})
+        runner.resource = Mock(return_value={"name": "sttest", "id": "res-id"})
+        runner.items = [
+            {"id": "clin-id", "type": "Lakehouse", "displayName": "clinical_lakehouse"},
+            {"id": "img-id", "type": "Lakehouse", "displayName": "imaging_lakehouse"},
+            {"id": "p360-id", "type": "Lakehouse", "displayName": "patient360"},
+            {"id": "silver-id", "type": "Lakehouse", "displayName": "healthcare1_msft_silver"},
+            {"id": "eh-id", "type": "KQLDatabase", "displayName": "MasimoEventhouse"},
+        ]
         runner.cloud = Mock()
         runner.cloud.items = Mock(return_value=[{"id": "g-id", "displayName": "admin-group"}])
-        runner.cloud.call = Mock(return_value={})
+        runner.cloud.call = Mock(return_value={"properties": {"queryServiceUri": "https://eh.kusto.fabric.microsoft.com"}})
+        runner.ps = AsyncMock()
         runner.run_fabric_job = AsyncMock()
+        runner.verify_silver_tcga_patients = AsyncMock(return_value=15)
         runner.refresh_gold_sql_metadata = AsyncMock()
+        runner._deployer_upn = Mock(return_value="deployer@example.com")
         return runner
-
     async def test_demo_step_defaults(self):
         # Default configuration runs the safe demo steps and never the identity step
         runner = self.make_runner()
@@ -487,9 +496,10 @@ class WowDemoAddonWiringTests(unittest.IsolatedAsyncioTestCase):
             executed_sequence.append(("sql_refresh",))
 
         runner.command = AsyncMock(side_effect=track_command)
+        runner.ps = AsyncMock(side_effect=lambda title, script, params: executed_sequence.append(("ps", title, str(script), params)))
         runner.run_fabric_job = AsyncMock(side_effect=track_job)
+        runner.verify_silver_tcga_patients = AsyncMock(side_effect=lambda: executed_sequence.append(("verify_silver",)) or 15)
         runner.refresh_gold_sql_metadata = AsyncMock(side_effect=track_sql_refresh)
-
         root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
         await runner.prepare_rayfin_imaging(root)
 
@@ -511,14 +521,18 @@ class WowDemoAddonWiringTests(unittest.IsolatedAsyncioTestCase):
 
         substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
         self.assertEqual(substeps.get("rayfin-imaging: seed TCGA synthetic FHIR cohort"), "succeeded")
-
         all_actions = [item[0] if item[0] != "job" else f"job:{item[2]}" for item in executed_sequence]
         tcga_action_idx = all_actions.index("command")
+        export_idx = all_actions.index("ps")
         pipe_idx = all_actions.index("job:healthcare1_msft_clinical_data_foundation_ingestion")
         nb_idx = all_actions.index("job:materialize_reporting_tables")
+        silver_idx = all_actions.index("verify_silver")
         sql_idx = all_actions.index("sql_refresh")
-        self.assertLess(tcga_action_idx, pipe_idx)
+        self.assertLess(tcga_action_idx, export_idx)
+        self.assertLess(export_idx, pipe_idx)
         self.assertLess(pipe_idx, nb_idx)
+        self.assertLess(nb_idx, silver_idx)
+        self.assertLess(silver_idx, sql_idx)
         self.assertLess(nb_idx, sql_idx)
 
     async def test_researcher_persona_invoked_in_sequence(self):
