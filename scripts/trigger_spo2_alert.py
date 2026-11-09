@@ -167,21 +167,30 @@ def resolve_patient_device(patient_id: str, live: bool = False) -> Tuple[str, st
     sys.exit(1)
 
 
-def calculate_stopwatch(t0: float, t1: float, t2: float, t3: float) -> Dict[str, float]:
+def calculate_stopwatch(
+    t0: float,
+    t1: Optional[float] = None,
+    t2: Optional[float] = None,
+    t3: Optional[float] = None,
+) -> Dict[str, Optional[float]]:
     """Calculate the 4 timing beats and total elapsed stopwatch latency."""
-    t_ingest = round(t1 - t0, 3)
-    t_detect = round(t2 - t1, 3)
-    t_action = round(t3 - t2, 3)
-    t_total = round(t3 - t0, 3)
+    t_ingest = round(t1 - t0, 3) if t1 is not None else None
+    t_detect = round(t2 - t1, 3) if (t2 is not None and t1 is not None) else None
+    t_action = round(t3 - t2, 3) if (t3 is not None and t2 is not None) else None
+    t_total = round(t3 - t0, 3) if t3 is not None else (
+        round(t2 - t0, 3) if t2 is not None else (
+            round(t1 - t0, 3) if t1 is not None else None
+        )
+    )
     return {
-        "t_ingest": max(0.0, t_ingest),
-        "t_detect": max(0.0, t_detect),
-        "t_action": max(0.0, t_action),
-        "t_total": max(0.0, t_total),
+        "t_ingest": max(0.0, t_ingest) if t_ingest is not None else None,
+        "t_detect": max(0.0, t_detect) if t_detect is not None else None,
+        "t_action": max(0.0, t_action) if t_action is not None else None,
+        "t_total": max(0.0, t_total) if t_total is not None else None,
     }
 
 
-def format_ascii_table(beats: List[Dict[str, Any]], t_total: float) -> str:
+def format_ascii_table(beats: List[Dict[str, Any]], t_total: Optional[float]) -> str:
     """Format stopwatch timing beats in a readable ASCII table."""
     lines = [
         "+------------------------+------------------------------+-------------+",
@@ -190,11 +199,18 @@ def format_ascii_table(beats: List[Dict[str, Any]], t_total: float) -> str:
     ]
     for b in beats:
         name = b["name"][:22].ljust(22)
-        ts = b["timestamp"][:28].ljust(28)
-        el = f"{b['elapsed_seconds']:>10.1f}s "
+        raw_ts = b["timestamp"] or b["status"]
+        ts = raw_ts[:28].ljust(28)
+        if b["elapsed_seconds"] is not None:
+            el = f"{b['elapsed_seconds']:>10.1f}s "
+        else:
+            el = f"{b['status']:>10}  "
         lines.append(f"| {name} | {ts} | {el}|")
     lines.append("+------------------------+------------------------------+-------------+")
-    total_str = f"{t_total:>10.1f}s "
+    if t_total is not None:
+        total_str = f"{t_total:>10.1f}s "
+    else:
+        total_str = "       N/A  "
     lines.append(f"| Total Stopwatch (T_tot)| {'':28} | {total_str}|")
     lines.append("+------------------------+------------------------------+-------------+")
     return "\n".join(lines)
@@ -234,9 +250,13 @@ def run_trigger(
     dry_run: bool = True,
     live: bool = False,
     cleanup: bool = False,
-    workspace_name: str = "med-1103a",
+    workspace_name: Optional[str] = None,
     current_time_epoch: Optional[float] = None,
     history: Optional[Dict[str, float]] = None,
+    eventhub_namespace: Optional[str] = None,
+    resource_group: Optional[str] = None,
+    eventhouse_query_uri: Optional[str] = None,
+    eventhub_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute SpO2 alert trigger, dedupe check, and stopwatch measurement."""
     if cleanup:
@@ -283,9 +303,21 @@ def run_trigger(
     graph_error: Optional[str] = None
 
     if live and not dry_run:
-        rg = os.environ.get("RESOURCE_GROUP", "rg-med-1103a")
-        eh_name = os.environ.get("EVENTHUB_NAME", "telemetry-stream")
-        ns = os.environ.get("EVENTHUB_NAMESPACE", "med1103aopulbb4gx2ioc-eh-ns")
+        rg = resource_group or os.environ.get("RESOURCE_GROUP")
+        eh_name = eventhub_name or os.environ.get("EVENTHUB_NAME", "telemetry-stream")
+        ns = eventhub_namespace or os.environ.get("EVENTHUB_NAMESPACE")
+        query_uri = (eventhouse_query_uri or os.environ.get("EVENTHOUSE_QUERY_URI", "")).rstrip("/")
+
+        if not (rg and ns and query_uri):
+            missing = []
+            if not ns:
+                missing.append("--eventhub-namespace / EVENTHUB_NAMESPACE")
+            if not rg:
+                missing.append("--resource-group / RESOURCE_GROUP")
+            if not query_uri:
+                missing.append("--eventhouse-query-uri / EVENTHOUSE_QUERY_URI")
+            sys.stderr.write(f"ERROR: Live execution requires: {', '.join(missing)}\n")
+            sys.exit(2)
 
         eh_token = get_msal_token("https://eventhubs.azure.net/.default")
         if not eh_token:
@@ -313,51 +345,62 @@ def run_trigger(
             sys.stderr.write("EventHub delivery timed out after 15s\n")
             sys.exit(1)
 
-        # 2. Wait and query Eventhouse KQL for ingestion_time()
-        time.sleep(5)
+        # 2. Wait and query Eventhouse KQL for ingestion_time() with deadline
+        time.sleep(3)
         kusto_tok = get_msal_token("https://kusto.kusto.windows.net/.default")
-        query_uri = "https://trd-us0w7kghtuut4wda3z.z6.kusto.fabric.microsoft.com"
         q_headers = {"Authorization": f"Bearer {kusto_tok}", "Content-Type": "application/json"}
 
-        # Query TelemetryRaw for T1
+        # Query TelemetryRaw for T1 (up to 30s deadline)
         csl_t1 = f"TelemetryRaw | where tostring(device_id) == '{device_id}' and todouble(telemetry.spo2) == {spo2_val} | project ingestion_time(), timestamp, EventEnqueuedUtcTime, device_id, telemetry | top 1 by ingestion_time() desc"
-        res_t1 = requests.post(f"{query_uri}/v2/rest/query", headers=q_headers, json={"db": "MasimoEventhouse", "csl": csl_t1}, timeout=20)
-        t1_epoch = t0_live + 2.3
-        if res_t1.status_code == 200:
-            frames = res_t1.json()
-            primary = next((f for f in frames if f.get("TableKind") == "PrimaryResult"), None)
-            if primary and primary.get("Rows"):
-                kql_telemetry_raw = primary["Rows"][0]
-                try:
-                    ing_str = primary["Rows"][0][0]
-                    # Parse ingestion timestamp
-                    ing_clean = ing_str.replace("Z", "+00:00")
-                    if "." in ing_clean:
-                        parts = ing_clean.split(".")
-                        frac = parts[1].split("+")[0][:6]
-                        ing_clean = f"{parts[0]}.{frac}+00:00"
-                    t1_epoch = dt.datetime.fromisoformat(ing_clean).timestamp()
-                except Exception:
-                    t1_epoch = time.time()
+        t1_epoch: Optional[float] = None
+        t1_deadline = time.time() + 30.0
+        while time.time() < t1_deadline:
+            try:
+                res_t1 = requests.post(f"{query_uri}/v2/rest/query", headers=q_headers, json={"db": "MasimoEventhouse", "csl": csl_t1}, timeout=10)
+                if res_t1.status_code == 200:
+                    frames = res_t1.json()
+                    primary = next((f for f in frames if f.get("TableKind") == "PrimaryResult"), None)
+                    if primary and primary.get("Rows"):
+                        kql_telemetry_raw = primary["Rows"][0]
+                        try:
+                            ing_str = primary["Rows"][0][0]
+                            ing_clean = ing_str.replace("Z", "+00:00")
+                            if "." in ing_clean:
+                                parts = ing_clean.split(".")
+                                frac = parts[1].split("+")[0][:6]
+                                ing_clean = f"{parts[0]}.{frac}+00:00"
+                            t1_epoch = dt.datetime.fromisoformat(ing_clean).timestamp()
+                        except Exception:
+                            t1_epoch = time.time()
+                        break
+            except Exception:
+                pass
+            time.sleep(3)
 
-        # Query fn_ClinicalAlerts for T2
+        # Query fn_ClinicalAlerts for T2 (up to 30s deadline)
         csl_t2 = f"fn_ClinicalAlerts(10) | where tostring(device_id) == '{device_id}'"
-        res_t2 = requests.post(f"{query_uri}/v2/rest/query", headers=q_headers, json={"db": "MasimoEventhouse", "csl": csl_t2}, timeout=20)
-        t2_epoch = t1_epoch + 5.8
-        if res_t2.status_code == 200:
-            frames = res_t2.json()
-            primary = next((f for f in frames if f.get("TableKind") == "PrimaryResult"), None)
-            if primary and primary.get("Rows"):
-                kql_alert_row = primary["Rows"][0]
-                t2_epoch = time.time()
+        t2_epoch: Optional[float] = None
+        t2_deadline = time.time() + 30.0
+        while time.time() < t2_deadline:
+            try:
+                res_t2 = requests.post(f"{query_uri}/v2/rest/query", headers=q_headers, json={"db": "MasimoEventhouse", "csl": csl_t2}, timeout=10)
+                if res_t2.status_code == 200:
+                    frames = res_t2.json()
+                    primary = next((f for f in frames if f.get("TableKind") == "PrimaryResult"), None)
+                    if primary and primary.get("Rows"):
+                        kql_alert_row = primary["Rows"][0]
+                        t2_epoch = time.time()
+                        break
+            except Exception:
+                pass
+            time.sleep(3)
 
         # 3. Query Microsoft Graph for mailbox messages (T3)
         graph_tok = get_msal_token("https://graph.microsoft.com/Mail.Read")
         if not graph_tok:
-            # Try getting .default token
             graph_tok = get_msal_token("https://graph.microsoft.com/.default")
-        
-        t3_epoch = t2_epoch + 10.3
+
+        t3_epoch: Optional[float] = None
         if graph_tok:
             try:
                 g_url = f"https://graph.microsoft.com/v1.0/me/messages?$filter=receivedDateTime ge {t0_str}&$orderby=receivedDateTime desc&$top=5"
@@ -374,7 +417,7 @@ def run_trigger(
                         try:
                             t3_epoch = dt.datetime.fromisoformat(activator_msg["receivedDateTime"].replace("Z", "+00:00")).timestamp()
                         except Exception:
-                            pass
+                            t3_epoch = time.time()
                 else:
                     graph_error = f"HTTP {g_resp.status_code}: {g_resp.text}"
             except Exception as e:
@@ -391,9 +434,18 @@ def run_trigger(
 
     latencies = calculate_stopwatch(t0_epoch, t1_epoch, t2_epoch, t3_epoch)
 
-    t1_str = dt.datetime.fromtimestamp(t1_epoch, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.300Z")
-    t2_str = dt.datetime.fromtimestamp(t2_epoch, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.100Z")
-    t3_str = dt.datetime.fromtimestamp(t3_epoch, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.400Z")
+    t1_str = dt.datetime.fromtimestamp(t1_epoch, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.300Z") if t1_epoch is not None else None
+    t2_str = dt.datetime.fromtimestamp(t2_epoch, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.100Z") if t2_epoch is not None else None
+    t3_str = dt.datetime.fromtimestamp(t3_epoch, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.400Z") if t3_epoch is not None else None
+
+    beat_t1_status = "completed" if t1_epoch is not None else "not_observed"
+    beat_t2_status = "completed" if t2_epoch is not None else "not_observed"
+    if not email_queued:
+        beat_t3_status = "suppressed"
+    elif t3_epoch is not None:
+        beat_t3_status = "completed"
+    else:
+        beat_t3_status = "not_observed"
 
     beats = [
         {
@@ -408,21 +460,21 @@ def run_trigger(
             "name": "Eventstream Enqueued",
             "timestamp": t1_str,
             "elapsed_seconds": latencies["t_ingest"],
-            "status": "completed",
+            "status": beat_t1_status,
         },
         {
             "id": "kql_detected",
             "name": "KQL Detected",
             "timestamp": t2_str,
-            "elapsed_seconds": round(t2_epoch - t0_epoch, 1),
-            "status": "completed",
+            "elapsed_seconds": round(t2_epoch - t0_epoch, 1) if t2_epoch is not None else None,
+            "status": beat_t2_status,
         },
         {
             "id": "activator_dispatched",
             "name": "Activator Dispatched",
             "timestamp": t3_str,
-            "elapsed_seconds": round(t3_epoch - t0_epoch, 1),
-            "status": "completed" if email_queued else "suppressed",
+            "elapsed_seconds": round(t3_epoch - t0_epoch, 1) if t3_epoch is not None else None,
+            "status": beat_t3_status,
         },
     ]
 
@@ -453,16 +505,32 @@ def run_trigger(
     return result
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description="Trigger deterministic SpO2 alert and measure latency stopwatch.")
     parser.add_argument("--patient-id", default="TCGA-G6-A8L6", help="Patient ID (default: TCGA-G6-A8L6)")
     parser.add_argument("--email", help="Notification recipient email (must match HLS_ALERT_EMAIL allowlist)")
     parser.add_argument("--dry-run", action="store_true", default=True, help="Dry run mode (default: True)")
-    parser.add_argument("--live", action="store_true", help="Live execution against med-1103a Event Hub and Eventhouse")
+    parser.add_argument("--live", action="store_true", help="Live execution against Event Hub and Eventhouse")
     parser.add_argument("--cleanup", action="store_true", help="Reset alert history and synthetic records")
     parser.add_argument("--json", action="store_true", help="Output JSON only")
-    parser.add_argument("--workspace-name", "--workspace", dest="workspace_name", default=os.environ.get("FABRIC_WORKSPACE_NAME", "med-1103a"), help="Fabric workspace name")
+    parser.add_argument("--workspace-name", "--workspace", dest="workspace_name", default=os.environ.get("FABRIC_WORKSPACE_NAME"), help="Fabric workspace name")
+    parser.add_argument("--eventhub-namespace", default=os.environ.get("EVENTHUB_NAMESPACE"), help="Event Hub namespace (required in --live)")
+    parser.add_argument("--resource-group", default=os.environ.get("RESOURCE_GROUP"), help="Azure resource group (required in --live)")
+    parser.add_argument("--eventhouse-query-uri", default=os.environ.get("EVENTHOUSE_QUERY_URI"), help="Eventhouse KQL cluster query URI (required in --live)")
+    parser.add_argument("--eventhub-name", default=os.environ.get("EVENTHUB_NAME", "telemetry-stream"), help="Event Hub entity name (default: telemetry-stream)")
     args = parser.parse_args()
+
+    if args.live:
+        missing = []
+        if not args.eventhub_namespace:
+            missing.append("--eventhub-namespace")
+        if not args.resource_group:
+            missing.append("--resource-group")
+        if not args.eventhouse_query_uri:
+            missing.append("--eventhouse-query-uri")
+        if missing:
+            sys.stderr.write(f"ERROR: Live execution requires arguments: {', '.join(missing)}\n")
+            return 2
 
     dry_run = not args.live if args.live else True
     if "--dry-run" in sys.argv and "--live" in sys.argv:
@@ -475,15 +543,26 @@ def main():
         live=args.live,
         cleanup=args.cleanup,
         workspace_name=args.workspace_name,
+        eventhub_namespace=args.eventhub_namespace,
+        resource_group=args.resource_group,
+        eventhouse_query_uri=args.eventhouse_query_uri,
+        eventhub_name=args.eventhub_name,
     )
+
+    t1_beat = next((b for b in res.get("beats", []) if b.get("id") == "eventstream_enqueued"), None)
+    t2_beat = next((b for b in res.get("beats", []) if b.get("id") == "kql_detected"), None)
+    t1_observed = bool(t1_beat and t1_beat.get("status") != "not_observed")
+    t2_observed = bool(t2_beat and t2_beat.get("status") != "not_observed")
 
     if args.json:
         print(json.dumps(res, indent=2))
-        return
+        if args.live and not (t1_observed and t2_observed):
+            return 1
+        return 0
 
     if args.cleanup:
         print("Cleanup completed successfully.")
-        return
+        return 0
 
     print("==================================================================")
     print("           REAL-TIME CLINICAL ALERT TRIGGER & STOPWATCH           ")
@@ -508,6 +587,12 @@ def main():
         print(f"Microsoft Graph Mailbox Notice: {res['graph_error']}")
     print(f"Structured Result: {json.dumps({'status': res['status'], 'total_seconds': res['t_total'], 'suppressed_by_dedupe': res['suppressed_by_dedupe']})}")
 
+    if args.live and not (t1_observed and t2_observed):
+        sys.stderr.write(f"ERROR: Live alert verification failed: T1 observed={t1_observed}, T2 observed={t2_observed}\n")
+        return 1
+
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

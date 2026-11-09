@@ -154,15 +154,25 @@ if [[ -n "$ONELAKE_EXTERNAL_LOCATION_URL" ]]; then
     "ALTER TABLE ${ONELAKE_CATALOG}.gold.cohort_summary DROP FEATURE 'catalogManaged' TRUNCATE HISTORY"; do
     stmt_resp="$(databricks api post /api/2.0/sql/statements --json "$(jq -n \
       --arg s "$onelake_sql" --arg w "$WAREHOUSE_ID" \
-      '{statement: $s, warehouse_id: $w, wait_timeout: "50s", on_wait_timeout: "CONTINUE"}')")" || true
+      '{statement: $s, warehouse_id: $w, wait_timeout: "50s", on_wait_timeout: "CONTINUE"}')")"
     stmt_id="$(jq -r '.statement_id // empty' <<<"$stmt_resp")"
     stmt_state="$(jq -r '.status.state // empty' <<<"$stmt_resp")"
-    for ((poll = 0; poll < 30; poll++)); do
+    for ((poll = 0; poll < 60; poll++)); do
       [[ "$stmt_state" != "PENDING" && "$stmt_state" != "RUNNING" ]] && break
-      sleep 3
+      sleep 5
       stmt_resp="$(databricks api get "/api/2.0/sql/statements/$stmt_id")"
       stmt_state="$(jq -r '.status.state // empty' <<<"$stmt_resp")"
     done
+    if [[ "$stmt_state" != "SUCCEEDED" ]]; then
+      err_msg="$(jq -r '.status.error.message // empty' <<<"$stmt_resp")"
+      if [[ "$onelake_sql" =~ "DROP FEATURE" ]] && [[ "$err_msg" =~ (Cannot[[:space:]]+drop[[:space:]]+feature|feature[[:space:]]+.*catalogManaged.*is[[:space:]]+not[[:space:]]+enabled|not[[:space:]]+supported[[:space:]]+or[[:space:]]+not[[:space:]]+present|is[[:space:]]+not[[:space:]]+enabled[[:space:]]+on[[:space:]]+table|CANNOT_DROP_FEATURE|DELTA_FEATURE_NOT_FOUND) ]]; then
+        echo "  [DROP FEATURE already applied: ${err_msg}]"
+      else
+        echo "FAIL at OneLake statement ($stmt_state): $onelake_sql" >&2
+        echo "Error: $(jq -c '.status.error // .status' <<<"$stmt_resp")" >&2
+        exit 1
+      fi
+    fi
   done
   verify "OneLake managed catalog readable" "SELECT count(*) FROM ${ONELAKE_CATALOG}.gold.cohort_summary"
 fi

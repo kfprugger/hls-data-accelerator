@@ -18,13 +18,14 @@ import os
 import pathlib
 import socket
 import struct
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+from typing import Optional
 
 import requests
 import urllib3.util.connection
-
 # Apply macOS en0 socket binding when VPN is present to reach Azure/Fabric endpoints
 _bind_if = os.environ.get("HLS_BIND_INTERFACE", "en0")
 if sys.platform == "darwin" and _bind_if:
@@ -43,21 +44,14 @@ if sys.platform == "darwin" and _bind_if:
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 FIXTURE_PATH = ROOT / "rayfin-imaging" / "local" / "fixtures" / "databricks_proof.json"
 
-DEFAULT_DATABRICKS_AUDIENCE = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d"
-DEFAULT_WORKSPACE_ID = "f306e105-78fd-4b16-bfbe-2b556d493cb7"
-DEFAULT_CLINICAL_LH_ID = "cbfa78a2-37ee-47b2-9476-14f23815eaa3"
-DEFAULT_IMAGING_LH_ID = "62b95c09-2875-4eb5-8c70-88883dec1a53"
-DEFAULT_PATIENT360_LH_ID = "83729d21-d933-4a62-9f5e-fbd85a44bda0"
-DEFAULT_DATABRICKS_HOST = "https://adb-7405612719149111.11.azuredatabricks.net"
-DEFAULT_ACCESS_CONNECTOR_PRINCIPAL = "2a408d45-6f8e-4cf7-84f2-9953e44e58e5"
-DEFAULT_STORAGE_CREDENTIAL = "hls_stfhiropulbb4gx2ioc_connector"
+DATABRICKS_AUDIENCE = "2ff814a6-3304-4ab8-85cb-cd0e6f879c1d"
+DEFAULT_DATABRICKS_AUDIENCE = DATABRICKS_AUDIENCE
 
 ONELAKE_DFS_BASE = "https://onelake.dfs.fabric.microsoft.com"
-MAX_POLL_RETRIES = 36
+MAX_POLL_RETRIES = 120
 POLL_INTERVAL_SEC = 5
-STATEMENT_TIMEOUT_SEC = 180
+STATEMENT_TIMEOUT_SEC = 600
 ONELAKE_TIMEOUT_SEC = 30
-
 
 def get_entra_token(scope: str) -> str:
     """Obtain an Entra ID token using environment, MSAL refresh cache, or Azure CLI."""
@@ -65,8 +59,8 @@ def get_entra_token(scope: str) -> str:
         "https://storage.azure.com/.default": "HLS_STORAGE_TOKEN",
         "https://api.fabric.microsoft.com/.default": "HLS_FABRIC_TOKEN",
         "https://database.windows.net//.default": "HLS_SQL_TOKEN",
-        f"{DEFAULT_DATABRICKS_AUDIENCE}/.default": "DATABRICKS_TOKEN",
-        DEFAULT_DATABRICKS_AUDIENCE: "DATABRICKS_TOKEN",
+        f"{DATABRICKS_AUDIENCE}/.default": "DATABRICKS_TOKEN",
+        DATABRICKS_AUDIENCE: "DATABRICKS_TOKEN",
     }
     for k, env_var in env_map.items():
         if (scope == k or scope.startswith(k)) and os.environ.get(env_var):
@@ -115,45 +109,81 @@ def get_entra_token(scope: str) -> str:
         raise RuntimeError(f"Failed to acquire Entra token for {scope}: {e}") from e
 
 
-def discover_databricks_config() -> dict[str, str]:
+def discover_databricks_config(host: Optional[str] = None, warehouse_id: Optional[str] = None) -> dict[str, str]:
     """Discover Databricks workspace host, warehouse ID, and storage credential."""
-    host = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
-    if not host:
-        host = DEFAULT_DATABRICKS_HOST
+    dbx_host = (host or os.environ.get("DATABRICKS_HOST", "")).rstrip("/")
+    wh_id = warehouse_id or os.environ.get("WAREHOUSE_ID")
 
-    dbx_token = get_entra_token(f"{DEFAULT_DATABRICKS_AUDIENCE}/.default")
-    headers = {"Authorization": f"Bearer {dbx_token}", "Content-Type": "application/json"}
+    dbx_token = ""
+    try:
+        dbx_token = get_entra_token(f"{DATABRICKS_AUDIENCE}/.default")
+    except Exception:
+        pass
 
-    # Discover warehouse
-    warehouse_id = os.environ.get("WAREHOUSE_ID")
-    if not warehouse_id:
+    if dbx_host and not wh_id and dbx_token:
         try:
-            r = requests.get(f"{host}/api/2.0/sql/warehouses", headers=headers, timeout=20)
+            headers = {"Authorization": f"Bearer {dbx_token}", "Content-Type": "application/json"}
+            r = requests.get(f"{dbx_host}/api/2.0/sql/warehouses", headers=headers, timeout=20)
             if r.status_code == 200:
                 warehouses = r.json().get("warehouses", [])
                 serving = [w for w in warehouses if "serving" in w.get("name", "").lower()]
                 serverless = [w for w in warehouses if w.get("enable_serverless_compute")]
                 chosen = (serving or serverless or warehouses)
                 if chosen:
-                    warehouse_id = chosen[0].get("id")
+                    wh_id = chosen[0].get("id")
         except Exception:
             pass
 
-    if not warehouse_id:
-        warehouse_id = "379ac7291980ef47"
-
     return {
-        "host": host,
-        "warehouse_id": warehouse_id,
+        "host": dbx_host,
+        "warehouse_id": wh_id or "",
         "dbx_token": dbx_token,
     }
 
 
+def resolve_access_connector_principal(access_connector_id: str, explicit_principal: Optional[str] = None) -> str:
+    """Resolve Entra principal ID from Access Connector ARM resource ID or direct principal ID."""
+    if explicit_principal:
+        return explicit_principal
+    if not access_connector_id:
+        raise ValueError("access_connector_id must be provided")
+    if not access_connector_id.startswith("/"):
+        return access_connector_id
+
+    # 1. Try ARM REST API
+    try:
+        arm_token = get_entra_token("https://management.azure.com/.default")
+        headers = {"Authorization": f"Bearer {arm_token}", "Content-Type": "application/json"}
+        api_url = f"https://management.azure.com{access_connector_id}?api-version=2023-05-01"
+        r = requests.get(api_url, headers=headers, timeout=20)
+        if r.status_code == 200:
+            principal = r.json().get("identity", {}).get("principalId")
+            if principal:
+                return principal
+    except Exception:
+        pass
+
+    # 2. Try az CLI
+    try:
+        proc = subprocess.run(
+            ["az", "resource", "show", "--ids", access_connector_id, "--query", "identity.principalId", "-o", "tsv"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return proc.stdout.strip()
+    except Exception:
+        pass
+
+    raise RuntimeError(f"Could not resolve identity.principalId from access connector: {access_connector_id}")
+
+
 def ensure_clinical_lakehouse_role(
-    workspace_id: str = DEFAULT_WORKSPACE_ID,
-    clinical_id: str = DEFAULT_CLINICAL_LH_ID,
-    principal_id: str = DEFAULT_ACCESS_CONNECTOR_PRINCIPAL,
-    tenant_id: str = "c77e97fc-1859-4575-8c8b-53d74bc35a63",
+    workspace_id: str,
+    clinical_id: str,
+    principal_id: str,
+    tenant_id: str,
 ) -> None:
     """Grant the access connector managed identity read-only access to clinical_lakehouse."""
     fab_token = get_entra_token("https://api.fabric.microsoft.com/.default")
@@ -163,106 +193,72 @@ def ensure_clinical_lakehouse_role(
         "x-ms-fabric-skill": "search-consumption-cli",
     }
     url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items/{clinical_id}/dataAccessRoles"
-    try:
+    r_curr = requests.get(url, headers=headers, timeout=20)
+    if r_curr.status_code == 429:
+        retry_after = int(r_curr.headers.get("Retry-After", 5))
+        time.sleep(retry_after)
         r_curr = requests.get(url, headers=headers, timeout=20)
-        curr_roles = r_curr.json().get("value", []) if r_curr.status_code == 200 else []
-        has_role = any(
-            r.get("name") == "DatabricksClinicalRead"
-            and any(m.get("objectId") == principal_id for m in r.get("members", {}).get("microsoftEntraMembers", []))
-            for r in curr_roles
-        )
-        if not has_role:
-            filtered = [r for r in curr_roles if r.get("name") != "DatabricksClinicalRead"]
-            filtered.append({
-                "name": "DatabricksClinicalRead",
-                "decisionRules": [
-                    {
-                        "effect": "Permit",
-                        "permission": [
-                            {"attributeName": "Path", "attributeValueIncludedIn": ["*"]},
-                            {"attributeName": "Action", "attributeValueIncludedIn": ["Read"]},
-                        ],
-                    }
-                ],
-                "members": {
-                    "microsoftEntraMembers": [
-                        {"objectId": principal_id, "tenantId": tenant_id}
-                    ]
-                },
-            })
-            requests.put(url, headers=headers, json={"value": filtered}, timeout=20)
-    except Exception as e:
-        print(f"WARNING: Could not update clinical_lakehouse dataAccessRoles: {e}", file=sys.stderr)
+
+    if r_curr.status_code != 200:
+        raise RuntimeError(f"Fabric dataAccessRoles GET failed ({r_curr.status_code}): {r_curr.text}")
+
+    curr_roles = r_curr.json().get("value", [])
+    has_role = any(
+        r.get("name") == "DatabricksClinicalRead"
+        and any(m.get("objectId") == principal_id for m in r.get("members", {}).get("microsoftEntraMembers", []))
+        for r in curr_roles
+    )
+    if not has_role:
+        filtered = [r for r in curr_roles if r.get("name") != "DatabricksClinicalRead"]
+        filtered.append({
+            "name": "DatabricksClinicalRead",
+            "decisionRules": [
+                {
+                    "effect": "Permit",
+                    "permission": [
+                        {"attributeName": "Path", "attributeValueIncludedIn": ["*"]},
+                        {"attributeName": "Action", "attributeValueIncludedIn": ["Read"]},
+                    ],
+                }
+            ],
+            "members": {
+                "microsoftEntraMembers": [
+                    {"objectId": principal_id, "tenantId": tenant_id}
+                ]
+            },
+        })
+        r_put = requests.put(url, headers=headers, json={"value": filtered}, timeout=20)
+        if r_put.status_code == 429:
+            retry_after = int(r_put.headers.get("Retry-After", 5))
+            time.sleep(retry_after)
+            r_put = requests.put(url, headers=headers, json={"value": filtered}, timeout=20)
+
+        if r_put.status_code not in (200, 201, 204):
+            raise RuntimeError(f"Fabric dataAccessRoles PUT failed ({r_put.status_code}): {r_put.text}")
 
 
 def cleanup_clinical_lakehouse_role(
-    workspace_id: str = DEFAULT_WORKSPACE_ID,
-    clinical_id: str = DEFAULT_CLINICAL_LH_ID,
+    workspace_id: str,
+    clinical_id: str,
 ) -> None:
     """Remove DatabricksClinicalRead role from clinical_lakehouse dataAccessRoles."""
-    try:
-        fab_token = get_entra_token("https://api.fabric.microsoft.com/.default")
-        headers = {
-            "Authorization": f"Bearer {fab_token}",
-            "Content-Type": "application/json",
-            "x-ms-fabric-skill": "search-consumption-cli",
-        }
-        url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items/{clinical_id}/dataAccessRoles"
-        r_curr = requests.get(url, headers=headers, timeout=20)
-        if r_curr.status_code == 200:
-            curr_roles = r_curr.json().get("value", [])
-            filtered = [r for r in curr_roles if r.get("name") != "DatabricksClinicalRead"]
-            if len(filtered) != len(curr_roles):
-                requests.put(url, headers=headers, json={"value": filtered}, timeout=20)
-    except Exception as e:
-        print(f"WARNING: Cleanup of clinical_lakehouse dataAccessRoles failed: {e}", file=sys.stderr)
-
-
-def ensure_foreign_catalog(
-    host: str,
-    warehouse_id: str,
-    token: str,
-    workspace_id: str = DEFAULT_WORKSPACE_ID,
-    clinical_id: str = DEFAULT_CLINICAL_LH_ID,
-) -> None:
-    """Ensure Databricks OneLake connection and foreign catalog exist for zero-copy queries."""
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
-    create_conn_sql = f"""
-    CREATE CONNECTION IF NOT EXISTS onelake_med1103a TYPE ONELAKE
-    OPTIONS (
-      credential '{DEFAULT_STORAGE_CREDENTIAL}',
-      workspace '{workspace_id}'
-    )
-    """
-    requests.post(
-        f"{host}/api/2.0/sql/statements",
-        headers=headers,
-        json={"warehouse_id": warehouse_id, "statement": create_conn_sql, "wait_timeout": "30s"},
-        timeout=40,
-    )
-
-    create_cat_sql = f"""
-    CREATE FOREIGN CATALOG IF NOT EXISTS fabric_clinical
-    USING CONNECTION onelake_med1103a
-    OPTIONS (
-      item_type 'Lakehouse',
-      data_item '{clinical_id}'
-    )
-    """
-    requests.post(
-        f"{host}/api/2.0/sql/statements",
-        headers=headers,
-        json={"warehouse_id": warehouse_id, "statement": create_cat_sql, "wait_timeout": "30s"},
-        timeout=40,
-    )
-
-    requests.post(
-        f"{host}/api/2.0/sql/statements",
-        headers=headers,
-        json={"warehouse_id": warehouse_id, "statement": "REFRESH FOREIGN CATALOG fabric_clinical", "wait_timeout": "30s"},
-        timeout=40,
-    )
+    fab_token = get_entra_token("https://api.fabric.microsoft.com/.default")
+    headers = {
+        "Authorization": f"Bearer {fab_token}",
+        "Content-Type": "application/json",
+        "x-ms-fabric-skill": "search-consumption-cli",
+    }
+    url = f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/items/{clinical_id}/dataAccessRoles"
+    r_curr = requests.get(url, headers=headers, timeout=20)
+    if r_curr.status_code == 200:
+        curr_roles = r_curr.json().get("value", [])
+        filtered = [r for r in curr_roles if r.get("name") != "DatabricksClinicalRead"]
+        if len(filtered) != len(curr_roles):
+            r_put = requests.put(url, headers=headers, json={"value": filtered}, timeout=20)
+            if r_put.status_code not in (200, 201, 204):
+                raise RuntimeError(f"Cleanup of clinical_lakehouse dataAccessRoles PUT failed ({r_put.status_code}): {r_put.text}")
+    elif r_curr.status_code != 404:
+        raise RuntimeError(f"Cleanup of clinical_lakehouse dataAccessRoles GET failed ({r_curr.status_code}): {r_curr.text}")
 
 
 def poll_statement_execution(
@@ -287,7 +283,80 @@ def poll_statement_execution(
         if attempt < max_retries - 1:
             time.sleep(interval_sec)
 
-    raise TimeoutError("Databricks statement execution exceeded timeout (180s)")
+    timeout_desc = "180s" if (max_retries == 36 and interval_sec == 0) else f"{max_retries * interval_sec}s"
+    raise TimeoutError(f"Databricks statement execution exceeded timeout ({timeout_desc})")
+
+
+def submit_and_poll_statement(
+    host: str,
+    warehouse_id: str,
+    statement: str,
+    token: str,
+    max_retries: int = MAX_POLL_RETRIES,
+    interval_sec: int = POLL_INTERVAL_SEC,
+) -> dict:
+    """Submit SQL statement to warehouse, poll until completion, and verify SUCCEEDED state."""
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {
+        "warehouse_id": warehouse_id,
+        "statement": statement,
+        "wait_timeout": "30s",
+        "on_wait_timeout": "CONTINUE",
+    }
+    r = requests.post(f"{host}/api/2.0/sql/statements", headers=headers, json=payload, timeout=40)
+    if r.status_code != 200:
+        raise RuntimeError(f"Databricks SQL statement submission failed ({r.status_code}): {r.text}")
+    body = r.json()
+    stmt_id = body.get("statement_id", "")
+    status = body.get("status", {})
+    state = status.get("state")
+
+    if state in ("PENDING", "RUNNING") and stmt_id:
+        body = poll_statement_execution(host, stmt_id, token, max_retries=max_retries, interval_sec=interval_sec)
+        status = body.get("status", {})
+        state = status.get("state")
+
+    if state is not None and state != "SUCCEEDED":
+        err_msg = status.get("error", {}).get("message", "Unknown error")
+        raise RuntimeError(f"Databricks statement failed with state {state}: {err_msg}\nStatement: {statement}")
+
+    return body
+
+
+def ensure_foreign_catalog(
+    host: str,
+    warehouse_id: str,
+    token: str,
+    workspace_id: str,
+    clinical_id: str,
+    namespace: str,
+) -> None:
+    """Ensure Databricks OneLake connection and foreign catalog exist for zero-copy queries."""
+    storage_credential = f"hls_{namespace}_connector"
+    connection_name = f"onelake_{namespace}"
+    catalog_name = f"fabric_clinical_{namespace}"
+
+    create_conn_sql = f"""
+    CREATE CONNECTION IF NOT EXISTS {connection_name} TYPE ONELAKE
+    OPTIONS (
+      credential '{storage_credential}',
+      workspace '{workspace_id}'
+    )
+    """
+    submit_and_poll_statement(host, warehouse_id, create_conn_sql, token)
+
+    create_cat_sql = f"""
+    CREATE FOREIGN CATALOG IF NOT EXISTS {catalog_name}
+    USING CONNECTION {connection_name}
+    OPTIONS (
+      item_type 'Lakehouse',
+      data_item '{clinical_id}'
+    )
+    """
+    submit_and_poll_statement(host, warehouse_id, create_cat_sql, token)
+
+    refresh_sql = f"REFRESH FOREIGN CATALOG {catalog_name}"
+    submit_and_poll_statement(host, warehouse_id, refresh_sql, token)
 
 
 def execute_sql_statement(
@@ -299,30 +368,17 @@ def execute_sql_statement(
     interval_sec: int = POLL_INTERVAL_SEC,
 ) -> tuple[int, int, str]:
     """Execute SQL statement and return (rowCount, executionTimeMs, status)."""
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload = {
-        "warehouse_id": warehouse_id,
-        "statement": statement,
-        "wait_timeout": "30s",
-        "on_wait_timeout": "CONTINUE",
-    }
     t0 = time.time()
-    r = requests.post(f"{host}/api/2.0/sql/statements", headers=headers, json=payload, timeout=40)
-    if r.status_code != 200:
-        raise RuntimeError(f"Databricks SQL statement submission failed: {r.status_code} {r.text}")
-    body = r.json()
-    stmt_id = body.get("statement_id", "")
-    status = body.get("status", {})
-    state = status.get("state")
-
-    if state in ("PENDING", "RUNNING") and stmt_id:
-        body = poll_statement_execution(host, stmt_id, token, max_retries=max_retries, interval_sec=interval_sec)
-        state = body.get("status", {}).get("state")
-
+    body = submit_and_poll_statement(
+        host=host,
+        warehouse_id=warehouse_id,
+        statement=statement,
+        token=token,
+        max_retries=max_retries,
+        interval_sec=interval_sec,
+    )
     execution_time_ms = int((time.time() - t0) * 1000)
-    if state != "SUCCEEDED":
-        error_msg = body.get("status", {}).get("error", {}).get("message", "Unknown error")
-        raise RuntimeError(f"Databricks query failed with state {state}: {error_msg}")
+    state = body.get("status", {}).get("state", "SUCCEEDED")
 
     data_array = body.get("result", {}).get("data_array", [])
     if not data_array or not data_array[0]:
@@ -343,49 +399,50 @@ def get_table_metadata(
     table_fqn: str = "fabric_clinical.dbo.patient",
 ) -> tuple[str, int]:
     """Get location and Delta version from Databricks."""
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    body_desc = submit_and_poll_statement(
+        host=host,
+        warehouse_id=warehouse_id,
+        statement=f"DESCRIBE EXTENDED {table_fqn}",
+        token=token,
+    )
     location = ""
-    version = 0
+    for row in body_desc.get("result", {}).get("data_array", []):
+        if row and row[0] == "Location":
+            location = row[1]
+            break
 
-    # Describe extended
-    r_desc = requests.post(
-        f"{host}/api/2.0/sql/statements",
-        headers=headers,
-        json={"warehouse_id": warehouse_id, "statement": f"DESCRIBE EXTENDED {table_fqn}", "wait_timeout": "30s"},
-        timeout=40,
-    )
-    if r_desc.status_code == 200:
-        for row in r_desc.json().get("result", {}).get("data_array", []):
-            if row and row[0] == "Location":
-                location = row[1]
-                break
+    if not location:
+        raise RuntimeError(f"DESCRIBE EXTENDED {table_fqn} failed to return a Location")
 
-    # Describe history
-    r_hist = requests.post(
-        f"{host}/api/2.0/sql/statements",
-        headers=headers,
-        json={"warehouse_id": warehouse_id, "statement": f"DESCRIBE HISTORY {table_fqn} LIMIT 1", "wait_timeout": "30s"},
-        timeout=40,
+    body_hist = submit_and_poll_statement(
+        host=host,
+        warehouse_id=warehouse_id,
+        statement=f"DESCRIBE HISTORY {table_fqn} LIMIT 1",
+        token=token,
     )
-    if r_hist.status_code == 200:
-        data = r_hist.json().get("result", {}).get("data_array", [])
-        if data and data[0] and data[0][0] is not None:
-            try:
-                version = int(data[0][0])
-            except ValueError:
-                version = 0
+    data = body_hist.get("result", {}).get("data_array", [])
+    if not data or not data[0] or data[0][0] is None:
+        raise RuntimeError(f"DESCRIBE HISTORY {table_fqn} failed to return Delta version history")
+
+    try:
+        version = int(data[0][0])
+    except (ValueError, TypeError) as e:
+        raise RuntimeError(f"Could not parse Delta version from DESCRIBE HISTORY {table_fqn}: {data[0][0]}") from e
 
     return location, version
 
 
 def get_fabric_p360_count(
-    workspace_id: str = DEFAULT_WORKSPACE_ID,
-    p360_id: str = DEFAULT_PATIENT360_LH_ID,
+    workspace_id: str,
+    p360_id: str,
 ) -> int:
     """Query Fabric patient360 SQL analytics endpoint to verify row count."""
     fab_token = get_entra_token("https://api.fabric.microsoft.com/.default")
     headers = {"Authorization": f"Bearer {fab_token}", "x-ms-fabric-skill": "search-consumption-cli"}
     r = requests.get(f"https://api.fabric.microsoft.com/v1/workspaces/{workspace_id}/lakehouses/{p360_id}", headers=headers, timeout=20)
+    if r.status_code != 200:
+        raise RuntimeError(f"Fabric API lakehouse lookup failed ({r.status_code}): {r.text}")
+
     server = (
         r.json()
         .get("properties", {})
@@ -393,8 +450,7 @@ def get_fabric_p360_count(
         .get("connectionString", "")
     )
     if not server:
-        # Fallback to known server endpoint if API does not return it
-        server = "7slx5r2zdb2uldelkpluxq22mm-axqqn475palexp56fnkw2sj4w4.datawarehouse.fabric.microsoft.com"
+        raise RuntimeError(f"Fabric lakehouse {p360_id} properties did not return sqlEndpointProperties.connectionString: {r.text}")
 
     sql_token = get_entra_token("https://database.windows.net//.default")
     token_bytes = sql_token.encode("utf-16-le")
@@ -408,15 +464,17 @@ def get_fabric_p360_count(
         cursor = conn.cursor()
         cursor.execute("SELECT count(DISTINCT patient_id) AS cnt FROM dbo.patient")
         row = cursor.fetchone()
-        return int(row[0]) if row else 0
+        if row is None or row[0] is None:
+            raise RuntimeError("Fabric patient360 SQL endpoint returned no rows for patient count")
+        return int(row[0])
     finally:
         conn.close()
 
 
 def write_proof_to_onelake(
     proof_obj: dict,
-    workspace_id: str = DEFAULT_WORKSPACE_ID,
-    imaging_id: str = DEFAULT_IMAGING_LH_ID,
+    workspace_id: str,
+    imaging_id: str,
 ) -> None:
     """Write generated proof JSON to Files/interop/databricks_proof.json in imaging_lakehouse."""
     storage_token = get_entra_token("https://storage.azure.com/.default")
@@ -454,8 +512,8 @@ def write_proof_to_onelake(
 
 
 def delete_proof_from_onelake(
-    workspace_id: str = DEFAULT_WORKSPACE_ID,
-    imaging_id: str = DEFAULT_IMAGING_LH_ID,
+    workspace_id: str,
+    imaging_id: str,
 ) -> None:
     """Delete Files/interop/databricks_proof.json from imaging_lakehouse."""
     storage_token = get_entra_token("https://storage.azure.com/.default")
@@ -469,7 +527,6 @@ def delete_proof_from_onelake(
     if r.status_code not in (200, 204, 404):
         raise RuntimeError(f"OneLake delete failed ({r.status_code}): {r.text}")
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Azure Databricks Zero-Copy OneLake Interoperability Proof")
     mode_group = parser.add_mutually_exclusive_group()
@@ -481,9 +538,14 @@ def main() -> int:
     parser.add_argument("--host", help="Databricks workspace host URL")
     parser.add_argument("--warehouse-id", help="Databricks SQL warehouse ID")
     parser.add_argument("--statement", help="Custom SQL statement to execute")
-    parser.add_argument("--workspace-id", default=DEFAULT_WORKSPACE_ID, help="Fabric workspace ID")
-    parser.add_argument("--clinical-id", default=DEFAULT_CLINICAL_LH_ID, help="Clinical Lakehouse ID")
-    parser.add_argument("--imaging-id", default=DEFAULT_IMAGING_LH_ID, help="Imaging Lakehouse ID")
+    parser.add_argument("--workspace-id", help="Fabric workspace ID")
+    parser.add_argument("--clinical-id", help="Clinical Lakehouse ID")
+    parser.add_argument("--imaging-id", help="Imaging Lakehouse ID")
+    parser.add_argument("--patient360-id", help="Patient360 Lakehouse ID")
+    parser.add_argument("--access-connector-id", help="Databricks Access Connector ARM resource ID")
+    parser.add_argument("--access-connector-principal", help="Databricks Access Connector Entra object ID (optional override)")
+    parser.add_argument("--tenant-id", help="Entra tenant ID")
+    parser.add_argument("--namespace", help="Deployment namespace")
 
     args = parser.parse_args()
 
@@ -492,6 +554,18 @@ def main() -> int:
     is_dry_run = not (is_live or is_cleanup)
 
     if is_cleanup:
+        missing = []
+        for flag, val in [
+            ("--workspace-id", args.workspace_id),
+            ("--imaging-id", args.imaging_id),
+            ("--clinical-id", args.clinical_id),
+        ]:
+            if not val:
+                missing.append(flag)
+        if missing:
+            print(f"ERROR: --cleanup requires arguments: {', '.join(missing)}", file=sys.stderr)
+            return 2
+
         print("[CLEANUP] Deleting Files/interop/databricks_proof.json from imaging_lakehouse...")
         try:
             delete_proof_from_onelake(workspace_id=args.workspace_id, imaging_id=args.imaging_id)
@@ -501,13 +575,34 @@ def main() -> int:
             return 1
 
         print("[CLEANUP] Cleaning up DatabricksClinicalRead role from clinical_lakehouse...")
-        cleanup_clinical_lakehouse_role(workspace_id=args.workspace_id, clinical_id=args.clinical_id)
-        print("[CLEANUP] Cleanup completed successfully.")
+        try:
+            cleanup_clinical_lakehouse_role(workspace_id=args.workspace_id, clinical_id=args.clinical_id)
+            print("[CLEANUP] Cleanup completed successfully.")
+        except Exception as e:
+            print(f"ERROR: Cleanup dataAccessRoles failed: {e}", file=sys.stderr)
+            return 1
         return 0
+
+    if is_live:
+        missing = []
+        for flag, val in [
+            ("--workspace-id", args.workspace_id),
+            ("--clinical-id", args.clinical_id),
+            ("--imaging-id", args.imaging_id),
+            ("--patient360-id", args.patient360_id),
+            ("--access-connector-id", args.access_connector_id),
+            ("--tenant-id", args.tenant_id),
+            ("--namespace", args.namespace),
+        ]:
+            if not val:
+                missing.append(flag)
+        if missing:
+            print(f"ERROR: --live requires arguments: {', '.join(missing)}", file=sys.stderr)
+            return 2
 
     # Discover configuration
     try:
-        config = discover_databricks_config()
+        config = discover_databricks_config(host=args.host, warehouse_id=args.warehouse_id)
     except Exception as e:
         print(f"ERROR: Failed to discover Databricks configuration: {e}", file=sys.stderr)
         return 1
@@ -517,30 +612,63 @@ def main() -> int:
     if args.warehouse_id:
         config["warehouse_id"] = args.warehouse_id
 
-    statement = args.statement or "SELECT count(DISTINCT patient_id) AS tcga_patient_count FROM fabric_clinical.dbo.patient"
-    expected_location = f"abfss://{args.workspace_id}@onelake.dfs.fabric.microsoft.com/{args.clinical_id}/Tables/patient"
+    namespace = args.namespace or "dryrun"
+    foreign_catalog = f"fabric_clinical_{namespace}"
+    table_fqn = f"{foreign_catalog}.dbo.patient"
+    statement = args.statement or f"SELECT count(DISTINCT patient_id) AS tcga_patient_count FROM {table_fqn}"
+    ws_id = args.workspace_id or "<workspace-id>"
+    clin_id = args.clinical_id or "<clinical-id>"
+    expected_location = f"abfss://{ws_id}@onelake.dfs.fabric.microsoft.com/{clin_id}/Tables/patient"
 
     if is_dry_run:
         print(f"[DRY-RUN] Statement: {statement}")
         print(f"[DRY-RUN] Target OneLake external location: {expected_location}")
-        print(f"[DRY-RUN] Warehouse ID: {config['warehouse_id']}")
+        print(f"[DRY-RUN] Warehouse ID: {config['warehouse_id'] or '<warehouse-id>'}")
         print(f"[DRY-RUN] Mode: DRY-RUN (no files written, exit 0)")
         return 0
 
     # Live execution:
-    # 1. Ensure OneLake data access role is active on clinical_lakehouse
-    print(f"[LIVE] Ensuring OneLake data access role on clinical_lakehouse ({args.clinical_id})...")
-    ensure_clinical_lakehouse_role(workspace_id=args.workspace_id, clinical_id=args.clinical_id)
+    if not config["host"]:
+        print("ERROR: Databricks host is required in --live (pass --host or set DATABRICKS_HOST)", file=sys.stderr)
+        return 1
+    if not config["warehouse_id"]:
+        print("ERROR: Databricks SQL warehouse ID is required in --live (pass --warehouse-id or set WAREHOUSE_ID)", file=sys.stderr)
+        return 1
 
-    # 2. Ensure foreign catalog fabric_clinical is mounted over OneLake connection
-    print(f"[LIVE] Ensuring foreign catalog fabric_clinical in Databricks...")
-    ensure_foreign_catalog(
-        host=config["host"],
-        warehouse_id=config["warehouse_id"],
-        token=config["dbx_token"],
-        workspace_id=args.workspace_id,
-        clinical_id=args.clinical_id,
-    )
+    # 1. Ensure OneLake data access role is active on clinical_lakehouse
+    print(f"[LIVE] Resolving access connector principal...")
+    try:
+        principal_id = resolve_access_connector_principal(args.access_connector_id, args.access_connector_principal)
+    except Exception as e:
+        print(f"ERROR: Failed to resolve access connector principal: {e}", file=sys.stderr)
+        return 1
+
+    print(f"[LIVE] Ensuring OneLake data access role on clinical_lakehouse ({args.clinical_id})...")
+    try:
+        ensure_clinical_lakehouse_role(
+            workspace_id=args.workspace_id,
+            clinical_id=args.clinical_id,
+            principal_id=principal_id,
+            tenant_id=args.tenant_id,
+        )
+    except Exception as e:
+        print(f"ERROR: Failed updating clinical_lakehouse dataAccessRoles: {e}", file=sys.stderr)
+        return 1
+
+    # 2. Ensure foreign catalog fabric_clinical_{namespace} is mounted over OneLake connection
+    print(f"[LIVE] Ensuring foreign catalog {foreign_catalog} in Databricks...")
+    try:
+        ensure_foreign_catalog(
+            host=config["host"],
+            warehouse_id=config["warehouse_id"],
+            token=config["dbx_token"],
+            workspace_id=args.workspace_id,
+            clinical_id=args.clinical_id,
+            namespace=args.namespace,
+        )
+    except Exception as e:
+        print(f"ERROR: Failed creating foreign catalog {foreign_catalog}: {e}", file=sys.stderr)
+        return 1
 
     # 3. Query Databricks Serverless SQL
     print(f"[LIVE] Submitting SQL statement to warehouse {config['warehouse_id']}...")
@@ -561,30 +689,32 @@ def main() -> int:
         return 1
 
     # 4. Fetch table metadata (location and Delta version)
-    table_location, delta_version = get_table_metadata(
-        host=config["host"],
-        warehouse_id=config["warehouse_id"],
-        token=config["dbx_token"],
-        table_fqn="fabric_clinical.dbo.patient",
-    )
-    if not table_location:
-        table_location = expected_location
+    try:
+        table_location, delta_version = get_table_metadata(
+            host=config["host"],
+            warehouse_id=config["warehouse_id"],
+            token=config["dbx_token"],
+            table_fqn=table_fqn,
+        )
+    except Exception as e:
+        print(f"ERROR: Failed to fetch table metadata: {e}", file=sys.stderr)
+        return 1
 
     # 5. Query Fabric patient360 SQL endpoint to verify data parity
     print(f"[LIVE] Querying Fabric patient360 SQL endpoint for comparison...")
     try:
-        fabric_count = get_fabric_p360_count(workspace_id=args.workspace_id)
+        fabric_count = get_fabric_p360_count(workspace_id=args.workspace_id, p360_id=args.patient360_id)
     except Exception as e:
-        print(f"WARNING: patient360 SQL query failed: {e}; defaulting to verified rowCount", file=sys.stderr)
-        fabric_count = row_count
+        print(f"ERROR: patient360 SQL query failed: {e}", file=sys.stderr)
+        return 1
 
     print(f"[LIVE] Databricks rowCount: {row_count}, Fabric patient360 count: {fabric_count}")
     print(f"[LIVE] Table location: {table_location}, Delta version: {delta_version}")
 
     is_zero_copy = (
-        row_count == 15
+        row_count > 0
         and fabric_count == row_count
-        and ("cbfa78a2-37ee-47b2-9476-14f23815eaa3" in table_location or "clinical_lakehouse" in table_location)
+        and (args.clinical_id.lower() in table_location.lower())
     )
 
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -625,7 +755,6 @@ def main() -> int:
             print(f"WARNING: Could not update local fixture: {e}", file=sys.stderr)
 
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())
