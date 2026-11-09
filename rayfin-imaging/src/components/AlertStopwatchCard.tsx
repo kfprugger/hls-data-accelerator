@@ -182,7 +182,7 @@ export function AlertStopwatchCard({ patientId, className = '' }: AlertStopwatch
           <span>Latency Budget: <strong>18.4s</strong> of 60.0s (NFR-1 budget satisfied)</span>
         </div>
         <div>
-          <span>Allowlist Recipient: <code className="font-mono">joey@jbatl.dev</code> (10-min dedupe cooldown)</span>
+          <span>Allowlist Recipient: configured alert email (10-min dedupe cooldown)</span>
         </div>
       </div>
     </div>

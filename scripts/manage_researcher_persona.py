@@ -1,15 +1,19 @@
-"""Manage Entra test user researcher-demo@jbatl.dev and OneLake data access security roles.
+"""Manage the Entra researcher persona (researcher-demo@<tenant default domain>) and OneLake data access roles.
 
 FR-3 & FR-7: Standalone idempotent CLI for researcher persona lifecycle:
-- --create: Idempotently creates Entra user researcher-demo@jbatl.dev and assigns OneLake
-  ClinicalResearcherRole on patient360 and clinical_lakehouse.
+- --create: Idempotently creates Entra user researcher-demo@<tenant default verified domain> and assigns
+  OneLake ClinicalResearcherRole on patient360 and clinical_lakehouse.
 - --delete / --cleanup: Removes Entra user and revokes OneLake role assignments.
 - --verify: Confirms Graph API and Fabric dataAccessRoles state without exposing secrets.
 - --dry-run: Structured validation and reporting of planned operations without changes.
+
+Live runs need --workspace-id. The Lakehouses are resolved by display name in that workspace, the tenant comes
+from --tenant-id (or the signed-in token's `tid`), and the UPN domain is the tenant's default verified domain.
 """
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import pathlib
@@ -38,39 +42,33 @@ if os.environ.get("HLS_BIND_INTERFACE") and sys.platform == "darwin":
 ROOT_DIR = pathlib.Path(__file__).resolve().parents[1]
 GRAPH_API = "https://graph.microsoft.com/v1.0"
 FABRIC_API = "https://api.fabric.microsoft.com/v1"
+GRAPH_SCOPE = "https://graph.microsoft.com/.default"
+FABRIC_SCOPE = "https://api.fabric.microsoft.com/.default"
 
-DEFAULT_TENANT_ID = "c77e97fc-1859-4575-8c8b-53d74bc35a63"
-DEFAULT_WORKSPACE_ID = "f306e105-78fd-4b16-bfbe-2b556d493cb7"
-DEFAULT_PATIENT360_ID = "83729d21-d933-4a62-9f5e-fbd85a44bda0"
-DEFAULT_CLINICAL_LH_ID = "cbfa78a2-37ee-47b2-9476-14f23815eaa3"
+RESEARCHER_ALIAS = "researcher-demo"
+PATIENT360_NAME = "patient360"
+CLINICAL_LH_NAME = "clinical_lakehouse"
 
-RESEARCHER_UPN = "researcher-demo@jbatl.dev"
-NURSE_UPN = "joey@jbatl.dev"
-
-_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
+_TOKEN_CACHE: dict[tuple[str, str | None], tuple[str, float]] = {}
 
 
-def get_token(scope: str) -> str:
-    """Acquire token for requested resource scope over en0 using MSAL cache or Azure CLI."""
-    if os.environ.get("AZURE_CONFIG_DIR"):
-        az_dir = pathlib.Path(os.environ["AZURE_CONFIG_DIR"])
-    else:
-        az_dir = pathlib.Path.home() / ".azure-isolated" / "JBATL"
-        if not az_dir.is_dir():
-            az_dir = pathlib.Path.home() / ".azure"
-
-    cached = _TOKEN_CACHE.get(scope)
+def get_token(scope: str, tenant_id: str | None = None) -> str:
+    """Acquire a token for `scope` from the Azure CLI login (MSAL refresh token first, so HLS_BIND_INTERFACE applies)."""
+    cached = _TOKEN_CACHE.get((scope, tenant_id))
     if cached and cached[1] - time.time() > 120:
         return cached[0]
 
+    az_dir = pathlib.Path(os.environ.get("AZURE_CONFIG_DIR") or pathlib.Path.home() / ".azure")
     msal_path = az_dir / "msal_token_cache.json"
-    if msal_path.is_file():
+    profile_path = az_dir / "azureProfile.json"
+    tenant = tenant_id
+    if not tenant and profile_path.is_file():
+        profiles = json.loads(profile_path.read_bytes().decode("utf-8-sig"))
+        tenant = next((s["tenantId"] for s in profiles.get("subscriptions", []) if s.get("isDefault")), None)
+    if tenant and msal_path.is_file():
         try:
             msal = json.loads(msal_path.read_text())
             rt_entry = next(iter(msal.get("RefreshToken", {}).values()))
-            profile_path = az_dir / "azureProfile.json"
-            profiles = json.loads(profile_path.read_bytes().decode("utf-8-sig")) if profile_path.is_file() else {}
-            tenant = next((s["tenantId"] for s in profiles.get("subscriptions", []) if s.get("isDefault")), DEFAULT_TENANT_ID)
             resp = requests.post(
                 f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
                 data={
@@ -84,16 +82,25 @@ def get_token(scope: str) -> str:
             if resp.status_code == 200 and "access_token" in resp.json():
                 body = resp.json()
                 token_val = body["access_token"]
-                expires_in = float(body.get("expires_in", 3600))
-                _TOKEN_CACHE[scope] = (token_val, time.time() + expires_in)
+                _TOKEN_CACHE[(scope, tenant_id)] = (token_val, time.time() + float(body.get("expires_in", 3600)))
                 return token_val
         except Exception:
-            pass
+            pass  # fall through to the Azure CLI, which raises with its own error if it cannot sign in
 
-    cred = AzureCliCredential(process_timeout=30)
+    cred = AzureCliCredential(process_timeout=30, tenant_id=tenant_id) if tenant_id else AzureCliCredential(process_timeout=30)
     tok = cred.get_token(scope)
-    _TOKEN_CACHE[scope] = (tok.token, float(tok.expires_on))
+    _TOKEN_CACHE[(scope, tenant_id)] = (tok.token, float(tok.expires_on))
     return tok.token
+
+
+def token_claims(token: str) -> dict:
+    payload = token.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+
+
+def _raise_for(resp: requests.Response, what: str) -> None:
+    if resp.status_code >= 400:
+        raise RuntimeError(f"{what} failed: {resp.status_code} {resp.text}")
 
 
 def generate_ephemeral_credential(length: int = 24) -> str:
@@ -114,7 +121,7 @@ def generate_ephemeral_credential(length: int = 24) -> str:
 def build_data_access_roles(
     nurse_object_id: str,
     researcher_object_id: str,
-    tenant_id: str = DEFAULT_TENANT_ID,
+    tenant_id: str,
 ) -> dict:
     """Construct OneLake data access security role payload for nurse and researcher personas."""
     return {
@@ -164,27 +171,31 @@ def build_data_access_roles(
         ]
     }
 
-
 class ResearcherPersonaManager:
     def __init__(
         self,
-        tenant_id: str = DEFAULT_TENANT_ID,
-        workspace_id: str = DEFAULT_WORKSPACE_ID,
-        patient360_id: str = DEFAULT_PATIENT360_ID,
-        clinical_id: str = DEFAULT_CLINICAL_LH_ID,
+        workspace_id: str | None = None,
+        tenant_id: str | None = None,
+        nurse_upn: str | None = None,
     ) -> None:
-        self.tenant_id = tenant_id
         self.workspace_id = workspace_id
-        self.patient360_id = patient360_id
-        self.clinical_id = clinical_id
+        self.tenant_id = tenant_id
+        self.nurse_upn = nurse_upn
+        self.researcher_upn: str | None = None
+        self.patient360_id: str | None = None
+        self.clinical_id: str | None = None
+
+    @property
+    def researcher_label(self) -> str:
+        return self.researcher_upn or f"{RESEARCHER_ALIAS}@<tenant default verified domain>"
 
     def graph_request(self, method: str, path: str, json_data: dict | None = None) -> requests.Response:
-        tok = get_token("https://graph.microsoft.com/.default")
+        tok = get_token(GRAPH_SCOPE, self.tenant_id)
         headers = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
         return requests.request(method, f"{GRAPH_API}{path}", headers=headers, json=json_data, timeout=30)
 
     def fabric_request(self, method: str, path: str, json_data: dict | None = None) -> requests.Response:
-        tok = get_token("https://api.fabric.microsoft.com/.default")
+        tok = get_token(FABRIC_SCOPE, self.tenant_id)
         headers = {
             "Authorization": f"Bearer {tok}",
             "Content-Type": "application/json",
@@ -192,17 +203,67 @@ class ResearcherPersonaManager:
         }
         return requests.request(method, f"{FABRIC_API}{path}", headers=headers, json=json_data, timeout=30)
 
+    def resolve(self, need_nurse: bool = False) -> None:
+        """Resolve tenant, UPN domain and Lakehouse IDs for a live run; raise when any cannot be determined."""
+        if not self.workspace_id:
+            raise SystemExit("--workspace-id (or FABRIC_WORKSPACE_ID) is required for live operations")
+        if not self.tenant_id:
+            tid = token_claims(get_token(GRAPH_SCOPE)).get("tid")
+            if not tid:
+                raise SystemExit("--tenant-id is required: the signed-in token carries no 'tid' claim")
+            self.tenant_id = str(tid)
+
+        org = self.graph_request("GET", "/organization?$select=id,verifiedDomains")
+        _raise_for(org, "Graph GET /organization")
+        orgs = org.json().get("value", [])
+        if not orgs or orgs[0].get("id") != self.tenant_id:
+            raise RuntimeError(f"Graph token is not for tenant {self.tenant_id}: {org.text}")
+        domain = next((d["name"] for d in orgs[0].get("verifiedDomains", []) if d.get("isDefault")), None)
+        if not domain:
+            raise RuntimeError(f"Tenant {self.tenant_id} has no default verified domain: {org.text}")
+        self.researcher_upn = f"{RESEARCHER_ALIAS}@{domain}"
+
+        if need_nurse and not self.nurse_upn:
+            me = self.graph_request("GET", "/me?$select=userPrincipalName")
+            _raise_for(me, "Graph GET /me (pass --nurse-upn when signed in as a service principal)")
+            self.nurse_upn = me.json()["userPrincipalName"]
+
+        items: dict[str, str] = {}
+        url = f"/workspaces/{self.workspace_id}/items?type=Lakehouse"
+        while url:
+            resp = self.fabric_request("GET", url)
+            _raise_for(resp, f"Fabric GET {url}")
+            body = resp.json()
+            items.update({i["displayName"]: i["id"] for i in body.get("value", [])})
+            token = body.get("continuationToken")
+            url = f"/workspaces/{self.workspace_id}/items?type=Lakehouse&continuationToken={token}" if token else ""
+        missing = [n for n in (PATIENT360_NAME, CLINICAL_LH_NAME) if n not in items]
+        if missing:
+            raise RuntimeError(f"Workspace {self.workspace_id} has no Lakehouse named {', '.join(missing)}")
+        self.patient360_id = items[PATIENT360_NAME]
+        self.clinical_id = items[CLINICAL_LH_NAME]
+
     def find_user(self, upn: str) -> dict | None:
         r = self.graph_request("GET", f"/users/{upn}")
-        if r.status_code == 200:
-            return r.json()
         if r.status_code == 404:
             return None
-        r.raise_for_status()
-        return None
+        _raise_for(r, f"Graph GET /users/{upn}")
+        return r.json()
+
+    def get_roles(self, item_id: str) -> list[dict]:
+        url = f"/workspaces/{self.workspace_id}/items/{item_id}/dataAccessRoles"
+        resp = self.fabric_request("GET", url)
+        _raise_for(resp, f"Fabric GET {url}")
+        return resp.json().get("value", [])
+
+    def put_roles(self, item_id: str, roles: list[dict]) -> None:
+        url = f"/workspaces/{self.workspace_id}/items/{item_id}/dataAccessRoles"
+        _raise_for(self.fabric_request("PUT", url, {"value": roles}), f"Fabric PUT {url}")
 
     def execute_create(self, dry_run: bool = False) -> int:
-        print(f"[PersonaManager] Check Entra user {RESEARCHER_UPN}")
+        if not dry_run:
+            self.resolve(need_nurse=True)
+        print(f"[PersonaManager] Check Entra user {self.researcher_label}")
         print(f"[PersonaManager] Check OneLake data access role ClinicalResearcherRole")
         print(f"[PersonaManager] Plan assignment to Tables/patient_deidentified")
         print(f"[PersonaManager] Plan assignment to Tables/diagnosis, Tables/treatment, Tables/biomarker_test")
@@ -211,19 +272,20 @@ class ResearcherPersonaManager:
         if dry_run:
             print("[DRY-RUN] Planned operations validated successfully. No live modifications performed.")
             return 0
+        assert self.researcher_upn and self.nurse_upn and self.patient360_id and self.clinical_id and self.tenant_id
 
         # Check or create Entra user
-        user = self.find_user(RESEARCHER_UPN)
+        user = self.find_user(self.researcher_upn)
         if user:
-            print(f"Entra user {RESEARCHER_UPN} already exists (ID: {user['id']}). Reusing existing account.")
+            print(f"Entra user {self.researcher_upn} already exists (ID: {user['id']}). Reusing existing account.")
             researcher_id = user["id"]
         else:
             ephemeral_credential = generate_ephemeral_credential()
             payload = {
                 "accountEnabled": True,
                 "displayName": "Demonstration Oncology Researcher",
-                "mailNickname": "researcher-demo",
-                "userPrincipalName": RESEARCHER_UPN,
+                "mailNickname": RESEARCHER_ALIAS,
+                "userPrincipalName": self.researcher_upn,
                 "passwordProfile": {
                     "forceChangePasswordNextSignIn": False,
                     "password": ephemeral_credential,
@@ -231,44 +293,35 @@ class ResearcherPersonaManager:
                 "usageLocation": "US",
             }
             res = self.graph_request("POST", "/users", payload)
-            res.raise_for_status()
-            created = res.json()
-            researcher_id = created["id"]
-            print(f"Created Entra user {RESEARCHER_UPN} (ID: {researcher_id})")
+            _raise_for(res, "Graph POST /users")
+            researcher_id = res.json()["id"]
+            print(f"Created Entra user {self.researcher_upn} (ID: {researcher_id})")
             self._ephemeral_secret = ephemeral_credential
             print("[PersonaManager] Ephemeral credential kept in process memory only. Never printed, written to disk, or committed.")
 
         # Get nurse object ID
-        nurse_user = self.find_user(NURSE_UPN)
+        nurse_user = self.find_user(self.nurse_upn)
         if not nurse_user:
             raise RuntimeError(
-                f"Security guard: Nurse principal {NURSE_UPN} could not be resolved from Entra ID. "
+                f"Security guard: Nurse principal {self.nurse_upn} could not be resolved from Entra ID. "
                 f"Refusing to assign nurse role to researcher identity."
             )
         nurse_id = nurse_user["id"]
+        if nurse_id == researcher_id:
+            raise RuntimeError(f"Security guard: nurse principal {self.nurse_upn} is the researcher identity.")
 
         # Update OneLake data access security roles using strict read-modify-write
         # Physical tables are in clinical_lakehouse: preserves external roles like DatabricksClinicalRead
-        url_clin = f"/workspaces/{self.workspace_id}/items/{self.clinical_id}/dataAccessRoles"
-        curr_clin_resp = self.fabric_request("GET", url_clin)
-        curr_clin_roles = curr_clin_resp.json().get("value", []) if curr_clin_resp.status_code == 200 else []
         preserved_clin = [
-            r for r in curr_clin_roles
+            r for r in self.get_roles(self.clinical_id)
             if r.get("name") not in ("ClinicalNurseRole", "ClinicalResearcherRole")
         ]
         our_clin_roles = build_data_access_roles(nurse_id, researcher_id, self.tenant_id).get("value", [])
-        resp_clin = self.fabric_request("PUT", url_clin, {"value": preserved_clin + our_clin_roles})
-        resp_clin.raise_for_status()
-        print(f"Successfully configured dataAccessRoles on clinical_lakehouse ({self.clinical_id}) (preserved {len(preserved_clin)} existing roles)")
+        self.put_roles(self.clinical_id, preserved_clin + our_clin_roles)
+        print(f"Successfully configured dataAccessRoles on {CLINICAL_LH_NAME} ({self.clinical_id}) (preserved {len(preserved_clin)} existing roles)")
 
         # patient360 holds shortcuts: read-modify-write preserving DefaultReader and other roles
-        url_p360 = f"/workspaces/{self.workspace_id}/items/{self.patient360_id}/dataAccessRoles"
-        curr_p360_resp = self.fabric_request("GET", url_p360)
-        curr_p360_roles = curr_p360_resp.json().get("value", []) if curr_p360_resp.status_code == 200 else []
-        preserved_p360 = [
-            r for r in curr_p360_roles
-            if r.get("name") != "ClinicalResearcherRole"
-        ]
+        preserved_p360 = [r for r in self.get_roles(self.patient360_id) if r.get("name") != "ClinicalResearcherRole"]
         if not any(r.get("name") == "DefaultReader" for r in preserved_p360):
             preserved_p360.insert(0, {
                 "name": "DefaultReader",
@@ -280,52 +333,49 @@ class ResearcherPersonaManager:
             "decisionRules": [{"effect": "Permit", "permission": [{"attributeName": "Action", "attributeValueIncludedIn": ["Read"]}, {"attributeName": "Path", "attributeValueIncludedIn": ["*"]}]}],
             "members": {"microsoftEntraMembers": [{"objectId": researcher_id, "tenantId": self.tenant_id}]},
         }
-        resp_p360 = self.fabric_request("PUT", url_p360, {"value": preserved_p360 + [our_p360_role]})
-        resp_p360.raise_for_status()
-        print(f"Successfully configured dataAccessRoles on patient360 ({self.patient360_id}) (preserved {len(preserved_p360)} existing roles)")
+        self.put_roles(self.patient360_id, preserved_p360 + [our_p360_role])
+        print(f"Successfully configured dataAccessRoles on {PATIENT360_NAME} ({self.patient360_id}) (preserved {len(preserved_p360)} existing roles)")
 
         return 0
 
     def execute_delete(self, dry_run: bool = False) -> int:
-        print(f"[PersonaManager] Checking Entra user {RESEARCHER_UPN}")
+        if not dry_run:
+            self.resolve()
+        print(f"[PersonaManager] Checking Entra user {self.researcher_label}")
         print(f"[PersonaManager] Checking OneLake data access role ClinicalResearcherRole")
-        print(f"[PersonaManager] Plan removal of {RESEARCHER_UPN} from Entra ID")
+        print(f"[PersonaManager] Plan removal of {self.researcher_label} from Entra ID")
         print(f"[PersonaManager] Plan revocation of ClinicalResearcherRole from OneLake lakehouses")
 
         if dry_run:
             print("[DRY-RUN] Delete operations validated successfully. No live modifications performed.")
             return 0
+        assert self.researcher_upn and self.patient360_id and self.clinical_id
 
         # Revoke OneLake roles using read-modify-write (pruning only owned roles)
-        for item_name, item_id in [("patient360", self.patient360_id), ("clinical_lakehouse", self.clinical_id)]:
-            url = f"/workspaces/{self.workspace_id}/items/{item_id}/dataAccessRoles"
-            curr_resp = self.fabric_request("GET", url)
-            if curr_resp.status_code == 200:
-                curr_roles = curr_resp.json().get("value", [])
-                filtered = [r for r in curr_roles if r.get("name") not in ("ClinicalResearcherRole", "ClinicalNurseRole")]
-                if len(filtered) != len(curr_roles):
-                    del_resp = self.fabric_request("PUT", url, {"value": filtered})
-                    del_resp.raise_for_status()
-                    print(f"Revoked owned roles on {item_name} (preserved {len(filtered)} existing roles)")
+        for item_name, item_id in [(PATIENT360_NAME, self.patient360_id), (CLINICAL_LH_NAME, self.clinical_id)]:
+            curr_roles = self.get_roles(item_id)
+            filtered = [r for r in curr_roles if r.get("name") not in ("ClinicalResearcherRole", "ClinicalNurseRole")]
+            if len(filtered) != len(curr_roles):
+                self.put_roles(item_id, filtered)
+                print(f"Revoked owned roles on {item_name} (preserved {len(filtered)} existing roles)")
 
         # Delete Entra user
-        user = self.find_user(RESEARCHER_UPN)
+        user = self.find_user(self.researcher_upn)
         if user:
-            del_resp = self.graph_request("DELETE", f"/users/{user['id']}")
-            if del_resp.status_code in (200, 204):
-                print(f"Successfully deleted Entra user {RESEARCHER_UPN} ({user['id']})")
-            else:
-                print(f"Warning: DELETE user {RESEARCHER_UPN} returned {del_resp.status_code}: {del_resp.text}")
+            _raise_for(self.graph_request("DELETE", f"/users/{user['id']}"), f"Graph DELETE /users/{user['id']}")
+            print(f"Successfully deleted Entra user {self.researcher_upn} ({user['id']})")
         else:
-            print(f"Entra user {RESEARCHER_UPN} does not exist. Nothing to delete.")
+            print(f"Entra user {self.researcher_upn} does not exist. Nothing to delete.")
 
         return 0
 
     def execute_verify(self) -> int:
-        print(f"Verifying account and role state for {RESEARCHER_UPN}...")
-        user = self.find_user(RESEARCHER_UPN)
+        self.resolve()
+        assert self.researcher_upn and self.patient360_id
+        print(f"Verifying account and role state for {self.researcher_upn}...")
+        user = self.find_user(self.researcher_upn)
         if not user:
-            print(f"STATUS: User {RESEARCHER_UPN} does not exist in Entra ID.")
+            print(f"STATUS: User {self.researcher_upn} does not exist in Entra ID.")
             return 1
 
         print(f"Entra User: {user.get('userPrincipalName')} (ID: {user.get('id')}, Enabled: {user.get('accountEnabled')})")
@@ -334,24 +384,19 @@ class ResearcherPersonaManager:
         deadline = time.time() + 30
         backoff = 2.0
         researcher_role = None
-        url = f"/workspaces/{self.workspace_id}/items/{self.patient360_id}/dataAccessRoles"
         while True:
-            resp = self.fabric_request("GET", url)
-            if resp.status_code == 200:
-                roles = resp.json().get("value", [])
-                researcher_role = next((r for r in roles if r.get("name") == "ClinicalResearcherRole"), None)
-                if researcher_role:
-                    break
-            if time.time() >= deadline:
+            roles = self.get_roles(self.patient360_id)
+            researcher_role = next((r for r in roles if r.get("name") == "ClinicalResearcherRole"), None)
+            if researcher_role or time.time() >= deadline:
                 break
             time.sleep(backoff)
             backoff = min(backoff * 1.5, 8.0)
 
         if not researcher_role:
-            print("STATUS: ClinicalResearcherRole is missing from patient360 after propagation deadline.")
+            print(f"STATUS: ClinicalResearcherRole is missing from {PATIENT360_NAME} after propagation deadline.")
             return 1
 
-        print(f"OneLake Security: ClinicalResearcherRole active on patient360. Decision rules: {len(researcher_role.get('decisionRules', []))}")
+        print(f"OneLake Security: ClinicalResearcherRole active on {PATIENT360_NAME}. Decision rules: {len(researcher_role.get('decisionRules', []))}")
         return 0
 
 
@@ -362,14 +407,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--verify", action="store_true", help="Query Graph API and Fabric REST to verify configuration")
     parser.add_argument("--live", action="store_true", help="Execute live operations against Entra and Fabric")
     parser.add_argument("--dry-run", action="store_true", help="Report planned operations without making changes")
-    parser.add_argument("--tenant-id", default=os.environ.get("AZURE_TENANT_ID", DEFAULT_TENANT_ID), help="Entra tenant ID")
-    parser.add_argument("--workspace-id", default=os.environ.get("FABRIC_WORKSPACE_ID", DEFAULT_WORKSPACE_ID), help="Fabric workspace ID")
+    parser.add_argument("--tenant-id", default=os.environ.get("AZURE_TENANT_ID"), help="Entra tenant ID (default: the signed-in token's tid)")
+    parser.add_argument("--workspace-id", default=os.environ.get("FABRIC_WORKSPACE_ID"), help="Fabric workspace ID (required for live runs)")
+    parser.add_argument("--nurse-upn", default=os.environ.get("HLS_NURSE_UPN"), help="UPN granted the nurse role (default: the signed-in user)")
 
     args = parser.parse_args(argv)
 
     manager = ResearcherPersonaManager(
-        tenant_id=args.tenant_id,
         workspace_id=args.workspace_id,
+        tenant_id=args.tenant_id,
+        nurse_upn=args.nurse_upn,
     )
 
     if args.delete:

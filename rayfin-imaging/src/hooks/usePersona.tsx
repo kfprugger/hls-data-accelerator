@@ -7,7 +7,7 @@ export type SecurityTier = 'full' | 'deidentified';
 
 export interface PersonaDetails {
   id: Persona;
-  email: string;
+  account: string;
   label: string;
   badgeLabel: string;
   tier: SecurityTier;
@@ -18,7 +18,7 @@ export interface PersonaDetails {
 export const PERSONAS: Record<Persona, PersonaDetails> = {
   nurse: {
     id: 'nurse',
-    email: 'joey@jbatl.dev',
+    account: 'Clinical user',
     label: 'Nurse Persona',
     badgeLabel: 'Nurse Persona (Full Clinical PHI)',
     tier: 'full',
@@ -27,7 +27,7 @@ export const PERSONAS: Record<Persona, PersonaDetails> = {
   },
   researcher: {
     id: 'researcher',
-    email: 'researcher-demo@jbatl.dev',
+    account: 'researcher-demo',
     label: 'Researcher Persona',
     badgeLabel: 'Researcher Persona (De-identified - HIPAA Safe)',
     tier: 'deidentified',
@@ -36,13 +36,26 @@ export const PERSONAS: Record<Persona, PersonaDetails> = {
   },
 };
 
+/** Tier the server actually applied to a response; the server decides masking from the caller's token. */
+export function servedPersonaOf(res: { persona?: Persona; isDeidentified?: boolean } | null | undefined): Persona | null {
+  if (!res) return null;
+  if (res.isDeidentified === true || res.persona === 'researcher') return 'researcher';
+  if (res.isDeidentified === false || res.persona === 'nurse') return 'nurse';
+  return null;
+}
+
 interface PersonaContextValue {
+  /** Persona the client asks for. The server may only honour it as a downgrade to the de-identified tier. */
   persona: Persona;
+  /** Tier the server last reported, or null before the first response under the current request. */
+  servedPersona: Persona | null;
+  /** Details of the tier shown to the user: the served tier once known. */
   details: PersonaDetails;
   isNurse: boolean;
   isResearcher: boolean;
   setPersona: (p: Persona) => void;
   togglePersona: () => void;
+  reportServedPersona: (p: Persona | null) => void;
 }
 
 const PersonaContext = createContext<PersonaContextValue | undefined>(undefined);
@@ -51,7 +64,8 @@ const STORAGE_KEY = 'rayfin_active_persona';
 
 export function PersonaProvider({ children }: { children: ReactNode }) {
   const [persona, setPersonaState] = useState<Persona>(() => {
-    if (typeof window !== 'undefined') {
+    // Hosted mode has no persona switch: the token decides, so a stale stored choice must not leak in.
+    if (LOCAL_DATA && typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored === 'researcher' || stored === 'nurse') return stored;
@@ -61,29 +75,28 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
     }
     return 'nurse';
   });
+  const [servedPersona, setServedPersona] = useState<Persona | null>(null);
 
   const setPersona = useCallback((newPersona: Persona) => {
     setPersonaState(newPersona);
+    setServedPersona(null);
     setActivePersona(newPersona);
-    if (typeof window !== 'undefined') {
+    if (LOCAL_DATA && typeof window !== 'undefined') {
       try {
         localStorage.setItem(STORAGE_KEY, newPersona);
       } catch {
         // Ignore storage errors
       }
     }
-    if (LOCAL_DATA) {
-      void fetch('/local-api/persona', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ persona: newPersona }),
-      }).catch(() => undefined);
-    }
   }, []);
 
   const togglePersona = useCallback(() => {
     setPersona(persona === 'nurse' ? 'researcher' : 'nurse');
   }, [persona, setPersona]);
+
+  const reportServedPersona = useCallback((p: Persona | null) => {
+    if (p) setServedPersona(p);
+  }, []);
 
   useEffect(() => {
     setActivePersona(persona);
@@ -96,13 +109,16 @@ export function PersonaProvider({ children }: { children: ReactNode }) {
     }
   }, [persona]);
 
+  const shown = servedPersona ?? 'nurse';
   const value: PersonaContextValue = {
     persona,
-    details: PERSONAS[persona],
-    isNurse: persona === 'nurse',
-    isResearcher: persona === 'researcher',
+    servedPersona,
+    details: PERSONAS[shown],
+    isNurse: shown === 'nurse',
+    isResearcher: shown === 'researcher',
     setPersona,
     togglePersona,
+    reportServedPersona,
   };
 
   return <PersonaContext.Provider value={value}>{children}</PersonaContext.Provider>;
@@ -113,11 +129,13 @@ export function usePersona(): PersonaContextValue {
   if (!ctx) {
     return {
       persona: 'nurse',
+      servedPersona: null,
       details: PERSONAS.nurse,
       isNurse: true,
       isResearcher: false,
       setPersona: () => undefined,
       togglePersona: () => undefined,
+      reportServedPersona: () => undefined,
     };
   }
   return ctx;

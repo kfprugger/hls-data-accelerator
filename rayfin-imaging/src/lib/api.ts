@@ -21,8 +21,9 @@ export type Cell = Row[string];
 export type Silo = 'clinical' | 'genomics' | 'imaging';
 export type Persona = 'nurse' | 'researcher';
 
+// Hosted mode never restores a stored persona: the server decides the tier from the caller's token.
 let currentPersona: Persona =
-  typeof window !== 'undefined' && window.localStorage?.getItem('rayfin_active_persona') === 'researcher'
+  LOCAL_DATA && typeof window !== 'undefined' && window.localStorage?.getItem('rayfin_active_persona') === 'researcher'
     ? 'researcher'
     : 'nurse';
 
@@ -46,7 +47,7 @@ export async function fetchCohort(persona?: Persona): Promise<Cohort> {
     const query = p === 'researcher' ? '?persona=researcher' : '';
     return localApi(`getCohort${query}`, { headers: { 'x-rayfin-persona': p } });
   }
-  return getRayfinClient().functions.getCohort.invoke(p ? { persona: p } : undefined, { timeoutMs: 90_000 });
+  return getRayfinClient().functions.getCohort.invoke({ persona: p }, { timeoutMs: 90_000 });
 }
 
 export async function fetchPatient(patientId: string, persona?: Persona): Promise<PatientBundle> {
@@ -55,7 +56,7 @@ export async function fetchPatient(patientId: string, persona?: Persona): Promis
     const query = `patientId=${encodeURIComponent(patientId)}${p === 'researcher' ? '&persona=researcher' : ''}`;
     return localApi(`getPatient?${query}`, { headers: { 'x-rayfin-persona': p } });
   }
-  return getRayfinClient().functions.getPatient.invoke({ patientId, ...(p ? { persona: p } : {}) }, { timeoutMs: 90_000 });
+  return getRayfinClient().functions.getPatient.invoke({ patientId, persona: p }, { timeoutMs: 90_000 });
 }
 
 export async function fetchDataMap(): Promise<DataMap> {
@@ -74,7 +75,7 @@ export async function fetchStandardsMapping(patientId: string, persona?: Persona
     const query = `patientId=${encodeURIComponent(patientId)}${p === 'researcher' ? '&persona=researcher' : ''}`;
     return localApi(`getStandardsMapping?${query}`, { headers: { 'x-rayfin-persona': p } });
   }
-  return getRayfinClient().functions.getStandardsMapping.invoke({ patientId, ...(p ? { persona: p } : {}) }, { timeoutMs: 90_000 });
+  return getRayfinClient().functions.getStandardsMapping.invoke({ patientId, persona: p }, { timeoutMs: 90_000 });
 }
 
 export async function fetchAlertStopwatch(patientId?: string, persona?: Persona): Promise<AlertStopwatch> {
@@ -86,7 +87,7 @@ export async function fetchAlertStopwatch(patientId?: string, persona?: Persona)
     const query = parts.length > 0 ? `?${parts.join('&')}` : '';
     return localApi(`getAlertStopwatch${query}`, { headers: { 'x-rayfin-persona': p } });
   }
-  return getRayfinClient().functions.getAlertStopwatch.invoke({ patientId, ...(p ? { persona: p } : {}) }, { timeoutMs: 90_000 });
+  return getRayfinClient().functions.getAlertStopwatch.invoke({ patientId: patientId ?? '', persona: p }, { timeoutMs: 90_000 });
 }
 
 export async function askDataAgent(question: string, persona?: Persona): Promise<AskDataAgentResponse> {
@@ -108,7 +109,7 @@ export async function askDataAgent(question: string, persona?: Persona): Promise
       body: JSON.stringify({ question, persona: p }),
     });
   }
-  return getRayfinClient().functions.askDataAgent.invoke({ question }, { timeoutMs: 30_000 });
+  return getRayfinClient().functions.askDataAgent.invoke({ question }, { timeoutMs: 120_000 });
 }
 
 /** URL of a file in a silo's Files area, signed with the read-only SAS from the function (unsigned in local mode). */

@@ -189,7 +189,8 @@ class TestPhiPersonaViews(unittest.TestCase):
             exit_code = manage_researcher_persona.main(["--dry-run"])
         self.assertEqual(exit_code, 0)
         out_create = stdout_create.getvalue()
-        self.assertIn("Check Entra user researcher-demo@jbatl.dev", out_create)
+        self.assertIn("Check Entra user researcher-demo@", out_create)
+        self.assertNotIn("jbatl", out_create)
         self.assertIn("Check OneLake data access role ClinicalResearcherRole", out_create)
         self.assertIn("Plan assignment to Tables/patient_deidentified", out_create)
 
@@ -198,9 +199,10 @@ class TestPhiPersonaViews(unittest.TestCase):
             exit_code = manage_researcher_persona.main(["--delete", "--dry-run"])
         self.assertEqual(exit_code, 0)
         out_delete = stdout_delete.getvalue()
-        self.assertIn("Checking Entra user researcher-demo@jbatl.dev", out_delete)
+        self.assertIn("Checking Entra user researcher-demo@", out_delete)
         self.assertIn("Checking OneLake data access role ClinicalResearcherRole", out_delete)
-        self.assertIn("Plan removal of researcher-demo@jbatl.dev from Entra ID", out_delete)
+        self.assertIn("Plan removal of researcher-demo@", out_delete)
+        self.assertNotIn("jbatl", out_delete)
 
     def test_ephemeral_credential_generation_and_hygiene(self) -> None:
         """FR-3, NFR-2: Verify credential entropy and absence of persisted credentials."""

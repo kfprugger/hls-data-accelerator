@@ -57,6 +57,7 @@ def derive_deidentified_patient_rows(rows: list[dict]) -> list[dict]:
         # Coarsen birth date and diagnosis date
         yod = d.get("year_of_diagnosis")
         age = d.get("age_at_diagnosis")
+        birth_year = None
         if yod is not None and age is not None:
             try:
                 birth_year = int(yod) - int(age)
@@ -71,6 +72,11 @@ def derive_deidentified_patient_rows(rows: list[dict]) -> list[dict]:
                 d["diagnosis_date"] = f"{int(yod):04d}-01-01"
             except (ValueError, TypeError):
                 d["diagnosis_date"] = str(yod)
+
+        # HIPAA Safe Harbor: every other date tied to the patient keeps only its year.
+        for date_key in ("last_contact_date", "death_date"):
+            if d.get(date_key):
+                d[date_key] = str(d[date_key])[:4]
         # Explicitly retain demographic cohorts (race, country, sex, age_at_diagnosis)
         # They remain intact in d
 
@@ -167,28 +173,12 @@ def seed_fabric(dry_run: bool = False) -> int:
             }
         },
     }]
-    resp = seed_patient360_silos.fabric_call(
-        "POST",
-        f"/workspaces/{seed_patient360_silos.WORKSPACE_ID}/items/{seed_patient360_silos.PATIENT360}/shortcuts/bulkCreate?shortcutConflictPolicy=CreateOrOverwrite",
-        json={"createShortcutRequests": reqs},
-    )
-    seed_patient360_silos.wait_lro(resp)
+    seed_patient360_silos.create_shortcuts(reqs)
     print("Registered OneLake shortcut patient360.patient_deidentified")
 
     # Refresh SQL endpoint metadata so table is immediately queryable via SQL endpoint
-    try:
-        lh_detail = seed_patient360_silos.fabric_call(
-            "GET", f"/workspaces/{seed_patient360_silos.WORKSPACE_ID}/lakehouses/{seed_patient360_silos.PATIENT360}"
-        ).json()
-        sql_id = (lh_detail.get("properties", {}).get("sqlEndpointProperties") or {}).get("id")
-        if sql_id:
-            r = seed_patient360_silos.fabric_call(
-                "POST", f"/workspaces/{seed_patient360_silos.WORKSPACE_ID}/sqlEndpoints/{sql_id}/refreshMetadata", json={}
-            )
-            seed_patient360_silos.wait_lro(r)
-            print("Refreshed patient360 SQL endpoint metadata")
-    except Exception as exc:
-        print(f"Warning: SQL metadata refresh on patient360: {exc}")
+    seed_patient360_silos.refresh_sql_metadata(seed_patient360_silos.PATIENT360)
+    print("Refreshed patient360 SQL endpoint metadata")
 
     return 0
 

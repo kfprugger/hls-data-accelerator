@@ -292,6 +292,23 @@ Browser (Rayfin static hosting, Entra sign-in): React + OpenSeadragon + NiiVue
 Shared pins are stored in the app's own database through Rayfin's data API, with row-level security
 per author.
 
+Patient 360 masking is enforced by the caller's delegated identity. A requested researcher persona can
+only reduce access; it cannot upgrade a researcher to identified records. The persona banner uses the
+server's returned `persona` / `isDeidentified` tier, and researcher clinical event dates contain only years.
+Delegation-key, SAS and SQL-pool caches are isolated by caller identity; SQL pools also isolate refreshed
+tokens and are cleaned up only when they have no borrowed connections or pending requests.
+
+For a fresh workspace, run the repository-root `scripts/manage_researcher_persona.py --create
+--workspace-id <workspace-id> --tenant-id <tenant-id> --nurse-upn <clinical-user-upn>` after creating the
+Lakehouses. It discovers `patient360` and `clinical_lakehouse` by display name and derives the researcher
+UPN from Graph `/organization`'s default verified domain. `--tenant-id` may be omitted only when the
+signed-in token contains `tid`; `--dry-run` remains offline and makes no changes.
+
+Shortcut creation checks every bulk result and fails on any unsuccessful shortcut. Fabric operation
+polling honours `Retry-After`, has a ten-minute deadline, and raises with the failed response body.
+The Ask Data Agent client allows 120 seconds; the server polls a run for at most 55 seconds and returns
+502 for failed/cancelled/expired/requires-action runs or 504 on timeout rather than treating them as answers.
+
 ## Demo script (about 12 minutes)
 
 1. **Overview**: one Lakehouse holds gigapixel slides and whole-body scans, all public data, served from OneLake.

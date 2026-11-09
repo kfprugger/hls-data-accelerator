@@ -2,7 +2,8 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 export function parseDate(iso: string | null | undefined): Date | null {
   if (!iso) return null;
-  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  const s = /^\d{4}$/.test(iso.trim()) ? `${iso.trim()}-01-01` : iso.slice(0, 10);
+  const d = new Date(`${s}T00:00:00Z`);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 

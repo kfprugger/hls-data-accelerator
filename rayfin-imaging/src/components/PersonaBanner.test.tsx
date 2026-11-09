@@ -3,7 +3,16 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { PersonaBanner } from './PersonaBanner';
-import { PersonaProvider } from '@/hooks/usePersona';
+import { PersonaProvider, usePersona } from '@/hooks/usePersona';
+
+function ReportServed({ persona }: { persona: 'nurse' | 'researcher' }) {
+  const { reportServedPersona } = usePersona();
+  return (
+    <button type="button" data-testid="report-served" onClick={() => reportServedPersona(persona)}>
+      report
+    </button>
+  );
+}
 
 // Mock LOCAL_DATA as true
 vi.mock('@/lib/localMode', () => ({
@@ -19,15 +28,14 @@ describe('PersonaBanner Component', () => {
     }));
   });
 
-  it('renders default Nurse Persona with email, green badge, and toggle button', () => {
+  it('renders default Nurse Persona with account, green badge, and toggle button', () => {
     render(
       <PersonaProvider>
         <PersonaBanner />
       </PersonaProvider>
     );
 
-    // Verify default identity is joey@jbatl.dev
-    expect(screen.getByText('joey@jbatl.dev')).toBeDefined();
+    expect(screen.getByText('Clinical user')).toBeDefined();
 
     // Verify Nurse Persona badge
     const badge = screen.getByTestId('persona-badge');
@@ -39,10 +47,11 @@ describe('PersonaBanner Component', () => {
     expect(toggleBtn.textContent).toBe('Switch to Researcher Persona');
   });
 
-  it('transitions to Researcher Persona on toggle click', async () => {
+  it('waits for the server-reported tier after toggling the requested persona', async () => {
     render(
       <PersonaProvider>
         <PersonaBanner />
+        <ReportServed persona="researcher" />
       </PersonaProvider>
     );
 
@@ -52,8 +61,12 @@ describe('PersonaBanner Component', () => {
       fireEvent.click(toggleBtn);
     });
 
-    // Identity updates to researcher-demo@jbatl.dev
-    expect(screen.getByText('researcher-demo@jbatl.dev')).toBeDefined();
+    expect(screen.getByTestId('persona-badge').textContent).toBe('Nurse Persona (Full Clinical PHI)');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('report-served'));
+    });
+
+    expect(screen.getByText('researcher-demo')).toBeDefined();
 
     // Badge updates to Researcher Persona with purple theme
     const badge = screen.getByTestId('persona-badge');
@@ -68,9 +81,27 @@ describe('PersonaBanner Component', () => {
       fireEvent.click(toggleBtn);
     });
 
-    expect(screen.getByText('joey@jbatl.dev')).toBeDefined();
+    expect(screen.getByText('Clinical user')).toBeDefined();
     expect(badge.textContent).toBe('Nurse Persona (Full Clinical PHI)');
     expect(badge.className).toContain('emerald');
+  });
+
+  it('shows the tier the server served, not the requested persona', async () => {
+    render(
+      <PersonaProvider>
+        <PersonaBanner />
+        <ReportServed persona="researcher" />
+      </PersonaProvider>
+    );
+
+    // Requested persona is nurse; the server answered with de-identified data.
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('report-served'));
+    });
+
+    const badge = screen.getByTestId('persona-badge');
+    expect(badge.textContent).toBe('Researcher Persona (De-identified - HIPAA Safe)');
+    expect(badge.className).toContain('purple');
   });
 
   it('maintains responsive layout container classes for 1280px and 360px viewports', () => {

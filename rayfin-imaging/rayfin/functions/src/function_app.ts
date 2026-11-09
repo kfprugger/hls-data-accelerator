@@ -10,6 +10,7 @@ import {
   UserDataFunctions,
   type RayfinContext,
 } from '@microsoft/fabric-user-data-functions';
+import crypto from 'crypto';
 import sql from 'mssql';
 
 /*
@@ -448,8 +449,22 @@ export type AlertStopwatchSnapshot = {
 
 /* ------------------------------------------------------------------ OneLake & SAS helpers */
 
+export function getCallerId(token?: string): string {
+  if (!token) return 'anonymous';
+  try {
+    const parts = token.split('.');
+    if (parts.length >= 2) {
+      const claims = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8')) as Record<string, unknown>;
+      if (claims.oid && typeof claims.oid === 'string') return claims.oid;
+    }
+  } catch {
+    // fallback to hash
+  }
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
 const cachedSas = new Map<string, { query: string; expiresOn: number; reuseUntil: number }>();
-let delegation: { key: UserDelegationKey; reuseUntil: number; expiresOn: number } | null = null;
+const delegations = new Map<string, { key: UserDelegationKey; reuseUntil: number; expiresOn: number }>();
 
 async function readOneLake(token: string, relativePath: string): Promise<Response> {
   const response = await fetch(`${ONELAKE_DFS}/${WORKSPACE_ID}/${FILES_PATH}/${relativePath}`, {
@@ -460,21 +475,25 @@ async function readOneLake(token: string, relativePath: string): Promise<Respons
   }
   return response;
 }
-
 async function delegationKey(token: string): Promise<{ key: UserDelegationKey; expiresOn: number }> {
+  const caller = getCallerId(token);
   const now = Date.now();
-  if (delegation && delegation.reuseUntil > now) return delegation;
+  const existing = delegations.get(caller);
+  if (existing && existing.reuseUntil > now) return existing;
   const credential = { getToken: async () => ({ token, expiresOnTimestamp: now + 30 * 60_000 }) };
   const service = new DataLakeServiceClient(ONELAKE_DFS, credential);
   const expiresOn = now + SAS_LIFETIME_MS;
   const key = await service.getUserDelegationKey(new Date(now - 5 * 60_000), new Date(expiresOn));
-  delegation = { key, reuseUntil: now + KEY_REUSE_MS, expiresOn };
-  return delegation;
+  const entry = { key, reuseUntil: now + KEY_REUSE_MS, expiresOn };
+  delegations.set(caller, entry);
+  return entry;
 }
 
 async function signFolderSas(token: string, folder: string): Promise<{ query: string; expiresOn: number }> {
+  const caller = getCallerId(token);
+  const cacheKey = `${caller}:${folder}`;
   const now = Date.now();
-  const cached = cachedSas.get(folder);
+  const cached = cachedSas.get(cacheKey);
   if (cached && cached.reuseUntil > now) return cached;
   const scope = `${FILES_PATH}/${folder}`;
   const { key, expiresOn } = await delegationKey(token);
@@ -494,7 +513,7 @@ async function signFolderSas(token: string, folder: string): Promise<{ query: st
     'onelake',
   ).toString();
   const entry = { query, expiresOn, reuseUntil: now + SAS_REUSE_MS };
-  cachedSas.set(folder, entry);
+  cachedSas.set(cacheKey, entry);
   return entry;
 }
 
@@ -538,16 +557,31 @@ function lakehouseInfo(): LakehouseInfo {
 }
 
 /* ------------------------------------------------------------------ SQL Pools */
+const pools = new Map<string, { token: string; pool: sql.ConnectionPool; lastUsed: number; expiresOn: number }>();
 
-const pools = new Map<string, { token: string; pool: sql.ConnectionPool }>();
-
-async function getPool(token: string, database: string): Promise<sql.ConnectionPool> {
+export async function getPool(token: string, database: string): Promise<sql.ConnectionPool> {
   if (!SQL_SERVER || /^0{8}-/.test(WORKSPACE_ID)) {
     throw new Error('Fabric SQL is not configured: run scripts/setup_fabric.py, then redeploy with `npx rayfin up`.');
   }
-  const existing = pools.get(database);
-  if (existing && existing.token === token && existing.pool.connected) return existing.pool;
-  if (existing) void existing.pool.close().catch(() => undefined);
+  const caller = getCallerId(token);
+  const poolKey = `${database}:${caller}:${crypto.createHash('sha256').update(token).digest('hex')}`;
+  const now = Date.now();
+  const existing = pools.get(poolKey);
+  if (existing && existing.pool.connected && existing.expiresOn > now) {
+    existing.lastUsed = now;
+    return existing.pool;
+  }
+
+  // Clean up only idle, expired, or disconnected pools; never close in-flight pools of other callers
+  for (const [k, v] of pools.entries()) {
+    const isExpired = v.expiresOn <= now;
+    const isIdle = now - v.lastUsed > 5 * 60_000;
+    if ((!v.pool.connected || isExpired || isIdle) && v.pool.borrowed === 0 && v.pool.pending === 0) {
+      pools.delete(k);
+      void v.pool.close().catch(() => undefined);
+    }
+  }
+
   const pool = new sql.ConnectionPool({
     server: SQL_SERVER,
     database,
@@ -558,7 +592,21 @@ async function getPool(token: string, database: string): Promise<sql.ConnectionP
     connectionTimeout: 30_000,
   });
   await pool.connect();
-  pools.set(database, { token, pool });
+
+  let expiresOn = now + 50 * 60_000;
+  try {
+    const parts = token.split('.');
+    if (parts.length >= 2) {
+      const claims = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8')) as { exp?: number };
+      if (typeof claims.exp === 'number') {
+        expiresOn = claims.exp * 1000;
+      }
+    }
+  } catch {
+    // fallback
+  }
+
+  pools.set(poolKey, { token, pool, lastUsed: now, expiresOn });
   return pool;
 }
 
@@ -800,13 +848,53 @@ udf.func(
 
 /* ------------------------------------------------------------------ Patient 360 UDFs */
 
-udf.func(
-  'getCohort',
-  async (ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Storage>): Promise<Cohort> => {
-    const isResearcher = isResearcherPersona(ctx.Tokens.Sql);
+/** Opens the SQL pool for a caller and database; injectable so handler tests can stub SQL. */
+export type PoolSource = (token: string, database: string) => Promise<sql.ConnectionPool>;
+
+/**
+ * Masking tier for a call. The caller's token decides identified access; a `persona` argument can only
+ * downgrade the caller to the de-identified tier, never upgrade a researcher to identified data.
+ */
+function researcherCall(token: string | undefined, persona: string): boolean {
+  return isResearcherPersona(token) || persona === 'researcher';
+}
+
+const YEAR_ONLY_COLUMNS: Record<string, string[]> = {
+  patient: ['birth_date', 'diagnosis_date', 'last_contact_date', 'death_date'],
+  observations: ['date'],
+  encounters: ['start', 'stop'],
+  conditions: ['onset', 'resolved'],
+  medications: ['start', 'stop'],
+  immunizations: ['date'],
+  allergies: ['onset'],
+  procedures: ['date'],
+  careplans: ['start', 'stop'],
+  radiologyStudies: ['date'],
+  radiologySeries: ['date'],
+};
+
+/** Reduces the named date columns to their four-digit year (HIPAA Safe Harbor keeps only the year). */
+export function datesToYear(rows: Row[], columns: string[]): Row[] {
+  return rows.map((row) => {
+    const out: Row = { ...row };
+    for (const c of columns) {
+      const v = out[c];
+      if (typeof v === 'string' && /^\d{4}/.test(v)) out[c] = v.slice(0, 4);
+      else if (typeof v === 'number' && v > 9999) out[c] = new Date(v).getUTCFullYear();
+    }
+    return out;
+  });
+}
+
+export async function getCohortHandler(
+  ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Storage>,
+  persona: string = 'nurse',
+  openPool: PoolSource = getPool,
+): Promise<Cohort> {
+    const isResearcher = researcherCall(ctx.Tokens.Sql, persona);
     const cohortSql = isResearcher ? COHORT_SQL_DEIDENTIFIED : COHORT_SQL;
     const patientTable = isResearcher ? 'patient_deidentified' : 'patient';
-    const tracer = new Tracer(await getPool(ctx.Tokens.Sql, PATIENT360.name));
+    const tracer = new Tracer(await openPool(ctx.Tokens.Sql, PATIENT360.name));
     const list = await tracer.run(
       'cohort',
       ['clinical', 'genomics', 'imaging'],
@@ -833,21 +921,28 @@ udf.func(
       isDeidentified: isResearcher,
       persona: isResearcher ? 'researcher' : 'nurse',
     };
-  },
+}
+
+udf.func(
+  'getCohort',
+  async (
+    ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Storage>,
+    persona: string = 'nurse',
+  ): Promise<Cohort> => getCohortHandler(ctx, persona),
   [],
 );
 
-udf.func(
-  'getPatient',
-  async (
-    patientId: string,
-    ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Storage>,
-  ): Promise<PatientBundle> => {
+export async function getPatientHandler(
+  patientId: string,
+  ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Storage>,
+  persona: string = 'nurse',
+  openPool: PoolSource = getPool,
+): Promise<PatientBundle> {
     if (!PATIENT_ID.test(patientId)) throw new Error('Invalid patient id');
-    const isResearcher = isResearcherPersona(ctx.Tokens.Sql);
+    const isResearcher = researcherCall(ctx.Tokens.Sql, persona);
     const headerSql = isResearcher ? HEADER_SQL_DEIDENTIFIED : HEADER_SQL;
     const patientTable = isResearcher ? 'patient_deidentified' : 'patient';
-    const tracer = new Tracer(await getPool(ctx.Tokens.Sql, PATIENT360.name));
+    const tracer = new Tracer(await openPool(ctx.Tokens.Sql, PATIENT360.name));
     const params = { id: patientId };
     const q = (id: string, silo: Silo, table: string, text: string) => tracer.run(id, [silo], [table], text, params);
     const where = 'WHERE patient_id = @id';
@@ -933,21 +1028,23 @@ udf.func(
     ]);
 
     const types = [...new Set(positions.map((r) => String(r.mutation_type)))];
+    // Researchers see only the year of every clinical event date (HIPAA Safe Harbor).
+    const years = (key: string, rows: Row[]): Row[] => (isResearcher ? datesToYear(rows, YEAR_ONLY_COLUMNS[key]) : rows);
     return {
-      patient: patient[0],
+      patient: years('patient', patient)[0],
       header: header[0] ?? {},
       diagnoses,
       treatments,
       followUps,
       biomarkers,
-      observations,
-      encounters,
-      conditions,
-      medications,
-      immunizations,
-      allergies,
-      procedures,
-      careplans,
+      observations: years('observations', observations),
+      encounters: years('encounters', encounters),
+      conditions: years('conditions', conditions),
+      medications: years('medications', medications),
+      immunizations: years('immunizations', immunizations),
+      allergies: years('allergies', allergies),
+      procedures: years('procedures', procedures),
+      careplans: years('careplans', careplans),
       report: {
         text: report.map((r) => String(r.report_text ?? '')).join(''),
         pdfPath: reportRow?.pdf_path ? String(reportRow.pdf_path) : null,
@@ -972,14 +1069,22 @@ udf.func(
       reference,
       slide: slides.find((r) => r.role === 'diagnostic') ?? slides[0] ?? null,
       slides,
-      radiologyStudies: studies,
-      radiologySeries: series,
+      radiologyStudies: years('radiologyStudies', studies),
+      radiologySeries: years('radiologySeries', series),
       access: { slide: slideAccess, radiology: radiologyAccess, report: reportAccess },
       provenance: tracer.provenance(headerSql),
       isDeidentified: isResearcher,
       persona: isResearcher ? 'researcher' : 'nurse',
     };
-  },
+}
+
+udf.func(
+  'getPatient',
+  async (
+    patientId: string,
+    ctx: RayfinContext<AppSchema, AudienceType.Sql | AudienceType.Storage>,
+    persona: string = 'nurse',
+  ): Promise<PatientBundle> => getPatientHandler(patientId, ctx, persona),
   [],
 );
 
@@ -1072,11 +1177,13 @@ udf.func(
 
 /* ------------------------------------------------------------------ WardFlow Cardiology UDF */
 
-udf.func(
-  'getWardFlowCohort',
-  async (ctx: RayfinContext<AppSchema, AudienceType.Sql>): Promise<WardFlowCohortSnapshot> => {
+export async function getWardFlowCohortHandler(
+  ctx: RayfinContext<AppSchema, AudienceType.Sql>,
+  openPool: PoolSource = getPool,
+): Promise<WardFlowCohortSnapshot> {
     const t0 = Date.now();
-    const db = await getPool(ctx.Tokens.Sql, GOLD_DATABASE);
+    const isResearcher = isResearcherPersona(ctx.Tokens.Sql);
+    const db = await openPool(ctx.Tokens.Sql, GOLD_DATABASE);
     const [subjRes, obsRes, enrRes] = await Promise.all([
       db.request().query(WARDFLOW_SUBJECTS_SQL),
       db.request().query(WARDFLOW_LATEST_OBS_SQL),
@@ -1109,7 +1216,7 @@ udf.func(
       return {
         id: sid,
         initials: String(r.initials ?? ''),
-        fullName: r.FullName ? String(r.FullName).replace(/\d+/g, '') : null,
+        fullName: !isResearcher && r.FullName ? String(r.FullName).replace(/\d+/g, '') : null,
         gender: r.Gender ? String(r.Gender) : null,
         age: typeof r.Age === 'number' ? r.Age : null,
         ageBand: String(r.age_band ?? '60-69'),
@@ -1144,7 +1251,11 @@ udf.func(
       subjects,
       enrollableCount,
     };
-  },
+}
+
+udf.func(
+  'getWardFlowCohort',
+  async (ctx: RayfinContext<AppSchema, AudienceType.Sql>): Promise<WardFlowCohortSnapshot> => getWardFlowCohortHandler(ctx),
   [],
 );
 
@@ -1373,15 +1484,15 @@ function buildDicomDatasetForUdf(patientId: string, studyRow?: Row, seriesRow?: 
 udf.func(
   'getStandardsMapping',
   async (
-    patientId: string,
+    patientId: string = '',
     ctx: RayfinContext<AppSchema, AudienceType.Sql>,
-    input?: { persona?: 'nurse' | 'researcher' },
+    persona: string = 'nurse',
   ): Promise<StandardsMapping> => {
     if (!PATIENT_ID.test(patientId)) {
       throw new Error('Invalid patient id');
     }
 
-    const isResearcher = isResearcherPersona(ctx?.Tokens?.Sql) || input?.persona === 'researcher';
+    const isResearcher = researcherCall(ctx?.Tokens?.Sql, persona);
     const patientTable = isResearcher ? 'patient_deidentified' : 'patient';
     const pool = await getPool(ctx.Tokens.Sql, PATIENT360.name);
     const tracer = new Tracer(pool);
@@ -1436,13 +1547,14 @@ udf.func(
   'getAlertStopwatch',
   async (
     ctx: RayfinContext<AppSchema, AudienceType.Sql>,
-    input: { patientId?: string; persona?: 'nurse' | 'researcher' },
+    patientId: string = '',
+    persona: string = 'nurse',
   ): Promise<AlertStopwatchSnapshot> => {
-    const pId = input?.patientId;
+    const pId = patientId;
     if (pId && !PATIENT_ID.test(pId)) {
       throw new Error(`Invalid patient ID format: ${pId}`);
     }
-    const isResearcher = isResearcherPersona(ctx?.Tokens?.Sql) || input?.persona === 'researcher';
+    const isResearcher = researcherCall(ctx?.Tokens?.Sql, persona);
     const targetPatientId = pId || 'TCGA-G6-A8L6';
     const isMarcus = targetPatientId === 'TCGA-G6-A8L6';
     const patientName = isResearcher ? targetPatientId : (isMarcus ? 'Marcus Vance' : 'Monitored Patient');
@@ -1666,25 +1778,46 @@ export async function askDataAgentHandler(
       }
 
       // 2.5 Poll run until completion or terminal state
-      const pollStart = Date.now();
-      while (Date.now() - pollStart < 55_000) {
-        const pollRes = await fetch(`${baseUrl}/threads/${thId}/runs/${runId}?${apiParams}`, {
-          headers,
-          signal: AbortSignal.timeout(60_000),
-        });
+      const pollDeadline = Date.now() + 55_000;
+      let runStatus: string | undefined;
+      let lastRun: Record<string, unknown> = {};
+      while (Date.now() < pollDeadline) {
+        let pollRes: Response;
+        try {
+          pollRes = await fetch(`${baseUrl}/threads/${thId}/runs/${runId}?${apiParams}`, {
+            headers,
+            signal: AbortSignal.timeout(Math.max(1, pollDeadline - Date.now())),
+          });
+        } catch (error) {
+          if (Date.now() >= pollDeadline || (error instanceof Error && error.name === 'TimeoutError')) break;
+          throw error;
+        }
         checkAgentResponseStatus(pollRes, 'run poll');
-        const pollData = (await pollRes.json()) as { status?: string };
-        const status = pollData.status;
+        lastRun = (await pollRes.json()) as Record<string, unknown>;
+        runStatus = typeof lastRun.status === 'string' ? lastRun.status : undefined;
         if (
-          status === 'completed' ||
-          status === 'failed' ||
-          status === 'cancelled' ||
-          status === 'expired' ||
-          status === 'requires_action'
+          runStatus === 'completed' ||
+          runStatus === 'failed' ||
+          runStatus === 'cancelled' ||
+          runStatus === 'expired' ||
+          runStatus === 'requires_action'
         ) {
           break;
         }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const retryAfter = pollRes.headers?.get('Retry-After');
+        const seconds = retryAfter ? Number(retryAfter) : NaN;
+        const delay = retryAfter && !Number.isFinite(seconds)
+          ? Math.max(0, Date.parse(retryAfter) - Date.now())
+          : Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : 1000;
+        const remaining = pollDeadline - Date.now();
+        if (delay >= remaining) break;
+        await new Promise((resolve) => setTimeout(resolve, Number.isFinite(delay) ? delay : 1000));
+      }
+      if (runStatus !== 'completed') {
+        if (runStatus === 'failed' || runStatus === 'cancelled' || runStatus === 'expired' || runStatus === 'requires_action') {
+          throw new HttpError(`Data agent run ended with status '${runStatus}': ${JSON.stringify(lastRun)}`, 502, `run_${runStatus}`);
+        }
+        throw new HttpError(`Data agent run did not complete within 55 s (last status '${runStatus ?? 'unknown'}')`, 504, 'run_timeout');
       }
 
       // 2.6 Fetch run steps

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { fetchCohort, fetchPatient, type Cohort, type PatientBundle } from '@/lib/api';
-import { usePersona } from '@/hooks/usePersona';
+import { servedPersonaOf, usePersona } from '@/hooks/usePersona';
 
 /** Signed URLs last 55 minutes; refetch well before. */
 const MAX_AGE_MS = 30 * 60_000;
@@ -21,28 +21,36 @@ const Ctx = createContext<CohortState | undefined>(undefined);
 type Entry = { at: number; promise: Promise<PatientBundle>; value: PatientBundle | null };
 
 export function CohortProvider({ children }: { children: ReactNode }) {
-  const { persona } = usePersona();
+  const { persona, reportServedPersona } = usePersona();
   const [cohort, setCohort] = useState<Cohort | null>(null);
+  const [cohortPersona, setCohortPersona] = useState(persona);
+  const activePersona = useRef(persona);
+  activePersona.current = persona;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const cache = useRef(new Map<string, Entry>());
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      setCohort(await fetchCohort());
+      const next = await fetchCohort(persona);
+      if (activePersona.current !== persona) return;
+      // The banner shows the tier the server applied, never the tier the client asked for.
+      reportServedPersona(servedPersonaOf(next));
+      setCohort(next);
+      setCohortPersona(persona);
       setError(null);
     } catch (err) {
       console.error('Cohort load failed', err);
-      setError(err instanceof Error ? err.message : String(err));
+      if (activePersona.current === persona) setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (activePersona.current === persona) setLoading(false);
     }
-  }, []);
+  }, [persona, reportServedPersona]);
 
   useEffect(() => {
     cache.current.clear();
     void reload();
-  }, [persona, reload]);
+  }, [reload]);
 
   const getPatient = useCallback(
     (id: string) => {
@@ -51,7 +59,9 @@ export function CohortProvider({ children }: { children: ReactNode }) {
       if (hit && Date.now() - hit.at < MAX_AGE_MS) return hit.promise;
       const entry: Entry = { at: Date.now(), promise: fetchPatient(id, persona), value: null };
       entry.promise.then(
-        (v) => (entry.value = v),
+        (v) => {
+          entry.value = v;
+        },
         () => cache.current.delete(key)
       );
       cache.current.set(key, entry);
@@ -70,7 +80,7 @@ export function CohortProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <Ctx.Provider value={{ cohort, loading, error, reload, getPatient, peekPatient }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ cohort: cohortPersona === persona ? cohort : null, loading, error, reload, getPatient, peekPatient }}>{children}</Ctx.Provider>
   );
 }
 
@@ -85,6 +95,7 @@ export function usePatient(id: string | null) {
   const { persona } = usePersona();
   const { getPatient, peekPatient } = useCohort();
   const [bundle, setBundle] = useState<PatientBundle | null>(() => (id ? peekPatient(id) : null));
+  const [bundlePersona, setBundlePersona] = useState(persona);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadMs, setLoadMs] = useState<number | null>(null);
@@ -95,6 +106,7 @@ export function usePatient(id: string | null) {
     const cached = peekPatient(id);
     if (cached) {
       setBundle(cached);
+      setBundlePersona(persona);
       setLoadMs(null);
       setError(null);
       return;
@@ -105,6 +117,7 @@ export function usePatient(id: string | null) {
       .then((b) => {
         if (cancelled) return;
         setBundle(b);
+        setBundlePersona(persona);
         setError(null);
         setLoadMs(Math.round(performance.now() - t0));
       })
@@ -115,5 +128,6 @@ export function usePatient(id: string | null) {
     };
   }, [id, getPatient, peekPatient, persona]);
 
-  return { bundle: bundle && bundle.patient.patient_id === id ? bundle : null, stale: bundle, loading, error, loadMs };
+  const current = bundlePersona === persona ? bundle : null;
+  return { bundle: current && current.patient.patient_id === id ? current : null, stale: current, loading, error, loadMs };
 }

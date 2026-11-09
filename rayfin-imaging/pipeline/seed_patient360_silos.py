@@ -13,6 +13,7 @@ Usage: python pipeline/seed_patient360_silos.py
 from __future__ import annotations
 
 import datetime as dt
+from email.utils import parsedate_to_datetime
 import hashlib
 import json
 import os
@@ -835,32 +836,108 @@ def build_inventory(silo: str, tables: dict[str, list[dict]]) -> list[dict]:
     return rows
 
 
-def fabric_call(method: str, path: str, **kw) -> requests.Response:
-    headers = {
+def _fabric_headers() -> dict[str, str]:
+    return {
         "Authorization": f"Bearer {token('https://api.fabric.microsoft.com/.default')}",
         "x-ms-fabric-skill": "search-consumption-cli",
     }
-    resp = requests.request(method, f"{FABRIC}{path}", headers=headers, timeout=120, **kw)
+
+
+def fabric_call(method: str, path: str, **kw) -> requests.Response:
+    resp = requests.request(method, f"{FABRIC}{path}", headers=_fabric_headers(), timeout=120, **kw)
     if resp.status_code >= 400:
         raise SystemExit(f"{method} {path}: {resp.status_code} {resp.text}")
     return resp
 
 
-def wait_lro(resp: requests.Response) -> None:
+LRO_DEADLINE_S = 600
+
+
+def _retry_after(resp: requests.Response, default: float = 3.0) -> float:
+    try:
+        return max(1.0, float(resp.headers.get("Retry-After", default)))
+    except ValueError:
+        try:
+            return max(0.0, parsedate_to_datetime(resp.headers["Retry-After"]).timestamp() - time.time())
+        except (ValueError, KeyError, TypeError):
+            return default
+
+
+def _json_or_empty(resp: requests.Response) -> dict:
+    return resp.json() if resp.content else {}
+
+
+def wait_lro(resp: requests.Response, deadline_s: float = LRO_DEADLINE_S, require_result: bool = False) -> dict:
+    """Wait for a Fabric long-running operation and return its result body ({} when it has none).
+
+    Raises on a failed or cancelled operation (with the response body), on any HTTP error while polling,
+    and when the operation is still running after `deadline_s` seconds.
+    """
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Fabric operation failed: {resp.status_code} {resp.text}")
+    if resp.status_code != 202:
+        return _json_or_empty(resp)
     op = resp.headers.get("Location")
-    while resp.status_code == 202 and op:
-        time.sleep(3)
-        r = requests.get(
-            op,
-            headers={
-                "Authorization": f"Bearer {token('https://api.fabric.microsoft.com/.default')}",
-                "x-ms-fabric-skill": "search-consumption-cli",
-            },
-            timeout=60,
+    if not op:
+        raise RuntimeError(f"Fabric returned 202 without a Location header: {resp.text}")
+    deadline = time.monotonic() + deadline_s
+    while True:
+        delay = _retry_after(resp)
+        remaining = deadline - time.monotonic()
+        if delay >= remaining:
+            raise TimeoutError(f"Fabric operation {op} did not finish within {deadline_s:.0f} s: {resp.text}")
+        time.sleep(delay)
+        resp = requests.get(op, headers=_fabric_headers(), timeout=min(60, deadline - time.monotonic()))
+        if resp.status_code == 429:
+            continue
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Polling Fabric operation {op} failed: {resp.status_code} {resp.text}")
+        status = _json_or_empty(resp).get("status")
+        if status in ("Failed", "Cancelled"):
+            raise RuntimeError(f"Fabric operation {op} {status}: {resp.text}")
+        if status in ("Succeeded", "Completed"):
+            result_url = resp.headers.get("Location")
+            if not result_url or result_url == op:
+                if not require_result:
+                    return {}
+                result_url = f"{op.rstrip('/')}/result"
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"Fabric operation result deadline reached: {resp.text}")
+            result = requests.get(result_url, headers=_fabric_headers(), timeout=min(60, remaining))
+            if result.status_code >= 400:
+                raise RuntimeError(f"Fetching Fabric operation result {result_url} failed: {result.status_code} {result.text}")
+            return _json_or_empty(result)
+
+
+def create_shortcuts(requests_: list[dict]) -> None:
+    """Bulk-create OneLake shortcuts in patient360; raise unless every shortcut reports Succeeded."""
+    resp = fabric_call(
+        "POST",
+        f"/workspaces/{WORKSPACE_ID}/items/{PATIENT360}/shortcuts/bulkCreate?shortcutConflictPolicy=CreateOrOverwrite",
+        json={"createShortcutRequests": requests_},
+    )
+    results = wait_lro(resp, require_result=True).get("value") or []
+    failed = [r for r in results if r.get("status") != "Succeeded"]
+    if failed or len(results) != len(requests_):
+        raise RuntimeError(
+            f"bulkCreate shortcuts: {len(results)} results for {len(requests_)} requests, "
+            f"{len(failed)} not Succeeded: {json.dumps(failed or results)}"
         )
-        status = r.json().get("status")
-        if status in ("Succeeded", "Failed", "Completed"):
-            return
+
+
+def refresh_sql_metadata(item_id: str, deadline_s: float = LRO_DEADLINE_S) -> None:
+    """Refresh a lakehouse's SQL analytics endpoint, waiting for a just-created endpoint to be provisioned."""
+    deadline = time.monotonic() + deadline_s
+    while True:
+        lh_detail = fabric_call("GET", f"/workspaces/{WORKSPACE_ID}/lakehouses/{item_id}").json()
+        sql_id = (lh_detail.get("properties", {}).get("sqlEndpointProperties") or {}).get("id")
+        if sql_id:
+            break
+        if time.monotonic() + 10 > deadline:
+            raise TimeoutError(f"Lakehouse {item_id} has no SQL analytics endpoint after {deadline_s:.0f} s: {json.dumps(lh_detail)}")
+        time.sleep(10)
+    wait_lro(fabric_call("POST", f"/workspaces/{WORKSPACE_ID}/sqlEndpoints/{sql_id}/refreshMetadata", json={}))
 
 
 def main() -> None:
@@ -892,23 +969,11 @@ def main() -> None:
         }
         for silo, item in LAKEHOUSES.items()
     ]
-    resp = fabric_call(
-        "POST",
-        f"/workspaces/{WORKSPACE_ID}/items/{PATIENT360}/shortcuts/bulkCreate?shortcutConflictPolicy=CreateOrOverwrite",
-        json={"createShortcutRequests": reqs},
-    )
-    wait_lro(resp)
+    create_shortcuts(reqs)
     print(f"Registered {len(reqs)} OneLake shortcuts in patient360")
 
     for silo_id in [*LAKEHOUSES.values(), PATIENT360]:
-        try:
-            lh_detail = fabric_call("GET", f"/workspaces/{WORKSPACE_ID}/lakehouses/{silo_id}").json()
-            sql_id = (lh_detail.get("properties", {}).get("sqlEndpointProperties") or {}).get("id")
-            if sql_id:
-                r = fabric_call("POST", f"/workspaces/{WORKSPACE_ID}/sqlEndpoints/{sql_id}/refreshMetadata", json={})
-                wait_lro(r)
-        except Exception as exc:
-            print(f"Warning: SQL metadata refresh on {silo_id}: {exc}")
+        refresh_sql_metadata(silo_id)
     print("Refreshed SQL analytics endpoint metadata across silos and patient360")
 
 

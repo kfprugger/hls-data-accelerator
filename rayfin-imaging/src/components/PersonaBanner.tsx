@@ -2,6 +2,7 @@ import { usePersona } from '@/hooks/usePersona';
 import { LOCAL_DATA } from '@/lib/localMode';
 
 export function PersonaBanner() {
+  // `details` follows the tier the server reported for the data on screen, not the requested persona.
   const { details, isNurse, togglePersona } = usePersona();
 
   const isGreen = details.badgeColor === 'green';
@@ -16,7 +17,7 @@ export function PersonaBanner() {
       <div className="flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
           <div className="flex items-center gap-1.5 font-mono text-[11.5px] text-muted-foreground">
-            <span className="font-semibold text-foreground/90">{details.email}</span>
+            <span className="font-semibold text-foreground/90">{details.account}</span>
           </div>
 
           <span className="text-muted-foreground/40 hidden sm:inline" aria-hidden="true">

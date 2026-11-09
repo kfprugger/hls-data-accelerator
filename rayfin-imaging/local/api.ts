@@ -29,6 +29,18 @@ type Row = PatientBundle['patient'];
 type Cell = Row[string];
 type Silo = 'clinical' | 'genomics' | 'imaging';
 
+/** Mirrors the function app: researchers see only the year of clinical event dates (HIPAA Safe Harbor). */
+function datesToYear(rows: Row[], columns: string[]): Row[] {
+  return rows.map((row) => {
+    const out: Row = { ...row };
+    for (const c of columns) {
+      const v = out[c];
+      if (typeof v === 'string' && /^\d{4}/.test(v)) out[c] = v.slice(0, 4);
+    }
+    return out;
+  });
+}
+
 const SILOS: Record<Silo, { name: string; role: string }> = {
   clinical: { name: 'clinical_lakehouse', role: 'EHR and cancer registry' },
   genomics: { name: 'genomics_lakehouse', role: 'Sequencing core' },
@@ -579,21 +591,22 @@ export function createLocalApi(work: string): LocalApi {
       const reportRow = report[0] ?? null;
       const id = patientId.toLowerCase();
       const types = [...new Set(positions.map((r) => String(r.mutation_type)))];
+      const years = (rows: Row[], columns: string[]): Row[] => (isResearcher ? datesToYear(rows, columns) : rows);
       return {
-        patient: patient[0],
+        patient: years(patient, ['birth_date', 'diagnosis_date', 'last_contact_date', 'death_date'])[0],
         header: header[0] ?? {},
         diagnoses,
         treatments,
         followUps,
         biomarkers,
-        observations,
-        encounters,
-        conditions,
-        medications,
-        immunizations,
-        allergies,
-        procedures,
-        careplans,
+        observations: years(observations, ['date']),
+        encounters: years(encounters, ['start', 'stop']),
+        conditions: years(conditions, ['onset', 'resolved']),
+        medications: years(medications, ['start', 'stop']),
+        immunizations: years(immunizations, ['date']),
+        allergies: years(allergies, ['onset']),
+        procedures: years(procedures, ['date']),
+        careplans: years(careplans, ['start', 'stop']),
         report: {
           text: report.map((r) => String(r.report_text ?? '')).join(''),
           pdfPath: reportRow?.pdf_path ? String(reportRow.pdf_path) : null,
@@ -618,8 +631,8 @@ export function createLocalApi(work: string): LocalApi {
         reference,
         slide: slides.find((r) => r.role === 'diagnostic') ?? slides[0] ?? null,
         slides,
-        radiologyStudies: studies,
-        radiologySeries: series,
+        radiologyStudies: years(studies, ['date']),
+        radiologySeries: years(series, ['date']),
         access: {
           slide: access(origin, 'imaging', `slides/${id}`),
           radiology: access(origin, 'imaging', `radiology/${id}`),
