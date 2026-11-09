@@ -85,7 +85,7 @@ export function AddonFields({ value, onChange, disabled = false, unavailable = [
                 return onChange({ deploy_rayfin_apps: !!data.checked });
             }} disabled={rayfinDisabled}/>} disabled={rayfinDisabled}/>
         <Typography className={styles.help} component="span" variant="caption">
-          Deploys the Rayfin applications against this deployment's Fabric workspace after the base deployment finishes.
+          Deploys the Rayfin applications (Health Command Center, Clinical Triage, 2D/3D/4D Patient Imaging Viewer, and WardFlow Persona Navigator) against this deployment's Fabric workspace after the base deployment finishes.
         </Typography>
       </div>
       <div className={styles.section}>

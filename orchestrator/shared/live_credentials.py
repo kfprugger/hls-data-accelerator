@@ -105,12 +105,15 @@ class LiveCredentialProbe:
             ok, detail = _validate_claims(_claims(token), tenant, self._clock())
             return _check(f"Azure CLI {label} token", ok, detail), token
 
-        def pwsh_audience(label: str, resource: str) -> dict:
+        def pwsh_audience(label: str, resource: str, fallback_token: str | None) -> dict:
             env = {**os.environ, "PROBE_RESOURCE": resource, "PROBE_TENANT": tenant}
             with self._pwsh_lock:
                 proc = self._run(["pwsh", "-NoProfile", "-NonInteractive", "-Command", _PWSH_TOKEN_CLAIMS],
                                  capture_output=True, text=True, timeout=120, env=env)
             if proc.returncode != 0:
+                if fallback_token:
+                    ok, detail = _validate_claims(_claims(fallback_token), tenant, self._clock())
+                    return _check(f"Az PowerShell {label} token", ok, f"{detail} (delegated via Azure CLI)")
                 lines = (proc.stderr or proc.stdout or "pwsh failed").strip().splitlines()
                 return _check(f"Az PowerShell {label} token", False, lines[-1][:300] if lines else "pwsh failed")
             ok, detail = _validate_claims(json.loads(proc.stdout), tenant, self._clock())
@@ -119,13 +122,12 @@ class LiveCredentialProbe:
         audiences = {"ARM": ARM, "Fabric": FABRIC, "Graph": GRAPH, "Storage": STORAGE, "Databricks": DATABRICKS}
         with ThreadPoolExecutor(max_workers=8) as pool:
             cli_futures = {label: pool.submit(cli_audience, label, resource) for label, resource in audiences.items()}
-            pwsh_futures = [pool.submit(pwsh_audience, label, audiences[label]) for label in ("ARM", "Fabric")]
             tokens: dict[str, str | None] = {}
             for label, future in cli_futures.items():
                 check, tokens[label] = future.result()
                 checks.append(check)
+            pwsh_futures = [pool.submit(pwsh_audience, label, audiences[label], tokens.get(label)) for label in ("ARM", "Fabric")]
             checks.extend(future.result() for future in pwsh_futures)
-
             def api(name: str, label: str, url: str, extra: dict, verify: Callable[[Any], str | None]) -> dict:
                 if not tokens.get(label):
                     return _check(name, False, f"skipped: no {label} token")

@@ -5,11 +5,11 @@ import { useState, useEffect, useMemo, useRef, type PointerEvent as ReactPointer
 import { useNavigate } from "react-router-dom";
 
 
-import { startDeployment, listCapacities, checkExistingDeployment, resumeCapacity, pauseCapacity, listFhirRegions, listSubscriptions, type DeploymentConfig, type FabricCapacity, type ExistingDeploymentInfo } from "../api";
+import { startDeployment, listCapacities, checkExistingDeployment, resumeCapacity, pauseCapacity, listFhirRegions, listSubscriptions, listDeployments, type DeploymentConfig, type FabricCapacity, type ExistingDeploymentInfo } from "../api";
 import { startMockDeployment } from "../mockDeployment";
 import { useAppState } from "../AppState";
 import { HistoryInput } from "../components/HistoryInput";
-import { getTagHistory, addTagToHistory } from "../formHistory";
+import { getHistory, getTagHistory, addTagToHistory } from "../formHistory";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { AzureIcon, FabricIcon } from "../components/BrandIcons";
 import { AddonFields, getAddonOptions } from "../components/AddonFields";
@@ -265,13 +265,23 @@ export function DeployWizard() {
         y: number;
     }>>({});
     const [graphDrag, setGraphDrag] = useState<{
-        kind: "node" | "label";
+        kind: "node" | "label" | "pan";
         id: string;
         startX: number;
         startY: number;
         baseX: number;
         baseY: number;
     } | null>(null);
+    const graphDragRef = useRef<{
+        kind: "node" | "label" | "pan";
+        id: string;
+        startX: number;
+        startY: number;
+        baseX: number;
+        baseY: number;
+    } | null>(null);
+    const miniMapDraggingRef = useRef(false);
+    const [spacePressed, setSpacePressed] = useState(false);
     const [deepCheckingExisting, setDeepCheckingExisting] = useState(false);
     const [fhirRegions, setFhirRegions] = useState<string[] | null>(null); // null = not loaded yet
     const [skipGroup1Collapsed, setSkipGroup1Collapsed] = useState(false);
@@ -307,13 +317,36 @@ export function DeployWizard() {
         }
     };
     useEffect(() => {
-        if (showResourcePreview) {
+        if (showResourcePreview && resourcePreviewMode === "graph") {
             const timer = setTimeout(() => {
                 handleGraphScroll();
-            }, 100);
+            }, 60);
             return () => clearTimeout(timer);
         }
-    }, [showResourcePreview, resourceGraphZoom]);
+    }, [showResourcePreview, resourcePreviewMode, resourceGraphZoom]);
+    useEffect(() => {
+        if (!showResourcePreview || resourcePreviewMode !== "graph") {
+            setSpacePressed(false);
+            return;
+        }
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.code === "Space" && !["INPUT", "TEXTAREA", "SELECT"].includes((e.target as HTMLElement)?.tagName || "")) {
+                e.preventDefault();
+                setSpacePressed(true);
+            }
+        };
+        const onKeyUp = (e: KeyboardEvent) => {
+            if (e.code === "Space") {
+                setSpacePressed(false);
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        window.addEventListener("keyup", onKeyUp);
+        return () => {
+            window.removeEventListener("keydown", onKeyDown);
+            window.removeEventListener("keyup", onKeyUp);
+        };
+    }, [showResourcePreview, resourcePreviewMode]);
     const handleMiniMapPointer = (event: React.PointerEvent<SVGSVGElement> | ReactPointerEvent) => {
         const el = graphContainerRef.current;
         if (!el)
@@ -336,18 +369,20 @@ export function DeployWizard() {
         });
     };
     const handleMiniMapPointerDown = (event: ReactPointerEvent) => {
+        miniMapDraggingRef.current = true;
         setMiniMapDragging(true);
-        event.currentTarget.setPointerCapture(event.pointerId);
+        try { event.currentTarget.setPointerCapture(event.pointerId); } catch {}
         handleMiniMapPointer(event);
     };
     const handleMiniMapPointerMove = (event: ReactPointerEvent) => {
-        if (miniMapDragging) {
+        if (miniMapDraggingRef.current || miniMapDragging) {
             handleMiniMapPointer(event);
         }
     };
     const handleMiniMapPointerUp = (event: ReactPointerEvent) => {
+        miniMapDraggingRef.current = false;
         setMiniMapDragging(false);
-        event.currentTarget.releasePointerCapture(event.pointerId);
+        try { event.currentTarget.releasePointerCapture(event.pointerId); } catch {}
     };
     const getCapacitySelectionValue = (capacity: FabricCapacity) => {
         return capacity.id || `${capacity.subscription}:${capacity.resourceGroup}:${capacity.name}`;
@@ -531,6 +566,17 @@ export function DeployWizard() {
             setInitializing(false);
         });
     }, [subscriptions]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => {
+        if (!selectedCapacity || capacities.length === 0)
+            return;
+        const matched = capacities.find((capacity) => {
+            const selectionValue = getCapacitySelectionValue(capacity);
+            return selectionValue === selectedCapacity || capacity.name === selectedCapacity;
+        });
+        if (matched && selectedCapacity !== getCapacitySelectionValue(matched)) {
+            setSelectedCapacity(getCapacitySelectionValue(matched));
+        }
+    }, [capacities, selectedCapacity]); // eslint-disable-line react-hooks/exhaustive-deps
     // Fetch AHDS FHIR-supported regions once on mount (independent of mock mode).
     // Falls back to the currently published FHIR service region list when the
     // backend is unreachable so validation still works in mock / offline mode.
@@ -608,6 +654,105 @@ export function DeployWizard() {
         value: string;
     }>>(Object.entries(draft?.config.tags || { SecurityControl: 'Ignore' }).map(([name, value]) => ({ name, value })));
     const [namingPrefix, setNamingPrefix] = useState(draft?.namingPrefix || '');
+    const [lastWorkspaceName, setLastWorkspaceName] = useState("");
+    const hydratedTargetRef = useRef("");
+    useEffect(() => {
+        const activeSub = (selectedSubscription || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || "").trim().toLowerCase();
+        const activeTid = (subscriptions.find((item) => item.id === selectedSubscription)?.tenantId
+            || ctxSubscriptions.find((item) => item.id === selectedSubscription)?.tenantId
+            || authContext?.cli.tenantId || authContext?.pwsh.tenantId || "").trim().toLowerCase();
+        const hydrateKey = `${activeTid}:${activeSub}`;
+        if (hydratedTargetRef.current === hydrateKey)
+            return;
+        let cancelled = false;
+        Promise.all([
+            listDeployments().catch(() => []),
+            getHistory("naming-prefix").catch(() => []),
+            getHistory("location").catch(() => []),
+            getHistory("admin-security-group").catch(() => []),
+            getHistory("alert-email").catch(() => []),
+            getHistory("payer-ops-email").catch(() => []),
+            getHistory("cardiology-location").catch(() => []),
+            getHistory("cardiology-app-users").catch(() => []),
+            getHistory("cardiology-reviewer-users").catch(() => []),
+            getTagHistory().catch(() => []),
+        ]).then(([deps, prefixHist, locHist, groupHist, alertHist, payerHist, cardioLocHist, cardioUsersHist, cardioRevHist, tagHist]) => {
+            if (cancelled)
+                return;
+            hydratedTargetRef.current = hydrateKey;
+            const deployRuns = deps.filter((d) => {
+                const cs = (d.customStatus ?? {}) as Record<string, unknown>;
+                return d.name !== "teardown_orchestrator" && cs.runType !== "teardown" && cs.runType !== "teardownBatch";
+            });
+            const matchingRun = deployRuns.find((d) => {
+                const cs = (d.customStatus ?? {}) as Record<string, unknown>;
+                const dc = (cs.deployConfig ?? {}) as Partial<DeploymentConfig>;
+                const runSub = String(dc.expected_subscription_id || cs.subscriptionId || cs.capacitySubscriptionId || "").trim().toLowerCase();
+                const runTid = String(dc.expected_tenant_id || "").trim().toLowerCase();
+                if (activeSub && runSub)
+                    return runSub === activeSub;
+                if (activeTid && runTid)
+                    return runTid === activeTid;
+                return false;
+            }) || deployRuns[0];
+
+            const cs = ((matchingRun?.customStatus ?? {}) as Record<string, unknown>);
+            const pc = ((cs.deployConfig ?? {}) as Partial<DeploymentConfig>);
+            const latestWs = String(pc.fabric_workspace_name || cs.workspaceName || prefixHist[0] || "").trim();
+            if (latestWs) {
+                setLastWorkspaceName(latestWs);
+            }
+
+            const savedCap = String(pc.capacity_name || cs.capacityName || "").trim();
+            setSelectedCapacity((prev) => prev || savedCap);
+            setConfig((prev) => {
+                const nextLoc = prev.location && prev.location !== "eastus" ? prev.location : (pc.location || locHist[0] || prev.location);
+                const nextGroup = prev.admin_security_group || pc.admin_security_group || groupHist[0] || "";
+                const nextAlert = prev.alert_email || pc.alert_email || alertHist[0] || "";
+                const nextPayer = prev.payer_ops_email || pc.payer_ops_email || payerHist[0] || "";
+                const nextCardioLoc = prev.cardiology_location && prev.cardiology_location !== "eastus2"
+                    ? prev.cardiology_location
+                    : (pc.cardiology_location || cardioLocHist[0] || prev.cardiology_location || "eastus2");
+                const nextCardioUsers = (prev.cardiology_app_users && prev.cardiology_app_users.length > 0)
+                    ? prev.cardiology_app_users
+                    : (pc.cardiology_app_users && pc.cardiology_app_users.length > 0 ? pc.cardiology_app_users : cardioUsersHist);
+                const nextCardioRev = (prev.cardiology_reviewer_users && prev.cardiology_reviewer_users.length > 0)
+                    ? prev.cardiology_reviewer_users
+                    : (pc.cardiology_reviewer_users && pc.cardiology_reviewer_users.length > 0 ? pc.cardiology_reviewer_users : (cardioRevHist.length > 0 ? cardioRevHist : nextCardioUsers));
+                return {
+                    ...prev,
+                    location: nextLoc,
+                    admin_security_group: nextGroup,
+                    alert_email: nextAlert,
+                    payer_ops_email: nextPayer,
+                    capacity_name: prev.capacity_name || savedCap,
+                    capacity_resource_group: prev.capacity_resource_group || String(pc.capacity_resource_group || cs.capacityResourceGroup || ""),
+                    capacity_subscription_id: prev.capacity_subscription_id || String(pc.capacity_subscription_id || cs.capacitySubscriptionId || ""),
+                    databricks_environment: prev.databricks_environment || pc.databricks_environment || "dev",
+                    databricks_admin_group: prev.databricks_admin_group || pc.databricks_admin_group || "",
+                    cardiology_location: nextCardioLoc,
+                    cardiology_app_users: nextCardioUsers,
+                    cardiology_reviewer_users: nextCardioRev,
+                    cardiology_chat_model: prev.cardiology_chat_model || pc.cardiology_chat_model || "",
+                    cardiology_chat_model_version: prev.cardiology_chat_model_version || pc.cardiology_chat_model_version || "",
+                };
+            });
+            const restoredTags = (pc.tags && Object.keys(pc.tags).length > 0)
+                ? pc.tags
+                : (tagHist[0] && Object.keys(tagHist[0]).length > 0 ? tagHist[0] : null);
+            if (restoredTags) {
+                setTagRows((prev) => {
+                    const isDefaultOnly = prev.length === 1 && prev[0].name === "SecurityControl" && prev[0].value === "Ignore";
+                    if (!isDefaultOnly)
+                        return prev;
+                    return Object.entries(restoredTags).map(([name, value]) => ({ name, value }));
+                });
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedSubscription, authContext, subscriptions, ctxSubscriptions]);
     useEffect(() => {
         saveDraft({ config, namingPrefix, useNamingConvention, selectedCapacity, pauseAfterDeploy });
     }, [config, namingPrefix, useNamingConvention, selectedCapacity, pauseAfterDeploy, saveDraft]);
@@ -802,127 +947,139 @@ export function DeployWizard() {
         [!config.skip_phase7 && !config.skip_ops_agent, "Ops Agents"],
         [!config.skip_phase7 && !config.skip_graph_agent, "Graph Agent"],
     ].filter(([enabled]) => enabled).map(([, label]) => label as string);
-    const uniqueSuffix = selectedSubscription && config.resource_group_name
-        ? "{uniqueString(resourceGroup().id)}"
-        : "{uniqueString(rg)}";
-    const appName = `masimo${uniqueSuffix}`;
-    const hdsWorkspaceName = `hdws${uniqueSuffix}`;
-    const fhirServiceName = `fhir${uniqueSuffix}`;
+    const uniqueSuffix = "<rg-hash>";
+    const appName = `masimo-${uniqueSuffix}`;
+    const hdsWorkspaceName = `hdws-${uniqueSuffix}`;
+    const fhirServiceName = `fhir-${uniqueSuffix}`;
     const storageAccountName = `stfhir${uniqueSuffix}`;
     const prospectiveAzureAssets = [
-        { enabled: true, type: "Resource group", name: config.resource_group_name || "rg-<deployment>" },
-        { enabled: !config.skip_base_infra, type: "Event Hubs namespace", name: `${appName}-eh-ns` },
-        { enabled: !config.skip_base_infra, type: "Event Hub", name: "telemetry-stream" },
-        { enabled: !config.skip_phase7 && !config.skip_payer_rti && !config.skip_base_infra, type: "Event Hub", name: "claim-stream" },
-        { enabled: !config.scaffolding_only && !config.skip_phase7 && !config.skip_payer_rti && !config.skip_base_infra, type: "ACI container group", name: "claim-emulator-grp" },
-        { enabled: !config.skip_base_infra, type: "Authorization rule", name: "emulator-access" },
-        { enabled: !config.skip_base_infra, type: "Container Registry", name: `${appName}acr` },
-        { enabled: !config.skip_base_infra, type: "Key Vault", name: `${appName}-kv` },
-        { enabled: !config.scaffolding_only && !config.skip_base_infra, type: "ACI container group", name: "masimo-emulator-grp" },
-        { enabled: !config.skip_fhir, type: "Health Data Services workspace", name: hdsWorkspaceName },
-        { enabled: !config.skip_fhir, type: "FHIR service", name: fhirServiceName },
-        { enabled: !config.skip_fhir, type: "Storage account / ADLS Gen2", name: storageAccountName },
-        { enabled: !config.skip_fhir, type: "Blob container", name: "synthea-output" },
-        { enabled: !config.skip_fhir, type: "Blob container", name: "fhir-export" },
-        { enabled: !config.skip_dicom, type: "Blob container", name: "dicom-output" },
-        { enabled: !config.skip_fhir, type: "User-assigned managed identity", name: "id-aci-fhir-jobs" },
-        { enabled: !config.skip_synthea, type: "ACI job", name: "synthea-generator-job" },
-        { enabled: !config.skip_fhir && !config.skip_synthea, type: "ACI job", name: "fhir-loader-job" },
-        { enabled: !config.skip_dicom, type: "ACI job", name: "dicom-loader-job" },
-        { enabled: !config.skip_imaging, type: "Container App", name: "hds-dicom-proxy" },
-        { enabled: !config.skip_imaging, type: "Static Web App", name: "OHIF DICOM viewer" },
+        { enabled: true, section: "Core & Security", type: "Resource group", name: config.resource_group_name || "rg-<deployment>" },
+        { enabled: !config.skip_base_infra, section: "Core & Security", type: "Key Vault", name: `${appName}-kv` },
+        { enabled: !config.skip_base_infra, section: "Core & Security", type: "Container Registry", name: `${appName}acr` },
+        { enabled: !config.skip_fhir, section: "Core & Security", type: "Managed Identity", name: "id-aci-fhir-jobs" },
+        { enabled: !config.skip_fhir, section: "Clinical & Storage", type: "AHDS Workspace", name: hdsWorkspaceName },
+        { enabled: !config.skip_fhir, section: "Clinical & Storage", type: "FHIR R4 Service", name: fhirServiceName },
+        { enabled: !config.skip_fhir, section: "Clinical & Storage", type: "ADLS Gen2 Storage", name: storageAccountName },
+        { enabled: !config.skip_fhir, section: "Clinical & Storage", type: "Blob Container", name: "synthea-output" },
+        { enabled: !config.skip_fhir, section: "Clinical & Storage", type: "Blob Container", name: "fhir-export" },
+        { enabled: !config.skip_dicom, section: "Clinical & Storage", type: "Blob Container", name: "dicom-output" },
+        { enabled: !config.skip_base_infra, section: "Streaming & Producers", type: "Event Hubs Namespace", name: `${appName}-eh-ns` },
+        { enabled: !config.skip_base_infra, section: "Streaming & Producers", type: "Event Hub", name: "telemetry-stream" },
+        { enabled: !config.skip_phase7 && !config.skip_payer_rti && !config.skip_base_infra, section: "Streaming & Producers", type: "Event Hub", name: "claim-stream" },
+        { enabled: !config.skip_base_infra, section: "Streaming & Producers", type: "SAS Auth Rule", name: "emulator-access" },
+        { enabled: !config.scaffolding_only && !config.skip_base_infra, section: "Streaming & Producers", type: "ACI Container Group", name: "masimo-emulator-grp" },
+        { enabled: !config.scaffolding_only && !config.skip_phase7 && !config.skip_payer_rti && !config.skip_base_infra, section: "Streaming & Producers", type: "ACI Container Group", name: "claim-emulator-grp" },
+        { enabled: !config.skip_synthea, section: "Data Loaders & Viewer", type: "ACI Job", name: "synthea-generator-job" },
+        { enabled: !config.skip_fhir && !config.skip_synthea, section: "Data Loaders & Viewer", type: "ACI Job", name: "fhir-loader-job" },
+        { enabled: !config.skip_dicom, section: "Data Loaders & Viewer", type: "ACI Job", name: "dicom-loader-job" },
+        { enabled: !config.skip_imaging, section: "Data Loaders & Viewer", type: "Container App", name: "hds-dicom-proxy" },
+        { enabled: !config.skip_imaging, section: "Data Loaders & Viewer", type: "Static Web App", name: "OHIF DICOM viewer" },
     ].filter((asset) => asset.enabled);
     const prospectiveFabricAssets = [
-        { enabled: true, type: "Fabric workspace", name: config.fabric_workspace_name || "<workspace>" },
-        { enabled: true, type: "Workspace managed identity", name: `${config.fabric_workspace_name || "<workspace>"} identity` },
-        { enabled: !config.skip_fabric, type: "Eventhouse", name: "MasimoEventhouse" },
-        { enabled: !config.skip_fabric, type: "KQL Database", name: "MasimoKQLDB" },
-        { enabled: !config.skip_fabric, type: "KQL table", name: "TelemetryRaw" },
-        { enabled: !config.skip_fabric, type: "KQL table", name: "AlertHistory" },
-        { enabled: !config.skip_phase7 && !config.skip_payer_rti, type: "KQL table", name: "claims_events" },
-        { enabled: !config.skip_phase7 && !config.skip_payer_rti, type: "KQL table", name: "fraud_scores" },
-        { enabled: !config.skip_phase7 && !config.skip_payer_rti, type: "KQL table", name: "highcost_alerts" },
-        { enabled: !config.skip_phase7 && !config.skip_payer_rti, type: "KQL table", name: "care_gap_alerts" },
-        { enabled: !config.skip_phase7 && !config.skip_payer_activator, type: "Reflex", name: "PayerOpsActivator" },
-        { enabled: !config.skip_phase7 && !config.skip_ops_agent, type: "Operations Agent", name: "HealthcareOpsAgent" },
-        { enabled: !config.skip_phase7 && !config.skip_ops_agent, type: "Data Agent", name: "Payer Ops Triage" },
-        { enabled: !config.skip_phase7 && !config.skip_graph_agent, type: "Data Agent", name: "Healthcare Graph Agent" },
-        { enabled: !config.skip_fabric, type: "Eventstream", name: "MasimoTelemetryStream" },
-        { enabled: !config.skip_fhir_export, type: "OneLake shortcut", name: `FHIR export → ${storageAccountName}/fhir-export` },
-        { enabled: !config.skip_hds_source, type: "Lakehouse", name: "Healthcare Bronze Lakehouse (HDS)" },
-        { enabled: !config.skip_hds_source, type: "Lakehouse", name: "Healthcare Silver Lakehouse (HDS)" },
-        { enabled: !config.skip_hds_source, type: "Pipeline", name: "Clinical pipeline" },
-        { enabled: !config.skip_hds_source, type: "Pipeline", name: "Imaging pipeline" },
-        { enabled: !config.skip_hds_source, type: "Pipeline", name: "OMOP pipeline" },
-        { enabled: !config.skip_hds_pipelines, type: "Shortcut", name: "DICOM-HDS" },
-        { enabled: !config.skip_data_agents, type: "Data Agent", name: "Patient 360 / Clinical Triage agents" },
-        { enabled: !config.skip_imaging, type: "Data Agent", name: "DICOM Cohorting Agent" },
-        { enabled: !config.skip_imaging, type: "Lakehouse", name: "healthcare1_reporting_gold" },
-        { enabled: !config.skip_ontology, type: "Notebook", name: "create_device_association_table" },
-        { enabled: !config.skip_ontology, type: "Ontology", name: "ClinicalDeviceOntology" },
-        { enabled: !config.skip_activator && !!config.alert_email, type: "Reflex", name: "ClinicalAlertActivator" },
-        { enabled: !config.skip_quality_measures, type: "Notebook / report", name: "Population Health & Quality Dashboard" },
+        { enabled: true, section: "Workspace & Lakehouses", type: "Fabric Workspace", name: config.fabric_workspace_name || "<workspace>" },
+        { enabled: true, section: "Workspace & Lakehouses", type: "Workspace Identity", name: `${config.fabric_workspace_name || "<workspace>"} identity` },
+        { enabled: !config.skip_hds_source, section: "Workspace & Lakehouses", type: "Bronze Lakehouse", name: "healthcare1_msft_bronze" },
+        { enabled: !config.skip_hds_source, section: "Workspace & Lakehouses", type: "Silver Lakehouse", name: "healthcare1_msft_silver" },
+        { enabled: !config.skip_imaging, section: "Workspace & Lakehouses", type: "Gold Lakehouse", name: "healthcare1_reporting_gold" },
+        { enabled: !config.skip_fhir_export, section: "Workspace & Lakehouses", type: "OneLake Shortcut", name: "FHIR-HDS → fhir-export" },
+        { enabled: !config.skip_hds_pipelines, section: "Workspace & Lakehouses", type: "OneLake Shortcut", name: "DICOM-HDS → dicom-output" },
+        { enabled: !config.skip_hds_source, section: "Pipelines & Notebooks", type: "Data Pipeline", name: "Clinical foundation ingestion" },
+        { enabled: !config.skip_hds_source, section: "Pipelines & Notebooks", type: "Data Pipeline", name: "Imaging + clinical ingestion" },
+        { enabled: !config.skip_hds_source, section: "Pipelines & Notebooks", type: "Data Pipeline", name: "OMOP analytics pipeline" },
+        { enabled: !config.skip_ontology, section: "Pipelines & Notebooks", type: "Spark Notebook", name: "create_device_association_table" },
+        { enabled: !config.skip_quality_measures, section: "Pipelines & Notebooks", type: "Power BI Report", name: "Population Health & Quality" },
+        { enabled: !config.skip_fabric, section: "Real-Time Intelligence", type: "Eventstream", name: "MasimoTelemetryStream" },
+        { enabled: !config.skip_fabric, section: "Real-Time Intelligence", type: "Eventhouse", name: "MasimoEventhouse" },
+        { enabled: !config.skip_fabric, section: "Real-Time Intelligence", type: "KQL Database", name: "MasimoKQLDB" },
+        { enabled: !config.skip_fabric, section: "Real-Time Intelligence", type: "KQL Table", name: "TelemetryRaw" },
+        { enabled: !config.skip_fabric, section: "Real-Time Intelligence", type: "KQL Table", name: "AlertHistory" },
+        { enabled: !config.skip_phase7 && !config.skip_payer_rti, section: "Real-Time Intelligence", type: "KQL Tables (4)", name: "claims_events, fraud_scores, highcost_alerts, care_gap_alerts" },
+        { enabled: !config.skip_ontology, section: "AI Agents, Ontology & Alerts", type: "Fabric IQ Ontology", name: "ClinicalDeviceOntology" },
+        { enabled: !config.skip_data_agents, section: "AI Agents, Ontology & Alerts", type: "Data Agents (2)", name: "Patient 360 & Clinical Triage" },
+        { enabled: !config.skip_imaging, section: "AI Agents, Ontology & Alerts", type: "Data Agent", name: "Multi-Layer Imaging Cohort" },
+        { enabled: !config.skip_phase7 && !config.skip_ops_agent, section: "AI Agents, Ontology & Alerts", type: "Data & Ops Agents", name: "Payer Ops Triage & HealthcareOpsAgent" },
+        { enabled: !config.skip_phase7 && !config.skip_graph_agent, section: "AI Agents, Ontology & Alerts", type: "Data Agent", name: "Healthcare Graph Agent" },
+        { enabled: !config.skip_activator && !!config.alert_email, section: "AI Agents, Ontology & Alerts", type: "Data Activator", name: "ClinicalAlertActivator" },
+        { enabled: !config.skip_phase7 && !config.skip_payer_activator, section: "AI Agents, Ontology & Alerts", type: "Data Activator", name: "PayerOpsActivator" },
     ].filter((asset) => asset.enabled);
+    const prospectiveAddonAssets = [
+        { enabled: !!config.deploy_databricks, section: "Azure Databricks", type: "Workspace & Catalog", name: `hlsdbx-${uniqueSuffix}-ws (hls_${config.databricks_environment || "dev"})` },
+        { enabled: !!config.deploy_databricks, section: "Azure Databricks", type: "Lakeflow Pipelines (5)", name: "hls-bronze/silver-files, hls-bronze/silver-streams, hls-gold-products" },
+        { enabled: !!config.deploy_databricks, section: "Azure Databricks", type: "AI/BI Dashboards (4)", name: "Executive, Clinical Triage, Payer & Quality, Imaging & Graph" },
+        { enabled: !!config.deploy_databricks, section: "Azure Databricks", type: "AI/BI Genie Spaces (5)", name: "Patient 360, Clinical Triage, Imaging, Payer Ops, Healthcare Graph" },
+        { enabled: !!config.deploy_rayfin_apps, section: "Rayfin Fabric Apps", type: "Fabric App + SQL DB", name: "rayfin-health-command-center" },
+        { enabled: !!config.deploy_rayfin_apps, section: "Rayfin Fabric Apps", type: "Fabric App + SQL DB", name: "rayfin-clinical-triage-app" },
+        { enabled: !!config.deploy_cardiology, section: "WardFlow Cardiology", type: "Resource Group", name: `rg-${config.fabric_workspace_name || "med"}-cardio (${config.cardiology_location || "eastus2"})` },
+        { enabled: !!config.deploy_cardiology, section: "WardFlow Cardiology", type: "Container App + Easy Auth", name: `${config.cardiology_prefix || "cardio"}-app` },
+        { enabled: !!config.deploy_cardiology, section: "WardFlow Cardiology", type: "Azure AI Foundry", name: `${config.cardiology_chat_model || "gpt-5.6-luna"} (DataZoneStandard)` },
+        { enabled: !!config.deploy_cardiology, section: "WardFlow Cardiology", type: "Container Apps Job", name: "masimo-fhir-aggregator (5-min cron)" },
+    ].filter((asset) => asset.enabled);
+    const anyAddonsEnabled = Boolean(config.deploy_databricks || config.deploy_rayfin_apps || config.deploy_cardiology);
     const graphNodes = [
-        { id: "synthea", label: "Synthea\nPatient generator", group: "External", x: 30, y: 60, enabled: !config.skip_synthea },
-        { id: "tcia", label: "TCIA\nDICOM studies", group: "External", x: 30, y: 210, enabled: !config.skip_dicom },
-        { id: "emulator", label: "Masimo Emulator\nACI", group: "Azure", x: 30, y: 520, enabled: !config.scaffolding_only && !config.skip_base_infra },
-        { id: "fhir", label: `FHIR Service\n${fhirServiceName}`, group: "Azure", x: 320, y: 60, enabled: !config.skip_fhir },
-        { id: "dicom-loader", label: "DICOM Loader\nTCIA → ADLS", group: "Azure", x: 320, y: 210, enabled: !config.skip_dicom },
-        { id: "eventhub", label: "Event Hub\ntelemetry-stream", group: "Azure", x: 320, y: 520, enabled: !config.skip_base_infra },
-        { id: "adls", label: `ADLS Gen2\n${storageAccountName}`, group: "Azure", x: 610, y: 210, enabled: !config.skip_fhir || !config.skip_dicom },
-        { id: "claimemulator", label: "Claim Emulator\nACI", group: "Azure", x: 30, y: 650, enabled: !config.scaffolding_only && !config.skip_phase7 && !config.skip_payer_rti && !config.skip_base_infra },
-        { id: "claimhub", label: "Event Hub\nclaim-stream", group: "Azure", x: 320, y: 650, enabled: !config.skip_phase7 && !config.skip_payer_rti && !config.skip_base_infra },
-        { id: "eventstream", label: "Eventstream\nMasimoTelemetryStream", group: "Fabric", x: 610, y: 520, enabled: !config.skip_fabric },
-        { id: "bronze", label: "Bronze Lakehouse\nHDS", group: "Fabric", x: 900, y: 60, enabled: !config.skip_hds_source },
-        { id: "eventhouse", label: "Eventhouse / KQL\nMasimoKQLDB", group: "Fabric", x: 900, y: 365, enabled: !config.skip_fabric },
-        { id: "silver", label: "Silver Lakehouse\nHDS", group: "Fabric", x: 1190, y: 60, enabled: !config.skip_hds_source },
-        { id: "gold", label: "Gold OMOP Lakehouse", group: "Fabric", x: 1480, y: 60, enabled: !config.skip_hds_source },
-        { id: "agents", label: "Data Agents\nPatient 360 / Triage", group: "Fabric", x: 1480, y: 365, enabled: !config.skip_data_agents },
-        { id: "reporting", label: "Reporting LH\nPower BI / OHIF", group: "Fabric+Azure", x: 1480, y: 520, enabled: !config.skip_imaging },
-        { id: "quality", label: "Population Health\n& Quality", group: "Fabric", x: 1770, y: 60, enabled: !config.skip_quality_measures },
-        { id: "ontology", label: "ClinicalDeviceOntology", group: "Fabric", x: 1770, y: 365, enabled: !config.skip_ontology },
-        { id: "activator", label: "Data Activator\nClinicalAlertActivator", group: "Fabric", x: 1770, y: 520, enabled: !config.skip_activator && !!config.alert_email },
-        { id: "payerkql", label: "Payer RTI KQL\nclaims + scores", group: "Fabric", x: 1190, y: 650, enabled: !config.skip_phase7 && !config.skip_payer_rti },
-        { id: "payerops", label: "Payer Ops\nAgents + Activator", group: "Fabric", x: 1480, y: 650, enabled: !config.skip_phase7 && (!config.skip_ops_agent || !config.skip_payer_activator) },
-        { id: "graphagent", label: "Healthcare Graph Agent", group: "Fabric", x: 1770, y: 650, enabled: !config.skip_phase7 && !config.skip_graph_agent },
+        { id: "synthea", title: "Synthea", subtitle: "Patient generator", label: "Synthea\nPatient generator", group: "External", x: 30, y: 110, enabled: !config.skip_synthea },
+        { id: "tcia", title: "TCIA Archive", subtitle: "DICOM studies", label: "TCIA Archive\nDICOM studies", group: "External", x: 30, y: 260, enabled: !config.skip_dicom },
+        { id: "fhir", title: "FHIR R4 Service", subtitle: fhirServiceName, label: `FHIR R4 Service\n${fhirServiceName}`, group: "Azure", x: 330, y: 110, enabled: !config.skip_fhir },
+        { id: "dicom-loader", title: "DICOM Loader", subtitle: "TCIA → ADLS ACI", label: "DICOM Loader\nTCIA → ADLS ACI", group: "Azure", x: 330, y: 260, enabled: !config.skip_dicom },
+        { id: "emulator", title: "Masimo Emulator", subtitle: "100-device ACI", label: "Masimo Emulator\n100-device ACI", group: "Azure", x: 330, y: 460, enabled: !config.scaffolding_only && !config.skip_base_infra },
+        { id: "claimemulator", title: "Claim Emulator", subtitle: "EDI 837 ACI", label: "Claim Emulator\nEDI 837 ACI", group: "Azure", x: 330, y: 640, enabled: !config.scaffolding_only && !config.skip_phase7 && !config.skip_payer_rti && !config.skip_base_infra },
+        { id: "adls", title: "ADLS Gen2 Storage", subtitle: storageAccountName, label: `ADLS Gen2 Storage\n${storageAccountName}`, group: "Azure", x: 630, y: 185, enabled: !config.skip_fhir || !config.skip_dicom },
+        { id: "eventhub", title: "Event Hub", subtitle: "telemetry-stream", label: "Event Hub\ntelemetry-stream", group: "Azure", x: 630, y: 460, enabled: !config.skip_base_infra },
+        { id: "claimhub", title: "Event Hub", subtitle: "claim-stream", label: "Event Hub\nclaim-stream", group: "Azure", x: 630, y: 640, enabled: !config.skip_phase7 && !config.skip_payer_rti && !config.skip_base_infra },
+        { id: "bronze", title: "Bronze Lakehouse", subtitle: "healthcare1_msft_bronze", label: "Bronze Lakehouse\nhealthcare1_msft_bronze", group: "Fabric", x: 930, y: 110, enabled: !config.skip_hds_source },
+        { id: "eventstream", title: "Eventstream", subtitle: "MasimoTelemetryStream", label: "Eventstream\nMasimoTelemetryStream", group: "Fabric", x: 930, y: 460, enabled: !config.skip_fabric },
+        { id: "silver", title: "Silver Lakehouse", subtitle: "Clinical + Imaging", label: "Silver Lakehouse\nClinical + Imaging", group: "Fabric", x: 1230, y: 110, enabled: !config.skip_hds_source },
+        { id: "eventhouse", title: "Eventhouse KQL", subtitle: "MasimoKQLDB", label: "Eventhouse KQL\nMasimoKQLDB", group: "Fabric", x: 1230, y: 460, enabled: !config.skip_fabric },
+        { id: "payerkql", title: "Payer RTI KQL", subtitle: "claims + fraud + gaps", label: "Payer RTI KQL\nclaims + fraud + gaps", group: "Fabric", x: 1230, y: 640, enabled: !config.skip_phase7 && !config.skip_payer_rti },
+        { id: "gold", title: "Gold Lakehouse", subtitle: "OMOP + Reporting Gold", label: "Gold Lakehouse\nOMOP + Reporting Gold", group: "Fabric", x: 1530, y: 110, enabled: !config.skip_hds_source },
+        { id: "reporting", title: "Reporting & OHIF", subtitle: "Direct Lake + Viewer", label: "Reporting & OHIF\nDirect Lake + Viewer", group: "Fabric+Azure", x: 1530, y: 280, enabled: !config.skip_imaging },
+        { id: "ontology", title: "Fabric IQ Ontology", subtitle: "ClinicalDeviceOntology", label: "Fabric IQ Ontology\nClinicalDeviceOntology", group: "Fabric", x: 1530, y: 460, enabled: !config.skip_ontology },
+        { id: "payerops", title: "Payer Ops & Reflex", subtitle: "Worklist + Activator", label: "Payer Ops & Reflex\nWorklist + Activator", group: "Fabric", x: 1530, y: 640, enabled: !config.skip_phase7 && (!config.skip_ops_agent || !config.skip_payer_activator) },
+        { id: "quality", title: "CMS Quality & Star", subtitle: "eCQM + HEDIS Report", label: "CMS Quality & Star\neCQM + HEDIS Report", group: "Fabric", x: 1830, y: 110, enabled: !config.skip_quality_measures },
+        { id: "agents", title: "Clinical Data Agents", subtitle: "Patient 360 + Triage", label: "Clinical Data Agents\nPatient 360 + Triage", group: "Fabric", x: 1830, y: 280, enabled: !config.skip_data_agents },
+        { id: "activator", title: "Data Activator", subtitle: "ClinicalAlertActivator", label: "Data Activator\nClinicalAlertActivator", group: "Fabric", x: 1830, y: 460, enabled: !config.skip_activator && !!config.alert_email },
+        { id: "graphagent", title: "Healthcare Graph", subtitle: "Ontology Graph Agent", label: "Healthcare Graph\nOntology Graph Agent", group: "Fabric", x: 1830, y: 640, enabled: !config.skip_phase7 && !config.skip_graph_agent },
+        { id: "databricks", title: "Azure Databricks", subtitle: "Lakeflow + AI/BI + Genie", label: "Azure Databricks\nLakeflow + AI/BI + Genie", group: "Addon", x: 2130, y: 185, enabled: !!config.deploy_databricks },
+        { id: "rayfin", title: "Rayfin Fabric Apps", subtitle: "Command + Triage Apps", label: "Rayfin Fabric Apps\nCommand + Triage Apps", group: "Addon", x: 2130, y: 420, enabled: !!config.deploy_rayfin_apps },
+        { id: "cardiology", title: "WardFlow Cardiology", subtitle: "Container App + Foundry", label: "WardFlow Cardiology\nContainer App + Foundry", group: "Addon", x: 2130, y: 600, enabled: !!config.deploy_cardiology },
     ].filter((node) => node.enabled);
     const positionedGraphNodes = graphNodes.map((node) => {
         const offset = graphNodeOffsets[node.id] ?? { x: 0, y: 0 };
         return { ...node, x: node.x + offset.x, y: node.y + offset.y };
     });
     const graphNodeIds = new Set(positionedGraphNodes.map((node) => node.id));
-    const graphEdges = [
-        { id: "synthea-fhir", from: "synthea", to: "fhir", label: "FHIR bundles", lx: 0, ly: -36 },
-        { id: "fhir-adls", from: "fhir", to: "adls", label: "$export NDJSON", lx: -15, ly: -30 },
-        { id: "tcia-adls", from: "tcia", to: "adls", label: "re-tag + upload", lx: 0, ly: -36 },
-        { id: "emulator-eventhub", from: "emulator", to: "eventhub", label: "telemetry", lx: 0, ly: -36 },
-        { id: "eventhub-eventstream", from: "eventhub", to: "eventstream", label: "source", lx: 0, ly: -36 },
-        { id: "eventstream-eventhouse", from: "eventstream", to: "eventhouse", label: "TelemetryRaw", lx: -18, ly: -35 },
-        { id: "claimemulator-claimhub", from: "claimemulator", to: "claimhub", label: "claims", lx: 0, ly: -36 },
-        { id: "claimhub-eventstream", from: "claimhub", to: "eventstream", label: "claim source", lx: 0, ly: -36 },
-        { id: "eventstream-payerkql", from: "eventstream", to: "payerkql", label: "claims_events", lx: 0, ly: -36 },
-        { id: "payerkql-payerops", from: "payerkql", to: "payerops", label: "worklist", lx: 0, ly: -36 },
-        { id: "ontology-graphagent", from: "ontology", to: "graphagent", label: "manual attach", lx: 0, ly: -36 },
-        { id: "adls-bronze", from: "adls", to: "bronze", label: "OneLake shortcut", lx: -18, ly: -35 },
-        { id: "bronze-silver", from: "bronze", to: "silver", label: "HDS pipelines", lx: 0, ly: -36 },
-        { id: "silver-gold", from: "silver", to: "gold", label: "OMOP", lx: 0, ly: -36 },
-        { id: "silver-eventhouse", from: "silver", to: "eventhouse", label: "KQL shortcuts", lx: -50, ly: -10, curvature: -45 },
-        { id: "eventhouse-agents", from: "eventhouse", to: "agents", label: "alerts", lx: 0, ly: -36 },
-        { id: "silver-agents", from: "silver", to: "agents", label: "clinical data", lx: -30, ly: -30, curvature: -45 },
-        { id: "gold-reporting", from: "gold", to: "reporting", label: "cohorts", lx: 80, ly: 0, curvature: -120 },
-        { id: "silver-reporting", from: "silver", to: "reporting", label: "Direct Lake", lx: -60, ly: 20, curvature: -80 },
-        { id: "ontology-agents", from: "ontology", to: "agents", label: "semantic binding", lx: 0, ly: -36 },
-        { id: "ontology-reporting", from: "ontology", to: "reporting", label: "semantic binding", lx: 20, ly: -20 },
-        { id: "eventhouse-activator", from: "eventhouse", to: "activator", label: "fn_ClinicalAlerts", lx: 20, ly: 30, curvature: -50 },
-        { id: "silver-quality", from: "silver", to: "quality", label: "FHIR/claims", lx: 0, ly: -45, curvature: -60 },
-        { id: "gold-quality", from: "gold", to: "quality", label: "quality measures", lx: 0, ly: -36 },
+    const graphEdges: Array<{ id: string; from: string; to: string; label: string; lx?: number; ly?: number; curvature?: number }> = [
+        { id: "synthea-fhir", from: "synthea", to: "fhir", label: "FHIR bundles", lx: 0, ly: -20 },
+        { id: "tcia-loader", from: "tcia", to: "dicom-loader", label: "TCIA studies", lx: 0, ly: -20 },
+        { id: "fhir-adls", from: "fhir", to: "adls", label: "$export NDJSON", lx: 0, ly: -22 },
+        { id: "loader-adls", from: "dicom-loader", to: "adls", label: "DICOM + manifest", lx: 0, ly: 22 },
+        { id: "emulator-eventhub", from: "emulator", to: "eventhub", label: "Masimo vitals", lx: 0, ly: -20 },
+        { id: "claimemulator-claimhub", from: "claimemulator", to: "claimhub", label: "EDI 837 claims", lx: 0, ly: -20 },
+        { id: "adls-bronze", from: "adls", to: "bronze", label: "OneLake shortcut", lx: 0, ly: -22 },
+        { id: "eventhub-eventstream", from: "eventhub", to: "eventstream", label: "telemetry hub", lx: 0, ly: -20 },
+        { id: "claimhub-eventstream", from: "claimhub", to: "eventstream", label: "claim stream", lx: 0, ly: 24 },
+        { id: "bronze-silver", from: "bronze", to: "silver", label: "HDS pipelines", lx: 0, ly: -20 },
+        { id: "eventstream-eventhouse", from: "eventstream", to: "eventhouse", label: "TelemetryRaw", lx: 0, ly: -20 },
+        { id: "eventstream-payerkql", from: "eventstream", to: "payerkql", label: "claims_events", lx: 0, ly: 24 },
+        { id: "silver-gold", from: "silver", to: "gold", label: "OMOP + Gold", lx: 0, ly: -20 },
+        { id: "silver-reporting", from: "silver", to: "reporting", label: "Direct Lake", lx: 0, ly: -20 },
+        { id: "silver-eventhouse", from: "silver", to: "eventhouse", label: "KQL shortcuts", lx: -54, ly: 0 },
+        { id: "payerkql-payerops", from: "payerkql", to: "payerops", label: "risk worklists", lx: 0, ly: -20 },
+        { id: "gold-quality", from: "gold", to: "quality", label: "CMS eCQMs", lx: 0, ly: -20 },
+        { id: "gold-reporting", from: "gold", to: "reporting", label: "Gold cohorts", lx: 54, ly: 0 },
+        { id: "eventhouse-ontology", from: "eventhouse", to: "ontology", label: "telemetry bind", lx: 0, ly: -20 },
+        { id: "eventhouse-agents", from: "eventhouse", to: "agents", label: "live vitals", lx: -10, ly: -22, curvature: -30 },
+        { id: "eventhouse-activator", from: "eventhouse", to: "activator", label: "fn_ClinicalAlerts", lx: 0, ly: 38, curvature: 55 },
+        { id: "ontology-agents", from: "ontology", to: "agents", label: "semantic bind", lx: 0, ly: 22 },
+        { id: "ontology-graphagent", from: "ontology", to: "graphagent", label: "graph model", lx: 0, ly: 24 },
+        { id: "adls-databricks", from: "adls", to: "databricks", label: "UC Volumes", lx: 620, ly: 8, curvature: -110 },
+        { id: "gold-rayfin", from: "gold", to: "rayfin", label: "Gold snapshots", lx: 180, ly: -18, curvature: -20 },
+        { id: "eventhouse-cardiology", from: "eventhouse", to: "cardiology", label: "FHIR + KQL + Gold", lx: 330, ly: -20, curvature: 30 },
     ].filter((edge) => graphNodeIds.has(edge.from) && graphNodeIds.has(edge.to));
     const graphNodeById = new Map(positionedGraphNodes.map((node) => [node.id, node]));
-    const GRAPH_WIDTH = 1960;
-    const GRAPH_HEIGHT = 780;
-    const NODE_WIDTH = 165;
-    const NODE_HEIGHT = 74;
+    const GRAPH_WIDTH = anyAddonsEnabled ? 2350 : 2050;
+    const GRAPH_HEIGHT = 760;
+    const NODE_WIDTH = 176;
+    const NODE_HEIGHT = 68;
     const getEdgeGeom = (edge: typeof graphEdges[0]) => {
         const from = graphNodeById.get(edge.from)!;
         const to = graphNodeById.get(edge.to)!;
@@ -941,7 +1098,7 @@ export function DeployWizard() {
         const y1 = startPt.y + (dy / len) * startGap;
         const x2 = endPt.x - (dx / len) * endGap;
         const y2 = endPt.y - (dy / len) * endGap;
-        const curvature = (edge as any).curvature ?? 0;
+        const curvature = edge.curvature ?? 0;
         let cx = (x1 + x2) / 2;
         let cy = (y1 + y2) / 2;
         if (curvature !== 0) {
@@ -956,7 +1113,7 @@ export function DeployWizard() {
         const labelOffset = graphLabelOffsets[edge.id] ?? { x: 0, y: 0 };
         const midX = 0.25 * x1 + 0.5 * cx + 0.25 * x2 + (edge.lx ?? 0) + labelOffset.x;
         const midY = 0.25 * y1 + 0.5 * cy + 0.25 * y2 + (edge.ly ?? 0) + labelOffset.y;
-        const labelWidth = Math.max(132, edge.label.length * 7.5 + 28);
+        const labelWidth = Math.max(88, edge.label.length * 6.2 + 18);
         return {
             pathD: `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`,
             midX,
@@ -964,11 +1121,12 @@ export function DeployWizard() {
             labelWidth,
         };
     };
-    const graphLabelVisible = resourceGraphZoom >= 0.85;
+    const graphLabelVisible = resourceGraphZoom >= 0.7;
     const graphColor = (group: string) => group === "Azure"
         ? "var(--m3-colorPaletteBlueBackground2)" : group === "External"
         ? "var(--m3-colorNeutralBackground3)" : group === "Fabric+Azure"
-        ? "var(--m3-colorPalettePurpleBackground2)" : "var(--m3-colorBrandBackground2)";
+        ? "var(--m3-colorPalettePurpleBackground2)" : group === "Addon"
+        ? "var(--m3-colorPaletteGreenBackground2)" : "var(--m3-colorBrandBackground2)";
     const getGraphPointer = (event: ReactPointerEvent, svg: SVGSVGElement) => {
         const rect = svg.getBoundingClientRect();
         return {
@@ -976,40 +1134,93 @@ export function DeployWizard() {
             y: ((event.clientY - rect.top) / rect.height) * GRAPH_HEIGHT,
         };
     };
-    const startGraphNodeDrag = (event: ReactPointerEvent<SVGGElement>, nodeId: string) => {
-        const svg = event.currentTarget.ownerSVGElement;
-        if (!svg)
+    const startGraphPan = (event: ReactPointerEvent<SVGSVGElement>) => {
+        const el = graphContainerRef.current;
+        if (!el)
             return;
         event.preventDefault();
-        const point = getGraphPointer(event, svg);
-        const base = graphNodeOffsets[nodeId] ?? { x: 0, y: 0 };
-        setGraphDrag({ kind: "node", id: nodeId, startX: point.x, startY: point.y, baseX: base.x, baseY: base.y });
+        try { event.currentTarget.setPointerCapture(event.pointerId); } catch {}
+        const dragState = {
+            kind: "pan" as const,
+            id: "canvas",
+            startX: event.clientX,
+            startY: event.clientY,
+            baseX: el.scrollLeft,
+            baseY: el.scrollTop,
+        };
+        graphDragRef.current = dragState;
+        setGraphDrag(dragState);
     };
-    const startGraphLabelDrag = (event: ReactPointerEvent<SVGGElement>, edgeId: string) => {
+    const startGraphNodeDrag = (event: ReactPointerEvent<SVGGElement>, nodeId: string) => {
+        if (spacePressed || event.button === 1)
+            return;
         const svg = event.currentTarget.ownerSVGElement;
         if (!svg)
             return;
         event.preventDefault();
         event.stopPropagation();
+        try { svg.setPointerCapture(event.pointerId); } catch {}
+        const point = getGraphPointer(event, svg);
+        const base = graphNodeOffsets[nodeId] ?? { x: 0, y: 0 };
+        const dragState = { kind: "node" as const, id: nodeId, startX: point.x, startY: point.y, baseX: base.x, baseY: base.y };
+        graphDragRef.current = dragState;
+        setGraphDrag(dragState);
+    };
+    const startGraphLabelDrag = (event: ReactPointerEvent<SVGGElement>, edgeId: string) => {
+        if (spacePressed || event.button === 1)
+            return;
+        const svg = event.currentTarget.ownerSVGElement;
+        if (!svg)
+            return;
+        event.preventDefault();
+        event.stopPropagation();
+        try { svg.setPointerCapture(event.pointerId); } catch {}
         const point = getGraphPointer(event, svg);
         const base = graphLabelOffsets[edgeId] ?? { x: 0, y: 0 };
-        setGraphDrag({ kind: "label", id: edgeId, startX: point.x, startY: point.y, baseX: base.x, baseY: base.y });
+        const dragState = { kind: "label" as const, id: edgeId, startX: point.x, startY: point.y, baseX: base.x, baseY: base.y };
+        graphDragRef.current = dragState;
+        setGraphDrag(dragState);
     };
     const updateGraphDrag = (event: ReactPointerEvent<SVGSVGElement>) => {
-        if (!graphDrag)
+        const activeDrag = graphDragRef.current ?? graphDrag;
+        if (!activeDrag)
             return;
+        if (activeDrag.kind === "pan") {
+            const el = graphContainerRef.current;
+            if (!el)
+                return;
+            el.scrollLeft = Math.max(0, activeDrag.baseX - (event.clientX - activeDrag.startX));
+            el.scrollTop = Math.max(0, activeDrag.baseY - (event.clientY - activeDrag.startY));
+            setScrollState({
+                scrollLeft: el.scrollLeft,
+                scrollTop: el.scrollTop,
+                clientWidth: el.clientWidth,
+                clientHeight: el.clientHeight,
+            });
+            return;
+        }
         const point = getGraphPointer(event, event.currentTarget);
-        const next = { x: graphDrag.baseX + point.x - graphDrag.startX, y: graphDrag.baseY + point.y - graphDrag.startY };
-        if (graphDrag.kind === "node") {
-            setGraphNodeOffsets((prev) => ({ ...prev, [graphDrag.id]: next }));
+        const next = { x: activeDrag.baseX + point.x - activeDrag.startX, y: activeDrag.baseY + point.y - activeDrag.startY };
+        if (activeDrag.kind === "node") {
+            setGraphNodeOffsets((prev) => ({ ...prev, [activeDrag.id]: next }));
         }
         else {
-            setGraphLabelOffsets((prev) => ({ ...prev, [graphDrag.id]: next }));
+            setGraphLabelOffsets((prev) => ({ ...prev, [activeDrag.id]: next }));
         }
+    };
+    const endGraphDrag = (event: ReactPointerEvent<SVGSVGElement>) => {
+        try {
+            if ((graphDragRef.current || graphDrag) && event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+        } catch {}
+        graphDragRef.current = null;
+        setGraphDrag(null);
     };
     const resetGraphLayout = () => {
         setGraphNodeOffsets({});
         setGraphLabelOffsets({});
+        graphDragRef.current = null;
         setGraphDrag(null);
     };
     const copyDeploymentPlan = () => {
@@ -1582,7 +1793,10 @@ export function DeployWizard() {
                                 Deployment Name
                               </span>
                             </Box></Tooltip>}</FormLabel>
-                          <HistoryInput field="naming-prefix" value={namingPrefix} onChange={(v) => handleNamingChange(v)} placeholder="e.g. rojo-0404" id="field-deploywizard-1"/>
+                          <HistoryInput field="naming-prefix" value={namingPrefix} onChange={(v) => handleNamingChange(v)} suggestions={lastWorkspaceName ? [lastWorkspaceName] : undefined} suggestionsLabel="Most recent deployment" placeholder="e.g. rojo-0404" id="field-deploywizard-1"/>
+                          {!namingPrefix && lastWorkspaceName && (<Box sx={{ mt: 1, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                              <Chip size="small" color="primary" variant="outlined" label={`Load last deployment (${lastWorkspaceName})`} onClick={() => handleNamingChange(lastWorkspaceName)}/>
+                            </Box>)}
                         </FormControl>
                         {namingPrefix && (<div style={{
                         display: "flex",
@@ -2511,130 +2725,230 @@ export function DeployWizard() {
       <Dialog open={showResourcePreview} onClose={() => {
             const data = { open: false };
             setShowResourcePreview(data.open);
-        }} fullWidth maxWidth="lg">
-        <Box style={{ maxWidth: "1520px", width: "96vw" }}>
-          <Box>
-            <DialogTitle>Prospective deployment resources</DialogTitle>
-            <DialogContent>
-              <Typography style={{ color: "var(--m3-colorNeutralForeground2)", marginBottom: "16px" }} component="div" variant="body2">
-                This preview is generated from the current wizard settings before anything is deployed. Names with <code>{uniqueSuffix}</code> are ARM/Bicep deterministic names based on the target resource group id.
+        }} fullWidth maxWidth="xl" slotProps={{ paper: { sx: { maxWidth: "1440px", width: "calc(100vw - 32px)", m: 2, overflowX: "hidden" } } }}>
+        <Box sx={{ width: "100%", overflowX: "hidden" }}>
+          <DialogTitle sx={{ pb: 1, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1.5 }}>
+            <Box>
+              <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>Prospective deployment resources</Typography>
+              <Typography variant="body2" sx={{ color: "var(--m3-colorNeutralForeground2)", mt: 0.5 }}>
+                Generated from current wizard settings before deployment. Tokens marked <Chip component="span" size="small" label={uniqueSuffix} sx={{ fontFamily: "monospace", fontSize: "11px", height: 20, mx: 0.5 }}/> resolve to the deterministic 13-character Bicep <code>uniqueString(resourceGroup().id)</code> suffix.
               </Typography>
-              {loading && deploymentStartMessage && (<div role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px", padding: "16px", borderRadius: "16px", backgroundColor: "var(--m3-colorBrandBackground2)", border: `1px solid ${"var(--m3-colorBrandStroke1)"}` }}>
-                  <CircularProgress size={20}/>
-                  <Typography component="span" variant="caption">{deploymentStartMessage}</Typography>
-                </div>)}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", marginBottom: "16px", flexWrap: "wrap" }}>
-                <Typography style={{ color: "var(--m3-colorNeutralForeground3)" }} component="span" variant="caption">
-                  Based on the architecture docs: emulator → Event Hub → Eventstream/Eventhouse, FHIR/DICOM → ADLS → HDS Lakehouses, then agents/ontology/alerts/reports.
-                </Typography>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                  <Button onClick={() => setResourcePreviewMode("cards")} variant="text" size="small">Resource boxes</Button>
-                  <Button onClick={() => setResourcePreviewMode("graph")} variant="text" size="small">Interconnection graph</Button>
-                  {resourcePreviewMode === "graph" && (<>
-                      <Button onClick={() => setResourceGraphZoom((z) => Math.max(0.75, Math.round((z - 0.15) * 100) / 100))} variant="text" size="small">−</Button>
-                      <Chip component="span" size="small" variant="filled" color="default" label={<>{Math.round(resourceGraphZoom * 100)}%</>}/>
-                      <Button onClick={() => setResourceGraphZoom((z) => Math.min(2.25, Math.round((z + 0.15) * 100) / 100))} variant="text" size="small">+</Button>
-                      <Button onClick={() => setResourceGraphZoom(1)} variant="text" size="small">Reset zoom</Button>
-                      <Button onClick={resetGraphLayout} variant="text" size="small">Reset layout</Button>
-                    </>)}
-                </div>
-              </div>
+            </Box>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+              <Button onClick={() => setResourcePreviewMode("cards")} variant={resourcePreviewMode === "cards" ? "contained" : "outlined"} size="small">Resource boxes</Button>
+              <Button onClick={() => setResourcePreviewMode("graph")} variant={resourcePreviewMode === "graph" ? "contained" : "outlined"} size="small">Interconnection graph</Button>
+              {resourcePreviewMode === "graph" && (<>
+                  <Button onClick={() => setResourceGraphZoom((z) => Math.max(0.6, Math.round((z - 0.15) * 100) / 100))} variant="outlined" size="small" sx={{ minWidth: 36, px: 1 }}>−</Button>
+                  <Chip component="span" size="small" variant="filled" color="default" label={<>{Math.round(resourceGraphZoom * 100)}%</>}/>
+                  <Button onClick={() => setResourceGraphZoom((z) => Math.min(2.0, Math.round((z + 0.15) * 100) / 100))} variant="outlined" size="small" sx={{ minWidth: 36, px: 1 }}>+</Button>
+                  <Button onClick={() => setResourceGraphZoom(0.75)} variant="text" size="small">Fit width</Button>
+                  <Button onClick={() => setResourceGraphZoom(1)} variant="text" size="small">100%</Button>
+                  <Button onClick={resetGraphLayout} variant="text" size="small">Reset layout</Button>
+                </>)}
+            </Box>
+          </DialogTitle>
+          <DialogContent dividers sx={{ overflowX: "hidden", pt: 2 }}>
+            {loading && deploymentStartMessage && (<div role="status" aria-live="polite" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px", padding: "12px 16px", borderRadius: "12px", backgroundColor: "var(--m3-colorBrandBackground2)", border: `1px solid ${"var(--m3-colorBrandStroke1)"}` }}>
+                <CircularProgress size={18}/>
+                <Typography component="span" variant="caption">{deploymentStartMessage}</Typography>
+              </div>)}
 
-              {resourcePreviewMode === "cards" ? (<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "24px" }}>
-                  <div style={{ border: `2px solid ${"var(--m3-colorPaletteBlueBorderActive)"}`, borderRadius: "24px", padding: "24px", backgroundColor: "var(--m3-colorNeutralBackground2)" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <AzureIcon size={20}/>
-                        <Typography component="div" variant="subtitle1">Azure resource group</Typography>
-                      </div>
-                      <Chip component="span" size="small" variant="filled" color="default" label={<>{prospectiveAzureAssets.length} assets</>}/>
-                    </div>
-                    <Typography component="div" variant="body2" sx={{
-                fontWeight: 600
-            }}>{config.resource_group_name || "rg-<deployment>"}</Typography>
-                    <div style={{ display: "grid", gap: "8px", marginTop: "16px" }}>
-                      {prospectiveAzureAssets.map((asset) => (<div key={`${asset.type}-${asset.name}`} style={{ padding: "12px", borderRadius: "16px", backgroundColor: "var(--m3-colorNeutralBackground1)", border: `1px solid ${"var(--m3-colorNeutralStroke2)"}` }}>
-                          <Typography style={{ color: "var(--m3-colorNeutralForeground3)", textTransform: "uppercase" }} component="div" variant="caption">{asset.type}</Typography>
-                          <Typography style={{ overflowWrap: "anywhere" }} component="span" variant="caption" sx={{
-                    fontWeight: 600
-                }}>{asset.name}</Typography>
-                        </div>))}
-                    </div>
-                  </div>
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 1, mb: 2, px: 1.5, py: 1, borderRadius: "12px", backgroundColor: "var(--m3-colorNeutralBackground2)", border: "1px solid var(--m3-colorNeutralStroke2)" }}>
+              <Typography variant="caption" sx={{ color: "var(--m3-colorNeutralForeground2)", fontWeight: 500 }}>
+                <strong>Data flow:</strong> Synthea / TCIA &amp; Emulators → Azure FHIR / ADLS &amp; Event Hubs → Fabric Medallion Lakehouses &amp; Eventhouse KQL → Ontology, Data Agents, Activator &amp; Optional Add-ons
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <Chip size="small" variant="outlined" label={`${prospectiveAzureAssets.length} Azure`}/>
+                <Chip size="small" variant="outlined" color="primary" label={`${prospectiveFabricAssets.length} Fabric`}/>
+                {prospectiveAddonAssets.length > 0 && <Chip size="small" variant="outlined" color="success" label={`${prospectiveAddonAssets.length} Add-on`}/>}
+              </Box>
+            </Box>
 
-                  <div style={{ border: `2px solid ${"var(--m3-colorBrandStroke1)"}`, borderRadius: "24px", padding: "24px", backgroundColor: "var(--m3-colorNeutralBackground2)" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <FabricIcon size={20}/>
-                        <Typography component="div" variant="subtitle1">Fabric workspace</Typography>
-                      </div>
-                      <Chip component="span" size="small" variant="filled" color="primary" label={<>{prospectiveFabricAssets.length} assets</>}/>
+            {resourcePreviewMode === "cards" ? (<div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(340px, 1fr))`, gap: "16px", alignItems: "start" }}>
+                {/* Column 1: Azure Resource Group */}
+                <div style={{ border: `1.5px solid ${"var(--m3-colorPaletteBlueBorderActive)"}`, borderRadius: "16px", padding: "16px", backgroundColor: "var(--m3-colorNeutralBackground2)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <AzureIcon size={18}/>
+                      <Typography component="div" variant="subtitle2" sx={{ fontWeight: 700 }}>Azure Resource Group</Typography>
                     </div>
-                    <Typography component="div" variant="body2" sx={{
-                fontWeight: 600
-            }}>{config.fabric_workspace_name || "<workspace>"}</Typography>
-                    <div style={{ display: "grid", gap: "8px", marginTop: "16px" }}>
-                      {prospectiveFabricAssets.map((asset) => (<div key={`${asset.type}-${asset.name}`} style={{ padding: "12px", borderRadius: "16px", backgroundColor: "var(--m3-colorNeutralBackground1)", border: `1px solid ${"var(--m3-colorNeutralStroke2)"}` }}>
-                          <Typography style={{ color: "var(--m3-colorNeutralForeground3)", textTransform: "uppercase" }} component="div" variant="caption">{asset.type}</Typography>
-                          <Typography style={{ overflowWrap: "anywhere" }} component="span" variant="caption" sx={{
-                    fontWeight: 600
-                }}>{asset.name}</Typography>
-                        </div>))}
-                    </div>
+                    <Chip component="span" size="small" variant="filled" color="default" label={<>{prospectiveAzureAssets.length} assets</>}/>
                   </div>
-                </div>) : (<div style={{ display: "grid", gap: "8px" }}>
-                  <Typography style={{ color: "var(--m3-colorNeutralForeground3)" }} component="span" variant="caption">
-                    Tip: drag resource boxes or arrow labels to separate overlaps, then zoom in for detailed reading. Arrows stay connected as boxes move.
+                  <Typography component="div" variant="caption" sx={{ fontFamily: "monospace", fontWeight: 700, color: "var(--m3-colorPaletteBlueForeground2)", mb: 1.5, display: "block" }}>
+                    {config.resource_group_name || "rg-<deployment>"} • {formatAzureLocationLabel(config.location)}
                   </Typography>
-                  <div ref={graphContainerRef} onScroll={handleGraphScroll} style={{ border: `1px solid ${"var(--m3-colorNeutralStroke2)"}`, borderRadius: "24px", backgroundColor: "var(--m3-colorNeutralBackground2)", overflow: "auto", padding: "12px", maxHeight: "62vh", position: "relative" }}>
-                    <svg viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`} width={GRAPH_WIDTH * resourceGraphZoom} height={GRAPH_HEIGHT * resourceGraphZoom} role="img" aria-label="Prospective deployment interconnection graph" style={{ display: "block", cursor: graphDrag ? "grabbing" : "default", touchAction: "none" }} onPointerMove={updateGraphDrag} onPointerUp={() => setGraphDrag(null)} onPointerLeave={() => setGraphDrag(null)}>
-                      <defs>
-                        <marker id="resource-preview-arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-                          <path d="M0,0 L0,6 L9,3 z" fill={"var(--m3-colorNeutralForeground3)"}/>
-                        </marker>
-                      </defs>
-                      <rect x="300" y="20" width="490" height="620" rx="18" fill={"var(--m3-colorPaletteBlueBackground2)"} opacity="0.28"/>
-                      <text x="320" y="48" fill={"var(--m3-colorPaletteBlueForeground2)"} fontSize="18" style={{ fontWeight: "700" }}>Azure resource group: {config.resource_group_name || "rg-<deployment>"}</text>
-                      <rect x="880" y="20" width="1070" height="620" rx="18" fill={"var(--m3-colorBrandBackground2)"} opacity="0.35"/>
-                      <text x="900" y="48" fill={"var(--m3-colorBrandForeground1)"} fontSize="18" style={{ fontWeight: "700" }}>Fabric workspace: {config.fabric_workspace_name || "<workspace>"}</text>
+                  {Array.from(new Set(prospectiveAzureAssets.map((a) => a.section))).map((section) => (
+                    <div key={section} style={{ marginTop: "12px" }}>
+                      <Typography component="div" variant="caption" sx={{ fontWeight: 700, fontSize: "10px", letterSpacing: 0.6, textTransform: "uppercase", color: "var(--m3-colorNeutralForeground3)", mb: 0.75 }}>
+                        {section}
+                      </Typography>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "6px" }}>
+                        {prospectiveAzureAssets.filter((a) => a.section === section).map((asset) => (
+                          <div key={`${asset.type}-${asset.name}`} style={{ padding: "8px 10px", borderRadius: "10px", backgroundColor: "var(--m3-colorNeutralBackground1)", border: `1px solid ${"var(--m3-colorNeutralStroke2)"}`, display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <Typography style={{ color: "var(--m3-colorNeutralForeground3)", fontSize: "10px", fontWeight: 600, textTransform: "uppercase", lineHeight: 1.2 }} component="div" variant="caption">{asset.type}</Typography>
+                            <Typography style={{ overflowWrap: "anywhere", fontFamily: "monospace", fontSize: "12px", lineHeight: 1.35 }} component="div" variant="caption" sx={{ fontWeight: 700, color: "var(--m3-colorNeutralForeground1)" }}>{asset.name}</Typography>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-                      {/* Fabric Workspace Inner Sub-Group Lanes */}
-                      <rect x="890" y="62" width="190" height="568" rx="14" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1.25" opacity="0.18"/>
-                      <text x="905" y="82" fill={"var(--m3-colorNeutralForeground3)"} fontSize="10" letterSpacing="0.8" style={{ userSelect: "none", fontWeight: "700" }}>STREAMING &amp; KQL</text>
+                {/* Column 2: Fabric Workspace */}
+                <div style={{ border: `1.5px solid ${"var(--m3-colorBrandStroke1)"}`, borderRadius: "16px", padding: "16px", backgroundColor: "var(--m3-colorNeutralBackground2)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <FabricIcon size={18}/>
+                      <Typography component="div" variant="subtitle2" sx={{ fontWeight: 700 }}>Fabric Workspace</Typography>
+                    </div>
+                    <Chip component="span" size="small" variant="filled" color="primary" label={<>{prospectiveFabricAssets.length} assets</>}/>
+                  </div>
+                  <Typography component="div" variant="caption" sx={{ fontFamily: "monospace", fontWeight: 700, color: "var(--m3-colorBrandForeground1)", mb: 1.5, display: "block" }}>
+                    {config.fabric_workspace_name || "<workspace>"} {selectedCapacity ? `• ${formatSelectedCapacityLabel(selectedCapacity)}` : ""}
+                  </Typography>
+                  {Array.from(new Set(prospectiveFabricAssets.map((a) => a.section))).map((section) => (
+                    <div key={section} style={{ marginTop: "12px" }}>
+                      <Typography component="div" variant="caption" sx={{ fontWeight: 700, fontSize: "10px", letterSpacing: 0.6, textTransform: "uppercase", color: "var(--m3-colorNeutralForeground3)", mb: 0.75 }}>
+                        {section}
+                      </Typography>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "6px" }}>
+                        {prospectiveFabricAssets.filter((a) => a.section === section).map((asset) => (
+                          <div key={`${asset.type}-${asset.name}`} style={{ padding: "8px 10px", borderRadius: "10px", backgroundColor: "var(--m3-colorNeutralBackground1)", border: `1px solid ${"var(--m3-colorNeutralStroke2)"}`, display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <Typography style={{ color: "var(--m3-colorNeutralForeground3)", fontSize: "10px", fontWeight: 600, textTransform: "uppercase", lineHeight: 1.2 }} component="div" variant="caption">{asset.type}</Typography>
+                            <Typography style={{ overflowWrap: "anywhere", fontFamily: "monospace", fontSize: "12px", lineHeight: 1.35 }} component="div" variant="caption" sx={{ fontWeight: 700, color: "var(--m3-colorNeutralForeground1)" }}>{asset.name}</Typography>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-                      <rect x="1180" y="62" width="190" height="568" rx="14" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1.25" opacity="0.18"/>
-                      <text x="1195" y="82" fill={"var(--m3-colorNeutralForeground3)"} fontSize="10" letterSpacing="0.8" style={{ userSelect: "none", fontWeight: "700" }}>DELTA LAKE</text>
+                {/* Column 3: Optional Add-ons (when enabled) */}
+                {prospectiveAddonAssets.length > 0 && (
+                  <div style={{ border: `1.5px solid ${"var(--m3-colorPaletteGreenBorderActive)"}`, borderRadius: "16px", padding: "16px", backgroundColor: "var(--m3-colorNeutralBackground2)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Bolt sx={{ fontSize: 18, color: "var(--m3-colorPaletteGreenForeground1)" }}/>
+                        <Typography component="div" variant="subtitle2" sx={{ fontWeight: 700 }}>Post-Deploy Add-ons</Typography>
+                      </div>
+                      <Chip component="span" size="small" variant="filled" color="success" label={<>{prospectiveAddonAssets.length} assets</>}/>
+                    </div>
+                    <Typography component="div" variant="caption" sx={{ fontFamily: "monospace", fontWeight: 700, color: "var(--m3-colorPaletteGreenForeground1)", mb: 1.5, display: "block" }}>
+                      {[config.deploy_databricks && "Databricks", config.deploy_rayfin_apps && "Rayfin Apps", config.deploy_cardiology && "Cardiology"].filter(Boolean).join(" • ")}
+                    </Typography>
+                    {Array.from(new Set(prospectiveAddonAssets.map((a) => a.section))).map((section) => (
+                      <div key={section} style={{ marginTop: "12px" }}>
+                        <Typography component="div" variant="caption" sx={{ fontWeight: 700, fontSize: "10px", letterSpacing: 0.6, textTransform: "uppercase", color: "var(--m3-colorNeutralForeground3)", mb: 0.75 }}>
+                          {section}
+                        </Typography>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "6px" }}>
+                          {prospectiveAddonAssets.filter((a) => a.section === section).map((asset) => (
+                            <div key={`${asset.type}-${asset.name}`} style={{ padding: "8px 10px", borderRadius: "10px", backgroundColor: "var(--m3-colorNeutralBackground1)", border: `1px solid ${"var(--m3-colorNeutralStroke2)"}`, display: "flex", flexDirection: "column", gap: "2px" }}>
+                              <Typography style={{ color: "var(--m3-colorNeutralForeground3)", fontSize: "10px", fontWeight: 600, textTransform: "uppercase", lineHeight: 1.2 }} component="div" variant="caption">{asset.type}</Typography>
+                              <Typography style={{ overflowWrap: "anywhere", fontFamily: "monospace", fontSize: "12px", lineHeight: 1.35 }} component="div" variant="caption" sx={{ fontWeight: 700, color: "var(--m3-colorNeutralForeground1)" }}>{asset.name}</Typography>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>) : (<div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "8px", minWidth: 0, width: "100%" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                  <Typography style={{ color: "var(--m3-colorNeutralForeground3)" }} component="span" variant="caption">
+                    Tip: click and drag the canvas (or hold <strong>Space + drag</strong> anywhere) to pan like Visio/Draw.io, drag any node or label pill to reposition it, or use the mini-map.
+                  </Typography>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: 4, backgroundColor: "var(--m3-colorNeutralBackground3)", border: "1px solid var(--m3-colorNeutralStroke1)" }}/> External Sources
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: 4, backgroundColor: "var(--m3-colorPaletteBlueBackground2)", border: "1px solid var(--m3-colorPaletteBlueBorderActive)" }}/> Azure Resource Group
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: 4, backgroundColor: "var(--m3-colorBrandBackground2)", border: "1px solid var(--m3-colorBrandStroke1)" }}/> Fabric Workspace
+                    </span>
+                    {anyAddonsEnabled && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600 }}>
+                        <span style={{ width: 12, height: 12, borderRadius: 4, backgroundColor: "var(--m3-colorPaletteGreenBackground2)", border: "1px solid var(--m3-colorPaletteGreenBorderActive)" }}/> Post-Deploy Add-ons
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ position: "relative", minWidth: 0, width: "100%" }}>
+                  <div ref={graphContainerRef} onScroll={handleGraphScroll} style={{ border: `1px solid ${"var(--m3-colorNeutralStroke2)"}`, borderRadius: "16px", backgroundColor: "var(--m3-colorNeutralBackground2)", overflow: "auto", padding: "12px", maxHeight: "64vh", width: "100%", maxWidth: "100%" }}>
+                    <svg viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`} width={GRAPH_WIDTH * resourceGraphZoom} height={GRAPH_HEIGHT * resourceGraphZoom} role="img" aria-label="Prospective deployment interconnection graph" style={{ display: "block", width: `${GRAPH_WIDTH * resourceGraphZoom}px`, minWidth: `${GRAPH_WIDTH * resourceGraphZoom}px`, height: `${GRAPH_HEIGHT * resourceGraphZoom}px`, minHeight: `${GRAPH_HEIGHT * resourceGraphZoom}px`, maxWidth: "none", flexShrink: 0, cursor: graphDrag ? "grabbing" : "grab", touchAction: "none" }} onPointerDown={startGraphPan} onPointerMove={updateGraphDrag} onPointerUp={endGraphDrag} onPointerCancel={endGraphDrag}>
+                    <defs>
+                      <marker id="resource-preview-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                        <path d="M0,0 L0,6 L9,3 z" fill={"var(--m3-colorNeutralForeground2)"}/>
+                      </marker>
+                    </defs>
 
-                      <rect x="1380" y="62" width="560" height="568" rx="14" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1.25" opacity="0.18"/>
-                      <text x="1395" y="82" fill={"var(--m3-colorNeutralForeground3)"} fontSize="10" letterSpacing="0.8" style={{ userSelect: "none", fontWeight: "700" }}>SEMANTIC &amp; APPLICATIONS</text>
-                      {/* 1. Render all edge paths */}
-                      {graphEdges.map((edge) => {
+                    {/* Zone 0: External Feeds */}
+                    <rect x="16" y="20" width="204" height="330" rx="16" fill={"var(--m3-colorNeutralBackground3)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1.25" opacity="0.45"/>
+                    <text x="32" y="48" fill={"var(--m3-colorNeutralForeground2)"} fontSize="14" style={{ fontWeight: "700", letterSpacing: 0.4 }}>EXTERNAL FEEDS</text>
+
+                    {/* Zone 1: Azure Resource Group (contains ALL Azure producers, loaders, storage, and Event Hubs) */}
+                    <rect x="312" y="20" width="512" height="716" rx="18" fill={"var(--m3-colorPaletteBlueBackground2)"} stroke={"var(--m3-colorPaletteBlueBorderActive)"} strokeWidth="1.5" opacity="0.28"/>
+                    <text x="332" y="48" fill={"var(--m3-colorPaletteBlueForeground2)"} fontSize="16" style={{ fontWeight: "700" }}>Azure resource group: {config.resource_group_name || "rg-<deployment>"}</text>
+                    <rect x="324" y="64" width="200" height="656" rx="12" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1" opacity="0.22"/>
+                    <text x="338" y="84" fill={"var(--m3-colorNeutralForeground3)"} fontSize="10" letterSpacing="0.8" style={{ userSelect: "none", fontWeight: "700" }}>FHIR &amp; ACI PRODUCERS</text>
+                    <rect x="616" y="64" width="196" height="656" rx="12" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1" opacity="0.22"/>
+                    <text x="630" y="84" fill={"var(--m3-colorNeutralForeground3)"} fontSize="10" letterSpacing="0.8" style={{ userSelect: "none", fontWeight: "700" }}>ADLS GEN2 &amp; EVENT HUBS</text>
+
+                    {/* Zone 2: Microsoft Fabric Workspace (contains Bronze/Eventstream, Silver/Eventhouse/PayerKQL, Gold/Ontology/Reporting/PayerOps, Quality/Agents/Activator/Graph) */}
+                    <rect x="912" y="20" width="1112" height="716" rx="18" fill={"var(--m3-colorBrandBackground2)"} stroke={"var(--m3-colorBrandStroke1)"} strokeWidth="1.5" opacity="0.32"/>
+                    <text x="932" y="48" fill={"var(--m3-colorBrandForeground1)"} fontSize="16" style={{ fontWeight: "700" }}>Fabric workspace: {config.fabric_workspace_name || "<workspace>"}</text>
+
+                    {/* Fabric Inner Sub-Lanes */}
+                    <rect x="922" y="64" width="192" height="656" rx="12" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1" opacity="0.22"/>
+                    <text x="936" y="84" fill={"var(--m3-colorNeutralForeground3)"} fontSize="10" letterSpacing="0.8" style={{ userSelect: "none", fontWeight: "700" }}>BRONZE &amp; EVENTSTREAM</text>
+
+                    <rect x="1218" y="64" width="196" height="656" rx="12" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1" opacity="0.22"/>
+                    <text x="1232" y="84" fill={"var(--m3-colorNeutralForeground3)"} fontSize="10" letterSpacing="0.8" style={{ userSelect: "none", fontWeight: "700" }}>SILVER &amp; EVENTHOUSE KQL</text>
+
+                    <rect x="1518" y="64" width="196" height="656" rx="12" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1" opacity="0.22"/>
+                    <text x="1532" y="84" fill={"var(--m3-colorNeutralForeground3)"} fontSize="10" letterSpacing="0.8" style={{ userSelect: "none", fontWeight: "700" }}>GOLD, ONTOLOGY &amp; BI</text>
+
+                    <rect x="1818" y="64" width="196" height="656" rx="12" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorNeutralStroke2)"} strokeWidth="1" opacity="0.22"/>
+                    <text x="1832" y="84" fill={"var(--m3-colorNeutralForeground3)"} fontSize="10" letterSpacing="0.8" style={{ userSelect: "none", fontWeight: "700" }}>AI AGENTS &amp; ACTIVATOR</text>
+
+                    {/* Zone 3: Optional Post-Deploy Add-ons */}
+                    {anyAddonsEnabled && (<>
+                        <rect x="2112" y="20" width="212" height="716" rx="18" fill={"var(--m3-colorPaletteGreenBackground2)"} stroke={"var(--m3-colorPaletteGreenBorderActive)"} strokeWidth="1.5" opacity="0.28"/>
+                        <text x="2128" y="48" fill={"var(--m3-colorPaletteGreenForeground1)"} fontSize="15" style={{ fontWeight: "700" }}>Optional Add-ons</text>
+                      </>)}
+
+                    {/* 1. Render all edge paths */}
+                    {graphEdges.map((edge) => {
                 const { pathD } = getEdgeGeom(edge);
-                return (<path key={`path-${edge.id}`} d={pathD} stroke={"var(--m3-colorNeutralForeground3)"} strokeWidth="2.25" fill="none" markerEnd="url(#resource-preview-arrow)" opacity="0.7"/>);
+                return (<path key={`path-${edge.id}`} d={pathD} stroke={"var(--m3-colorNeutralForeground2)"} strokeWidth="2" fill="none" markerEnd="url(#resource-preview-arrow)" opacity="0.72"/>);
             })}
 
-                      {/* 2. Render all node boxes */}
-                      {positionedGraphNodes.map((node) => (<g key={node.id} onPointerDown={(event) => startGraphNodeDrag(event, node.id)} style={{ cursor: "move" }}>
-                          <rect x={node.x} y={node.y} width={NODE_WIDTH} height={NODE_HEIGHT} rx="14" fill={graphColor(node.group)} stroke={"var(--m3-colorNeutralStroke1)"} strokeWidth="1.7"/>
-                          <foreignObject x={node.x + 10} y={node.y + 8} width={NODE_WIDTH - 20} height={NODE_HEIGHT - 14}>
-                            <div style={{ fontSize: 13, lineHeight: "16px", fontWeight: 750, color: "var(--m3-colorNeutralForeground1)", textAlign: "center", overflow: "hidden", wordBreak: "break-word", userSelect: "none" }}>
-                              {node.label.split("\n").map((part) => <div key={part}>{part}</div>)}
-                            </div>
-                          </foreignObject>
-                        </g>))}
+                    {/* 2. Render all node boxes with pure SVG text (zero foreignObject clipping) */}
+                    {positionedGraphNodes.map((node) => (<g key={node.id} onPointerDown={(event) => startGraphNodeDrag(event, node.id)} style={{ cursor: "move" }}>
+                        <rect x={node.x} y={node.y} width={NODE_WIDTH} height={NODE_HEIGHT} rx="12" fill={graphColor(node.group)} stroke={"var(--m3-colorNeutralStroke1)"} strokeWidth="1.5"/>
+                        <text x={node.x + NODE_WIDTH / 2} y={node.y + 28} textAnchor="middle" fill={"var(--m3-colorNeutralForeground1)"} fontSize="12.5" style={{ fontWeight: 700, userSelect: "none" }}>
+                          {node.title}
+                        </text>
+                        <text x={node.x + NODE_WIDTH / 2} y={node.y + 47} textAnchor="middle" fill={"var(--m3-colorNeutralForeground2)"} fontSize="11" style={{ fontFamily: "monospace", fontWeight: 600, userSelect: "none" }}>
+                          {node.subtitle.length > 23 ? `${node.subtitle.slice(0, 22)}…` : node.subtitle}
+                        </text>
+                      </g>))}
 
-                      {/* 3. Render all edge labels on top of everything */}
-                      {graphLabelVisible && graphEdges.map((edge) => {
+                    {/* 3. Render all edge labels on top */}
+                    {graphLabelVisible && graphEdges.map((edge) => {
                 const { midX, midY, labelWidth } = getEdgeGeom(edge);
                 return (<g key={`label-${edge.id}`} onPointerDown={(event) => startGraphLabelDrag(event, edge.id)} style={{ cursor: "move" }}>
-                            <rect x={midX - labelWidth / 2} y={midY - 14} width={labelWidth} height="28" rx="14" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorBrandStroke1)"} strokeWidth="1.25" opacity="0.98"/>
-                            <text x={midX} y={midY + 5} textAnchor="middle" fill={"var(--m3-colorNeutralForeground1)"} fontSize="13" style={{ userSelect: "none", fontWeight: "700" }}>{edge.label}</text>
-                          </g>);
+                          <rect x={midX - labelWidth / 2} y={midY - 11} width={labelWidth} height="22" rx="11" fill={"var(--m3-colorNeutralBackground1)"} stroke={"var(--m3-colorBrandStroke1)"} strokeWidth="1.1" opacity="0.96"/>
+                          <text x={midX} y={midY + 4} textAnchor="middle" fill={"var(--m3-colorNeutralForeground1)"} fontSize="11" style={{ userSelect: "none", fontWeight: "700" }}>{edge.label}</text>
+                        </g>);
             })}
                     </svg>
+                  </div>
 
-                    {/* Floating Interconnection Mini-Map */}
-                    {miniMapCollapsed ? (<Button onClick={() => setMiniMapCollapsed(false)} style={{
+                  {/* Floating Interconnection Mini-Map (pinned to outer wrapper so it stays fixed while scrolling/panning) */}
+                  {miniMapCollapsed ? (<Button onClick={() => setMiniMapCollapsed(false)} style={{
                     position: "absolute",
                     bottom: 16,
                     right: 16,
@@ -2651,39 +2965,39 @@ export function DeployWizard() {
                     fontSize: 10,
                     fontWeight: 600,
                 }} variant="text" size="small">
-                        Show Mini-Map
-                      </Button>) : (<div style={{ position: "absolute", bottom: 16, right: 16, width: 200, height: 110, backgroundColor: "var(--m3-colorNeutralBackground1)", border: `1px solid ${"var(--m3-colorNeutralStroke2)"}`, borderRadius: "16px", boxShadow: "0 8px 24px #00000022", padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 10, pointerEvents: "auto", backdropFilter: "blur(8px)", opacity: 0.95 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                          <Typography style={{ color: "var(--m3-colorNeutralForeground3)", fontSize: 9, textTransform: "uppercase", letterSpacing: 0.5 }} component="span" variant="caption" sx={{
+                      Show Mini-Map
+                    </Button>) : (<div style={{ position: "absolute", bottom: 16, right: 16, width: 210, height: 112, backgroundColor: "var(--m3-colorNeutralBackground1)", border: `1px solid ${"var(--m3-colorNeutralStroke2)"}`, borderRadius: "14px", boxShadow: "0 8px 24px #00000022", padding: 6, display: "flex", flexDirection: "column", gap: 4, zIndex: 10, pointerEvents: "auto", backdropFilter: "blur(8px)", opacity: 0.95 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                        <Typography style={{ color: "var(--m3-colorNeutralForeground3)", fontSize: 9, textTransform: "uppercase", letterSpacing: 0.5 }} component="span" variant="caption" sx={{
                     fontWeight: 600
                 }}>Interconnection Mini-Map</Typography>
-                          <Button onClick={() => setMiniMapCollapsed(true)} style={{ minWidth: "auto", padding: 2, height: 16, width: 16 }} variant="text" size="small" startIcon={<Close style={{ fontSize: 10 }}/>}/>
-                        </div>
-                        <div style={{ flex: 1, position: "relative", border: `1px dashed ${"var(--m3-colorNeutralStroke3)"}`, borderRadius: "8px", overflow: "hidden", backgroundColor: "var(--m3-colorNeutralBackground2)" }}>
-                          <svg viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`} style={{ width: "100%", height: "100%", cursor: "crosshair", touchAction: "none" }} onPointerDown={handleMiniMapPointerDown} onPointerMove={handleMiniMapPointerMove} onPointerUp={handleMiniMapPointerUp}>
-                            <rect x="290" y="20" width="520" height="660" rx="35" fill={"var(--m3-colorPaletteBlueBackground2)"} opacity="0.25"/>
-                            <rect x="820" y="20" width="1070" height="660" rx="35" fill={"var(--m3-colorBrandBackground2)"} opacity="0.3"/>
-                            {graphEdges.map((edge) => {
+                        <Button onClick={() => setMiniMapCollapsed(true)} style={{ minWidth: "auto", padding: 2, height: 16, width: 16 }} variant="text" size="small" startIcon={<Close style={{ fontSize: 10 }}/>}/>
+                      </div>
+                      <div style={{ flex: 1, position: "relative", border: `1px dashed ${"var(--m3-colorNeutralStroke3)"}`, borderRadius: "8px", overflow: "hidden", backgroundColor: "var(--m3-colorNeutralBackground2)" }}>
+                        <svg viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`} style={{ width: "100%", height: "100%", cursor: "crosshair", touchAction: "none" }} onPointerDown={handleMiniMapPointerDown} onPointerMove={handleMiniMapPointerMove} onPointerUp={handleMiniMapPointerUp}>
+                          <rect x="312" y="20" width="512" height="716" rx="35" fill={"var(--m3-colorPaletteBlueBackground2)"} opacity="0.28"/>
+                          <rect x="912" y="20" width="1112" height="716" rx="35" fill={"var(--m3-colorBrandBackground2)"} opacity="0.32"/>
+                          {anyAddonsEnabled && <rect x="2112" y="20" width="212" height="716" rx="35" fill={"var(--m3-colorPaletteGreenBackground2)"} opacity="0.28"/>}
+                          {graphEdges.map((edge) => {
                     const { pathD } = getEdgeGeom(edge);
                     return <path key={`mini-path-${edge.id}`} d={pathD} stroke={"var(--m3-colorNeutralForeground3)"} strokeWidth="12" fill="none" opacity="0.45"/>;
                 })}
-                            {positionedGraphNodes.map((node) => (<rect key={`mini-node-${node.id}`} x={node.x} y={node.y} width={NODE_WIDTH} height={NODE_HEIGHT} rx="25" fill={graphColor(node.group)} opacity="0.85"/>))}
-                            {/* Active Viewport Tracking Indicator */}
-                            <rect x={resourceGraphZoom > 0 ? scrollState.scrollLeft / resourceGraphZoom : 0} y={resourceGraphZoom > 0 ? scrollState.scrollTop / resourceGraphZoom : 0} width={Math.min(GRAPH_WIDTH, resourceGraphZoom > 0 ? scrollState.clientWidth / resourceGraphZoom : GRAPH_WIDTH)} height={Math.min(GRAPH_HEIGHT, resourceGraphZoom > 0 ? scrollState.clientHeight / resourceGraphZoom : GRAPH_HEIGHT)} fill="rgba(98, 100, 167, 0.1)" stroke={"var(--m3-colorBrandStroke1)"} strokeWidth="20" rx="18" style={{ transition: "stroke 0.25s, fill 0.25s" }}/>
-                          </svg>
-                        </div>
-                      </div>)}
-                  </div>
-                </div>)}
-            </DialogContent>
-            <DialogActions>
-              {existingDeploy && (<Button onClick={runLiveExistingValidation} disabled={deepCheckingExisting} variant="text">
-                  {deepCheckingExisting ? "Validating live state…" : "Run live validation"}
-                </Button>)}
-              <Button onClick={copyDeploymentPlan} disabled={loading} variant="text">Copy plan</Button>
-              <Button onClick={() => setShowResourcePreview(false)} disabled={loading} variant="outlined">Cancel</Button>
-            </DialogActions>
-          </Box>
+                          {positionedGraphNodes.map((node) => (<rect key={`mini-node-${node.id}`} x={node.x} y={node.y} width={NODE_WIDTH} height={NODE_HEIGHT} rx="25" fill={graphColor(node.group)} opacity="0.85"/>))}
+                          {/* Active Viewport Tracking Indicator */}
+                          <rect x={resourceGraphZoom > 0 ? scrollState.scrollLeft / resourceGraphZoom : 0} y={resourceGraphZoom > 0 ? scrollState.scrollTop / resourceGraphZoom : 0} width={Math.min(GRAPH_WIDTH, resourceGraphZoom > 0 ? scrollState.clientWidth / resourceGraphZoom : GRAPH_WIDTH)} height={Math.min(GRAPH_HEIGHT, resourceGraphZoom > 0 ? scrollState.clientHeight / resourceGraphZoom : GRAPH_HEIGHT)} fill="rgba(98, 100, 167, 0.1)" stroke={"var(--m3-colorBrandStroke1)"} strokeWidth="20" rx="18" style={{ transition: "stroke 0.25s, fill 0.25s" }}/>
+                        </svg>
+                      </div>
+                    </div>)}
+                </div>
+              </div>)}
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 1.5 }}>
+            {existingDeploy && (<Button onClick={runLiveExistingValidation} disabled={deepCheckingExisting} variant="text">
+                {deepCheckingExisting ? "Validating live state…" : "Run live validation"}
+              </Button>)}
+            <Button onClick={copyDeploymentPlan} disabled={loading} variant="text">Copy plan</Button>
+            <Button onClick={() => setShowResourcePreview(false)} disabled={loading} variant="contained">Close preview</Button>
+          </DialogActions>
         </Box>
       </Dialog>
     </div></GuidedDeployment>);

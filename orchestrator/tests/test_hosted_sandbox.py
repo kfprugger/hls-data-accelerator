@@ -253,5 +253,134 @@ class PersistentDatabaseTests(unittest.TestCase):
             db.shutdown_database()
 
 
+    def test_backfill_and_state_tracking_reconcile_and_peer_target_import(self):
+        with tempfile.TemporaryDirectory() as shared_root_str:
+            shared_root = Path(shared_root_str)
+            peer_dir = shared_root / "9da330f25845"
+            active_dir = shared_root / "398c6e793157"
+            peer_dir.mkdir(parents=True)
+            active_dir.mkdir(parents=True)
+
+            target_tid = "8d038e6a-9b7d-4cb8-bbcf-e84dff156478"
+            target_sub = "9bbee190-dc61-4c58-ab47-1275cb04018f"
+
+            # 1. Populate peer sandbox (9da330f25845) with a completed deployment and a state-tracking ledger
+            with patch.dict(os.environ, {"HLS_DATA_DIR": str(peer_dir), "HLS_SHARED_DATA_DIR": str(shared_root)}):
+                peer_db = self.load_database()
+                peer_dep = {
+                    "name": "deploy_all_orchestrator",
+                    "runtimeStatus": "Completed",
+                    "createdTime": "2026-10-25T16:39:43+00:00",
+                    "lastUpdatedTime": "2026-10-25T18:10:00+00:00",
+                    "customStatus": {
+                        "status": "succeeded",
+                        "workspaceName": "med-1024",
+                        "resourceGroupName": "rg-med-1024",
+                        "capacityName": "fabrjbwu2",
+                        "deployConfig": {
+                            "expected_tenant_id": target_tid,
+                            "expected_subscription_id": target_sub,
+                            "fabric_workspace_name": "med-1024",
+                            "resource_group_name": "rg-med-1024",
+                            "location": "westus2",
+                            "admin_security_group": "sg-azure-admins",
+                            "alert_email": "alerts@brakekat.com",
+                            "payer_ops_email": "ops@brakekat.com",
+                            "deploy_cardiology": True,
+                            "cardiology_location": "eastus2",
+                            "cardiology_prefix": "cardio1024",
+                            "cardiology_app_users": ["joey@brakekat.com", "alerts@brakekat.com"],
+                        },
+                    },
+                }
+                peer_db.save_deployment("P1234567-20261025-163943", peer_dep)
+                peer_db.backfill_form_history_from_deployments()
+                self.assertEqual(peer_db.get_form_history("naming-prefix"), ["med-1024"])
+                self.assertEqual(peer_db.get_form_history("cardiology-prefix"), ["cardio1024"])
+                self.assertEqual(set(peer_db.get_form_history("cardiology-app-users")), {"joey@brakekat.com", "alerts@brakekat.com"})
+
+                # Also write a state-tracking ledger for med-1009 that was not yet in deployments table
+                peer_tracking = peer_dir / "state-tracking"
+                peer_tracking.mkdir(parents=True, exist_ok=True)
+                (peer_tracking / ".deployment-state-med-1009.json").write_text(json.dumps({
+                    "phases": [{
+                        "phase": "Phase1+2+3+4+5+6+7",
+                        "timestamp": "2026-10-10T00:00:10Z",
+                        "resources": {"ResourceGroupName": "rg-med-1009", "FabricWorkspaceName": "med-1009", "Location": "westus2"},
+                        "steps": [{"name": "Phase 1: Fabric Workspace", "success": True, "duration": "0.2 min"}],
+                    }]
+                }))
+                peer_db.backup_database()
+                peer_db.shutdown_database()
+
+            # 2. Start active sandbox (398c6e793157) and verify peer history is NOT imported for an unrelated subscription
+            with patch.dict(os.environ, {"HLS_DATA_DIR": str(active_dir), "HLS_SHARED_DATA_DIR": str(shared_root)}):
+                active_db = self.load_database()
+                unrelated = active_db.import_target_history_from_shared_storage(
+                    "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+                )
+                self.assertEqual(unrelated["importedDeployments"], 0)
+                self.assertEqual(len(active_db.list_deployments()), 0)
+
+                # 3. Now authenticate to the matching (target_tid, target_sub) and verify runs + ledgers + form_history import
+                imported = active_db.import_target_history_from_shared_storage(target_tid, target_sub)
+                self.assertEqual(imported["importedDeployments"], 1)
+                self.assertEqual(imported["reconstructedLedgers"], 1)
+                workspaces = {d["customStatus"]["workspaceName"] for d in active_db.list_deployments()}
+                self.assertEqual(workspaces, {"med-1024", "med-1009"})
+                self.assertIn("med-1024", active_db.get_form_history("naming-prefix"))
+                self.assertEqual(active_db.get_form_history("admin-security-group"), ["sg-azure-admins"])
+                self.assertEqual(active_db.get_form_history("cardiology-prefix"), ["cardio1024"])
+                active_db.shutdown_database()
+
+    def test_encrypted_azure_auth_seal_roundtrip_and_tamper_rejection(self):
+        with tempfile.TemporaryDirectory() as data_dir_str, tempfile.TemporaryDirectory() as cli_dir_str:
+            data_dir = Path(data_dir_str)
+            cli_dir = Path(cli_dir_str)
+            (cli_dir / "azureProfile.json").write_text(json.dumps({
+                "subscriptions": [{"id": "0525a464-e087-4084-a24e-a90396a83c15", "tenantId": "c77e97fc-1859-4575-8c8b-53d74bc35a63", "isDefault": True}]
+            }))
+            (cli_dir / "msal_token_cache.json").write_text(json.dumps({
+                "AccessToken": {"at-1": {"secret": "must-be-stripped"}},
+                "IdToken": {"id-1": {"secret": "must-be-stripped"}},
+                "RefreshToken": {"rt-1": {"secret": "refresh-secret-value"}},
+                "Account": {"acct-1": {"username": "joey@jbatl.dev"}},
+                "AppMetadata": {},
+            }))
+            env = {
+                "HLS_DATA_DIR": data_dir_str,
+                "AZURE_CONFIG_DIR": cli_dir_str,
+                "HLS_GATEWAY_KEY": "gateway-secret-key-for-user",
+                "HLS_SANDBOX_USER_TID": "c77e97fc-1859-4575-8c8b-53d74bc35a63",
+                "HLS_SANDBOX_USER_OID": "700530be-27dd-4cd2-aa2b-1937e3b24db8",
+            }
+            with patch.dict(os.environ, env):
+                self.assertTrue(hosted.seal_azure_auth_cache())
+                seal_file = data_dir / ".encrypted-azure-auth.bin"
+                self.assertTrue(seal_file.is_file())
+                raw_seal = seal_file.read_bytes()
+                self.assertNotIn(b"refresh-secret-value", raw_seal)
+                self.assertNotIn(b"must-be-stripped", raw_seal)
+
+                # Simulate container reap (wipe cli_dir AND rotate HLS_GATEWAY_KEY) and restore
+                for f in cli_dir.iterdir():
+                    f.unlink()
+                self.assertFalse((cli_dir / "msal_token_cache.json").exists())
+                with patch.dict(os.environ, {"HLS_GATEWAY_KEY": "rotated-gateway-key-after-reap"}):
+                    self.assertTrue(hosted.restore_azure_auth_cache())
+                restored_msal = json.loads((cli_dir / "msal_token_cache.json").read_text())
+                self.assertEqual(restored_msal["AccessToken"], {})
+                self.assertEqual(restored_msal["IdToken"], {})
+                self.assertEqual(restored_msal["RefreshToken"]["rt-1"]["secret"], "refresh-secret-value")
+                # Verify wrong identity cannot decrypt the seal
+                for f in cli_dir.iterdir():
+                    f.unlink()
+                with patch.dict(os.environ, {"HLS_SANDBOX_USER_OID": "00000000-0000-0000-0000-000000000000"}):
+                    self.assertFalse(hosted.restore_azure_auth_cache())
+                    self.assertFalse((cli_dir / "msal_token_cache.json").exists())
+
+                # Verify logout clears the seal
+                hosted.clear_azure_auth_seal()
+                self.assertFalse(seal_file.exists())
 if __name__ == "__main__":
     unittest.main()

@@ -133,9 +133,11 @@ def main() -> int:
             record("source_locations_read_only", "fail", f"writable source locations: {bad}")
         else:
             record("source_locations_read_only", "pass", "FHIR and DICOM locations are read-only")
+        if f"hls_{namespace}_onelake" in readonly:
+            onelake_count = int(sql(f"SELECT count(*) FROM {catalog}_onelake.gold.cohort_summary", warehouse_id)[0][0])
+            record("onelake_external_location", "pass" if onelake_count else "fail", f"hls_{namespace}_onelake managed catalog ({onelake_count} rows)")
     except Exception as exc:
         record("source_locations_read_only", "fail", str(exc))
-
     # Silver row gates.
     for table in REQUIRED_SILVER:
         try:
@@ -251,6 +253,41 @@ def main() -> int:
     except Exception as exc:
         record("clinical_alert", "skip", f"alert API unavailable: {exc}")
 
+
+    try:
+        dashboards_resp = cli("api", "get", "/api/2.0/lakeview/dashboards")
+        dashboards = dashboards_resp.get("dashboards") or []
+        expected_dashboards = (
+            "HLS Executive Command Center",
+            "HLS Clinical & Telemetry Triage",
+            "HLS Payer Operations, Fraud & CMS Quality",
+            "HLS Medical Imaging & Cross-Domain Graph",
+        )
+        matched = {
+            title: next(
+                (d.get("dashboard_id") for d in dashboards if str(d.get("display_name", "")).endswith(title)),
+                None,
+            )
+            for title in expected_dashboards
+        }
+        missing_dashboards = [title for title, did in matched.items() if not did]
+        if missing_dashboards:
+            record("aibi_dashboards", "fail", f"missing={missing_dashboards}")
+        else:
+            unpublished = []
+            for title, did in matched.items():
+                try:
+                    pub = cli("api", "get", f"/api/2.0/lakeview/dashboards/{did}/published")
+                    if not pub.get("revision_create_time"):
+                        unpublished.append(title)
+                except Exception:
+                    unpublished.append(title)
+            if unpublished:
+                record("aibi_dashboards", "fail", f"unpublished={unpublished}")
+            else:
+                record("aibi_dashboards", "pass", f"4/4 AI/BI dashboards deployed and published ({list(matched.values())})")
+    except Exception as exc:
+        record("aibi_dashboards", "fail", str(exc))
     return report(checks, catalog, args.json)
 
 

@@ -101,13 +101,17 @@ class AzureApps:
                         "env": [
                             {"name": "HLS_HOSTED", "value": "1"},
                             {"name": "HLS_DATA_DIR", "value": "/data"},
+                            {"name": "HLS_SHARED_DATA_DIR", "value": "/data-share"},
                             {"name": "HLS_GATEWAY_KEY", "secretRef": "gateway-key"},
                             {"name": "HLS_SANDBOX_USER_EMAIL", "value": row["email"]},
                             {"name": "HLS_SANDBOX_USER_OID", "value": row["oid"]},
                             {"name": "HLS_SANDBOX_USER_TID", "value": row["tid"]},
                             {"name": "WARDFLOW_ROOT", "value": "/app/wardflow"},
                         ],
-                        "volumeMounts": [{"volumeName": "sandboxes", "mountPath": "/data", "subPath": row["RowKey"]}],
+                        "volumeMounts": [
+                            {"volumeName": "sandboxes", "mountPath": "/data", "subPath": row["RowKey"]},
+                            {"volumeName": "sandboxes", "mountPath": "/data-share"},
+                        ],
                     }],
                     "scale": {"minReplicas": 1, "maxReplicas": 1},
                     "volumes": [{"name": "sandboxes", "storageType": "AzureFile", "storageName": "sandboxes",

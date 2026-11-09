@@ -222,13 +222,17 @@ def test_container_contract_survives_sdk_serialization(settings):
     assert template["scale"] == {"minReplicas": 1, "maxReplicas": 1}
     container = template["containers"][0]
     assert container["resources"] == {"cpu": 2, "memory": "4Gi"}
-    assert container["volumeMounts"] == [{"volumeName": "sandboxes", "mountPath": "/data", "subPath": USER.key}]
+    assert container["volumeMounts"] == [
+        {"volumeName": "sandboxes", "mountPath": "/data", "subPath": USER.key},
+        {"volumeName": "sandboxes", "mountPath": "/data-share"},
+    ]
     assert template["volumes"] == [{"name": "sandboxes", "storageType": "AzureFile", "storageName": "sandboxes",
                                     "mountOptions": "uid=10001,gid=10001,dir_mode=0750,file_mode=0640,nobrl,mfsymlinks,cache=strict"}]
     env = {entry["name"]: entry for entry in container["env"]}
     assert env["HLS_GATEWAY_KEY"] == {"name": "HLS_GATEWAY_KEY", "secretRef": "gateway-key"}
     assert env["HLS_HOSTED"]["value"] == "1"
     assert env["HLS_DATA_DIR"]["value"] == "/data"
+    assert env["HLS_SHARED_DATA_DIR"]["value"] == "/data-share"
     assert env["WARDFLOW_ROOT"]["value"] == "/app/wardflow"
 
 

@@ -19,6 +19,7 @@ foreach ($functionName in @(
     "Wait-LakehouseTableHasData",
     "Sync-LakehouseSqlEndpoint",
     "Assert-SilverFhirReferencesIntact",
+    "Test-PipelineLatestRunCompleted",
     "Invoke-OptionalDataPipelineNonBlocking",
     "Invoke-OptionalDataPipelineSerialized",
     "Get-FabricShortcutByName",
@@ -558,8 +559,16 @@ Remove-Item function:Start-Sleep -ErrorAction SilentlyContinue
 if (-not (Test-TransientFabricNotebookSessionFailure -FailureText 'Failed to create session for executing notebook. SessionId: abc')) {
     throw "Notebook session creation failures should be classified as transient."
 }
+if (-not (Test-TransientFabricNotebookSessionFailure -FailureText "'tuple' object has no attribute 'tb_frame'")) {
+    throw "Fabric Python 3.11 tb_frame notebook trace crashes should be classified as transient."
+}
 if (Test-TransientFabricNotebookSessionFailure -FailureText 'Notebook failed because a required table is missing') {
     throw "Deterministic notebook failures must not be classified as transient session failures."
+}
+
+$sourceText = Get-Content -Raw $scriptPath
+if ($sourceText -notmatch '\$omopId\s*=\s*if\s*\(\$omopPipeline\)\s*\{\s*\[string\]\$omopPipeline\.id\s*\}\s*else\s*\{\s*\$null\s*\}') {
+    throw "storage-access-trusted-workspace.ps1 must initialize `$omopId before the continuation branch so StrictMode summary URLs do not fail."
 }
 
 Set-Item -Path function:Invoke-FabricApiRequest -Value $ProductionInvokeFabricApiRequest

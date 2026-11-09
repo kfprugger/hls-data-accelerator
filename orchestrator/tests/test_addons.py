@@ -290,6 +290,75 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
             await runner.run(["databricks", "rayfin"])
         runner.rayfin.assert_not_awaited()
 
+    async def test_rayfin_imaging_uses_internal_cache_only_when_hosted_and_falls_back_to_on_the_fly_pipeline(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            root = tmp_path / "rayfin-imaging"
+            (root / "pipeline/volumes").mkdir(parents=True)
+            (root / "scripts").mkdir(parents=True)
+            (root / ".venv/bin").mkdir(parents=True)
+            (root / ".venv/bin/python").write_text("#!/bin/sh\n")
+            cache_root = tmp_path / "data-share/rayfin-imaging-cache"
+            (cache_root / "lakehouse").mkdir(parents=True)
+            (cache_root / "volumes").mkdir(parents=True)
+            (cache_root / "lakehouse/manifest.json").write_text('{"slides":[{"id":"brain-gbm"}]}')
+            (cache_root / "volumes/manifest.json").write_text('{"studies":[{"id":"fetal-face-atlas"}]}')
+
+            runner = object.__new__(addons.AddonRunner)
+            runner.config = {"fabric_workspace_name": "med-test"}
+            runner.log = Mock()
+            runner.resource = Mock(return_value={"name": "sttest"})
+
+            # 1. Public / non-hosted mode: even if HLS_SHARED_DATA_DIR is set, must NOT use internal cache; must run on-the-fly download/build.
+            runner.command = AsyncMock()
+            with patch.dict(addons.os.environ, {"HLS_HOSTED": "0", "HLS_SHARED_DATA_DIR": str(tmp_path / "data-share")}, clear=False):
+                await runner.prepare_rayfin_imaging(root)
+            titles_public = [call.args[0] for call in runner.command.await_args_list]
+            self.assertIn("rayfin-imaging: download slides", titles_public)
+            self.assertIn("rayfin-imaging: generate Deep Zoom tiles", titles_public)
+            self.assertIn("rayfin-imaging: download petct", titles_public)
+            self.assertIn("rayfin-imaging: convert cohort DICOM studies to NIfTI", titles_public)
+
+            # 2. Internal hosted mode with populated cache: copies cache into work/ and skips external downloads.
+            runner.command = AsyncMock()
+            with patch.dict(addons.os.environ, {"HLS_HOSTED": "1", "HLS_SHARED_DATA_DIR": str(tmp_path / "data-share")}, clear=False):
+                await runner.prepare_rayfin_imaging(root)
+            titles_hosted = [call.args[0] for call in runner.command.await_args_list]
+            self.assertNotIn("rayfin-imaging: download slides", titles_hosted)
+            self.assertNotIn("rayfin-imaging: download petct", titles_hosted)
+            self.assertTrue((root / "work/lakehouse/manifest.json").is_file())
+            self.assertIn("rayfin-imaging: convert cohort DICOM studies to NIfTI", titles_hosted)
+            self.assertIn("rayfin-imaging: upload slides to OneLake", titles_hosted)
+            self.assertIn("rayfin-imaging: register slides Delta table", titles_hosted)
+            self.assertIn("rayfin-imaging: upload volumes to OneLake", titles_hosted)
+            self.assertIn("rayfin-imaging: register volumes Delta table", titles_hosted)
+
+
+    async def test_ensure_onelake_databricks_storage_provisions_item_and_grants_readwrite_role(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.ws = "f306e105-78fd-4b16-bfbe-2b556d493cb7"
+        runner.log = Mock()
+        runner.cloud = Mock()
+        runner.cloud.items = Mock(side_effect=[
+            [],
+            [],
+        ])
+        runner.cloud.call = Mock(side_effect=[
+            {},
+            {"id": "328852ec-d574-4ce2-a0e4-c2bb44162933", "displayName": "hls_databricks_onelake_storage"},
+            {},
+        ])
+        with patch.object(addons, "az_json", return_value={"identity": {"principalId": "2a408d45-6f8e-4cf7-84f2-9953e44e58e5"}}):
+            url = await runner.ensure_onelake_databricks_storage(
+                {"expected_tenant_id": "c77e97fc-1859-4575-8c8b-53d74bc35a63"},
+                "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Databricks/accessConnectors/ac",
+            )
+        self.assertEqual(
+            url,
+            "abfss://f306e105-78fd-4b16-bfbe-2b556d493cb7@onelake.dfs.fabric.microsoft.com/328852ec-d574-4ce2-a0e4-c2bb44162933/Files/",
+        )
+        self.assertEqual(runner.cloud.call.call_count, 3)
 
 class BundlePreparationTests(unittest.TestCase):
     def test_every_production_target_of_the_real_bundle_gets_a_user_root_path_and_no_service_principal(self):

@@ -185,7 +185,17 @@ def resolve_lakehouse(client: Client, workspace_id: str, name: str | None) -> di
     root = f"/v1/workspaces/{workspace_id}"
     _, _, workspace = client.request("GET", root)
     capacities = list(client.items("/v1/capacities"))
-    if not any(item["id"] == workspace.get("capacityId") and item.get("state") == "Active" for item in capacities):
+    cap = next((item for item in capacities if item["id"] == workspace.get("capacityId")), None)
+    if cap and cap.get("state") != "Active" and cap.get("azureResourceId"):
+        print(f"Capacity {cap.get('displayName')} is {cap.get('state')}; auto-resuming via ARM...", flush=True)
+        subprocess.run(["az", "rest", "--method", "post", "--url", f"https://management.azure.com{cap['azureResourceId']}/resume?api-version=2023-11-01"], check=False)
+        for _ in range(24):
+            time.sleep(10)
+            capacities = list(client.items("/v1/capacities"))
+            cap = next((item for item in capacities if item["id"] == workspace.get("capacityId")), None)
+            if cap and cap.get("state") == "Active":
+                break
+    if not cap or cap.get("state") != "Active":
         raise RuntimeError("Workspace must be assigned to an active Fabric capacity")
     lakehouses = [item for item in client.items(root + "/lakehouses")
                   if item["displayName"] == name or (not name and "bronze" in item["displayName"].lower())]
