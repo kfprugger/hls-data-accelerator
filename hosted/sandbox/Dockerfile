@@ -2,7 +2,7 @@
 # .dockerignore: Dockerfile.dockerignore beside this file is the runtime-only allowlist.
 # WardFlow cardiology source comes from the pinned bundle image published by
 # Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle (hosted/sandbox/wardflow-bundle.Dockerfile).
-# Example: docker build --platform linux/amd64 --build-arg WARDFLOW_BUNDLE_IMAGE=<acr>/hls-wardflow-bundle:<commit> -f hosted/sandbox/Dockerfile .
+# Example: docker build --platform linux/amd64 --build-arg WARDFLOW_BUNDLE_IMAGE=<acr>/hls-wardflow-bundle:<commit> --build-arg HLS_IMAGE_COMMIT=$(git rev-parse HEAD) -f hosted/sandbox/Dockerfile .
 ARG WARDFLOW_BUNDLE_IMAGE
 ARG OHIF_VIEWER_IMAGE=acrhlsdeployer.azurecr.io/hls-ohif-static:9a2d2c3d1367-manifest-v1
 FROM ${WARDFLOW_BUNDLE_IMAGE} AS wardflow
@@ -75,7 +75,12 @@ RUN python -m venv orchestrator/.venv \
 # Copy only allowlisted runtime inputs.
 COPY --chown=hls:hls . /app/hls-data-accelerator/
 COPY --from=wardflow --chown=hls:hls /wardflow/ /app/wardflow/
+# Full commit SHA of the archived HLS source; hotfix tars apply only when their marker equals it.
+# Declared late so the per-commit value does not invalidate the toolchain layers above.
+ARG HLS_IMAGE_COMMIT
+ENV HLS_IMAGE_COMMIT=${HLS_IMAGE_COMMIT}
 RUN test -s /app/wardflow/.pinned-commit \
+ && echo "$HLS_IMAGE_COMMIT" | grep -Eq '^[0-9a-f]{40}$' \
  && chmod +x hosted/sandbox/entrypoint.sh \
  && chown -R hls:hls orchestrator/.venv \
  && chown hls:hls /app/hls-data-accelerator/orchestrator

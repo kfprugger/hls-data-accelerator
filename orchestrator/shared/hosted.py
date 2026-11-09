@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import shutil
@@ -22,6 +23,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 HOSTED = os.environ.get("HLS_HOSTED") == "1"
+_log = logging.getLogger(__name__)
 _NOTICE = "Your Azure sign-in stays inside your private sandbox and is deleted when the sandbox is removed. The operator of this host can technically access a running sandbox."
 _CA_PATTERN = re.compile(r"AADSTS(?:53003|530033|50097)|blocked by Conditional Access|device code flow is blocked", re.I)
 _CA_HINT = "Your tenant blocks device-code sign-in through Conditional Access. Ask your tenant administrator to exclude this flow/app from the blocking policy, or run the deployer locally."
@@ -92,26 +94,30 @@ def _seal_path(data_dir: Path | None = None) -> Path | None:
     return (root / _SEAL_FILENAME) if root else None
 
 
+def _hkdf(material: bytes, salt: bytes, info: bytes) -> bytes:
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=salt, info=info).derive(material)
+
+
 def _derive_seal_keys() -> list[bytes]:
+    """Return ``[current, *legacy]`` AES keys for the auth seal.
+
+    The current key is derived from the per-sandbox ``HLS_GATEWAY_KEY`` secret, which only lives in this
+    container's environment, with ``tid:oid`` bound in as HKDF info. Every sandbox can reach the shared
+    Azure Files root, so a key derived from ``tid:oid`` alone lets one user decrypt another's refresh token.
+    The legacy keys exist only so ``restore_azure_auth_cache`` can migrate an older seal, then re-seal it.
+    """
     tid = os.environ.get("HLS_SANDBOX_USER_TID", "").strip().lower()
     oid = os.environ.get("HLS_SANDBOX_USER_OID", "").strip().lower()
-    if not tid or not oid:
-        return []
-    salt = hashlib.sha256(f"{tid}:{oid}".encode("utf-8")).digest()
-    materials = [f"hls-seal-v2:{tid}:{oid}"]
     gw_key = os.environ.get("HLS_GATEWAY_KEY", "").strip()
-    if gw_key:
-        materials.append(gw_key)
-    keys: list[bytes] = []
-    for mat in materials:
-        hkdf = HKDF(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            info=b"hls-sandbox-azure-auth-seal-v1",
-        )
-        keys.append(hkdf.derive(mat.encode("utf-8")))
-    return keys
+    if not tid or not oid or not gw_key:
+        return []
+    identity = f"{tid}:{oid}".encode("utf-8")
+    salt = hashlib.sha256(identity).digest()
+    current = _hkdf(gw_key.encode("utf-8"), salt, b"hls-sandbox-azure-auth-seal-v3:" + identity)
+    legacy_info = b"hls-sandbox-azure-auth-seal-v1"
+    legacy = [_hkdf(f"hls-seal-v2:{tid}:{oid}".encode("utf-8"), salt, legacy_info),
+              _hkdf(gw_key.encode("utf-8"), salt, legacy_info)]
+    return [current, *legacy]
 
 
 def seal_azure_auth_cache(cli_dir: Path | None = None, data_dir: Path | None = None) -> bool:
@@ -177,9 +183,11 @@ def restore_azure_auth_cache(cli_dir: Path | None = None, data_dir: Path | None 
             return False
         nonce, ciphertext = blob[4:16], blob[16:]
         plaintext = None
-        for key in keys:
+        used = -1
+        for index, key in enumerate(keys):
             try:
                 plaintext = zlib.decompress(AESGCM(key).decrypt(nonce, ciphertext, b"hls-azure-auth-v1"))
+                used = index
                 break
             except Exception:
                 continue
@@ -202,6 +210,9 @@ def restore_azure_auth_cache(cli_dir: Path | None = None, data_dir: Path | None 
             azps_file = cfg_dir / "azps-context.json"
             azps_file.write_text(json.dumps(azps), encoding="utf-8")
             azps_file.chmod(0o600)
+        if used > 0 and not seal_azure_auth_cache(cfg_dir, data_dir):
+            # A seal under a legacy key must not outlive the migration: the shared root exposes it.
+            seal_file.unlink(missing_ok=True)
         return True
     except Exception:
         return False
@@ -277,11 +288,13 @@ async def _device_login(session: dict, req: DeviceLoginRequest, invalidate, on_t
         seal_azure_auth_cache()
         if on_target_authenticated is not None:
             try:
-                res = on_target_authenticated(tenant, subscription)
+                # Blocking SQLite/share I/O: keep it off the event loop.
+                res = await asyncio.to_thread(on_target_authenticated, tenant, subscription)
                 if asyncio.iscoroutine(res):
                     await res
             except Exception:
-                pass
+                # History import is best-effort for sign-in, but never silent.
+                _log.exception("Importing prior history for the signed-in target failed")
         invalidate()
     except asyncio.CancelledError:
         session.update(status="failed", **_error("Sign-in cancelled"))
@@ -349,6 +362,7 @@ def install_hosted_routes(app, active_runs, invalidate, on_target_authenticated=
         _sessions[session_id] = session
         task = asyncio.create_task(_device_login(session, req, invalidate, on_target_authenticated))
         session["task"] = task
+        _tasks.add(task)
         task.add_done_callback(_tasks.discard)
         try:
             await asyncio.wait_for(session["ready"].wait(), 45)

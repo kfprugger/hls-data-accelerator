@@ -377,7 +377,10 @@ if (-not $SkipImages) {
     try {
         $null = New-Item -ItemType Directory -Path $stage
         $sourceTar = Join-Path $stage 'source.tar'
-        Invoke-Native git @('-C', $repoRoot, 'archive', '--format=tar', "--output=$sourceTar", 'HEAD')
+        # Archive one resolved SHA so the baked HLS_IMAGE_COMMIT (hotfix marker check) names exactly the shipped source.
+        $sourceCommit = (& git -C $repoRoot rev-parse HEAD).Trim()
+        if ($LASTEXITCODE -ne 0 -or $sourceCommit -notmatch '^[0-9a-f]{40}$') { throw 'Cannot resolve the full HLS source commit.' }
+        Invoke-Native git @('-C', $repoRoot, 'archive', '--format=tar', "--output=$sourceTar", $sourceCommit)
         $context = Join-Path $stage 'context'
         $null = New-Item -ItemType Directory -Path $context
         Invoke-Native tar @('-xf', $sourceTar, '-C', $context)
@@ -395,7 +398,7 @@ if (-not $SkipImages) {
         if ($ohifTags -notcontains $ohifTag) {
             Invoke-AcrBuild (Join-Path $context 'hosted/sandbox') "hls-ohif-static:$ohifTag" 'ohif.Dockerfile'
         }
-        Invoke-AcrBuild $context "hls-orchestrator-sandbox:$ImageTag" 'hosted/sandbox/Dockerfile' @('--build-arg', "WARDFLOW_BUNDLE_IMAGE=$wardflowBundleImage", '--build-arg', "OHIF_VIEWER_IMAGE=$ohifImage")
+        Invoke-AcrBuild $context "hls-orchestrator-sandbox:$ImageTag" 'hosted/sandbox/Dockerfile' @('--build-arg', "WARDFLOW_BUNDLE_IMAGE=$wardflowBundleImage", '--build-arg', "OHIF_VIEWER_IMAGE=$ohifImage", '--build-arg', "HLS_IMAGE_COMMIT=$sourceCommit")
         Invoke-AcrBuild (Join-Path $context 'hosted/gateway') "hls-gateway:$ImageTag" 'Dockerfile'
     } finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }
 }

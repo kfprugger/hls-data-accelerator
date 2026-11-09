@@ -234,6 +234,9 @@ def mark_stale_as_terminated():
         ).fetchall()
         for row in rows:
             cs = json.loads(row["custom_status"])
+            if cs.get("importedFrom"):
+                # Read-only history imported from a peer sandbox; that sandbox owns its lifecycle.
+                continue
             addon_only = bool(cs.get("addonRunBaseCompleted"))
             runtime_status = "Completed" if addon_only else "Terminated"
             cs["status"] = "succeeded" if addon_only else "terminated"
@@ -692,10 +695,10 @@ def import_target_history_from_shared_storage(
         peer_fh: list[tuple[str, str, str]] = []
 
         if peer_db_path.is_file():
-            temp_copy = Path(tempfile.mktemp(prefix="hls-peer-", suffix=".db"))
+            # Open the peer's committed snapshot in place, read-only: nothing is ever written into a peer dir.
+            peer_uri = f"{peer_db_path.resolve().as_uri()}?mode=ro"
             try:
-                shutil.copyfile(peer_db_path, temp_copy)
-                with closing(sqlite3.connect(str(temp_copy), timeout=10)) as peer_conn:
+                with closing(sqlite3.connect(peer_uri, uri=True, timeout=10)) as peer_conn:
                     peer_conn.row_factory = sqlite3.Row
                     fh_rows = peer_conn.execute(
                         "SELECT field, value, used_at FROM form_history ORDER BY used_at ASC"
@@ -725,8 +728,6 @@ def import_target_history_from_shared_storage(
                             peer_matches_target = True
             except Exception as exc:
                 logger.warning("Failed to inspect peer database %s: %s", peer_db_path, exc)
-            finally:
-                temp_copy.unlink(missing_ok=True)
 
         if not peer_matches_target:
             continue
@@ -738,10 +739,18 @@ def import_target_history_from_shared_storage(
             inst_id = dep["instanceId"]
             local_dep = existing_by_id.get(inst_id)
             if local_dep:
+                if not (local_dep.get("customStatus") or {}).get("importedFrom"):
+                    # This sandbox owns the run; a peer copy never overwrites it.
+                    continue
                 local_updated = str(local_dep.get("lastUpdatedTime") or "")
                 peer_updated = str(dep.get("lastUpdatedTime") or "")
                 if peer_updated <= local_updated:
                     continue
+            if not isinstance(dep.get("customStatus"), dict):
+                dep["customStatus"] = {}
+            # Peer runs (including Running/Pending ones) are read-only history here: excluded from active-run
+            # counts and from restart recovery, which belongs to the peer sandbox.
+            dep["customStatus"]["importedFrom"] = peer_dir.name
             save_deployment(inst_id, dep)
             record_deployment_form_history(dep)
             existing_by_id[inst_id] = dep

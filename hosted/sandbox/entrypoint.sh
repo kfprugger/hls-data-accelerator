@@ -11,12 +11,9 @@ mkdir -p "${HLS_DATA_DIR:-/data}" "${AZURE_CONFIG_DIR}" "${HOME}/.Azure"
 az config set extension.use_dynamic_install=yes_without_prompt --only-show-errors
 export HLS_STATE_DIR="${HLS_DATA_DIR:-/data}/state-tracking"
 mkdir -p "$HLS_STATE_DIR"
-if [[ -f "${HLS_DATA_DIR:-/data}/hotfix.tar" ]]; then
-  tar -xf "${HLS_DATA_DIR:-/data}/hotfix.tar" -C /app/hls-data-accelerator 2>/dev/null || true
-fi
-if [[ -f "${HLS_DATA_DIR:-/data}/wardflow-fix.tar" ]]; then
-  tar -xf "${HLS_DATA_DIR:-/data}/wardflow-fix.tar" -C /app/wardflow 2>/dev/null || true
-fi
+# Operator hotfix tars apply only from this sandbox's own HLS_DATA_DIR and only when their
+# .hls-hotfix-commit marker equals HLS_IMAGE_COMMIT; an unpack failure stops the sandbox.
+/app/hls-data-accelerator/orchestrator/.venv/bin/python /app/hls-data-accelerator/orchestrator/shared/hotfix.py
 # Same backend launch used by Start-WebUI.ps1; exec preserves SIGTERM delivery.
 # HOME (Azure credentials) is container-local. Only HLS_DATA_DIR is mounted.
 exec /app/hls-data-accelerator/orchestrator/.venv/bin/python /app/hls-data-accelerator/orchestrator/local_server.py
