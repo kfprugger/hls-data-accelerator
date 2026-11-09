@@ -314,31 +314,57 @@ try {
 if ($existingOntology) {
     if ($existingOntology -is [array]) { $existingOntology = $existingOntology[0] }
     $existingIsV2 = $false
+    $chkHeaders = @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" }
+    $chkResp = $null
     try {
-        $chkHeaders = @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" }
         $chkResp = Invoke-WebRequest -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies/$($existingOntology.id)/getDefinition" -Headers $chkHeaders -Method POST -ErrorAction Stop
-        if ($chkResp.Content) {
-            $chkDef = $chkResp.Content | ConvertFrom-Json
-        } else {
-            $chkOpId = $chkResp.Headers["x-ms-operation-id"]; if ($chkOpId -is [array]) { $chkOpId = $chkOpId[0] }
-            $chkLoc = $chkResp.Headers["Location"]; if ($chkLoc -is [array]) { $chkLoc = $chkLoc[0] }
-            if ($chkLoc -and $chkLoc -notmatch '^https?://') { $chkLoc = "https://api.fabric.microsoft.com/v1/$($chkLoc.TrimStart('/'))" }
-            if (-not $chkLoc -and $chkOpId) { $chkLoc = "https://api.fabric.microsoft.com/v1/operations/$chkOpId" }
-            for ($p = 0; $p -lt 30 -and $chkLoc; $p++) {
-                Start-Sleep -Seconds 2
+    } catch {
+        throw "Failed to probe definition of existing ontology '$OntologyName' ($($existingOntology.id)): $_"
+    }
+    $chkDef = $null
+    if ($chkResp.Content) {
+        $chkDef = $chkResp.Content | ConvertFrom-Json
+    } else {
+        $chkOpId = $chkResp.Headers["x-ms-operation-id"]; if ($chkOpId -is [array]) { $chkOpId = $chkOpId[0] }
+        $chkLoc = $chkResp.Headers["Location"]; if ($chkLoc -is [array]) { $chkLoc = $chkLoc[0] }
+        if ($chkLoc -and $chkLoc -notmatch '^https?://') { $chkLoc = "https://api.fabric.microsoft.com/v1/$($chkLoc.TrimStart('/'))" }
+        if (-not $chkLoc -and $chkOpId) { $chkLoc = "https://api.fabric.microsoft.com/v1/operations/$chkOpId" }
+        if (-not $chkLoc) {
+            throw "getDefinition for ontology '$OntologyName' returned neither content nor operation location/ID."
+        }
+        # Poll the getDefinition LRO for >= 5 min (300 seconds)
+        $pollDeadline = (Get-Date).AddMinutes(5)
+        $lroSucceeded = $false
+        while ((Get-Date) -lt $pollDeadline) {
+            Start-Sleep -Seconds 5
+            try {
                 $chkOp = Invoke-RestMethod -Uri $chkLoc -Headers $chkHeaders -ErrorAction Stop
-                if ($chkOp.status -eq "Succeeded") {
-                    $resUri = if ($chkLoc -match '/result$') { $chkLoc } else { "$chkLoc/result" }
+            } catch {
+                continue
+            }
+            if ($chkOp.status -eq "Succeeded") {
+                $resUri = if ($chkLoc -match '/result$') { $chkLoc } else { "$chkLoc/result" }
+                try {
                     $chkDef = Invoke-RestMethod -Uri $resUri -Headers $chkHeaders -ErrorAction Stop
-                    break
+                } catch {
+                    throw "getDefinition LRO succeeded for ontology '$OntologyName', but failed to retrieve result from $($resUri): $_"
                 }
-                if ($chkOp.status -eq "Failed") { break }
+                $lroSucceeded = $true
+                break
+            }
+            if ($chkOp.status -in @("Failed", "Cancelled")) {
+                $opError = try { $chkOp.error | ConvertTo-Json -Depth 5 -Compress } catch { [string]$chkOp.status }
+                throw "getDefinition LRO for ontology '$OntologyName' ended with status $($chkOp.status): $opError"
             }
         }
-        if ($chkDef -and $chkDef.definition -and $chkDef.definition.parts) {
-            $existingIsV2 = @($chkDef.definition.parts | Where-Object { $_.path -eq "database.tmdl" -or $_.path -like "entities/*.tmdl" }).Count -gt 0
+        if (-not $lroSucceeded -or -not $chkDef) {
+            throw "getDefinition LRO for ontology '$OntologyName' did not complete within 5 minutes ($chkLoc)"
         }
-    } catch {}
+    }
+    if (-not $chkDef -or -not $chkDef.definition -or -not $chkDef.definition.parts) {
+        throw "getDefinition for ontology '$OntologyName' succeeded but returned no definition parts"
+    }
+    $existingIsV2 = @($chkDef.definition.parts | Where-Object { $_.path -eq "database.tmdl" -or $_.path -like "entities/*.tmdl" -or $_.path -like "*.tmdl" }).Count -gt 0
 
     if (-not $existingIsV2) {
         Write-Host "  Existing ontology '$OntologyName' ($($existingOntology.id)) uses legacy v1 JSON definition; replacing with Ontology v2 (TMDL)..." -ForegroundColor Yellow
@@ -415,13 +441,17 @@ if ($existingIsV1) {
     $delHeaders = @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" }
     try {
         Invoke-RestMethod -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies/$($existingOntology.id)" -Headers $delHeaders -Method DELETE -ErrorAction Stop | Out-Null
-    } catch {}
+    } catch {
+        throw "Failed to delete legacy v1 ontology '$OntologyName' ($($existingOntology.id)): $_"
+    }
     try {
         $oldGms = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/items?type=GraphModel"
         foreach ($gm in @($oldGms.value | Where-Object { $_.displayName -like "$OntologyName`_graph_*" })) {
             Invoke-RestMethod -Uri "$FabricApiBase/workspaces/$workspaceId/items/$($gm.id)" -Headers $delHeaders -Method DELETE -ErrorAction SilentlyContinue | Out-Null
         }
-    } catch {}
+    } catch {
+        Write-Warning "Could not clean up legacy graph models for '$OntologyName': $_"
+    }
     $existingOntology = $null
     Start-Sleep -Seconds 5
 }

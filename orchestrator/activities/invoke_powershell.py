@@ -279,6 +279,23 @@ def run_preflight(config: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _seed_tcga_cohort_selected(config: dict[str, Any]) -> bool:
+    """True only when the rayfin-imaging add-on will seed the TCGA cohort.
+
+    Mirrors AddonRunner.prepare_rayfin_imaging: TCGA seeding runs when the
+    rayfin add-on is selected and ``seed_tcga_cohort`` is absent or truthy.
+    Deploy-All then sizes the emulator for 115 devices instead of 100.
+    """
+    if not config.get("deploy_rayfin_apps"):
+        return False
+    flag = config.get("seed_tcga_cohort", True)
+    if flag is None:
+        return True
+    if isinstance(flag, str):
+        return flag.strip().lower() in ("true", "1", "yes")
+    return flag is True
+
+
 def _build_deploy_args(config: dict[str, Any]) -> list[str]:
     """Build the pwsh command line for Deploy-All.ps1."""
     if config.get("reuse_patients") and config.get("reseed_data"):
@@ -381,6 +398,8 @@ def _build_deploy_args(config: dict[str, Any]) -> list[str]:
             params.append("-Phase4")
         if config.get("phase7_only"):
             params.append("-Phase7")
+        if _seed_tcga_cohort_selected(config):
+            params.append("-SeedTcgaCohort:$true")
 
         params.append(f"-Tags {_ps_hashtable_literal(tags)}")
 
@@ -485,6 +504,8 @@ def _build_deploy_args(config: dict[str, Any]) -> list[str]:
         args.append("-Phase4")
     if config.get("phase7_only"):
         args.append("-Phase7")
+    if _seed_tcga_cohort_selected(config):
+        args.append("-SeedTcgaCohort:$true")
 
     return args
 

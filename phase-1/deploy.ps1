@@ -10,7 +10,7 @@ param (
     [string]$FabricWorkspaceName = "",
     [switch]$SkipTelemetry,
     [switch]$SkipEmulator,
-    [bool]$SeedTcgaCohort = $true,
+    [bool]$SeedTcgaCohort = $false,
     [int]$DeviceCount = 0
 )
 

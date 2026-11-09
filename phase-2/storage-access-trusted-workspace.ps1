@@ -63,7 +63,12 @@ param(
 
     [switch]$RequireClinicalFhirData,
     [switch]$RequireImagingDicomData,
-    [switch]$SkipImagingPipeline
+    [switch]$SkipImagingPipeline,
+    # Only a pipeline run that started after this instant (ISO 8601) may be reused as
+    # already Completed. Deploy-All passes its own start; standalone runs use script start.
+    [string]$ReuseRunsStartedAfterUtc = "",
+    # Authoritative reseed: never reuse a Completed run.
+    [switch]$ReseedData
 )
 
 Set-StrictMode -Version Latest
@@ -72,6 +77,11 @@ $VerbosePreference = 'Continue'
 $InformationPreference = 'Continue'
 $hlsRepoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $hlsRepoRoot 'utilities/python-runtime.ps1')
+$script:RunReuseNotBeforeUtc = if ([string]::IsNullOrWhiteSpace($ReuseRunsStartedAfterUtc)) {
+    [datetime]::UtcNow
+} else {
+    [datetime]::Parse($ReuseRunsStartedAfterUtc, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+}
 
 $FabricManagementEndpoint = 'https://api.fabric.microsoft.com'
 $OneLakeEndpoint = 'https://onelake.dfs.fabric.microsoft.com'
@@ -253,12 +263,17 @@ function Invoke-FabricApiRequest {
 }
 
 function Test-PipelineLatestRunCompleted {
+    # True only when the latest run is Completed AND started after -StartedAfterUtc
+    # (the current deployment's start), and never with -NeverReuse (-ReseedData).
     param(
         [Parameter(Mandatory)][string]$WorkspaceId,
         [object]$Pipeline,
         [Parameter(Mandatory)][hashtable]$FabricHeaders,
-        [string]$PipelineName = ''
+        [string]$PipelineName = '',
+        [Parameter(Mandatory)][datetime]$StartedAfterUtc,
+        [switch]$NeverReuse
     )
+    if ($NeverReuse) { return $false }
     if (-not $Pipeline -or -not $Pipeline.id) { return $false }
     $pipelineId = [string]$Pipeline.id
     $name = if ($PipelineName) { $PipelineName } else { [string]$Pipeline.displayName }
@@ -266,14 +281,28 @@ function Test-PipelineLatestRunCompleted {
         $jobsResult = Invoke-FabricApiRequest -Method Get `
             -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$pipelineId/jobs/instances?limit=1" `
             -Headers $FabricHeaders -Description "Check latest job status for '$name'"
-        $latestJob = $null
-        if ($jobsResult.Response -and $jobsResult.Response.PSObject.Properties['value']) {
-            $latestJob = $jobsResult.Response.value | Select-Object -First 1
-        }
-        return [bool]($latestJob -and $latestJob.status -eq 'Completed')
     } catch {
+        Write-Log "  Could not read latest run of '$name'; it will be re-run: $($_.Exception.Message)" 'WARN'
         return $false
     }
+    $latestJob = $null
+    if ($jobsResult.Response -and $jobsResult.Response.PSObject.Properties['value']) {
+        $latestJob = $jobsResult.Response.value | Select-Object -First 1
+    }
+    if (-not $latestJob -or $latestJob.status -ne 'Completed') { return $false }
+    $startRaw = if ($latestJob.PSObject.Properties['startTimeUtc']) { $latestJob.startTimeUtc } else { $null }
+    if (-not $startRaw) { return $false }
+    $startUtc = if ($startRaw -is [datetime]) {
+        if ($startRaw.Kind -eq [DateTimeKind]::Local) { $startRaw.ToUniversalTime() } else { [datetime]::SpecifyKind($startRaw, [DateTimeKind]::Utc) }
+    } else {
+        [datetime]::Parse([string]$startRaw, [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+    }
+    if ($startUtc -le $StartedAfterUtc.ToUniversalTime()) {
+        Write-Log "  Latest Completed run of '$name' started $($startUtc.ToString('o')), before this deployment ($($StartedAfterUtc.ToUniversalTime().ToString('o'))); re-running." 'INFO'
+        return $false
+    }
+    return $true
 }
 
 function Invoke-OptionalDataPipelineNonBlocking {
@@ -2097,7 +2126,7 @@ if ($optionalSidecarPipelines.Count -gt 0) {
     Write-Log "  Detected $($optionalSidecarPipelines.Count) optional HDS sidecar pipeline(s). Claims/CCLF writers run serially to avoid Delta conflicts; disjoint sidecars remain non-blocking." 'INFO'
     foreach ($sidecarPipeline in $serializedSidecars) {
         $sidecarName = [string]$sidecarPipeline.displayName
-        if (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -PipelineName $sidecarName) {
+        if (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -PipelineName $sidecarName -StartedAfterUtc $script:RunReuseNotBeforeUtc -NeverReuse:$ReseedData) {
             Write-Log "─── Sidecar Pipeline: ${sidecarName}: latest run already Completed — reusing ───" 'INFO'
             Record-Step -Name "Sidecar Pipeline: $sidecarName" -Status 'COMPLETED' -Seconds 0
             $optionalSidecarResults += [pscustomobject]@{ Name = $sidecarName; Id = [string]$sidecarPipeline.id; Status = 'COMPLETED'; Invoked = $true; AlreadyRunning = $false }
@@ -2107,7 +2136,7 @@ if ($optionalSidecarPipelines.Count -gt 0) {
     }
     foreach ($sidecarPipeline in $nonBlockingSidecars) {
         $sidecarName = [string]$sidecarPipeline.displayName
-        if (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -PipelineName $sidecarName) {
+        if (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -PipelineName $sidecarName -StartedAfterUtc $script:RunReuseNotBeforeUtc -NeverReuse:$ReseedData) {
             Write-Log "─── Sidecar Pipeline: ${sidecarName}: latest run already Completed — reusing ───" 'INFO'
             Record-Step -Name "Sidecar Pipeline: $sidecarName" -Status 'COMPLETED' -Seconds 0
             $optionalSidecarResults += [pscustomobject]@{ Name = $sidecarName; Id = [string]$sidecarPipeline.id; Status = 'COMPLETED'; Invoked = $true; AlreadyRunning = $false }
@@ -2262,7 +2291,7 @@ if (-not $poaPipeline) {
         if (-not $runtime) { throw 'Outreach demo enrichment requires orchestrator/.venv. Run setup-prereqs.ps1.' }
         $demoPython = $runtime.executable
     }
-    if (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $poaPipeline -FabricHeaders $fabHeaders -PipelineName $PoaPipelineName) {
+    if (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $poaPipeline -FabricHeaders $fabHeaders -PipelineName $PoaPipelineName -StartedAfterUtc $script:RunReuseNotBeforeUtc -NeverReuse:$ReseedData) {
         Write-Log "  ✓ POA pipeline '$PoaPipelineName' latest run already Completed — skipping outreach re-seeding and POA rerun." 'INFO'
         Record-Step -Name 'POA Pipeline' -Status 'COMPLETED' -Seconds 0
         $poaCompleted = $true
@@ -2297,7 +2326,7 @@ if (-not $cmaPipeline) {
     $cmaTimer.Stop()
     Record-Step -Name 'CMA Pipeline' -Status 'SKIPPED' -Seconds $cmaTimer.Elapsed.TotalSeconds
     $cmaResult = [pscustomobject]@{ Name = $CmaPipelineName; Id = $cmaId; Status = 'SKIPPED'; Invoked = $false; AlreadyRunning = $false }
-} elseif (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $cmaPipeline -FabricHeaders $fabHeaders -PipelineName $CmaPipelineName) {
+} elseif (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $cmaPipeline -FabricHeaders $fabHeaders -PipelineName $CmaPipelineName -StartedAfterUtc $script:RunReuseNotBeforeUtc -NeverReuse:$ReseedData) {
     Write-Log "─── Step 9c: CMA pipeline '$CmaPipelineName' latest run already Completed — reusing ───" 'INFO'
     Record-Step -Name 'CMA Pipeline' -Status 'COMPLETED' -Seconds 0
     $cmaResult = [pscustomobject]@{ Name = $CmaPipelineName; Id = $cmaId; Status = 'COMPLETED'; Invoked = $true; AlreadyRunning = $false }
@@ -2318,7 +2347,7 @@ if ($SkipImagingPipeline) {
     Write-Log '─── Step 9b: Imaging Ingestion Pipeline intentionally skipped ───' 'INFO'
     $imgCompleted = $true
     $step9Timer.Stop()
-} elseif ($clinicalCompleted -and $imagingPipeline -and (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $imagingPipeline -FabricHeaders $fabHeaders -PipelineName $ImagingPipelineName)) {
+} elseif ($clinicalCompleted -and $imagingPipeline -and (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $imagingPipeline -FabricHeaders $fabHeaders -PipelineName $ImagingPipelineName -StartedAfterUtc $script:RunReuseNotBeforeUtc -NeverReuse:$ReseedData)) {
     Write-Log "─── Step 9b: Imaging pipeline '$ImagingPipelineName' latest run already Completed — reusing ───" 'INFO'
     $imgCompleted = $true
     $step9Timer.Stop()
@@ -2495,7 +2524,7 @@ if (-not $omopPipeline) {
     Write-Log "  Skipping OMOP pipeline — it may not be deployed yet." 'WARN'
     $step10Timer.Stop()
     Record-Step -Name 'OMOP Pipeline' -Status 'NOT FOUND' -Seconds $step10Timer.Elapsed.TotalSeconds
-} elseif (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $omopPipeline -FabricHeaders $fabHeaders -PipelineName $OmopPipelineName) {
+} elseif (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $omopPipeline -FabricHeaders $fabHeaders -PipelineName $OmopPipelineName -StartedAfterUtc $script:RunReuseNotBeforeUtc -NeverReuse:$ReseedData) {
     Write-Log "  ✓ OMOP pipeline '$OmopPipelineName' latest run already Completed — skipping OMOP rerun." 'INFO'
     $omopCompleted = $true
     $step10Timer.Stop()

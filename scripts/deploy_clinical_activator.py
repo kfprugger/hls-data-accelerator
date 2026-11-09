@@ -40,7 +40,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 SKILL_HEADER = "fabric-activator-kqlsource-and-lro-gotchas"
-LRO_TIMEOUT_SECONDS = 120
+LRO_TIMEOUT_SECONDS = 300
 
 
 def validate_recipient_allowlist(email_arg: Optional[str] = None) -> str:
@@ -97,7 +97,7 @@ def get_fabric_token() -> str:
     if proc.returncode == 0:
         return json.loads(proc.stdout)["accessToken"]
 
-    raise RuntimeError("Could not acquire Fabric access token")
+    raise RuntimeError(f"Could not acquire Fabric access token: az exited {proc.returncode}: {proc.stderr.strip()}")
 
 
 def build_reflex_entities(
@@ -301,32 +301,110 @@ def build_reflex_entities(
     return entities, b64_str
 
 
-def poll_lro(op_id: str, token: str, deadline_seconds: int = LRO_TIMEOUT_SECONDS) -> None:
-    """Poll Fabric long running operation until Succeeded or Timeout."""
-    import requests
+RETRYABLE_STATUS = (429, 500, 502, 503, 504)
+MAX_BACKOFF_SECONDS = 60.0
+
+
+def is_retryable_response(resp: requests.Response) -> bool:
+    """Transient Fabric failures: throttling, 5xx, and the inbound-policy 403 flap."""
+    return resp.status_code in RETRYABLE_STATUS or (
+        resp.status_code == 403 and "RequestDeniedByInboundPolicy" in resp.text
+    )
+
+
+def retry_delay_seconds(resp: Optional[requests.Response], attempt: int) -> float:
+    """Honour Retry-After when present; otherwise exponential backoff, both capped at 60 s."""
+    backoff = min(MAX_BACKOFF_SECONDS, 2.0 ** (attempt - 1))
+    retry_after = resp.headers.get("Retry-After") if resp is not None else None
+    if retry_after:
+        try:
+            return min(MAX_BACKOFF_SECONDS, max(0.1, float(retry_after)))
+        except ValueError:
+            return backoff
+    return backoff
+
+
+def fabric_request(
+    method: str,
+    url: str,
+    headers: Dict[str, str],
+    json_data: Optional[Dict[str, Any]] = None,
+    timeout: int = 60,
+    max_attempts: int = 8,
+) -> requests.Response:
+    """Send one Fabric REST request with retries on transient failures.
+
+    Up to ``max_attempts`` tries with a ``timeout``-second per-request limit. Retries
+    429/5xx, 403 RequestDeniedByInboundPolicy and network errors; returns any other
+    response for the caller to judge. Not for item-creating POSTs (see deploy_activator).
+    """
+    method_upper = method.upper()
+    send = {"GET": requests.get, "POST": requests.post, "DELETE": requests.delete}.get(method_upper)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            if send is None:
+                resp = requests.request(method_upper, url, headers=headers, json=json_data, timeout=timeout)
+            elif method_upper == "POST":
+                resp = send(url, headers=headers, json=json_data, timeout=timeout)
+            else:
+                resp = send(url, headers=headers, timeout=timeout)
+        except requests.RequestException as ex:
+            if attempt == max_attempts:
+                raise RuntimeError(
+                    f"Fabric request {method_upper} {url} failed after {max_attempts} attempts: {ex}"
+                ) from ex
+            time.sleep(retry_delay_seconds(None, attempt))
+            continue
+        if not is_retryable_response(resp):
+            return resp
+        if attempt == max_attempts:
+            raise RuntimeError(
+                f"Fabric request {method_upper} {url} failed with HTTP {resp.status_code} after {max_attempts} attempts: {resp.text}"
+            )
+        time.sleep(retry_delay_seconds(resp, attempt))
+    raise AssertionError("unreachable")
+
+
+def find_reflex_id(ws_id: str, headers: Dict[str, str], reflex_name: str) -> Optional[str]:
+    """Return the id of the Reflex item named ``reflex_name``, or None when absent."""
+    resp = fabric_request("GET", f"{FABRIC_API_BASE}/workspaces/{ws_id}/items?type=Reflex", headers=headers)
+    if resp.status_code != 200:
+        raise RuntimeError(f"Failed to list Reflex items: HTTP {resp.status_code} - {resp.text}")
+    found = next((i for i in resp.json().get("value", []) if i.get("displayName") == reflex_name), None)
+    return found.get("id") if found else None
+
+
+def poll_lro(op_id: str, token: str, deadline_seconds: float = LRO_TIMEOUT_SECONDS) -> None:
+    """Poll a Fabric long-running operation until Succeeded; raise on failure or deadline."""
     start = time.time()
     url = f"{FABRIC_API_BASE}/operations/{op_id}"
     headers = {
         "Authorization": f"Bearer {token}",
         "x-ms-fabric-skill": SKILL_HEADER,
     }
+    default_interval = min(3.0, max(0.01, deadline_seconds / 5.0))
+    interval = default_interval
+    last_status = "unknown"
     while time.time() - start < deadline_seconds:
-        interval = min(3.0, max(0.01, deadline_seconds / 5.0))
-        time.sleep(interval)
+        remaining = deadline_seconds - (time.time() - start)
+        time.sleep(max(0.0, min(interval, remaining)))
+        resp = fabric_request("GET", url, headers=headers, timeout=60, max_attempts=3)
+        if resp.status_code not in (200, 202):
+            raise RuntimeError(f"Fabric LRO {op_id} polling failed with HTTP {resp.status_code}: {resp.text}")
+        data = resp.json() if resp.text else {}
+        last_status = data.get("status") or last_status
+        if last_status == "Succeeded":
+            return
+        if last_status in ("Failed", "Cancelled"):
+            raise RuntimeError(f"Fabric LRO {op_id} ended with status: {last_status}, detail: {data.get('error', resp.text)}")
+        retry_after = resp.headers.get("Retry-After") if hasattr(resp, "headers") else None
         try:
-            resp = requests.get(url, headers=headers, timeout=20)
-            if resp.status_code == 200:
-                data = resp.json()
-                status = data.get("status")
-                if status == "Succeeded":
-                    return
-                if status in ("Failed", "Cancelled"):
-                    raise RuntimeError(f"Fabric LRO {op_id} ended with status: {status}")
-        except requests.RequestException:
-            pass
+            interval = min(60.0, max(default_interval, float(retry_after))) if retry_after else default_interval
+        except (TypeError, ValueError):
+            interval = default_interval
 
     sys.stderr.write(f"Operation timed out after {deadline_seconds}s (Operation ID: {op_id})\n")
-    raise TimeoutError(f"Reflex LRO {op_id} did not reach Succeeded within {deadline_seconds} seconds")
+    raise TimeoutError(f"Reflex LRO {op_id} did not reach Succeeded within {deadline_seconds} seconds (last status: {last_status})")
 
 
 def deploy_activator(
@@ -358,7 +436,6 @@ def deploy_activator(
         }
 
     # Live deployment
-    import requests
     token = get_fabric_token()
     headers = {
         "Authorization": f"Bearer {token}",
@@ -367,8 +444,9 @@ def deploy_activator(
     }
 
     # 1. Resolve workspace ID
-    ws_resp = requests.get(f"{FABRIC_API_BASE}/workspaces", headers=headers, timeout=20)
-    ws_resp.raise_for_status()
+    ws_resp = fabric_request("GET", f"{FABRIC_API_BASE}/workspaces", headers=headers, timeout=60)
+    if ws_resp.status_code != 200:
+        raise RuntimeError(f"Failed to list workspaces: HTTP {ws_resp.status_code} - {ws_resp.text}")
     workspaces = ws_resp.json().get("value", [])
     ws = next((w for w in workspaces if w.get("displayName") == workspace_name), None)
     if not ws:
@@ -376,8 +454,9 @@ def deploy_activator(
     ws_id = ws["id"]
 
     # 2. Discover KQL Database
-    kql_resp = requests.get(f"{FABRIC_API_BASE}/workspaces/{ws_id}/kqlDatabases", headers=headers, timeout=20)
-    kql_resp.raise_for_status()
+    kql_resp = fabric_request("GET", f"{FABRIC_API_BASE}/workspaces/{ws_id}/kqlDatabases", headers=headers, timeout=60)
+    if kql_resp.status_code != 200:
+        raise RuntimeError(f"Failed to list KQL databases: HTTP {kql_resp.status_code} - {kql_resp.text}")
     kql_dbs = kql_resp.json().get("value", [])
     kql_db = next((k for k in kql_dbs if "masimo" in k.get("displayName", "").lower()), None)
     if not kql_db and kql_dbs:
@@ -387,14 +466,17 @@ def deploy_activator(
     kql_db_id = kql_db["id"]
 
     # 3. Check for existing Reflex
-    items_resp = requests.get(f"{FABRIC_API_BASE}/workspaces/{ws_id}/items?type=Reflex", headers=headers, timeout=20)
-    items_resp.raise_for_status()
+    items_resp = fabric_request("GET", f"{FABRIC_API_BASE}/workspaces/{ws_id}/items?type=Reflex", headers=headers, timeout=60)
+    if items_resp.status_code != 200:
+        raise RuntimeError(f"Failed to list Reflex items: HTTP {items_resp.status_code} - {items_resp.text}")
     items = items_resp.json().get("value", [])
     existing = next((i for i in items if i.get("displayName") == reflex_name), None)
 
     if cleanup:
         if existing:
-            del_resp = requests.delete(f"{FABRIC_API_BASE}/workspaces/{ws_id}/items/{existing['id']}", headers=headers, timeout=20)
+            del_resp = fabric_request("DELETE", f"{FABRIC_API_BASE}/workspaces/{ws_id}/items/{existing['id']}", headers=headers, timeout=60)
+            if del_resp.status_code not in (200, 204):
+                raise RuntimeError(f"Failed to delete Reflex item: HTTP {del_resp.status_code} - {del_resp.text}")
             return {"status": "DELETED", "reflex_id": existing["id"]}
         return {"status": "NOT_FOUND", "message": "Reflex item did not exist"}
 
@@ -409,24 +491,39 @@ def deploy_activator(
             "type": "Reflex",
             "definition": {"parts": [{"path": "ReflexEntities.json", "payload": no_rule_b64, "payloadType": "InlineBase64"}]},
         }
-        create_resp = requests.post(f"{FABRIC_API_BASE}/workspaces/{ws_id}/items", headers=headers, json=create_payload, timeout=30)
-        if create_resp.status_code == 201:
-            reflex_id = create_resp.json().get("id")
-        elif create_resp.status_code == 202:
-            op_id = create_resp.headers.get("x-ms-operation-id")
-            if op_id:
-                poll_lro(op_id, token)
-            # Find created item
-            for _ in range(12):
-                time.sleep(3)
-                refresh_resp = requests.get(f"{FABRIC_API_BASE}/workspaces/{ws_id}/items?type=Reflex", headers=headers, timeout=20)
-                if refresh_resp.status_code == 200:
-                    found = next((i for i in refresh_resp.json().get("value", []) if i.get("displayName") == reflex_name), None)
-                    if found:
-                        reflex_id = found["id"]
-                        break
-        else:
-            raise RuntimeError(f"Reflex creation failed with HTTP {create_resp.status_code}: {create_resp.text}")
+        create_url = f"{FABRIC_API_BASE}/workspaces/{ws_id}/items"
+        max_create_attempts = 8
+        for attempt in range(1, max_create_attempts + 1):
+            if attempt > 1:
+                # A timed-out or 5xx create may still have succeeded: reuse it instead of re-POSTing.
+                reflex_id = find_reflex_id(ws_id, headers, reflex_name)
+                if reflex_id:
+                    break
+            try:
+                create_resp = requests.post(create_url, headers=headers, json=create_payload, timeout=60)
+            except requests.RequestException as ex:
+                if attempt == max_create_attempts:
+                    raise RuntimeError(f"Reflex creation failed after {max_create_attempts} attempts: {ex}") from ex
+                time.sleep(retry_delay_seconds(None, attempt))
+                continue
+            if create_resp.status_code == 201:
+                reflex_id = create_resp.json().get("id")
+                break
+            if create_resp.status_code == 202:
+                op_id = create_resp.headers.get("x-ms-operation-id")
+                if op_id:
+                    poll_lro(op_id, token)
+                find_deadline = time.time() + 60
+                while not reflex_id and time.time() < find_deadline:
+                    reflex_id = find_reflex_id(ws_id, headers, reflex_name)
+                    if not reflex_id:
+                        time.sleep(3)
+                if not reflex_id:
+                    raise RuntimeError(f"Reflex item '{reflex_name}' creation accepted (202) but the item was not listed within 60 s")
+                break
+            if not is_retryable_response(create_resp) or attempt == max_create_attempts:
+                raise RuntimeError(f"Reflex creation failed with HTTP {create_resp.status_code}: {create_resp.text}")
+            time.sleep(retry_delay_seconds(create_resp, attempt))
 
     if not reflex_id:
         raise RuntimeError("Reflex was not created or resolved")
@@ -435,7 +532,13 @@ def deploy_activator(
     time.sleep(2)
     _, full_b64 = build_reflex_entities(recipient, kql_db_id, ws_id, execution_interval_seconds=60, include_rule=True)
     update_payload = {"definition": {"parts": [{"path": "ReflexEntities.json", "payload": full_b64, "payloadType": "InlineBase64"}]}}
-    upd_resp = requests.post(f"{FABRIC_API_BASE}/workspaces/{ws_id}/items/{reflex_id}/updateDefinition", headers=headers, json=update_payload, timeout=30)
+    upd_resp = fabric_request(
+        "POST",
+        f"{FABRIC_API_BASE}/workspaces/{ws_id}/items/{reflex_id}/updateDefinition",
+        headers=headers,
+        json_data=update_payload,
+        timeout=60,
+    )
     if upd_resp.status_code not in (200, 202):
         raise RuntimeError(f"Reflex updateDefinition failed with HTTP {upd_resp.status_code}: {upd_resp.text}")
 
@@ -443,7 +546,6 @@ def deploy_activator(
         op_id = upd_resp.headers.get("x-ms-operation-id")
         if op_id:
             poll_lro(op_id, token)
-
     return {
         "status": "DEPLOYED",
         "reflex_id": reflex_id,

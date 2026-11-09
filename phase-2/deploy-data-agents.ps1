@@ -50,15 +50,6 @@ function Get-AccessTokenForResource {
         return $env:HLS_FABRIC_TOKEN
     }
     try {
-        $rootPath = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-        $pyTok = & /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -c "import os, sys; sys.path.insert(0, sys.argv[1]); from scripts.verify_data_agent_qa import get_delegated_token; print(get_delegated_token(sys.argv[2]))" "$rootPath" "$ResourceUrl" 2>$null
-        if ($pyTok -and $pyTok.Trim().Length -gt 100) {
-            $rawToken = $pyTok.Trim()
-            $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = (Get-Date).AddMinutes(50) }
-            return $rawToken
-        }
-    } catch {}
-    try {
         $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
         $rawToken = $tokenObj.Token
         if ($rawToken -is [System.Security.SecureString]) {

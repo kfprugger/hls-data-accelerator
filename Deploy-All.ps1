@@ -116,7 +116,7 @@ param (
     [int]$ClaimEventRatePerMinute = 60,
 
     # ── Demonstration Capabilities ──
-    [bool]$SeedTcgaCohort = $true,
+    [bool]$SeedTcgaCohort = $false,   # $true only when the rayfin-imaging add-on seeds the TCGA cohort (115 devices)
     [int]$DeviceCount = 0,
     # ── SPN Credentials ──
     [string]$SpnClientId = "",
@@ -155,10 +155,12 @@ $requestedSummaryPhase = if ($Phase7) { "Phase7" } elseif ($Phase5) { "Phase5" }
 # See #fix-2.
 $null = az config set extension.use_dynamic_install=yes_without_prompt --only-show-errors 2>$null
 
-# When Az PowerShell is not separately logged in (single-auth Azure CLI mode),
-# provide a process-scoped Get-AzAccessToken shim that falls back to `az account get-access-token`
-# so external scripts (e.g., FabricDicomCohortingToolkit) work seamlessly without Connect-AzAccount.
+# When Az PowerShell is not separately logged in (single-auth Azure CLI mode), or its context
+# is on a tenant other than -ExpectedTenantId, provide a process-scoped Get-AzAccessToken shim
+# that uses `az account get-access-token` pinned to the expected tenant, so external scripts
+# (e.g., FabricDicomCohortingToolkit) never receive a token for the wrong tenant.
 $global:HlsExpectedSubscriptionId = $ExpectedSubscriptionId
+$global:HlsExpectedTenantId = $ExpectedTenantId
 function global:Get-AzAccessToken {
     [CmdletBinding()]
     param(
@@ -166,59 +168,90 @@ function global:Get-AzAccessToken {
         [string]$ResourceTypeName,
         [string]$TenantId
     )
-    try {
-        $cmd = Microsoft.PowerShell.Core\Get-Command -Name Get-AzAccessToken -CommandType Cmdlet -Module Az.Accounts -ErrorAction Stop | Select-Object -First 1
-        $resObj = & $cmd @PSBoundParameters -ErrorAction Stop
-        if ($null -eq $resObj -or $null -eq $resObj.Token) { throw "Get-AzAccessToken returned null token." }
-        return $resObj
-    } catch {
-        $res = if (-not [string]::IsNullOrWhiteSpace($ResourceUrl)) {
-            $ResourceUrl
-        } else {
-            switch ($ResourceTypeName) {
-                'Arm'               { 'https://management.azure.com' }
-                'ResourceManager'   { 'https://management.azure.com' }
-                'Storage'           { 'https://storage.azure.com' }
-                'DataLake'          { 'https://datalake.azure.net' }
-                'KeyVault'          { 'https://vault.azure.net' }
-                'MSGraph'           { 'https://graph.microsoft.com' }
-                'AadGraph'          { 'https://graph.windows.net' }
-                'OperationalInsights' { 'https://api.loganalytics.io' }
-                'OssRdbms'          { 'https://ossrdbms-aad.database.windows.net' }
-                'Synapse'           { 'https://dev.azuresynapse.net' }
-                'Batch'             { 'https://batch.core.windows.net' }
-                'Media'             { 'https://rest.media.azure.net' }
-                default {
-                    if (-not [string]::IsNullOrWhiteSpace($ResourceTypeName)) {
-                        throw "Unsupported ResourceTypeName '$ResourceTypeName' for Azure CLI token fallback."
-                    }
-                    'https://management.azure.com'
-                }
-            }
-        }
-        $expectedSubVar = Get-Variable -Name HlsExpectedSubscriptionId -Scope Global -ErrorAction SilentlyContinue
-        $subId = if ($expectedSubVar -and $expectedSubVar.Value) { [string]$expectedSubVar.Value } else { '' }
-        $subArgs = if (-not [string]::IsNullOrWhiteSpace($subId)) { @("--subscription", $subId) } else { @() }
-        $tenantArgs = if (-not [string]::IsNullOrWhiteSpace($TenantId)) { @("--tenant", $TenantId) } else { @() }
-        $global:LASTEXITCODE = 0
-        $cliRaw = az account get-access-token --resource $res @subArgs @tenantArgs -o json 2>$null
-        if ($global:LASTEXITCODE -ne 0 -or -not $cliRaw) { throw }
-        $cliObj = $cliRaw | ConvertFrom-Json
-        if (-not $cliObj -or -not $cliObj.accessToken) { throw }
-        $expOn = [DateTimeOffset]::UtcNow.AddMinutes(50)
+    $expectedTenantVar = Get-Variable -Name HlsExpectedTenantId -Scope Global -ErrorAction SilentlyContinue
+    $targetTenant = if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+        $TenantId
+    } elseif ($expectedTenantVar -and $expectedTenantVar.Value) {
+        [string]$expectedTenantVar.Value
+    } else { '' }
+
+    $azError = ''
+    $azCmd = Microsoft.PowerShell.Core\Get-Command -Name Get-AzAccessToken -CommandType Cmdlet -Module Az.Accounts -ErrorAction SilentlyContinue | Select-Object -First 1
+    $azContext = $null
+    if ($azCmd) {
+        try { $azContext = Az.Accounts\Get-AzContext -ErrorAction Stop } catch { $azError = $_.Exception.Message }
+    }
+    $azTenant = if ($azContext -and $azContext.Tenant) { [string]$azContext.Tenant.Id } else { '' }
+    # Use the Az cmdlet only when its context is on the expected tenant; otherwise go straight to CLI.
+    if ($azCmd -and $azTenant -and (-not $targetTenant -or $azTenant -eq $targetTenant)) {
         try {
-            if ($cliObj.PSObject.Properties['expires_on'] -and $cliObj.expires_on) {
-                $expOn = [DateTimeOffset]::FromUnixTimeSeconds([int64]$cliObj.expires_on)
-            } elseif ($cliObj.PSObject.Properties['expiresOn'] -and $cliObj.expiresOn) {
-                $expOn = [DateTimeOffset]::Parse([string]$cliObj.expiresOn)
-            }
-        } catch {}
-        return [PSCustomObject]@{
-            Token     = $cliObj.accessToken
-            ExpiresOn = $expOn
-            TenantId  = $cliObj.tenant
-            Type      = "Bearer"
+            $resObj = & $azCmd @PSBoundParameters -ErrorAction Stop
+            if ($null -eq $resObj -or $null -eq $resObj.Token) { throw "Get-AzAccessToken returned null token." }
+            return $resObj
+        } catch {
+            $azError = $_.Exception.Message
         }
+    } elseif ($azTenant) {
+        $azError = "Az PowerShell context tenant '$azTenant' does not match expected tenant '$targetTenant'"
+    }
+
+    $res = if (-not [string]::IsNullOrWhiteSpace($ResourceUrl)) {
+        $ResourceUrl
+    } else {
+        switch ($ResourceTypeName) {
+            'Arm'               { 'https://management.azure.com' }
+            'ResourceManager'   { 'https://management.azure.com' }
+            'Storage'           { 'https://storage.azure.com' }
+            'DataLake'          { 'https://datalake.azure.net' }
+            'KeyVault'          { 'https://vault.azure.net' }
+            'MSGraph'           { 'https://graph.microsoft.com' }
+            'AadGraph'          { 'https://graph.windows.net' }
+            'OperationalInsights' { 'https://api.loganalytics.io' }
+            'OssRdbms'          { 'https://ossrdbms-aad.database.windows.net' }
+            'Synapse'           { 'https://dev.azuresynapse.net' }
+            'Batch'             { 'https://batch.core.windows.net' }
+            'Media'             { 'https://rest.media.azure.net' }
+            default {
+                if (-not [string]::IsNullOrWhiteSpace($ResourceTypeName)) {
+                    throw "Unsupported ResourceTypeName '$ResourceTypeName' for Azure CLI token fallback."
+                }
+                'https://management.azure.com'
+            }
+        }
+    }
+    # `az account get-access-token` rejects --subscription together with --tenant: pin the
+    # tenant when known, otherwise the expected subscription.
+    $scopeArgs = if (-not [string]::IsNullOrWhiteSpace($targetTenant)) {
+        @("--tenant", $targetTenant)
+    } else {
+        $expectedSubVar = Get-Variable -Name HlsExpectedSubscriptionId -Scope Global -ErrorAction SilentlyContinue
+        if ($expectedSubVar -and $expectedSubVar.Value) { @("--subscription", [string]$expectedSubVar.Value) } else { @() }
+    }
+    $global:LASTEXITCODE = 0
+    $cliAll = @(az account get-access-token --resource $res @scopeArgs -o json 2>&1)
+    $cliExit = $global:LASTEXITCODE
+    $cliErr = ($cliAll | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { $_.ToString() }) -join "`n"
+    $cliRaw = ($cliAll | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }) -join "`n"
+    if ($cliExit -ne 0 -or -not $cliRaw) {
+        $azNote = if ($azError) { " Az PowerShell: $azError." } else { '' }
+        throw "az account get-access-token --resource $res $($scopeArgs -join ' ') failed (exit $cliExit): $cliErr.$azNote"
+    }
+    $cliObj = $cliRaw | ConvertFrom-Json
+    if (-not $cliObj -or -not $cliObj.accessToken) { throw "az account get-access-token for $res returned no accessToken." }
+    if ($targetTenant -and $cliObj.tenant -and $cliObj.tenant -ne $targetTenant) {
+        throw "az account get-access-token returned a token for tenant '$($cliObj.tenant)' but expected '$targetTenant'."
+    }
+    $expOn = [DateTimeOffset]::UtcNow.AddMinutes(50)
+    if ($cliObj.PSObject.Properties['expires_on'] -and $cliObj.expires_on) {
+        $expOn = [DateTimeOffset]::FromUnixTimeSeconds([int64]$cliObj.expires_on)
+    } elseif ($cliObj.PSObject.Properties['expiresOn'] -and $cliObj.expiresOn) {
+        $expOn = [DateTimeOffset]::Parse([string]$cliObj.expiresOn)
+    }
+    return [PSCustomObject]@{
+        Token     = $cliObj.accessToken
+        ExpiresOn = $expOn
+        TenantId  = $cliObj.tenant
+        Type      = "Bearer"
     }
 }
 
@@ -695,12 +728,24 @@ if (-not $Teardown) {
     if ($LASTEXITCODE -ne 0 -or $selectedAccount.tenantId -ne $ExpectedTenantId -or $selectedAccount.id -ne $ExpectedSubscriptionId) {
         throw "Azure CLI context does not match the explicitly requested tenant and subscription."
     }
-    try {
-        $selectedContext = Set-AzContext -TenantId $ExpectedTenantId -SubscriptionId $ExpectedSubscriptionId -ErrorAction SilentlyContinue
-        if ($selectedContext -and $selectedContext.Tenant.Id -and $selectedContext.Tenant.Id -ne $ExpectedTenantId) {
-            throw "Az PowerShell selected an unexpected tenant."
+    # Az PowerShell is optional (single-auth Azure CLI mode). When it cannot select the
+    # expected tenant, the Get-AzAccessToken shim detects the mismatch and uses Azure CLI
+    # with -ExpectedTenantId. A context that resolves to a different tenant is fatal.
+    $selectedContext = $null
+    $azContextError = ''
+    if (Microsoft.PowerShell.Core\Get-Command -Name Set-AzContext -ErrorAction SilentlyContinue) {
+        try {
+            $selectedContext = Set-AzContext -TenantId $ExpectedTenantId -SubscriptionId $ExpectedSubscriptionId -ErrorAction Stop
+        } catch {
+            $azContextError = $_.Exception.Message
         }
-    } catch { }
+    }
+    if ($selectedContext -and $selectedContext.Tenant -and $selectedContext.Tenant.Id -and $selectedContext.Tenant.Id -ne $ExpectedTenantId) {
+        throw "Az PowerShell selected tenant '$($selectedContext.Tenant.Id)' but -ExpectedTenantId is '$ExpectedTenantId'."
+    }
+    if (-not $selectedContext) {
+        Write-Host "  Az PowerShell context unavailable for tenant $ExpectedTenantId$(if ($azContextError) { " ($azContextError)" }); tokens will come from Azure CLI." -ForegroundColor DarkGray
+    }
     $tandemProviders = @(
         "Microsoft.Resources",
         "Microsoft.KeyVault",
@@ -800,6 +845,9 @@ function Get-PhaseResources {
 $stepNumber = 0
 $stepResults = @()
 $overallTimer = [System.Diagnostics.Stopwatch]::StartNew()
+# Pipeline/notebook runs that started before this instant belong to an earlier deployment
+# and are never reused as already Completed.
+$script:DeploymentStartUtc = [datetime]::UtcNow
 $hdsSourceJob = $null
 $hdsSourceTimer = $null
 $payerScaffoldJob = $null
@@ -1762,10 +1810,12 @@ if ($Phase2) {
                 ResourceGroupName   = $ResourceGroupName
                 ExpectedSubscriptionId = $ExpectedSubscriptionId
                 DeploymentPython = $script:deploymentPython
+                ReuseRunsStartedAfterUtc = $script:DeploymentStartUtc.ToString('o')
             }
             if ($RequireBronzeClinicalFhir) { $hdsPipelineArgs['RequireClinicalFhirData'] = $true }
             if ($RequireBronzeImagingDicom) { $hdsPipelineArgs['RequireImagingDicomData'] = $true }
             if ($SkipImaging) { $hdsPipelineArgs['SkipImagingPipeline'] = $true }
+            if ($ReseedData) { $hdsPipelineArgs['ReseedData'] = $true }
             $global:LASTEXITCODE = 0
             & "$ScriptDir/phase-2/storage-access-trusted-workspace.ps1" @hdsPipelineArgs
             Assert-LastExternalCommandSucceeded "storage-access-trusted-workspace.ps1"
@@ -2348,10 +2398,12 @@ if (-not $Phase3 -and -not $Phase4 -and -not $Phase5 -and -not $Phase7) {
                 ResourceGroupName   = $ResourceGroupName
                 ExpectedSubscriptionId = $ExpectedSubscriptionId
                 DeploymentPython = $script:deploymentPython
+                ReuseRunsStartedAfterUtc = $script:DeploymentStartUtc.ToString('o')
             }
             if ($RequireBronzeClinicalFhir) { $hdsPipelineArgs['RequireClinicalFhirData'] = $true }
             if ($RequireBronzeImagingDicom) { $hdsPipelineArgs['RequireImagingDicomData'] = $true }
             if ($SkipImaging) { $hdsPipelineArgs['SkipImagingPipeline'] = $true }
+            if ($ReseedData) { $hdsPipelineArgs['ReseedData'] = $true }
             $global:LASTEXITCODE = 0
             & "$ScriptDir/phase-2/storage-access-trusted-workspace.ps1" @hdsPipelineArgs
             Assert-LastExternalCommandSucceeded "storage-access-trusted-workspace.ps1"
@@ -3590,6 +3642,9 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                 }
             }
 
+            # Only a run started after this run's definition write may be reused.
+            $nbDefinitionWrittenUtc = [datetime]::UtcNow
+
             if ($existingNb -and $existingNb.id) {
                 Write-Host "  Notebook '$nbName' exists — updating definition..." -ForegroundColor White
                 $updateBody = @{
@@ -3660,11 +3715,25 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             Write-Host "  ✓ Notebook: $nbName ($nbId)" -ForegroundColor Green
             Move-FabricNotebooksToFolder -FabricWorkspaceName $FabricWorkspaceName -WorkspaceId $p5WsId
 
-            # Run the notebook (or reuse if its latest job already Completed)
-            $priorQualityJobs = $null
-            try { $priorQualityJobs = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items/$nbId/jobs/instances?limit=1" -Label 'Check prior materialization notebook run').value } catch {}
-            if ($priorQualityJobs -and $priorQualityJobs[0].status -eq 'Completed') {
-                Write-Host "  ✓ Materialization notebook '$nbName' latest run already Completed — reusing." -ForegroundColor Green
+            # Run the notebook, or reuse its latest job only when it Completed and started after
+            # this run wrote the notebook definition (never with -ReseedData).
+            $reusableQualityRun = $false
+            if (-not $ReseedData) {
+                $priorQualityJobs = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items/$nbId/jobs/instances?limit=1" -Label 'Check prior materialization notebook run').value
+                $priorQualityJob = @($priorQualityJobs) | Select-Object -First 1
+                if ($priorQualityJob -and $priorQualityJob.status -eq 'Completed' -and $priorQualityJob.PSObject.Properties['startTimeUtc'] -and $priorQualityJob.startTimeUtc) {
+                    $priorStart = $priorQualityJob.startTimeUtc
+                    $priorStartUtc = if ($priorStart -is [datetime]) {
+                        if ($priorStart.Kind -eq [DateTimeKind]::Local) { $priorStart.ToUniversalTime() } else { [datetime]::SpecifyKind($priorStart, [DateTimeKind]::Utc) }
+                    } else {
+                        [datetime]::Parse([string]$priorStart, [System.Globalization.CultureInfo]::InvariantCulture,
+                            [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+                    }
+                    $reusableQualityRun = $priorStartUtc -gt $nbDefinitionWrittenUtc
+                }
+            }
+            if ($reusableQualityRun) {
+                Write-Host "  ✓ Materialization notebook '$nbName' already Completed in this deployment — reusing." -ForegroundColor Green
                 $qualityNotebookCompleted = $true
             } else {
             Write-Host "  Running materialization notebook..." -ForegroundColor White
