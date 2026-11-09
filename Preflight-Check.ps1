@@ -225,29 +225,38 @@ try {
     Write-Host "  ✗ Not logged in to Azure CLI" -ForegroundColor Red
 }
 
-# 6. Az PowerShell login
+# 6. Az PowerShell login (optional when Azure CLI is authenticated)
 try {
     $azPsContext = Get-AzContext -ErrorAction Stop
     if ($azPsContext -and $azPsContext.Subscription -and $azPsContext.Subscription.Id) {
         $checks += @{ name = "Az PowerShell Login"; status = "pass"; detail = "$($azPsContext.Subscription.Name) ($($azPsContext.Subscription.Id.Substring(0,8))...)" }
         Write-Host "  ✓ Az PowerShell login: $($azPsContext.Subscription.Name)" -ForegroundColor Green
+    } elseif ($azCliAccount -and $azCliAccount.id) {
+        $checks += @{ name = "Az PowerShell Login"; status = "pass"; detail = "Delegated to Azure CLI ($($azCliAccount.name))" }
+        Write-Host "  ✓ Az PowerShell login: delegated to Azure CLI ($($azCliAccount.name))" -ForegroundColor Green
     } else {
         $checks += @{ name = "Az PowerShell Login"; status = "fail"; detail = "No active Az context" }
-        $failures += "Not logged in to Azure PowerShell. Run: Connect-AzAccount"
+        $failures += "Not logged in to Azure CLI. Run: az login"
         Write-Host "  ✗ Not logged in to Azure PowerShell" -ForegroundColor Red
     }
 } catch {
-    $checks += @{ name = "Az PowerShell Login"; status = "fail"; detail = "No active Az context" }
-    $failures += "Not logged in to Azure PowerShell. Run: Connect-AzAccount"
-    Write-Host "  ✗ Not logged in to Azure PowerShell" -ForegroundColor Red
+    if ($azCliAccount -and $azCliAccount.id) {
+        $checks += @{ name = "Az PowerShell Login"; status = "pass"; detail = "Delegated to Azure CLI ($($azCliAccount.name))" }
+        Write-Host "  ✓ Az PowerShell login: delegated to Azure CLI ($($azCliAccount.name))" -ForegroundColor Green
+    } else {
+        $checks += @{ name = "Az PowerShell Login"; status = "fail"; detail = "No active Az context" }
+        $failures += "Not logged in to Azure CLI. Run: az login"
+        Write-Host "  ✗ Not logged in to Azure PowerShell" -ForegroundColor Red
+    }
 }
 
-# 7. Account context alignment (Azure CLI vs Az PowerShell)
-if ($azCliAccount -and $azCliAccount.id -and $azPsContext -and $azPsContext.Subscription -and $azPsContext.Subscription.Id) {
+# 7. Account context alignment
+if ($azCliAccount -and $azCliAccount.id) {
     $cliSub = "$($azCliAccount.id)".Trim().ToLower()
-    $psSub = "$($azPsContext.Subscription.Id)".Trim().ToLower()
     $cliTenant = "$($azCliAccount.tenantId)".Trim().ToLower()
-    $psTenant = "$($azPsContext.Tenant.Id)".Trim().ToLower()
+    $psLoggedIn = [bool]($azPsContext -and $azPsContext.Subscription -and $azPsContext.Subscription.Id)
+    $psSub = if ($psLoggedIn) { "$($azPsContext.Subscription.Id)".Trim().ToLower() } else { $cliSub }
+    $psTenant = if ($psLoggedIn) { "$($azPsContext.Tenant.Id)".Trim().ToLower() } else { $cliTenant }
     $expectedTenantNorm = "$ExpectedTenantId".Trim().ToLower()
     $expectedSubNorm = "$ExpectedSubscriptionId".Trim().ToLower()
     if (($expectedTenantNorm -and ($cliTenant -ne $expectedTenantNorm -or $psTenant -ne $expectedTenantNorm)) -or
@@ -259,7 +268,7 @@ if ($azCliAccount -and $azCliAccount.id -and $azPsContext -and $azPsContext.Subs
     }
     if ($cliSub -eq $psSub -and $cliTenant -eq $psTenant) {
         $checks += @{ name = "Azure Context"; status = "pass"; detail = "Subscription and tenant aligned" }
-        Write-Host "  ✓ Azure context aligned (CLI + Az PowerShell)" -ForegroundColor Green
+        Write-Host "  ✓ Azure context aligned" -ForegroundColor Green
     } else {
         $checks += @{ name = "Azure Context"; status = "fail"; detail = "CLI/Az subscription or tenant mismatch" }
         $failures += "Azure CLI and Az PowerShell contexts do not match. Align with: az account set -s <subscription> and Set-AzContext -Subscription <subscriptionId>"
@@ -268,8 +277,8 @@ if ($azCliAccount -and $azCliAccount.id -and $azPsContext -and $azPsContext.Subs
         Write-Host "    Az  sub/tenant: $psSub / $psTenant" -ForegroundColor DarkGray
     }
 } else {
-    $checks += @{ name = "Azure Context"; status = "fail"; detail = "Cannot compare CLI/Az contexts" }
-    $failures += "Cannot validate Azure account context because one or both login contexts are missing."
+    $checks += @{ name = "Azure Context"; status = "fail"; detail = "Cannot validate Azure context" }
+    $failures += "Cannot validate Azure account context because Azure CLI login is missing."
     Write-Host "  ✗ Could not validate Azure context alignment" -ForegroundColor Red
 }
 

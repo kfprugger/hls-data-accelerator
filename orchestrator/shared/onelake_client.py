@@ -21,7 +21,7 @@ class OneLakeClient:
     """Upload local trees to OneLake without buffering complete files in memory."""
 
     def __init__(self, credential=None, base_url: str = ONELAKE_DFS_BASE) -> None:
-        self.credential = credential or DefaultAzureCredential()
+        self.credential = credential or DefaultAzureCredential(exclude_managed_identity_credential=True)
         self.base_url = base_url.rstrip("/")
 
     def _headers(self, content_type: str | None = None) -> dict[str, str]:

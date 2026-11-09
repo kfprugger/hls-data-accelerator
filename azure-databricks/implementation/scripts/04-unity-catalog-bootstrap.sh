@@ -77,6 +77,11 @@ ensure_external_location "hls_${NAMESPACE}_dicom_output" "${DICOM_OUTPUT_URL}/" 
 ensure_external_location "hls_${NAMESPACE}_managed" "${MANAGED_LOCATION_URL}/${NAMESPACE}/" \
   "Managed Delta storage for HLS ${NAMESPACE}" writable
 
+ONELAKE_EXTERNAL_LOCATION_URL="${ONELAKE_EXTERNAL_LOCATION_URL:-}"
+if [[ -n "$ONELAKE_EXTERNAL_LOCATION_URL" ]]; then
+  ensure_external_location "hls_${NAMESPACE}_onelake" "${ONELAKE_EXTERNAL_LOCATION_URL%/}/" \
+    "Fabric OneLake external location (AzureDatabricksStorage) for HLS ${NAMESPACE}" writable
+fi
 for source_location in "hls_${NAMESPACE}_fhir_export" "hls_${NAMESPACE}_dicom_output"; do
   databricks external-locations get "$source_location" -o json | jq -e '.read_only == true' >/dev/null \
     || { echo "FAIL: $source_location is not read-only" >&2; exit 1; }
@@ -135,4 +140,30 @@ verify "DICOM source readable" "LIST '${DICOM_OUTPUT_URL}/'"
 verify "managed write works" "CREATE TABLE IF NOT EXISTS ${CATALOG}.meta._bootstrap_probe (checked_at TIMESTAMP)"
 verify "managed cleanup works" "DROP TABLE IF EXISTS ${CATALOG}.meta._bootstrap_probe"
 
+if [[ -n "$ONELAKE_EXTERNAL_LOCATION_URL" ]]; then
+  ONELAKE_CATALOG="${CATALOG}_onelake"
+  echo "Provisioning OneLake-managed Unity Catalog ${ONELAKE_CATALOG} on Fabric AzureDatabricksStorage..."
+  for onelake_sql in \
+    "GRANT CREATE MANAGED STORAGE ON EXTERNAL LOCATION \`hls_${NAMESPACE}_onelake\` TO \`${WORKLOAD_PRINCIPAL}\`" \
+    "CREATE CATALOG IF NOT EXISTS ${ONELAKE_CATALOG} MANAGED LOCATION '${ONELAKE_EXTERNAL_LOCATION_URL%/}/catalog' COMMENT 'HLS Data Accelerator OneLake-managed Unity Catalog'" \
+    "GRANT USE CATALOG, USE SCHEMA, SELECT ON CATALOG ${ONELAKE_CATALOG} TO \`${DATABRICKS_ADMIN_GROUP}\`" \
+    "GRANT ALL PRIVILEGES ON CATALOG ${ONELAKE_CATALOG} TO \`${WORKLOAD_PRINCIPAL}\`" \
+    "CREATE SCHEMA IF NOT EXISTS ${ONELAKE_CATALOG}.gold COMMENT 'Managed Gold tables stored natively in Microsoft Fabric OneLake'" \
+    "CREATE VOLUME IF NOT EXISTS ${ONELAKE_CATALOG}.gold.onelake_files COMMENT 'Managed volume stored natively in Microsoft Fabric OneLake'" \
+    "CREATE TABLE IF NOT EXISTS ${ONELAKE_CATALOG}.gold.cohort_summary AS SELECT '${NAMESPACE}' AS namespace, current_timestamp() AS synced_at" \
+    "ALTER TABLE ${ONELAKE_CATALOG}.gold.cohort_summary DROP FEATURE 'catalogManaged' TRUNCATE HISTORY"; do
+    stmt_resp="$(databricks api post /api/2.0/sql/statements --json "$(jq -n \
+      --arg s "$onelake_sql" --arg w "$WAREHOUSE_ID" \
+      '{statement: $s, warehouse_id: $w, wait_timeout: "50s", on_wait_timeout: "CONTINUE"}')")" || true
+    stmt_id="$(jq -r '.statement_id // empty' <<<"$stmt_resp")"
+    stmt_state="$(jq -r '.status.state // empty' <<<"$stmt_resp")"
+    for ((poll = 0; poll < 30; poll++)); do
+      [[ "$stmt_state" != "PENDING" && "$stmt_state" != "RUNNING" ]] && break
+      sleep 3
+      stmt_resp="$(databricks api get "/api/2.0/sql/statements/$stmt_id")"
+      stmt_state="$(jq -r '.status.state // empty' <<<"$stmt_resp")"
+    done
+  done
+  verify "OneLake managed catalog readable" "SELECT count(*) FROM ${ONELAKE_CATALOG}.gold.cohort_summary"
+fi
 echo "Unity Catalog bootstrap complete for ${CATALOG}."

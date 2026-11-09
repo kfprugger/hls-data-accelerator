@@ -9,6 +9,7 @@ import { listDeployments, getTeardownBatch, deleteDeployment, clearAllDeployment
 import { listMockDeployments } from "../mockDeployment";
 import { MockDataBanner } from "../components/MockDataBanner";
 import { AzureBadge, FabricBadge } from "../components/TypeBadges";
+import { useAppState } from "../AppState";
 
 const useStyles = makeStyles({
     header: {
@@ -203,6 +204,7 @@ export function DeploymentHistory() {
     const styles = useStyles();
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
+    const { authContext, selectedSubscription } = useAppState();
     const signatureRef = useRef("");
     const [deployments, setDeployments] = useState<DeploymentSummary[]>([]);
     const [usingMock, setUsingMock] = useState(false);
@@ -262,7 +264,7 @@ export function DeploymentHistory() {
     }, []);
     useEffect(() => {
         refresh();
-    }, [refresh]);
+    }, [refresh, authContext, selectedSubscription]);
     useEffect(() => {
         if (!liveUpdates)
             return;

@@ -155,30 +155,88 @@ $requestedSummaryPhase = if ($Phase7) { "Phase7" } elseif ($Phase5) { "Phase5" }
 # See #fix-2.
 $null = az config set extension.use_dynamic_install=yes_without_prompt --only-show-errors 2>$null
 
+# When Az PowerShell is not separately logged in (single-auth Azure CLI mode),
+# provide a process-scoped Get-AzAccessToken shim that falls back to `az account get-access-token`
+# so external scripts (e.g., FabricDicomCohortingToolkit) work seamlessly without Connect-AzAccount.
+$global:HlsExpectedSubscriptionId = $ExpectedSubscriptionId
+function global:Get-AzAccessToken {
+    [CmdletBinding()]
+    param(
+        [string]$ResourceUrl,
+        [string]$ResourceTypeName,
+        [string]$TenantId
+    )
+    try {
+        $cmd = Microsoft.PowerShell.Core\Get-Command -Name Get-AzAccessToken -CommandType Cmdlet -Module Az.Accounts -ErrorAction Stop | Select-Object -First 1
+        $resObj = & $cmd @PSBoundParameters -ErrorAction Stop
+        if ($null -eq $resObj -or $null -eq $resObj.Token) { throw "Get-AzAccessToken returned null token." }
+        return $resObj
+    } catch {
+        $res = if (-not [string]::IsNullOrWhiteSpace($ResourceUrl)) {
+            $ResourceUrl
+        } else {
+            switch ($ResourceTypeName) {
+                'Arm'               { 'https://management.azure.com' }
+                'ResourceManager'   { 'https://management.azure.com' }
+                'Storage'           { 'https://storage.azure.com' }
+                'DataLake'          { 'https://datalake.azure.net' }
+                'KeyVault'          { 'https://vault.azure.net' }
+                'MSGraph'           { 'https://graph.microsoft.com' }
+                'AadGraph'          { 'https://graph.windows.net' }
+                'OperationalInsights' { 'https://api.loganalytics.io' }
+                'OssRdbms'          { 'https://ossrdbms-aad.database.windows.net' }
+                'Synapse'           { 'https://dev.azuresynapse.net' }
+                'Batch'             { 'https://batch.core.windows.net' }
+                'Media'             { 'https://rest.media.azure.net' }
+                default {
+                    if (-not [string]::IsNullOrWhiteSpace($ResourceTypeName)) {
+                        throw "Unsupported ResourceTypeName '$ResourceTypeName' for Azure CLI token fallback."
+                    }
+                    'https://management.azure.com'
+                }
+            }
+        }
+        $expectedSubVar = Get-Variable -Name HlsExpectedSubscriptionId -Scope Global -ErrorAction SilentlyContinue
+        $subId = if ($expectedSubVar -and $expectedSubVar.Value) { [string]$expectedSubVar.Value } else { '' }
+        $subArgs = if (-not [string]::IsNullOrWhiteSpace($subId)) { @("--subscription", $subId) } else { @() }
+        $tenantArgs = if (-not [string]::IsNullOrWhiteSpace($TenantId)) { @("--tenant", $TenantId) } else { @() }
+        $global:LASTEXITCODE = 0
+        $cliRaw = az account get-access-token --resource $res @subArgs @tenantArgs -o json 2>$null
+        if ($global:LASTEXITCODE -ne 0 -or -not $cliRaw) { throw }
+        $cliObj = $cliRaw | ConvertFrom-Json
+        if (-not $cliObj -or -not $cliObj.accessToken) { throw }
+        $expOn = [DateTimeOffset]::UtcNow.AddMinutes(50)
+        try {
+            if ($cliObj.PSObject.Properties['expires_on'] -and $cliObj.expires_on) {
+                $expOn = [DateTimeOffset]::FromUnixTimeSeconds([int64]$cliObj.expires_on)
+            } elseif ($cliObj.PSObject.Properties['expiresOn'] -and $cliObj.expiresOn) {
+                $expOn = [DateTimeOffset]::Parse([string]$cliObj.expiresOn)
+            }
+        } catch {}
+        return [PSCustomObject]@{
+            Token     = $cliObj.accessToken
+            ExpiresOn = $expOn
+            TenantId  = $cliObj.tenant
+            Type      = "Bearer"
+        }
+    }
+}
+
 $script:AccessTokenCache = @{}
 function Get-CachedAccessToken {
     param([Parameter(Mandatory)][string]$ResourceUrl)
     $key = $ResourceUrl.ToLowerInvariant()
     $cached = $script:AccessTokenCache[$key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
-    try {
-        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
-        $token = $tokenObj.Token
-        if ($token -is [System.Security.SecureString]) {
-            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
-            try { $token = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-        }
-        $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = $tokenObj.ExpiresOn }
-        return $token
-    } catch {
-        $subArgs = if ($ExpectedSubscriptionId) { @("--subscription", $ExpectedSubscriptionId) } else { @() }
-        $cliJson = az account get-access-token --resource $ResourceUrl @subArgs -o json 2>$null | ConvertFrom-Json
-        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
-        $token = $cliJson.accessToken
-        $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = (Get-Date).AddMinutes(50) }
-        return $token
+    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+    $token = $tokenObj.Token
+    if ($token -is [System.Security.SecureString]) {
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+        try { $token = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
     }
+    $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = $tokenObj.ExpiresOn }
+    return $token
 }
 
 function Test-FabricPaidFsku {
@@ -631,14 +689,18 @@ function Test-Prerequisites {
 }
 
 if (-not $Teardown) {
-    $selectedContext = Set-AzContext -TenantId $ExpectedTenantId -SubscriptionId $ExpectedSubscriptionId -ErrorAction Stop
-    if ($selectedContext.Tenant.Id -ne $ExpectedTenantId) { throw "Az PowerShell selected an unexpected tenant." }
     az account set --subscription $ExpectedSubscriptionId --only-show-errors
     if ($LASTEXITCODE -ne 0) { throw "Azure CLI could not select expected subscription $ExpectedSubscriptionId before preflight." }
     $selectedAccount = az account show --output json | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or $selectedAccount.tenantId -ne $ExpectedTenantId -or $selectedAccount.id -ne $ExpectedSubscriptionId) {
         throw "Azure CLI context does not match the explicitly requested tenant and subscription."
     }
+    try {
+        $selectedContext = Set-AzContext -TenantId $ExpectedTenantId -SubscriptionId $ExpectedSubscriptionId -ErrorAction SilentlyContinue
+        if ($selectedContext -and $selectedContext.Tenant.Id -and $selectedContext.Tenant.Id -ne $ExpectedTenantId) {
+            throw "Az PowerShell selected an unexpected tenant."
+        }
+    } catch { }
     $tandemProviders = @(
         "Microsoft.Resources",
         "Microsoft.KeyVault",
@@ -1310,7 +1372,8 @@ function Add-OntologyDatasourceToAgents {
                 $ontologyNamesToRemove = @($RemoveOntologyNames + $OntologyName) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
                 foreach ($removeName in $ontologyNamesToRemove) {
                     $safeRemoveName = [regex]::Escape("ontology-$removeName")
-                    $existingParts = @($existingParts | Where-Object { $_.path -notmatch $safeRemoveName })
+                    $safeLegacyPath = [regex]::Escape("ontologies/$removeName")
+                    $existingParts = @($existingParts | Where-Object { $_.path -notmatch $safeRemoveName -and $_.path -notmatch $safeLegacyPath })
                 }
 
                 # An ontology datasource with an empty element list contributes nothing to the
@@ -3597,7 +3660,13 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             Write-Host "  ✓ Notebook: $nbName ($nbId)" -ForegroundColor Green
             Move-FabricNotebooksToFolder -FabricWorkspaceName $FabricWorkspaceName -WorkspaceId $p5WsId
 
-            # Run the notebook
+            # Run the notebook (or reuse if its latest job already Completed)
+            $priorQualityJobs = $null
+            try { $priorQualityJobs = (Invoke-P5FabricRest -Uri "$p5Base/workspaces/$p5WsId/items/$nbId/jobs/instances?limit=1" -Label 'Check prior materialization notebook run').value } catch {}
+            if ($priorQualityJobs -and $priorQualityJobs[0].status -eq 'Completed') {
+                Write-Host "  ✓ Materialization notebook '$nbName' latest run already Completed — reusing." -ForegroundColor Green
+                $qualityNotebookCompleted = $true
+            } else {
             Write-Host "  Running materialization notebook..." -ForegroundColor White
             try {
                 $p5Token = Get-FabricTokenLocal
@@ -3643,6 +3712,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
                 Write-Host "  ⚠ Could not run notebook: $($_.Exception.Message)" -ForegroundColor Yellow
                 throw
             }
+            }
         } else {
             Write-Host "  ⚠ Notebook source not found at: $qualityNotebookPath" -ForegroundColor Yellow
             throw "Notebook source not found at: $qualityNotebookPath"
@@ -3666,7 +3736,6 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             $global:LASTEXITCODE = 0
             & "$ScriptDir\phase-4\deploy-ontology.ps1" @payerOntologyArgs
             Assert-LastExternalCommandSucceeded "deploy-ontology.ps1 DevicePayerOntology"
-
             Add-OntologyDatasourceToAgents -WorkspaceId $p5WsId `
                 -OntologyName "DevicePayerOntology" `
                 -AgentNames @("Payer Ops Triage", "Healthcare Graph Agent", "HealthcareOpsAgent") `
@@ -3834,7 +3903,7 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
         Write-Host ""
         Write-Host "  --- Step 10c: Readmission Risk Alert (Data Activator) ---" -ForegroundColor Cyan
 
-        if (-not $SkipActivator -and $AlertEmail) {
+        if (-not $ScaffoldingOnly -and $AlertEmail) {
             # Activator's supported programmable source is KQL. Expose the
             # reporting-lakehouse Delta table through a KQL DB OneLake shortcut,
             # then bind a real ReflexEntities definition to that external table.
@@ -3864,10 +3933,23 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             $p5KustoHeaders = @{ Authorization = "Bearer $p5KustoToken"; 'Content-Type' = 'application/json' }
             $riskExternalUrl = "https://onelake.dfs.fabric.microsoft.com/$p5WsId/$($p5KqlDb.id)/Tables/$riskShortcutName;impersonate"
             $riskExternalCommand = ".create-or-alter external table $riskShortcutName kind=delta (h@'$riskExternalUrl')"
-            Invoke-RestMethod -Method POST -Uri "$p5KustoUri/v1/rest/mgmt" -Headers $p5KustoHeaders `
-                -Body (@{ db = $p5KqlDb.displayName; csl = $riskExternalCommand } | ConvertTo-Json) | Out-Null
-            Invoke-RestMethod -Method POST -Uri "$p5KustoUri/v1/rest/query" -Headers $p5KustoHeaders `
-                -Body (@{ db = $p5KqlDb.displayName; csl = "external_table('$riskShortcutName') | take 1 | count" } | ConvertTo-Json) | Out-Null
+            for ($kAttempt = 1; $kAttempt -le 5; $kAttempt++) {
+                try {
+                    Invoke-RestMethod -Method POST -Uri "$p5KustoUri/v1/rest/mgmt" -Headers $p5KustoHeaders `
+                        -Body (@{ db = $p5KqlDb.displayName; csl = $riskExternalCommand } | ConvertTo-Json) -ErrorAction Stop | Out-Null
+                    Invoke-RestMethod -Method POST -Uri "$p5KustoUri/v1/rest/query" -Headers $p5KustoHeaders `
+                        -Body (@{ db = $p5KqlDb.displayName; csl = "external_table('$riskShortcutName') | take 1 | count" } | ConvertTo-Json) -ErrorAction Stop | Out-Null
+                    break
+                } catch {
+                    if ($kAttempt -lt 5) {
+                        $delay = 5 * $kAttempt
+                        Write-Host "  ⚠ QualityReadmissionRiskScores external table not yet ready (shortcut propagating); retrying in ${delay}s ($kAttempt/5)..." -ForegroundColor Yellow
+                        Start-Sleep -Seconds $delay
+                    } else {
+                        throw
+                    }
+                }
+            }
 
             $riskContainerId = [guid]::NewGuid().ToString()
             $riskSourceId = [guid]::NewGuid().ToString()

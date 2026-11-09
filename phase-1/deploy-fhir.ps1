@@ -107,7 +107,8 @@ function ConvertTo-StrictIntFromCliOutput {
 
 $script:DeploymentSubscriptionId = $ExpectedSubscriptionId
 if ($script:DeploymentSubscriptionId) {
-    Set-AzContext -SubscriptionId $script:DeploymentSubscriptionId -ErrorAction Stop | Out-Null
+    az account set --subscription $script:DeploymentSubscriptionId 2>$null
+    try { Set-AzContext -SubscriptionId $script:DeploymentSubscriptionId -ErrorAction SilentlyContinue | Out-Null } catch { }
 } else {
     try {
         $azContext = Get-AzContext -ErrorAction SilentlyContinue

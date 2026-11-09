@@ -1125,7 +1125,7 @@ dependencies:
     # small local table instead of snapshotting the alert result itself.
     Write-Host ""
     Write-Host "  Refreshing patient-to-facility location mapping..." -ForegroundColor White
-    $cmd = '.set-or-replace PatientLocationDashboard <| let patient_encounters = external_table(''SilverEncounter'') | mv-expand loc = location | extend patient_orig_id = coalesce(tostring(subject.idOrig), replace_string(tostring(subject.msftSourceReference), "Patient/", ""), tostring(subject.identifier.value)), location_key = coalesce(tostring(loc.location.id), tostring(loc.location.identifier.value)) | where isnotempty(patient_orig_id) and isnotempty(location_key) | summarize arg_max(todatetime(period.start), location_key) by patient_orig_id | project patient_orig_id, location_key; let location_info = external_table(''SilverLocation'') | where isnotempty(position) | extend location_keys = pack_array(tostring(id), tostring(idOrig)) | mv-expand location_key = location_keys | where isnotempty(location_key) | project location_key = tostring(location_key), location_name = name, latitude = todouble(position.latitude), longitude = todouble(position.longitude), city = tostring(address.city), state = tostring(address.state); patient_encounters | join kind=leftouter location_info on location_key | project patient_id = patient_orig_id, location_name = coalesce(location_name, "Unknown (no Encounter Location match)"), city = coalesce(city, "Unknown"), state = coalesce(state, ""), latitude, longitude'
+    $cmd = '.set-or-replace PatientLocationDashboard <| (external_table(''SilverEncounter'') | mv-expand loc = location | extend patient_orig_id = coalesce(tostring(subject.idOrig), replace_string(tostring(subject.msftSourceReference), "Patient/", ""), tostring(subject.identifier.value)), location_key = coalesce(tostring(loc.location.id), tostring(loc.location.identifier.value)) | where isnotempty(patient_orig_id) and isnotempty(location_key) | summarize arg_max(todatetime(period.start), location_key) by patient_orig_id | project patient_orig_id, location_key) | join kind=leftouter (external_table(''SilverLocation'') | where isnotempty(position) | extend location_keys = pack_array(tostring(id), tostring(idOrig)) | mv-expand location_key = location_keys | where isnotempty(location_key) | project location_key = tostring(location_key), location_name = name, latitude = todouble(position.latitude), longitude = todouble(position.longitude), city = tostring(address.city), state = tostring(address.state)) on location_key | project patient_id = patient_orig_id, location_name = coalesce(location_name, "Unknown (no Encounter Location match)"), city = coalesce(city, "Unknown"), state = coalesce(state, ""), latitude, longitude'
     if (Invoke-KustoMgmt -Command $cmd -Label "PatientLocationDashboard mapping" @kqlParams) { $p2Success++ } else { $p2Fail++ }
 
     Write-Host "  Deploying fn_AlertLocationMap (live alerts + cached location mapping)..." -ForegroundColor White
@@ -1365,20 +1365,20 @@ Write-Host ""
 Write-Host "--- STEP 0: VALIDATING PREREQUISITES ---" -ForegroundColor Cyan
 
 # Verify Az module
-if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
-    Write-Host "ERROR: Az PowerShell module not found. Run: Install-Module Az" -ForegroundColor Red
-    exit 1
-}
-Write-Host "  ✓ Az PowerShell module found" -ForegroundColor Green
-
-# Verify logged in
+# Verify logged in via Azure CLI (with Az PowerShell fallback)
 try {
-    $azContext = Get-AzContext
-    if (-not $azContext) { throw "No Az context" }
-    Write-Host "  ✓ Authenticated as: $($azContext.Account.Id)" -ForegroundColor Green
-    Write-Host "  ✓ Subscription: $($azContext.Subscription.Name) ($($azContext.Subscription.Id))" -ForegroundColor Green
+    $cliAcct = az account show -o json 2>$null | ConvertFrom-Json
+    if ($cliAcct -and $cliAcct.id) {
+        Write-Host "  ✓ Authenticated as: $($cliAcct.user.name)" -ForegroundColor Green
+        Write-Host "  ✓ Subscription: $($cliAcct.name) ($($cliAcct.id))" -ForegroundColor Green
+    } else {
+        $azContext = Get-AzContext -ErrorAction Stop
+        if (-not $azContext) { throw "No Az context" }
+        Write-Host "  ✓ Authenticated as: $($azContext.Account.Id)" -ForegroundColor Green
+        Write-Host "  ✓ Subscription: $($azContext.Subscription.Name) ($($azContext.Subscription.Id))" -ForegroundColor Green
+    }
 } catch {
-    Write-Host "ERROR: Not logged in. Run: Connect-AzAccount" -ForegroundColor Red
+    Write-Host "ERROR: Not logged in. Run: az login" -ForegroundColor Red
     exit 1
 }
 

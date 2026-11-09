@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, Box, Button, Card, Chip, CircularProgress, Stack, Step, StepButton, Stepper, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, Chip, CircularProgress, LinearProgress, Stack, Step, StepButton, Stepper, Typography } from '@mui/material';
 import { errorMessageFromBody, type DeploymentConfig } from '../api';
 import { useAppState } from '../AppState';
 
@@ -55,8 +55,10 @@ export function GuidedDeployment({ children, config, errors, starting, onStart, 
   const latestValidation = useRef(validationKey);
   latestValidation.current = validationKey;
   const pendingOverrideKey = useRef('');
+  const autoValidatedKey = useRef('');
   const controller = useRef<AbortController | null>(null);
   const ready = Boolean(authContext?.ready);
+  const configureCompleted = step >= 2 && errors.length === 0;
   const canDeploy = Boolean(ready && errors.length === 0 && result?.passed && validated === validationKey);
 
   useEffect(() => () => controller.current?.abort(), []);
@@ -68,8 +70,15 @@ export function GuidedDeployment({ children, config, errors, starting, onStart, 
     setValidated('');
     setConfirmed('');
     setResult(null);
+    autoValidatedKey.current = '';
   }, [authenticationKey, fingerprint, validationKey]);
 
+  useEffect(() => {
+    if (step === 2 && ready && errors.length === 0 && !busy && validated !== validationKey && autoValidatedKey.current !== validationKey) {
+      autoValidatedKey.current = validationKey;
+      void validate();
+    }
+  }, [step, ready, errors.length, busy, validated, validationKey]);
   async function validate(overridePatch?: Partial<DeploymentConfig>) {
     const requestPayload = overridePatch ? JSON.stringify({ ...config, ...overridePatch }) : fingerprint;
     const requestKey = overridePatch
@@ -108,8 +117,8 @@ export function GuidedDeployment({ children, config, errors, starting, onStart, 
 
   return <Stack spacing={3}>
     <Typography variant="h5" component="h2">New deployment</Typography>
-    <Stepper nonLinear activeStep={step} alternativeLabel sx={{ overflowX: 'auto', '& .MuiStep-root': { minWidth: 72 }, '& .MuiStepLabel-label': { fontSize: { xs: 11, sm: 14 } } }}>
-      {steps.map((name, index) => <Step key={name} completed={index === 0 ? ready : index === 2 ? canDeploy : false}>
+    <Stepper nonLinear activeStep={step} alternativeLabel sx={{ overflow: 'hidden', py: 0.5, '& .MuiStep-root': { minWidth: 64 }, '& .MuiStepLabel-label': { fontSize: { xs: 11, sm: 14 } } }}>
+      {steps.map((name, index) => <Step key={name} completed={index === 0 ? ready : index === 1 ? configureCompleted : index === 2 ? canDeploy : index === 3 ? (canDeploy && confirmed === validationKey) : false}>
         <StepButton disabled={starting || busy || (index === 4 && (!canDeploy || confirmed !== validationKey))} onClick={() => setStep(index)}>{name}</StepButton>
       </Step>)}
     </Stepper>
@@ -133,8 +142,41 @@ export function GuidedDeployment({ children, config, errors, starting, onStart, 
         <ul>{errors.map(message => <li key={message}>{message}</li>)}</ul>
         <Button onClick={() => setStep(1)}>Return to configuration</Button>
       </Alert>}
-      <Button variant="contained" disabled={!ready || errors.length > 0 || busy} onClick={() => void validate()}>{busy ? 'Validating…' : 'Run preflight'}</Button>
-      {busy && <CircularProgress size={24} aria-label="Checking deployment prerequisites" />}
+      <Button
+        variant="contained"
+        disabled={!ready || errors.length > 0 || busy}
+        onClick={() => void validate()}
+      >
+        {busy ? 'Validating prerequisites…' : 'Run preflight'}
+      </Button>
+      {busy && (
+        <Box
+          role="status"
+          aria-live="polite"
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 1.5,
+            py: 3,
+            px: 3,
+            borderRadius: '16px',
+            bgcolor: 'var(--m3-colorNeutralBackground2)',
+            border: '1px solid var(--m3-colorNeutralStroke2)',
+            textAlign: 'center',
+          }}
+        >
+          <CircularProgress size={28} thickness={4.5} aria-label="Checking deployment prerequisites" />
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            Checking Azure, Fabric, capacity, and add-on prerequisites…
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'var(--m3-colorNeutralForeground2)' }}>
+            Verifying subscription access, resource providers, Entra security group, and regional model quotas.
+          </Typography>
+          <LinearProgress sx={{ width: '100%', maxWidth: 420, mt: 0.5, borderRadius: 4 }} />
+        </Box>
+      )}
       {error && <Alert severity="error">{error}</Alert>}
       {result?.checks.map((check, index) => {
         const msg = check.message || check.detail || '';
@@ -177,8 +219,26 @@ export function GuidedDeployment({ children, config, errors, starting, onStart, 
         <Button onClick={() => setStep(2)}>Go to validation</Button>
       </Alert>}
       {step === 3
-        ? <Button variant="contained" disabled={!canDeploy} onClick={() => { setConfirmed(validationKey); setStep(4); }}>Confirm review</Button>
-        : <Button variant="contained" disabled={!canDeploy || confirmed !== validationKey || starting} onClick={() => void onStart()}>{starting ? 'Starting deployment…' : 'Deploy to this subscription'}</Button>}
+        ? <Button
+            variant="contained"
+            disabled={!canDeploy || starting}
+            startIcon={starting ? <CircularProgress size={18} color="inherit" /> : undefined}
+            onClick={() => {
+              setConfirmed(validationKey);
+              setStep(4);
+              void onStart();
+            }}
+          >
+            {starting ? 'Starting deployment…' : 'Confirm review & deploy'}
+          </Button>
+        : <Button
+            variant="contained"
+            disabled={!canDeploy || confirmed !== validationKey || starting}
+            startIcon={starting ? <CircularProgress size={18} color="inherit" /> : undefined}
+            onClick={() => void onStart()}
+          >
+            {starting ? 'Starting deployment…' : 'Deploy to this subscription'}
+          </Button>}
     </Stack></Card>}
     {step > 0 && <Button disabled={starting || busy} onClick={() => setStep(step - 1)}>Back</Button>}
   </Stack>;

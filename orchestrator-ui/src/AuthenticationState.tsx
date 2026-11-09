@@ -70,7 +70,7 @@ export function AuthenticationProvider({ children }: {
             const state = await requestJson<SavedState>('/api/auth/state', { signal: controller.signal });
             if (controller.signal.aborted) return;
             const serverTarget = state.pending || state.target;
-            const saved = state.pending || readDraft(owner) || state.target;
+            const saved = state.pending || readDraft(owner) || state.target || (owner.tid ? { tenant_id: owner.tid, subscription_id: '' } : null);
             if (saved) {
                 applyTarget(saved);
                 if (serverTarget && targetKey(saved) === targetKey(serverTarget)) persistedTarget.current = targetKey(serverTarget);
@@ -105,9 +105,9 @@ export function AuthenticationProvider({ children }: {
         return () => { controller.abort(); clearTimeout(timer); };
     }, []);
     useEffect(() => {
-        applyTarget({ tenant_id: target.current.tenant_id || authContext?.cli.tenantId || authContext?.pwsh.tenantId || '',
+        applyTarget({ tenant_id: target.current.tenant_id || authContext?.cli.tenantId || authContext?.pwsh.tenantId || identity?.tid || '',
             subscription_id: target.current.subscription_id || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || '' });
-    }, [authContext]);
+    }, [authContext, identity?.tid]);
     useEffect(() => {
         if (!identity?.hosted || busy || !uuid.test(tenant.trim()) || !uuid.test(subscription.trim())) return;
         const pair = { tenant_id: tenant.trim(), subscription_id: subscription.trim() };
@@ -153,7 +153,7 @@ export function AuthenticationProvider({ children }: {
             }
             setCode(null); setBusy(false); reservation.current = false;
             if (result.status === 'succeeded') {
-                setMessage(`${tool === 'az' ? 'Azure CLI' : 'Az PowerShell'} sign-in complete.`);
+                setMessage('Azure deployment sign-in complete (Azure CLI + PowerShell ready).');
                 try { await refresh.current(); }
                 catch (cause) { setError(`Sign-in succeeded, but the account context could not be refreshed. Use Refresh sign-in status. ${cause instanceof Error ? cause.message : ''}`); }
             } else {
@@ -186,6 +186,9 @@ export function AuthenticationProvider({ children }: {
             persistedTarget.current = targetKey(pair);
             setRemaining(next.expires_in);
             setCode(next);
+            if (next.user_code && typeof navigator !== 'undefined' && navigator.clipboard) {
+                void navigator.clipboard.writeText(next.user_code).catch(() => {});
+            }
         }
         catch (cause) {
             setError(cause instanceof Error ? cause.message : 'Unable to begin sign-in');

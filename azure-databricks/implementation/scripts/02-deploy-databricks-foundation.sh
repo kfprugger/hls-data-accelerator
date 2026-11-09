@@ -12,11 +12,13 @@ OUTPUT_FILE="$ROOT_DIR/.state/foundation-${ENVIRONMENT}.json"
 : "${AZ_RESOURCE_GROUP:?}" "${AZ_LOCATION:?}" "${STORAGE_ACCOUNT_NAME:?}" "${EVENTHUB_NAMESPACE:?}" "${ENVIRONMENT:?}"
 mkdir -p "$ROOT_DIR/.state"
 
+WORKSPACE_LOCATION="${DATABRICKS_WORKSPACE_LOCATION:-$AZ_LOCATION}"
 echo "Validating template against the live resource group (no changes yet)..."
 az deployment group validate \
   --resource-group "$AZ_RESOURCE_GROUP" \
   --template-file "$ROOT_DIR/bicep/databricks-foundation.bicep" \
   --parameters location="$AZ_LOCATION" \
+               workspaceLocation="$WORKSPACE_LOCATION" \
                storageAccountName="$STORAGE_ACCOUNT_NAME" \
                eventHubNamespaceName="$EVENTHUB_NAMESPACE" \
                adminGroupObjectId="${ADMIN_GROUP_OBJECT_ID:-}" \
@@ -27,6 +29,7 @@ az deployment group what-if \
   --resource-group "$AZ_RESOURCE_GROUP" \
   --template-file "$ROOT_DIR/bicep/databricks-foundation.bicep" \
   --parameters location="$AZ_LOCATION" \
+               workspaceLocation="$WORKSPACE_LOCATION" \
                storageAccountName="$STORAGE_ACCOUNT_NAME" \
                eventHubNamespaceName="$EVENTHUB_NAMESPACE" \
                adminGroupObjectId="${ADMIN_GROUP_OBJECT_ID:-}"
@@ -41,6 +44,7 @@ az deployment group create \
   --name "$DEPLOYMENT_NAME" \
   --template-file "$ROOT_DIR/bicep/databricks-foundation.bicep" \
   --parameters location="$AZ_LOCATION" \
+               workspaceLocation="$WORKSPACE_LOCATION" \
                storageAccountName="$STORAGE_ACCOUNT_NAME" \
                eventHubNamespaceName="$EVENTHUB_NAMESPACE" \
                adminGroupObjectId="${ADMIN_GROUP_OBJECT_ID:-}" \
