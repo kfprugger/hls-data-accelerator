@@ -52,8 +52,9 @@ def check_graph_agent(az, ws_id, items, log, mcp_jsonrpc, expected_association_c
             answers.append({"question": question, "answer": answer or _answer(response), "rawResponse": response})
         count_match = re.search(r"\b(\d+)\b", answers[0]["answer"])
         association_count = int(count_match.group(1)) if count_match else None
-        id_match = re.search(r"assocPatientId\s*[:` ]+([0-9a-f-]{36})", answers[1]["answer"], re.I)
-        device_match = re.search(r"deviceRef\s*[:` ]+(MASIMO-[A-Z0-9-]+)", answers[1]["answer"], re.I)
+        # Agents format fields as Markdown (`**assocPatientId**: \`<id>\``); skip emphasis and code markers.
+        id_match = re.search(r"assocPatientId[*_`]*\s*[:\s*_`]+([0-9a-f-]{36})", answers[1]["answer"], re.I)
+        device_match = re.search(r"deviceRef[*_`]*\s*[:\s*_`]+(MASIMO-[A-Z0-9-]+)", answers[1]["answer"], re.I)
         mixed_answer = answers[2]["answer"].lower()
         mixed_counts = [int(v) for v in re.findall(r"\b\d+\b", mixed_answer)]
         mixed_grounded = (

@@ -172,5 +172,39 @@ class ReportCoverageTests(unittest.TestCase):
         self.assertFalse(result["passed"])
 
 
+class GraphAgentCheckTests(unittest.TestCase):
+    def _run(self, sample_answer):
+        from graph_agent_check import check_graph_agent
+        answers = [
+            "100 DeviceAssoc entities were found.\n\nSource: DevicePayerOntology.",
+            sample_answer,
+            "1. DevicePayerOntology\n   - Patient entities: 100\n   - linkedToDevice relationships: 100\n"
+            "2. MasimoEventhouse / TelemetryRaw\n   - Distinct currently reporting devices: 100",
+        ]
+        tool = {"name": "ask", "inputSchema": {"properties": {"userQuestion": {}}}}
+
+        def rpc(_endpoint, _token, body):
+            if body.get("method") == "tools/list":
+                return {"result": {"tools": [tool]}}
+            if body.get("method") == "tools/call":
+                return {"result": {"content": [{"type": "text", "text": answers[body["id"] - 3]}]}}
+            return {"result": {}}
+
+        az = Mock()
+        az.token.return_value = "token"
+        items = [{"type": "DataAgent", "displayName": "Healthcare Graph Agent", "id": "agent"}]
+        return check_graph_agent(az, "ws", items, Mock(), rpc, 100)
+
+    def test_markdown_formatted_association_passes(self):
+        result = self._run("- **assocPatientId**: `a88fa4a9-7abf-6238-a5f8-8d1dc76263fc`  \n- **deviceRef**: `MASIMO-RADIUS7-0061`")
+        self.assertTrue(result["passed"], result)
+        self.assertEqual(result["results"][0]["deviceId"], "MASIMO-RADIUS7-0061")
+
+    def test_association_without_real_ids_fails(self):
+        result = self._run("- **assocPatientId**: `patient-1`\n- **deviceRef**: `device-1`")
+        self.assertFalse(result["passed"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
