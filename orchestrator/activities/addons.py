@@ -137,6 +137,33 @@ def _check_cardiology_region_quota(config: dict, location: str, candidates: list
     return None
 
 
+def cardiology_resource_group(config: dict) -> str:
+    return f"rg-{config['fabric_workspace_name']}-cardio"
+
+
+def _existing_cardiology_model(config: dict, candidates: list[tuple[str, str]]) -> str | None:
+    """Describe the candidate model this environment already runs; phase 8 keeps it, so it needs no new quota."""
+    group = cardiology_resource_group(config)
+    try:
+        accounts = az_json(config, "cognitiveservices", "account", "list", "-g", group)
+    except RuntimeError as exc:
+        if "ResourceGroupNotFound" in str(exc):
+            return None
+        raise
+    account = next((a for a in accounts if (a.get("tags") or {}).get("hls-workload") == "cardiology-app"), None)
+    if not account:
+        return None
+    deployments = az_json(config, "cognitiveservices", "account", "deployment", "list", "-g", group, "-n", account["name"])
+    # Phase 8 matches with PowerShell -eq, which ignores case.
+    for name, _version in candidates:
+        found = next((d for d in deployments if (d.get("name") or "").casefold() == name.casefold()
+                      and ((d.get("sku") or {}).get("name") or "").casefold() == "datazonestandard"), None)
+        if found:
+            version = ((found.get("properties") or {}).get("model") or {}).get("version")
+            return f"{found['name']} {version}: keeping this environment's DataZoneStandard deployment ({found['sku'].get('capacity')}K TPM)"
+    return None
+
+
 class TransientHttpError(RuntimeError):
     """HTTP 429/5xx from a cloud API; ``retry_after`` is the server's Retry-After in seconds, if any."""
 
@@ -252,9 +279,12 @@ def preflight(config: dict) -> list[dict]:
         def model():
             pending_cardio = ensure_providers_registered(config, CARDIOLOGY_PROVIDERS, wait=False)
             location = config["cardiology_location"]
-            candidates = [(config["cardiology_chat_model"], config["cardiology_chat_model_version"])] if config.get("cardiology_chat_model") else MODEL_CANDIDATES
+            explicit = bool(config.get("cardiology_chat_model"))
+            candidates = [(config["cardiology_chat_model"], config["cardiology_chat_model_version"])] if explicit else MODEL_CANDIDATES
             try:
-                match = _check_cardiology_region_quota(config, location, candidates)
+                # As in phase 8, an environment keeps the candidate model it already runs unless one is requested.
+                match = (None if explicit else _existing_cardiology_model(config, candidates)) or \
+                    _check_cardiology_region_quota(config, location, candidates)
             except Exception as exc:
                 if "MissingSubscriptionRegistration" in str(exc):
                     msg = "Microsoft.CognitiveServices is registering; auto-registration started and model quota will be verified once registration completes."
@@ -1430,7 +1460,7 @@ class AddonRunner:
         self.substep("Wait for HDS ingestion", "succeeded")
         await self.command("Refresh cardiology Gold", [sys.executable, backend / "cardiology-api/fabric/refresh_cardiology_gold.py", "--since", since])
         prefix = cfg.get("cardiology_prefix") or "cardio" + re.sub("[^a-z0-9]", "", cfg["fabric_workspace_name"].lower())[-6:]
-        group = f"rg-{cfg['fabric_workspace_name']}-cardio"
+        group = cardiology_resource_group(cfg)
         statuses = (self.deployment.get("customStatus") or {}).get("addons") or {}
         rayfin_res = statuses.get("rayfin", {}).get("resources") or {}
         # Keep a previously registered Rayfin origin on reruns: phase 8 reconciles SPA

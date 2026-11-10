@@ -51,6 +51,8 @@ class AddonContractTests(unittest.TestCase):
             if args[0] == "provider":
                 return {"registrationState": "Registered"}
             region = args[-1]
+            if args[1] == "account":
+                return []
             if args[1] == "model":
                 return [{"model": {"name": "gpt-5.6-luna", "version": "2026-07-09", "skus": [{"name": "DataZoneStandard"}]}}]
             return [{"name": {"value": "OpenAI.DataZoneStandard.gpt-5.6-luna"}, "limit": 100 if region == "eastus" else 20, "currentValue": 0}]
@@ -61,11 +63,45 @@ class AddonContractTests(unittest.TestCase):
             self.assertIn("(available in eastus)", check["message"])
 
         with patch.object(addons, "ensure_providers_registered", return_value=[("Microsoft.CognitiveServices", "Registering")]), \
+             patch.object(addons, "_existing_cardiology_model", return_value=None), \
              patch.object(addons, "_check_cardiology_region_quota", side_effect=RuntimeError("MissingSubscriptionRegistration")), \
              patch.object(addons.Cloud, "call", return_value={"defaultUserRolePermissions": {"allowedToCreateApps": True}}):
             check = next(c for c in addons.preflight(config) if c["name"] == "Cardiology model quota")
             self.assertEqual(check["status"], "warn")
             self.assertIn("Microsoft.CognitiveServices is registering", check["message"])
+
+    def test_cardiology_rerun_keeps_the_existing_model_when_zone_quota_is_exhausted(self):
+        config = self.config(deploy_cardiology=True, cardiology_location="eastus2")
+        accounts = [{"name": "cardiotest-ai", "tags": {"hls-workload": "cardiology-app"}}]
+        def az(_config, *args):
+            if args[0] == "provider":
+                return {"registrationState": "Registered"}
+            if args[1:3] == ("account", "list"):
+                if isinstance(accounts, Exception):
+                    raise accounts
+                return accounts if args[3:5] == ("-g", "rg-med-test-cardio") else []
+            if args[1:4] == ("account", "deployment", "list"):
+                return [{"name": "gpt-5.5", "sku": {"name": "DataZoneStandard", "capacity": 100},
+                         "properties": {"model": {"name": "gpt-5.5", "version": "2026-04-24"}}}]
+            if args[1] == "model":
+                return [{"model": {"name": n, "version": v, "skus": [{"name": "DataZoneStandard"}]}} for n, v in addons.MODEL_CANDIDATES]
+            # Every candidate's US data-zone quota is fully used.
+            return [{"name": {"value": f"OpenAI.DataZoneStandard.{n}"}, "limit": 100, "currentValue": 100} for n, _ in addons.MODEL_CANDIDATES]
+        def quota_check(cfg):
+            return next(c for c in addons.preflight(cfg) if c["name"] == "Cardiology model quota")
+        with patch.object(addons, "az_json", side_effect=az), \
+             patch.object(addons.Cloud, "call", return_value={"defaultUserRolePermissions": {"allowedToCreateApps": True}}):
+            check = quota_check(config)
+            self.assertEqual(check["status"], "pass")
+            self.assertIn("gpt-5.5 2026-04-24", check["message"])
+            # An explicitly requested model still needs free zone quota, as in phase 8.
+            explicit = {**config, "cardiology_chat_model": "gpt-5.5", "cardiology_chat_model_version": "2026-04-24"}
+            self.assertEqual(quota_check(explicit)["status"], "fail")
+            # A first deployment has no resource group yet, so only free quota can satisfy it.
+            accounts = RuntimeError("(ResourceGroupNotFound) Resource group 'rg-med-test-cardio' could not be found.")
+            check = quota_check(config)
+            self.assertEqual(check["status"], "fail")
+            self.assertIn("No requested model/version", check["message"])
 
     def test_ensure_providers_registered_raises_on_wait_timeout(self):
         config = self.config()
