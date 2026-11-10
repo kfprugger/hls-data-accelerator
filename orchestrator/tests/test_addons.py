@@ -420,7 +420,8 @@ class WowDemoAddonWiringTests(unittest.IsolatedAsyncioTestCase):
             {"id": "eh-id", "type": "KQLDatabase", "displayName": "MasimoEventhouse"},
         ]
         runner.cloud = Mock()
-        runner.cloud.items = Mock(return_value=[{"id": "g-id", "displayName": "admin-group"}])
+        # Workspace item listings return the current runner.items; anything else is a Graph group lookup.
+        runner.cloud.items = Mock(side_effect=lambda url, *_, **__: list(runner.items) if url.endswith("/items") else [{"id": "g-id", "displayName": "admin-group"}])
         runner.cloud.call = Mock(return_value={"properties": {"queryServiceUri": "https://eh.kusto.fabric.microsoft.com"}})
         runner.ps = AsyncMock()
         runner.run_fabric_job = AsyncMock()
@@ -646,6 +647,51 @@ class WowDemoAddonWiringTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("workspace-id-123", interop_cmd)
         substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
         self.assertEqual(substeps.get("databricks: verify OneLake Unity Catalog interop"), "succeeded")
+
+    async def _run_databricks_with_live_items(self, runner, live_items):
+        executed = []
+
+        async def track_command(title, args, *_, **__):
+            executed.append(title)
+            runner.substep(title, "succeeded")
+            return ""
+
+        runner.command = AsyncMock(side_effect=track_command)
+        runner.working_copy = Mock(return_value=Path("/tmp/unused-dbx"))
+        runner.resource = Mock(return_value={"id": "fhir-id", "name": "res-name"})
+        runner.ensure_metastore = AsyncMock()
+        runner.ensure_admin_group = AsyncMock()
+        runner.ensure_onelake_databricks_storage = AsyncMock(return_value="abfss://...")
+        runner.databricks_alert_recipient = AsyncMock(return_value="")
+        runner.cloud.items = Mock(side_effect=lambda url, *_, **__: list(live_items) if url.endswith("/items") else [{"id": "g-id", "displayName": "admin-group"}])
+        with patch.object(addons, "az_json", side_effect=[
+            {"properties": {"exportConfiguration": {"storageAccountName": "exports"}}},
+            {"user": {"name": "deployer@example.com"}},
+        ]), \
+        patch.object(addons, "ensure_providers_registered", return_value=[]), \
+        patch.dict(sys.modules, {"yaml": Mock(safe_load=Mock(return_value={"targets": {}}), safe_dump=Mock(return_value=""))}), \
+        patch("pathlib.Path.read_text", return_value='{"workspaceUrl": {"value": "https://adb"}, "accessConnectorId": {"value": "ac"}, "managedLocationUrl": {"value": "loc"}, "dicomOutputUrl": {"value": "out"}, "warehouse_id": "wh-1"}'), \
+        patch("pathlib.Path.write_text"), patch("pathlib.Path.chmod"):
+            await runner.databricks()
+        return executed
+
+    async def test_databricks_interop_sees_lakehouses_created_after_discover(self):
+        # med-1109: rayfin created clinical_lakehouse after discover(); the stale snapshot
+        # failed databricks with "Expected exactly one clinical_lakehouse, found 0".
+        runner = self.make_runner({"verify_databricks_interop": True})
+        live = list(runner.items)
+        runner.items = [i for i in runner.items if i["displayName"] not in ("clinical_lakehouse", "patient360")]
+        executed = await self._run_databricks_with_live_items(runner, live)
+        self.assertIn("databricks: verify OneLake Unity Catalog interop", executed)
+
+    async def test_databricks_interop_skips_with_reason_without_rayfin_lakehouses(self):
+        runner = self.make_runner({"verify_databricks_interop": True})
+        live = [i for i in runner.items if i["displayName"] != "clinical_lakehouse"]
+        executed = await self._run_databricks_with_live_items(runner, live)
+        self.assertNotIn("databricks: verify OneLake Unity Catalog interop", executed)
+        step = next(s for s in runner.phase["subSteps"] if s["name"] == "databricks: verify OneLake Unity Catalog interop")
+        self.assertEqual(step["status"], "skipped")
+        self.assertIn("clinical_lakehouse", step.get("detail", ""))
 
     async def test_demo_step_failure_is_not_swallowed(self):
         runner = self.make_runner({"seed_tcga_cohort": True})

@@ -705,27 +705,36 @@ class AddonRunner:
         await self.command("07 Databricks deployment validation", [sys.executable, scripts / "07-validate-deployment.py", "--environment", variables["ENVIRONMENT"], "--namespace", variables["DATABRICKS_NAMESPACE"]], root, env)
         interop_flag = self.config.get("verify_databricks_interop", True)
         interop_enabled = interop_flag is True or (isinstance(interop_flag, str) and interop_flag.strip().lower() in ("true", "1", "yes")) if interop_flag is not None else True
+        interop_title = "databricks: verify OneLake Unity Catalog interop"
         if interop_enabled:
-            clinical_id = self.item("Lakehouse", "clinical_lakehouse")["id"]
-            imaging_id = self.item("Lakehouse", "imaging_lakehouse")["id"]
-            patient360_id = self.item("Lakehouse", "patient360")["id"]
-            await self.command(
-                "databricks: verify OneLake Unity Catalog interop",
-                [
-                    sys.executable,
-                    str(ROOT / "azure-databricks/implementation/scripts/09-onelake-interop-proof.py"),
-                    "--live",
-                    "--workspace-id", self.ws,
-                    "--clinical-id", clinical_id,
-                    "--imaging-id", imaging_id,
-                    "--patient360-id", patient360_id,
-                    "--access-connector-id", variables["ACCESS_CONNECTOR_ID"],
-                    "--tenant-id", cfg["expected_tenant_id"],
-                    "--namespace", variables["DATABRICKS_NAMESPACE"],
-                ],
-                root,
-                env,
-            )
+            # discover() ran before earlier add-ons in this run; rayfin-imaging creates these
+            # Lakehouses after it, so the snapshot taken at start cannot see them.
+            self.items = await asyncio.to_thread(self.cloud.items, f"{FABRIC}/v1/workspaces/{self.ws}/items")
+            names = ("clinical_lakehouse", "imaging_lakehouse", "patient360")
+            missing = [n for n in names if not any(i["type"] == "Lakehouse" and i["displayName"] == n for i in self.items)]
+            if missing:
+                detail = f"skipped: rayfin-imaging Lakehouses not found ({', '.join(missing)}); deploy the rayfin add-on, then rerun databricks"
+                self.substep(interop_title, "skipped", detail)
+                self.log(f"{interop_title} {detail}", "warn")
+            else:
+                clinical_id, imaging_id, patient360_id = (self.item("Lakehouse", n)["id"] for n in names)
+                await self.command(
+                    interop_title,
+                    [
+                        sys.executable,
+                        str(ROOT / "azure-databricks/implementation/scripts/09-onelake-interop-proof.py"),
+                        "--live",
+                        "--workspace-id", self.ws,
+                        "--clinical-id", clinical_id,
+                        "--imaging-id", imaging_id,
+                        "--patient360-id", patient360_id,
+                        "--access-connector-id", variables["ACCESS_CONNECTOR_ID"],
+                        "--tenant-id", cfg["expected_tenant_id"],
+                        "--namespace", variables["DATABRICKS_NAMESPACE"],
+                    ],
+                    root,
+                    env,
+                )
         return {
             "workspaceUrl": variables["DATABRICKS_HOST"],
             "fhirExportUrl": variables["FHIR_EXPORT_URL"],
