@@ -10,14 +10,22 @@ export type Procedure = 'dbo.GetHealthSyncAccess' | 'dbo.PublishHealthSnapshot';
 /** `publisherId` is the caller's allowlisted email, verified by the function before publication. */
 export interface Publication { payloadJson: string; expectedVersion: number; publisherId: string }
 
+/** Fabric reports `serverFqdn` as `host,1433` (optionally `tcp:`-prefixed); tedious needs host and port separately. */
+export function parseServer(value: string): { host: string; port: number } {
+    const [host, port] = value.trim().replace(/^tcp:/i, '').split(',');
+    return { host, port: port ? Number(port) : 1433 };
+}
+
 /** Each call opens its own session with the invocation's app-identity SQL token; no token-bearing shared pool. */
 export function executeProcedure(settings: SqlSettings, procedure: Procedure, publication?: Publication): Promise<SqlRow> {
+    const { host, port } = parseServer(settings.server);
     return new Promise((resolve, reject) => {
         const connection = new Connection({
-            server: settings.server,
+            server: host,
             authentication: { type: 'azure-active-directory-access-token', options: { token: settings.token } },
             options: {
                 database: settings.database,
+                port,
                 encrypt: true,
                 trustServerCertificate: false,
                 connectTimeout: 30_000,

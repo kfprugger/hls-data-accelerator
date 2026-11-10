@@ -213,7 +213,7 @@ export default function App() {
                             {authError
                                 ? `Fabric sign-in failed: ${authError.message}`
                                 : !isAuthenticated
-                                    ? "Open this app from the med-1003 workspace so Fabric can sign you in and connect the database."
+                                    ? "Open this app from its Fabric workspace so Fabric can sign you in and connect the database."
                                     : error
                                         ? `The app database could not be refreshed (${error.message}). ${version ? `Still displaying published version ${version}.` : "No publication is available."}`
                                         : syncError
