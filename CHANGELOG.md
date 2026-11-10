@@ -5,6 +5,7 @@
 ### Source-integrity CI dependency order (2026-11-10)
 
 - **Fixed** clean-checkout TCGA cohort tests failing before metadata generation because the shared Patient 360 seeder imports `requests` and `azure-identity`. Install the existing locked backend dependencies before the Synthea suite, rather than after it. The dataset guard still runs first with its schema-only dependency set.
+- **Fixed** the standards-view CLI regression depending on an untracked `rayfin-imaging/work/tables` dataset. The test now creates isolated Parquet tables and runs the CLI in a temporary layout, checking that it selects the requested patient's FHIR and DICOM mappings rather than another patient's rows.
 
 ### Daylight theme for med-1109 Rayfin Imaging & WardFlow (2026-11-10)
 

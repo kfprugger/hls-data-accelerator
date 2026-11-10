@@ -1,7 +1,9 @@
 """Unit tests for the Rayfin Standards View (FHIR R4 & DICOM to Delta Lake Lineage) verification script."""
 import json
 import subprocess
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,50 +14,65 @@ SCRIPT_PATH = ROOT / "rayfin-imaging" / "scripts" / "verify_standards_view.py"
 
 class TestStandardsViewVerification(unittest.TestCase):
     def test_verify_standards_view_dry_run(self):
-        """Test that verify_standards_view.py runs successfully in dry-run mode for default patient Marcus Vance."""
-        self.assertTrue(SCRIPT_PATH.exists(), f"Script not found at {SCRIPT_PATH}")
-
-        proc = subprocess.run(
-            [PYTHON_EXEC, str(SCRIPT_PATH), "--patient-id", "TCGA-G6-A8L6", "--dry-run"],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(proc.returncode, 0, f"Script failed with stderr:\n{proc.stderr}")
-
-        data = json.loads(proc.stdout)
-        self.assertEqual(data.get("status"), "verified")
-        self.assertEqual(data.get("patient_id"), "TCGA-G6-A8L6")
-
-        verified_cols = data.get("verified_columns", [])
-        expected_cols = [
-            "patient_id",
-            "display_name",
-            "primary_diagnosis",
-            "study_uid",
-            "series_uid",
-        ]
-        for col in expected_cols:
-            self.assertIn(col, verified_cols, f"Missing verified column: {col}")
-
+        """Verify patient-specific FHIR and DICOM mappings without local work data."""
+        import pyarrow as pa
         import pyarrow.parquet as pq
 
-        work_tables = ROOT / "rayfin-imaging" / "work" / "tables"
-        studies = pq.read_table(str(work_tables / "imaging" / "radiology_study.parquet")).to_pylist()
-        series = pq.read_table(str(work_tables / "imaging" / "radiology_series.parquet")).to_pylist()
-        patients = pq.read_table(str(work_tables / "clinical" / "patient.parquet")).to_pylist()
+        patient_id = "TCGA-G6-A8L6"
+        other_id = "TCGA-AA-0001"
+        tables = {
+            "clinical/patient": [
+                {"patient_id": other_id, "display_name": "Other Patient", "sex": "female", "icd10": "C50.9"},
+                {"patient_id": patient_id, "display_name": "Marcus Vance", "sex": "male", "icd10": "C64.9"},
+            ],
+            "clinical/diagnosis": [
+                {"patient_id": other_id, "primary_diagnosis": "Breast cancer"},
+                {"patient_id": patient_id, "primary_diagnosis": "Clear cell renal carcinoma"},
+            ],
+            "imaging/radiology_study": [
+                {"patient_id": other_id, "study_uid": "2.25.101"},
+                {"patient_id": patient_id, "study_uid": "2.25.102"},
+            ],
+            "imaging/radiology_series": [
+                {"patient_id": other_id, "series_uid": "2.25.201", "modality": "MR"},
+                {"patient_id": patient_id, "series_uid": "2.25.202", "modality": "CT"},
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            rayfin_dir = Path(tmp) / "rayfin-imaging"
+            script = rayfin_dir / "scripts" / SCRIPT_PATH.name
+            script.parent.mkdir(parents=True)
+            shutil.copy2(SCRIPT_PATH, script)
+            for name, rows in tables.items():
+                table_path = rayfin_dir / "work" / "tables" / f"{name}.parquet"
+                table_path.parent.mkdir(parents=True, exist_ok=True)
+                pq.write_table(pa.Table.from_pylist(rows), table_path)
 
-        expected_study = next(s for s in studies if s["patient_id"] == "TCGA-G6-A8L6")
-        expected_series = next(r for r in series if r["patient_id"] == "TCGA-G6-A8L6")
-        expected_patient = next(p for p in patients if p["patient_id"] == "TCGA-G6-A8L6")
-
-        fhir_mapping = data.get("fhir_mapping", {})
-        self.assertEqual(fhir_mapping.get("display_name"), expected_patient.get("display_name"))
-        self.assertEqual(fhir_mapping.get("primary_diagnosis"), expected_patient.get("primary_diagnosis"))
-
-        dicom_mapping = data.get("dicom_mapping", {})
-        self.assertEqual(dicom_mapping.get("study_uid"), expected_study.get("study_uid"))
-        self.assertEqual(dicom_mapping.get("series_uid"), expected_series.get("series_uid"))
+            proc = subprocess.run(
+                [PYTHON_EXEC, str(script), "--patient-id", patient_id, "--dry-run"],
+                cwd=tmp,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        self.assertEqual(proc.returncode, 0, f"Script failed with stderr:\n{proc.stderr}")
+        data = json.loads(proc.stdout)
+        self.assertEqual(data["status"], "verified")
+        self.assertEqual(data["patient_id"], patient_id)
+        self.assertEqual(set(data["verified_columns"]), {
+            "patient_id", "display_name", "primary_diagnosis", "study_uid", "series_uid",
+        })
+        self.assertEqual(data["fhir_mapping"], {
+            "display_name": "Marcus Vance",
+            "primary_diagnosis": "Clear cell renal carcinoma",
+            "sex": "male",
+            "icd10": "C64.9",
+        })
+        self.assertEqual(data["dicom_mapping"], {
+            "study_uid": "2.25.102",
+            "series_uid": "2.25.202",
+            "modality": "CT",
+        })
 
     def test_verify_standards_view_invalid_patient_format(self):
         """Test that verify_standards_view.py rejects malicious or malformed patient IDs."""
