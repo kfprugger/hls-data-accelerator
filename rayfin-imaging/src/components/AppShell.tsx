@@ -51,7 +51,7 @@ function ShellHeader() {
               key={t.to}
               to={t.to}
               title={t.title}
-              className={`tab whitespace-nowrap px-1.5 lg:px-2 text-[12.5px] lg:text-[13px] ${t.active(pathname) ? 'active' : ''}`}
+              className={`tab whitespace-nowrap px-1.5 2xl:px-2 text-[12.5px] lg:text-[13px] ${t.active(pathname) ? 'active' : ''}`}
             >
               {t.label}
             </Link>
@@ -68,8 +68,8 @@ function ShellHeader() {
               className="inline-flex items-center gap-1.5 rounded-full border border-teal-600/30 dark:border-teal-400/30 bg-teal-50 dark:bg-teal-950/40 px-2 sm:px-2.5 py-0.5 text-[11px] font-medium text-teal-800 dark:text-teal-300 transition-colors shadow-2xs select-none cursor-help"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-teal-500 animate-pulse shrink-0" aria-hidden="true" />
-              <span className="hidden sm:inline">100% synthetic / public de-identified data</span>
-              <span className="inline sm:hidden font-mono text-[10px] font-semibold tracking-wider">SYNTHETIC</span>
+              <span className="hidden 2xl:inline">100% synthetic / public de-identified data</span>
+              <span className="inline 2xl:hidden font-mono text-[10px] font-semibold tracking-wider">SYNTHETIC</span>
             </span>
             <div
               role="tooltip"

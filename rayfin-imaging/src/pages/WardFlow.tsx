@@ -934,8 +934,8 @@ function PatientHemodynamicsTab({
 
       <div className="grid gap-10 xl:grid-cols-2">
         <PanelSection title="Stevenson 2×2 Hemodynamic Cockpit" aside={<span className="mono">{stevenson.quadrant}</span>}>
-          <div className="grid items-center gap-6 md:grid-cols-[340px_1fr]">
-            <svg viewBox="0 0 340 280" className="hair w-full max-w-[340px] border" style={{ background: 'var(--surface)' }}>
+          <div className="flex flex-wrap items-start gap-6">
+            <svg viewBox="0 0 340 280" className="hair w-full max-w-[340px] flex-none border" style={{ background: 'var(--surface)' }}>
               <rect x="40" y="30" width="130" height="110" fill="rgba(47,95,138,0.08)" stroke="var(--line)" />
               <rect x="170" y="30" width="130" height="110" fill="rgba(47,125,79,0.10)" stroke="var(--line)" />
               <rect x="40" y="140" width="130" height="110" fill="rgba(180,35,24,0.12)" stroke="var(--line)" />
@@ -955,7 +955,7 @@ function PatientHemodynamicsTab({
                 {s.initials}
               </text>
             </svg>
-            <div className="space-y-3 text-[13px]">
+            <div className="min-w-[240px] flex-1 space-y-3 text-[13px]">
               <div>
                 <div className="t-label">Current Classification</div>
                 <div className="text-[18px] font-semibold">{stevenson.quadrant}</div>
