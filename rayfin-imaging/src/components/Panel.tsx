@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 export function PanelSection({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
@@ -80,9 +80,31 @@ export function ListColumn({
   /** Compact content shown when the column is collapsed (Patient 360 initials rail). */
   rail?: ReactNode;
 }) {
-  const [state, setState] = useStoredState<'open' | 'closed'>('atlas.list', () => 'open', ['open', 'closed']);
-  const isCollapsed = collapsed !== undefined ? collapsed : state === 'closed';
-  const handleToggle = onToggle ?? (() => setState(isCollapsed ? 'open' : 'closed'));
+  const [state, setState] = useStoredState<'open' | 'closed'>(
+    'atlas.list',
+    () => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'closed' : 'open'),
+    ['open', 'closed']
+  );
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia('(max-width: 767px)');
+    const handleMediaChange = (e: MediaQueryListEvent) => {
+      setIsNarrow(e.matches);
+      if (e.matches) setMobileOpen(false);
+    };
+    setIsNarrow(mql.matches);
+    mql.addEventListener('change', handleMediaChange);
+    return () => mql.removeEventListener('change', handleMediaChange);
+  }, []);
+  const isCollapsed = collapsed !== undefined ? collapsed : isNarrow ? !mobileOpen : state === 'closed';
+  const handleToggle =
+    onToggle ??
+    (() => {
+      if (isNarrow) setMobileOpen((o) => !o);
+      else setState(isCollapsed ? 'open' : 'closed');
+    });
 
   if (isCollapsed) {
     if (rail) {

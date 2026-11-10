@@ -2,6 +2,17 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Daylight theme for med-1109 Rayfin Imaging & WardFlow (2026-11-10)
+
+- **Added** Joey's **Daylight** theme variant (Direction C - Broadcast placard on warm paper) to `rayfin-imaging`, scoped exclusively to the `med-1109` Fabric workspace (`8be8f60c-dae7-4c79-9307-683c5794dcf7`) and hosting domain (`elite-otter-03514eba33-westus2.webapp.fabricapps.net`).
+- **Scoped runtime mechanism**: A committed deployment-origin/workspace lookup map in `src/hooks/useTheme.ts` inspects runtime context (`window.location.hostname` or Fabric workspace ID) and applies `data-theme-variant="daylight"` to the document root element. This design survives hosted add-on reruns and full redeployments of med-1109 without requiring custom build flags. All other deployments (e.g. `med-1103a`, `elfin-field-43838dcb1c-westus2.webapp.fabricapps.net`) retain Sanjay's source theme byte-for-byte in look.
+- **Styling tokens**: Warm paper (`#F4F1EA`), charcoal ink (`#1F1D1A`), gold accent marker band (`#FFB900`), ink-ruled plates (`2px solid #1F1D1A`), and hard ink offset shadows (`6px 6px 0 #1F1D1A`). Applied across the app shell, navigation, WardFlow cardiology (kpis, review rack, alerts, Masimo telemetry, EKG trace, agent loop), 2D/3D/4D imaging viewers, Patient 360, Data Map, and Ask Data Agent. High-contrast WCAG AA compliance verified across all text and dark DICOM canvases preserved within daylight ink frames.
+
+### Caldova cardiology Rayfin Fabric app companion (2026-11-10)
+
+- **Added** an optional cardiology Rayfin companion app. When the WardFlow bundle contains `caldova-cardio/app/rayfin/rayfin.yml`, the cardiology add-on deploys it after the Container App: it installs Rayfin CLI 1.36.2 in a per-deployment copy, provisions the item, builds the static export with the Container App URL and the app registration's client and tenant IDs, and records the hosting origin as a Rayfin redirect URI. If that origin is new, phase 8 runs again with `CardiologyRayfinOrigins`, which registers it as an SPA redirect URI and as the only cross-origin caller allowed by the Container App. Reruns pass the recorded origin to the first phase-8 deploy, so phase 8 does not remove it.
+- **Added** the companion URL to the cardiology add-on resources (`rayfinUrl`) and to the Container App as `CALDOVA_RAYFIN_APP_URL`. Any failure in these steps fails the cardiology add-on. The add-on also fails if the Container App has no `CALDOVA_AUTH_CLIENT_ID`, so it never builds an unauthenticated bundle.
+
 ### Material 3 frontend redesign (2026-10-09)
 
 - Replaced Fluent UI components and icons with current MUI components, a restrained Material 3 Expressive theme, and platform-neutral **HLS Data Accelerator** branding. The standalone Griffel styling engine remains for feature layouts; no Fluent component dependency remains.

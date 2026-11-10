@@ -2118,3 +2118,485 @@ body.tl-picking {
   font-size: 12.5px;
   letter-spacing: 0.02em;
 }
+
+/* ==========================================================================
+   Daylight theme (Direction C variant — Broadcast placard on warm paper)
+   Scoped exclusively to med-1109 via html[data-theme-variant='daylight'].
+   Every other deployment keeps the source theme above untouched.
+   ========================================================================== */
+
+:root[data-theme-variant='daylight'],
+:root[data-theme-variant='daylight'][data-theme='light'],
+:root[data-theme-variant='daylight'][data-theme='dark'] {
+  color-scheme: light;
+
+  /* Canonical Daylight tokens (from references/directions/C-variants/boards.html) */
+  --paper: #f4f1ea;
+  --paper-2: #eae5da;
+  --paper-3: #dcd5c7;
+  --plate: #fffdf8;
+  --ink: #1f1d1a;
+  --ink-2: #45403a;
+  --muted: #6b645a;
+  --rule: #1f1d1a;
+  --rule-soft: #d3ccbe;
+  --edge: #1f1d1a;
+  --edge-w: 2px;
+  --divider: #8f877b;
+  --top-rule: 2px;
+  --accent: #ffb900;
+  --accent-soft: #ffe6a1;
+  --accent-text: #1f1d1a;
+  --focus-num: #1f1d1a;
+  --focus-border: #1f1d1a;
+  --focus-fill: #fffdf8;
+  --focus-ink: #1f1d1a;
+  --series-2: #45403a;
+  --series-3: #b9b0a1;
+  --ok: #3b7400;
+  --bad: #b3360d;
+  --bad-soft: #f7ded3;
+  --ok-soft: #e2eccd;
+  --code-bg: #fffdf8;
+  --camera: #2a2622;
+  --camera-rule: #1f1d1a;
+  --shadow-card: 6px 6px 0 var(--paper-3);
+  --shadow-focus: 6px 6px 0 var(--ink);
+  --radius-card: 0px;
+  --radius-tag: 0px;
+  --band: var(--accent);
+
+  /* Mapped onto Rayfin / Atlas semantic variables */
+  --bg: var(--paper);
+  --surface: var(--plate);
+  --surface-subtle: var(--paper-2);
+  --surface-muted: var(--paper-2);
+  --well: #e6dfd1;
+  --well-subtle: var(--paper-2);
+  --field: var(--plate);
+  --line: var(--rule-soft);
+  --line-strong: var(--ink);
+  --hair: var(--rule-soft);
+  --ink-3: var(--muted);
+  --ink-muted: var(--muted);
+
+  /* Daylight yellow accent: dark charcoal ink on yellow, charcoal ink for text accents on light ground */
+  --accent-ink: #1f1d1a;
+  --accent-wash: var(--accent-soft);
+  --on-accent: #1f1d1a;
+
+  /* Data & clinical semantic colors mapped to Daylight palette */
+  --c-clin: #1f1d1a;
+  --c-path: #7a2e14;
+  --c-rad: #3d352c;
+  --c-gen: #45403a;
+  --c-syn: #6b645a;
+  --c-alert: var(--bad);
+  --c-gain: #8a5600;
+  --c-loss: #3d352c;
+  --c-good: var(--ok);
+
+  /* Typography mapped to Daylight: Segoe UI 700 display, system sans body, JetBrains Mono code */
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-display: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Mono', ui-monospace, Menlo, monospace;
+
+  /* Shadcn / Tailwind semantic tokens */
+  --radius: 0px;
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--plate);
+  --card-foreground: var(--ink);
+  --popover: var(--plate);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--plate);
+  --secondary: var(--paper-2);
+  --secondary-foreground: var(--ink);
+  --muted-foreground: var(--muted);
+  --accent-foreground: var(--ink);
+  --destructive: var(--bad);
+  --destructive-foreground: var(--plate);
+  --border: var(--edge);
+  --input: var(--edge);
+  --ring: var(--ink);
+}
+
+/* Daylight display headings: Segoe UI 700, tight tracking */
+:root[data-theme-variant='daylight'] .t-display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.06;
+}
+
+/* Daylight yellow marker band behind key figures & primary headings */
+:root[data-theme-variant='daylight'] .t-accent {
+  color: var(--ink);
+  background: var(--accent-soft);
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+:root[data-theme-variant='daylight'] .daylight-marker {
+  position: relative;
+  display: inline-block;
+  z-index: 0;
+}
+
+:root[data-theme-variant='daylight'] .daylight-marker::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: 56%;
+  bottom: 2%;
+  background: var(--band);
+  z-index: -1;
+  transform: rotate(-0.8deg);
+  border-radius: 2px 10px 3px 12px / 3px 8px 2px 10px;
+  pointer-events: none;
+}
+
+:root[data-theme-variant='daylight'] main h1.t-display {
+  display: inline;
+  background: linear-gradient(transparent 62%, var(--band) 62% 94%, transparent 94%);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Shell header & navigation in Daylight */
+:root[data-theme-variant='daylight'] header.hair {
+  background: var(--paper);
+  border-bottom: var(--top-rule) solid var(--ink);
+}
+
+:root[data-theme-variant='daylight'] [data-testid='persona-banner'] {
+  background: var(--paper-2);
+  border-bottom: 2px solid var(--ink);
+  color: var(--ink);
+}
+
+:root[data-theme-variant='daylight'] [data-testid='persona-banner'] span {
+  color: var(--ink);
+}
+
+:root[data-theme-variant='daylight'] [data-testid='persona-toggle'] {
+  background: var(--plate);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 600;
+}
+
+:root[data-theme-variant='daylight'] [data-testid='persona-toggle']:hover {
+  background: var(--accent);
+  color: var(--ink);
+}
+
+/* Eliminate cyan/teal/glass/soft shadows in the Synthetic HIPAA pill & tooltip */
+:root[data-theme-variant='daylight'] header [role='region'][aria-label*='synthetic'] > span {
+  background: var(--accent-soft);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--paper-3);
+  font-weight: 600;
+}
+
+:root[data-theme-variant='daylight'] header [role='region'][aria-label*='synthetic'] > span > span:first-child {
+  background: var(--ok);
+  animation: none;
+}
+
+:root[data-theme-variant='daylight'] header [role='tooltip'] {
+  background: var(--plate);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: var(--shadow-focus);
+}
+
+:root[data-theme-variant='daylight'] header [role='tooltip'] > div:first-child {
+  color: var(--ok);
+}
+
+:root[data-theme-variant='daylight'] header [role='tooltip'] > div:first-child > span {
+  background: var(--ok);
+}
+
+/* Daylight theme status pill in header */
+.daylight-theme-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  background: var(--accent);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 639px) {
+  .daylight-theme-pill {
+    padding: 0 5px;
+    font-size: 10px;
+    height: 22px;
+  }
+  :root[data-theme-variant='daylight'] header [role='region'][aria-label*='synthetic'] {
+    display: none;
+  }
+}
+
+/* Navigation tabs: bold ink active underline + warm paper hover */
+:root[data-theme-variant='daylight'] .tab {
+  color: var(--ink-2);
+  font-weight: 600;
+  border-bottom-width: 3px;
+  margin-bottom: -2px;
+}
+
+:root[data-theme-variant='daylight'] .tab:hover {
+  color: var(--ink);
+}
+
+:root[data-theme-variant='daylight'] .tab.active {
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom-color: var(--ink);
+  background: linear-gradient(transparent 58%, var(--accent) 58% 88%, transparent 88%);
+}
+
+/* Buttons & segmented controls: square-edged, ink-ruled, hard offset shadows */
+:root[data-theme-variant='daylight'] .btn {
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--plate);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 3px 3px 0 var(--paper-3);
+}
+
+:root[data-theme-variant='daylight'] .btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+:root[data-theme-variant='daylight'] .btn-ink {
+  background: var(--ink);
+  color: var(--plate);
+  border-color: var(--ink);
+  box-shadow: 3px 3px 0 var(--paper-3);
+}
+
+:root[data-theme-variant='daylight'] .btn-ink:hover:not(:disabled) {
+  background: var(--ink-2);
+  color: var(--plate);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+:root[data-theme-variant='daylight'] .btn-primary {
+  background: var(--accent);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-weight: 700;
+}
+
+:root[data-theme-variant='daylight'] .btn-primary:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+:root[data-theme-variant='daylight'] .seg {
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--plate);
+  box-shadow: 2px 2px 0 var(--paper-3);
+}
+
+:root[data-theme-variant='daylight'] .seg > button {
+  border-left-color: var(--ink);
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+:root[data-theme-variant='daylight'] .seg > button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+:root[data-theme-variant='daylight'] .field {
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--plate);
+  color: var(--ink);
+}
+
+/* Ink-ruled plates & hard offset shadows on cards, panels, and metrics */
+:root[data-theme-variant='daylight'] .specimen,
+:root[data-theme-variant='daylight'] [data-testid='alert-stopwatch-card'],
+:root[data-theme-variant='daylight'] [data-testid='alert-stopwatch-loading'] {
+  background: var(--plate);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: var(--shadow-card);
+}
+
+:root[data-theme-variant='daylight'] [data-testid='total-stopwatch-badge'] {
+  background: var(--bad-soft);
+  color: var(--bad);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+/* WardFlow KPI strip: yellow marker band behind key figures */
+:root[data-theme-variant='daylight'] .hair .t-display.num {
+  position: relative;
+  display: inline-block;
+  z-index: 0;
+  padding: 0 4px;
+  color: var(--ink) !important;
+}
+
+:root[data-theme-variant='daylight'] .hair .t-display.num::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -6px;
+  top: 42%;
+  bottom: -2%;
+  background: var(--band);
+  z-index: -1;
+  transform: rotate(-1.5deg);
+  border-radius: 2px 8px 3px 10px;
+}
+
+/* WardFlow Agent Loop & detail cards */
+:root[data-theme-variant='daylight'] div.hair.border.p-5,
+:root[data-theme-variant='daylight'] div.hair.border.p-4,
+:root[data-theme-variant='daylight'] section.hair.border {
+  background: var(--plate);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: var(--shadow-card);
+}
+
+/* WardFlow sub-tabs (Cohort, Agent Loop, Patient, Economics) */
+:root[data-theme-variant='daylight'] [aria-label='WardFlow views'] [role='tab'] {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+:root[data-theme-variant='daylight'] [aria-label='WardFlow views'] [role='tab'][aria-selected='true'] {
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom: 3px solid var(--ink);
+  background: var(--accent-soft);
+}
+
+/* Tables in Daylight: crisp ink headers and warm paper hover */
+:root[data-theme-variant='daylight'] .tbl th,
+:root[data-theme-variant='daylight'] .data-table th {
+  color: var(--ink);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 2px solid var(--ink);
+}
+
+:root[data-theme-variant='daylight'] .tbl.idx tbody tr.on,
+:root[data-theme-variant='daylight'] .pt-row[aria-current='true'],
+:root[data-theme-variant='daylight'] .list-row[aria-current='true'] {
+  background: var(--accent-soft);
+  border-left-color: var(--ink);
+}
+
+/* Patient 360 chapter rules & pills: ink rule with yellow marker pill */
+:root[data-theme-variant='daylight'] .chap-rule::before {
+  background: var(--ink);
+  height: 2px;
+}
+
+:root[data-theme-variant='daylight'] .chap-pill {
+  background: var(--accent);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--ink);
+  font-weight: 700;
+}
+
+:root[data-theme-variant='daylight'] .rec-tab {
+  border-radius: 0;
+  font-weight: 600;
+}
+
+:root[data-theme-variant='daylight'] .rec-tab[aria-selected='true'] {
+  background: var(--plate);
+  border-color: var(--ink);
+  border-width: 2px;
+  border-bottom: 0;
+  box-shadow: inset 0 4px 0 var(--accent);
+  font-weight: 700;
+}
+
+/* Standards & AskDataAgent cards: ink-ruled plates, high-contrast active badges */
+:root[data-theme-variant='daylight'] button[aria-pressed='true'] {
+  color: var(--ink) !important;
+  background: var(--accent) !important;
+  border-color: var(--ink) !important;
+  font-weight: 700;
+}
+
+:root[data-theme-variant='daylight'] .glossary-tooltip-popup {
+  background: var(--plate);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: var(--shadow-focus);
+}
+
+/* Wordmark square block: yellow marker block with ink border in Daylight */
+:root[data-theme-variant='daylight'] header a[href='/'] > span:first-child,
+:root[data-theme-variant='daylight'] header div > span.h-2\.5.w-2\.5 {
+  border: 1.5px solid var(--ink);
+}
+
+/* Telemetry strips, Zero-Copy cards, and AskDataAgent panels in Daylight */
+:root[data-theme-variant='daylight'] .masimo-telemetry-bar,
+:root[data-theme-variant='daylight'] [data-testid='masimo-telemetry-bar'],
+:root[data-theme-variant='daylight'] [data-testid='latency-budget-strip'] {
+  background: var(--paper-2);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--paper-3);
+  color: var(--ink);
+}
+
+:root[data-theme-variant='daylight'] .masimo-telemetry-bar span.rounded-full,
+:root[data-theme-variant='daylight'] [data-testid='masimo-telemetry-bar'] span.rounded-full {
+  border: 1.5px solid var(--ink);
+  border-radius: 0;
+  background: var(--plate);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+:root[data-theme-variant='daylight'] div.rounded.border.p-5,
+:root[data-theme-variant='daylight'] div.rounded-lg.border.p-5 {
+  background: var(--plate);
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: var(--shadow-card);
+}

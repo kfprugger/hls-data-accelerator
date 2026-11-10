@@ -37,8 +37,8 @@ export interface EnrichedSubject {
 
 const STAGE_COLOUR: Record<Stage, string> = {
   critical: 'var(--c-alert)',
-  concerning: 'var(--accent)',
-  'at-risk': '#b07d05',
+  concerning: 'var(--accent-ink)',
+  'at-risk': 'var(--c-gain)',
   stable: 'var(--c-good)',
 };
 
@@ -104,7 +104,7 @@ function EcgCanvas({
       stage === 'critical'
         ? css.getPropertyValue('--c-alert').trim() || '#b42318'
         : stage === 'concerning'
-          ? css.getPropertyValue('--accent').trim() || '#b0450a'
+          ? css.getPropertyValue('--c-gain').trim() || css.getPropertyValue('--accent').trim() || '#b0450a'
           : css.getPropertyValue('--c-good').trim() || '#2f7d4f';
 
     ctx.strokeStyle = stroke;

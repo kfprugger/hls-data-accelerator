@@ -7,6 +7,7 @@ import App from './App.tsx';
 import { ErrorFallback } from './ErrorFallback.tsx';
 import { AuthProvider } from './hooks/AuthContext.tsx';
 import { ServiceContainer } from './services/ServiceContainer';
+import { applyThemeVariant } from './hooks/useTheme';
 
 import './main.css';
 import './styles/theme.css';
@@ -20,6 +21,7 @@ import '@fontsource/fira-mono/400.css';
 import './atlas.css';
 
 document.body.classList.add('atlas');
+applyThemeVariant();
 
 // Backward compat: old Fabric Portal may redirect the popup to the bare origin
 // with handoff params in the URL hash. Bridge the code to the opener and close.

@@ -52,6 +52,20 @@ Four tabs, with collapsible side panels and a light/dark theme:
 | Fetal body growth, 22 to 38 weeks | the trunk with nine labelled organs, week by week |
 | Fetal brain development, 21 to 36 weeks | a 0.5 mm MRI atlas: the cortex folds as the brain grows 6.6-fold |
 
+## Themes & Variants
+
+The app supports both light and dark modes with a default warm clinical theme designed by Sanjay.
+
+### Deployment-scoped variants (Daylight)
+For specific presentation environments, theme variants are configured via a committed runtime mapping (`src/hooks/useTheme.ts`) that matches the active Fabric workspace ID or hosting hostname:
+
+- **Daylight variant (`data-theme-variant="daylight"`)**: Activated automatically on deployment `med-1109` (workspace `8be8f60c-dae7-4c79-9307-683c5794dcf7`, domain `elite-otter-03514eba33-westus2.webapp.fabricapps.net`). Derived from Direction C (Broadcast placard):
+  - Warm paper ground (`#F4F1EA`), charcoal ink (`#1F1D1A`), and gold accent (`#FFB900`) marker bands.
+  - Ink-ruled plates (`2px solid #1F1D1A`) with hard offset shadows (`6px 6px 0 #1F1D1A`).
+  - Preserves dark DICOM viewing canvases inside high-contrast daylight plate borders for maximum clinical legibility.
+  - Survives hosted add-on reruns and full redeployments of `med-1109` because the selection logic is checked at runtime rather than lost in an ephemeral build flag.
+- **Default / Source theme**: All other deployments (e.g. `med-1103a`) default to Sanjay's original theme with no variant attribute applied (`data-theme-variant` is null).
+
 ---
 
 ## Setup guide for an AI agent

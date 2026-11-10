@@ -6,7 +6,18 @@ const OPTIONS: { value: Theme; label: string }[] = [
 ];
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, variant } = useTheme();
+  if (variant === 'daylight') {
+    return (
+      <span
+        className="daylight-theme-pill shrink-0"
+        aria-label="Daylight theme active"
+        title="Daylight theme (med-1109)"
+      >
+        Daylight
+      </span>
+    );
+  }
   return (
     <div className="seg shrink-0" role="group" aria-label="Colour theme">
       {OPTIONS.map((o) => (
