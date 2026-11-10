@@ -32,6 +32,11 @@ MODEL_CANDIDATES = [("gpt-5.6-luna", "2026-07-09"), ("gpt-5.5", "2026-04-24")]
 CARDIOLOGY_FALLBACK_REGIONS = ("eastus2", "eastus", "westus", "westus3", "northcentralus", "southcentralus", "centralus", "swedencentral")
 DATABRICKS_PROVIDERS = ("Microsoft.Databricks", "Microsoft.Storage", "Microsoft.EventHub", "Microsoft.KeyVault", "Microsoft.EventGrid")
 CARDIOLOGY_PROVIDERS = ("Microsoft.App", "Microsoft.CognitiveServices", "Microsoft.OperationalInsights")
+# The Rayfin CLI writes one diagnostic log per invocation under
+# $RAYFIN_CONFIG_DIR/logs (default ~/.rayfin/logs), keeps only the newest 20,
+# and the hosted sandbox home is wiped on image rollout. Copy each log out.
+RAYFIN_LOG_LINE_LIMIT = 2000
+RAYFIN_LOG_LEVELS = {"debug": "info", "info": "info", "warn": "warn", "warning": "warn", "error": "error"}
 
 
 def now() -> str:
@@ -40,6 +45,31 @@ def now() -> str:
 
 def selected(config: dict) -> list[str]:
     return [name for name, flag in ADDON_FLAGS.items() if config.get(flag)]
+
+
+def rayfin_log_dir(env: dict) -> Path:
+    """Return the Rayfin CLI diagnostic log directory that ``env`` selects."""
+    config_dir = env.get("RAYFIN_CONFIG_DIR") or str(Path(env.get("HOME") or Path.home()) / ".rayfin")
+    return Path(config_dir) / "logs"
+
+
+def rayfin_log_for_pid(log_dir: Path, pid: int) -> Path | None:
+    """Find the diagnostic log whose start record names process ``pid``."""
+    if not log_dir.is_dir():
+        return None
+    for path in sorted(log_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True):
+        with path.open(encoding="utf-8", errors="replace") as file:
+            first = file.readline()
+        start = first.find("{")
+        if start < 0:
+            continue
+        try:
+            data = json.loads(first[start:])
+        except json.JSONDecodeError:
+            continue
+        if data.get("processId") == pid:
+            return path
+    return None
 
 
 def az_json(config: dict, *args: str):
@@ -322,7 +352,7 @@ class AddonRunner:
         self.deployment["customStatus"].setdefault("subStepsByPhase", {})[self.phase["phase"]] = steps
         self.persist()
 
-    async def command(self, title, args, cwd=None, env=None, capture=False, input_text=None):
+    async def command(self, title, args, cwd=None, env=None, capture=False, input_text=None, on_start=None):
         if self.deployment.get("runtimeStatus") == "Terminated":
             raise RuntimeError("Add-on cancelled")
         self.substep(title, "running")
@@ -343,6 +373,8 @@ class AddonRunner:
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE if capture else asyncio.subprocess.STDOUT,
             start_new_session=True)
         self.pids[self.id] = process.pid
+        if on_start is not None:
+            on_start(process.pid)
         script_name = next((Path(str(a)).name for a in args if str(a).endswith((".py", ".sh", ".ps1"))), Path(str(args[0])).name)
         try:
             if capture:
@@ -371,6 +403,46 @@ class AddonRunner:
             raise
         finally:
             self.pids.pop(self.id, None)
+
+    async def rayfin_command(self, title, args, cwd, env, **kwargs):
+        """Run `rayfin up` and keep its diagnostic log with this deployment (`up status` and `secret` write none)."""
+        pids = []
+        try:
+            return await self.command(title, args, cwd, env, on_start=pids.append, **kwargs)
+        finally:
+            if pids:
+                try:
+                    await asyncio.to_thread(self.collect_rayfin_log, title, rayfin_log_dir(env), pids[0])
+                except Exception as exc:
+                    self.log(f"{title}: could not collect Rayfin CLI log: {exc}", "warn")
+
+    def collect_rayfin_log(self, title, log_dir, pid):
+        """Copy the CLI's (already sanitized) log to DATA_DIR and append its records to the run log."""
+        source = rayfin_log_for_pid(log_dir, pid)
+        if source is None:
+            self.log(f"{title}: Rayfin CLI wrote no diagnostic log under {log_dir}", "warn")
+            return
+        target_dir = DATA_DIR / "logs" / "rayfin" / self.id
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / source.name
+        shutil.copyfile(source, target)
+        phase = self.phase["phase"] if self.phase else "Add-ons"
+        entries = []
+        with target.open(encoding="utf-8", errors="replace") as file:
+            for count, line in enumerate(file):
+                if count == RAYFIN_LOG_LINE_LIMIT:
+                    entries.append({"timestamp": now(), "level": "warn", "phase": phase, "source": "rayfin-cli",
+                                    "message": f"[rayfin] log truncated after {RAYFIN_LOG_LINE_LIMIT} lines; full log: {target}"})
+                    break
+                parts = line.rstrip("\n").split(" ", 2)
+                if len(parts) < 3:
+                    continue
+                timestamp, level, rest = parts
+                entries.append({"timestamp": timestamp, "level": RAYFIN_LOG_LEVELS.get(level.lower(), "info"),
+                                "phase": phase, "source": "rayfin-cli", "message": f"[rayfin] {rest}"})
+        with (DATA_DIR / "logs" / f"{self.id}.jsonl").open("a", encoding="utf-8") as file:
+            file.writelines(json.dumps(entry) + "\n" for entry in entries)
+        self.log(f"{title}: Rayfin CLI log saved to {target}")
 
     async def ps(self, title, script, parameters):
         path = self.work / "parameters.json"
@@ -1008,7 +1080,7 @@ class AddonRunner:
             cli = [str(root / "node_modules/.bin/rayfin")]
             up = cli + ["up", "--workspace-id", self.ws, "--tenant", cfg["expected_tenant_id"], "--yes"]
             # Provision first so `rayfin env` in the build has the new backend, not a source workspace.
-            await self.command(f"{app}: provision backend", up + ["--exclude-services", "staticHosting,functions"], root, await rayfin_env())
+            await self.rayfin_command(f"{app}: provision backend", up + ["--exclude-services", "staticHosting,functions"], root, await rayfin_env())
             if app == "rayfin-health-command-center":
                 databases = await asyncio.to_thread(self.cloud.items, f"{FABRIC}/v1/workspaces/{self.ws}/sqlDatabases", FABRIC, "sqldb-cli")
                 database = require_one([d for d in databases if d["displayName"] == app], "command center app SQL database")
@@ -1025,7 +1097,7 @@ class AddonRunner:
                 await self.prepare_rayfin_imaging(root)
                 await self.command(f"{app}: install function dependencies", ["npm", "ci", "--no-audit", "--no-fund"], root / "rayfin/functions")
             await self.command(f"{app}: build", ["npm", "run", "build"], root, await rayfin_env("https://analysis.windows.net/powerbi/api"))
-            await self.command(f"{app}: deploy", up, root, await rayfin_env())
+            await self.rayfin_command(f"{app}: deploy", up, root, await rayfin_env())
             status = parse_cli_json(
                 await self.command(f"{app}: hosting details", cli + ["up", "status", "--json"], root, await rayfin_env(), capture=True),
                 f"{app} hosting status",
@@ -1043,7 +1115,7 @@ class AddonRunner:
             config_path.write_text(yaml.safe_dump(config, sort_keys=False))
             # CLI's hosting callback registration is best-effort. Reapply settings as a
             # required step, without rebuilding the two services a second time.
-            await self.command(f"{app}: register hosting origin", up + ["--exclude-services", "staticHosting,functions"], root, await rayfin_env())
+            await self.rayfin_command(f"{app}: register hosting origin", up + ["--exclude-services", "staticHosting,functions"], root, await rayfin_env())
             result[app] = hosting
             self.deployment.get("customStatus", {}).setdefault("addons", {}).setdefault("rayfin", {})["resources"] = dict(result)
             self.persist()

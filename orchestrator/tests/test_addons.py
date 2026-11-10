@@ -823,5 +823,74 @@ class WowDemoAddonWiringTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("elseif ($SeedTcgaCohort) { 115 } else { 100 }", deploy_all_ps1)
         self.assertIn('"deviceCount=$effectiveDeviceCount"', deploy_ps1)
         self.assertIn("$deployArgs['DeviceCount'] = $effectiveDeviceCount", deploy_all_ps1)
+
+
+class RayfinLogCollectionTests(unittest.IsolatedAsyncioTestCase):
+    # Writes a log the way the Rayfin CLI does: first record names the writing process.
+    FAKE_RAYFIN = (
+        "import json, os, pathlib, sys\n"
+        "d = pathlib.Path(os.environ['HOME']) / '.rayfin' / 'logs'\n"
+        "d.mkdir(parents=True, exist_ok=True)\n"
+        "start = json.dumps({'schemaVersion': 1, 'commandName': 'up', 'processId': os.getpid()})\n"
+        "(d / f'2026-11-10T120000.000Z-up-{os.getpid():036d}.log').write_text(\n"
+        "    f'2026-11-10T12:00:00.000Z info invocation Command started {start}\\n'\n"
+        "    '2026-11-10T12:00:01.000Z warn functions.deploy retrying publish\\n'\n"
+        "    '2026-11-10T12:00:02.000Z error functions.deploy Functions publish failed {\"status\":404}\\n')\n"
+        "sys.exit(int(sys.argv[1]))\n"
+    )
+
+    def runner(self, home):
+        runner = object.__new__(addons.AddonRunner)
+        runner.id, runner.pids, runner.save = "run-1", {}, Mock()
+        runner.deployment = {"customStatus": {}}
+        runner.phase = {"phase": "Add-ons: rayfin"}
+        runner.env = {**addons.os.environ, "HOME": str(home)}
+        runner.env.pop("RAYFIN_CONFIG_DIR", None)
+        return runner
+
+    def jsonl(self, data_dir):
+        return [json.loads(line) for line in (data_dir / "logs" / "run-1.jsonl").read_text().splitlines()]
+
+    async def test_failed_up_keeps_its_own_log_and_ignores_other_processes(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp, patch.object(addons, "DATA_DIR", Path(tmp) / "data"):
+            data_dir, home = Path(tmp) / "data", Path(tmp) / "home"
+            foreign = home / ".rayfin" / "logs" / "2026-11-10T110000.000Z-up-other.log"
+            foreign.parent.mkdir(parents=True)
+            foreign.write_text('2026-11-10T11:00:00.000Z info invocation Command started {"processId": 1}\n')
+            runner = self.runner(home)
+            with self.assertRaisesRegex(RuntimeError, "exited with code 3"):
+                await runner.rayfin_command("rayfin-imaging: deploy", [sys.executable, "-c", self.FAKE_RAYFIN, "3"], Path(tmp), runner.env)
+            kept = list((data_dir / "logs" / "rayfin" / "run-1").iterdir())
+            self.assertEqual(len(kept), 1)
+            self.assertIn("Functions publish failed", kept[0].read_text())
+            rayfin = [e for e in self.jsonl(data_dir) if e.get("source") == "rayfin-cli"]
+            self.assertEqual([e["level"] for e in rayfin], ["info", "warn", "error"])
+            self.assertEqual(rayfin[-1]["message"], '[rayfin] functions.deploy Functions publish failed {"status":404}')
+            self.assertTrue(all(e["phase"] == "Add-ons: rayfin" for e in rayfin))
+            self.assertTrue(foreign.exists(), "Another invocation's log must be left in place, not attributed to this run")
+
+    async def test_long_log_is_capped_in_the_run_log_but_kept_whole_on_disk(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp, patch.object(addons, "DATA_DIR", Path(tmp) / "data"), \
+             patch.object(addons, "RAYFIN_LOG_LINE_LIMIT", 2):
+            data_dir = Path(tmp) / "data"
+            runner = self.runner(Path(tmp) / "home")
+            await runner.rayfin_command("rayfin-imaging: deploy", [sys.executable, "-c", self.FAKE_RAYFIN, "0"], Path(tmp), runner.env)
+            rayfin = [e for e in self.jsonl(data_dir) if e.get("source") == "rayfin-cli"]
+            self.assertEqual(len(rayfin), 3)
+            self.assertIn("log truncated after 2 lines", rayfin[-1]["message"])
+            kept = next((data_dir / "logs" / "rayfin" / "run-1").iterdir())
+            self.assertEqual(len(kept.read_text().splitlines()), 3)
+
+    async def test_missing_log_is_reported_without_masking_the_command_result(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp, patch.object(addons, "DATA_DIR", Path(tmp) / "data"):
+            data_dir = Path(tmp) / "data"
+            runner = self.runner(Path(tmp) / "home")
+            self.assertEqual(await runner.rayfin_command("rayfin: noop", [sys.executable, "-c", "pass"], Path(tmp), runner.env), "")
+            self.assertTrue(any("wrote no diagnostic log" in e["message"] and e["level"] == "warn" for e in self.jsonl(data_dir)))
+
+
 if __name__ == "__main__":
     unittest.main()
