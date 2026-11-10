@@ -308,6 +308,8 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         def az_json(_config, *args):
             if args[:2] == ("resource", "show"):
                 return {"properties": {"authenticationConfiguration": {"audience": "https://ws-fhir.fhir.azurehealthcareapis.com"}}}
+            if args[:2] == ("containerapp", "list"):
+                return []
             if args[:2] == ("containerapp", "show"):
                 return {"properties": {"configuration": {"ingress": {"fqdn": "cardiotest-app.example.io"}}}}
             raise AssertionError(args)
@@ -372,6 +374,63 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         cardio = [c for c in runner.ps.await_args_list if str(c.args[1]).endswith("deploy-cardiology-app.ps1")]
         self.assertEqual(len(cardio), 1)
         self.assertEqual(cardio[0].args[2]["CardiologyRayfinOrigins"], ["https://cardio-westus2.webapp.fabricapps.net"])
+
+    async def test_cardiology_new_instance_reuses_the_existing_hosted_companion(self):
+        import tempfile
+        origin = "https://cardio-westus2.webapp.fabricapps.net"
+        for origin_source in ("CALDOVA_RAYFIN_APP_URL", "CALDOVA_ALLOWED_ORIGIN", "registration"):
+            with self.subTest(origin_source=origin_source), tempfile.TemporaryDirectory() as tmp:
+                runner, wardflow, default_az_json = self.cardiology_runner(tmp)
+
+                def live_az_json(config, *args):
+                    if args[:2] == ("containerapp", "list"):
+                        env = [{"name": "CALDOVA_AUTH_CLIENT_ID", "value": "client-id"}]
+                        if origin_source != "registration":
+                            env.append({"name": origin_source, "value": origin + "/"})
+                        return [{"name": "cardiotest-app", "resourceGroup": "rg-med-test-cardio", "properties": {
+                            "configuration": {"ingress": {"fqdn": "cardiotest-app.example.io"}},
+                            "template": {"containers": [{"env": env}]}
+                        }}]
+                    if args[:3] == ("ad", "app", "show"):
+                        return {"signInAudience": "AzureADMyOrg", "tags": ["hls-cardiology-app:sub/rg-med-test-cardio/cardiotest-app"],
+                                "web": {"redirectUris": ["https://cardiotest-app.example.io/.auth/login/aad/callback"]},
+                                "spa": {"redirectUris": [origin + "/"]}}
+                    return default_az_json(config, *args)
+
+                async def phase8(title, _script, params):
+                    if title == "Deploy cardiology app" and params.get("CardiologyRayfinOrigins") != [origin]:
+                        raise RuntimeError("foreign SPA redirect URI; existing app quarantined")
+
+                runner.ps.side_effect = phase8
+                result, _ = await self.run_cardiology(runner, wardflow, live_az_json)
+                self.assertEqual(result["rayfinUrl"], origin + "/")
+                self.assertEqual(runner.deployment["customStatus"]["addons"]["cardiology"]["resources"], result)
+
+    async def test_cardiology_rejects_untrusted_registration_before_reconciliation(self):
+        import tempfile
+        for field, rejected in (("tags", []), ("signInAudience", "AzureADMultipleOrgs"),
+                                ("web", {"redirectUris": ["https://other.example/.auth/login/aad/callback"]}),
+                                ("spa", {"redirectUris": ["http://attacker.example/"]})):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                runner, wardflow, default_az_json = self.cardiology_runner(tmp)
+
+                def live_az_json(config, *args):
+                    if args[:2] == ("containerapp", "list"):
+                        return [{"name": "cardiotest-app", "resourceGroup": "rg-med-test-cardio", "properties": {
+                            "configuration": {"ingress": {"fqdn": "cardiotest-app.example.io"}},
+                            "template": {"containers": [{"env": [{"name": "CALDOVA_AUTH_CLIENT_ID", "value": "client-id"}]}]}
+                        }}]
+                    if args[:3] == ("ad", "app", "show"):
+                        registration = {"signInAudience": "AzureADMyOrg", "tags": ["hls-cardiology-app:sub/rg-med-test-cardio/cardiotest-app"],
+                                        "web": {"redirectUris": ["https://cardiotest-app.example.io/.auth/login/aad/callback"]},
+                                        "spa": {"redirectUris": ["https://cardio-westus2.webapp.fabricapps.net/"]}}
+                        registration[field] = rejected
+                        return registration
+                    return default_az_json(config, *args)
+
+                with self.assertRaises((RuntimeError, ValueError)):
+                    await self.run_cardiology(runner, wardflow, live_az_json)
+                self.assertFalse(any(call.args[0] == "Deploy cardiology app" for call in runner.ps.call_args_list))
 
     async def test_cardiology_without_a_rayfin_project_deploys_only_the_container_app(self):
         import tempfile

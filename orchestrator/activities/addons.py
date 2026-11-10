@@ -1437,6 +1437,31 @@ class AddonRunner:
         # redirect URIs and CORS exactly, so omitting it would revoke the hosted app.
         prior_rayfin = (statuses.get("cardiology", {}).get("resources") or {}).get("rayfinUrl")
         prior_origins = [rayfin_origin(prior_rayfin)] if prior_rayfin else []
+        if not prior_origins:
+            # A new deployment instance has no add-on history, but targets the same app.
+            # List at subscription scope so first deployments also work before the group exists.
+            existing_apps = await asyncio.to_thread(az_json, cfg, "containerapp", "list")
+            existing_app = next((app for app in existing_apps
+                                 if app.get("name") == prefix + "-app"
+                                 and app.get("resourceGroup", "").lower() == group.lower()), {})
+            existing_env = {entry.get("name"): entry.get("value")
+                            for container in existing_app.get("properties", {}).get("template", {}).get("containers", [])
+                            for entry in container.get("env", [])}
+            installed_origins = existing_env.get("CALDOVA_ALLOWED_ORIGIN") or existing_env.get("CALDOVA_RAYFIN_APP_URL") or ""
+            prior_origins = [rayfin_origin(value.strip()) for value in installed_origins.split(",") if value.strip()]
+            client_id = existing_env.get("CALDOVA_AUTH_CLIENT_ID")
+            if not prior_origins and client_id:
+                # Registration can precede both the template's CORS config and the final link update.
+                # Recover only a registration bound to this exact app and tagged for this estate.
+                registration = await asyncio.to_thread(az_json, cfg, "ad", "app", "show", "--id", client_id)
+                host = existing_app.get("properties", {}).get("configuration", {}).get("ingress", {}).get("fqdn")
+                owner = f"hls-cardiology-app:{cfg['expected_subscription_id']}/{group.lower()}/{prefix}-app"
+                callback = f"https://{host}/.auth/login/aad/callback"
+                if (registration.get("signInAudience") != "AzureADMyOrg"
+                        or owner not in (registration.get("tags") or [])
+                        or registration.get("web", {}).get("redirectUris") != [callback]):
+                    raise RuntimeError("Refusing to recover Rayfin origins from an unowned or unbound cardiology registration")
+                prior_origins = [rayfin_origin(uri) for uri in registration.get("spa", {}).get("redirectUris", [])]
         cardio_ps_params = {
             **shared, "ResourceGroupName": group, "Location": cfg["cardiology_location"], "Prefix": prefix,
             "Tags": {**cfg.get("tags", {}), "hls-deployment": cfg["fabric_workspace_name"]},
