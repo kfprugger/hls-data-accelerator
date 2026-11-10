@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920,height=1080">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: #FFFFFF radial-gradient(#E2E8F0 1.5px, transparent 1.5px);
+    background-size: 32px 32px;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    color: #0F172A;
+  }
+  .board {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    padding: 60px 80px;
+  }
+  .kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 600;
+    color: #0284C7;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+  .title {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 56px;
+    font-weight: 800;
+    color: #0F172A;
+    line-height: 1.12;
+    letter-spacing: -0.03em;
+  }
+  .content {
+    margin-top: 26px;
+    display: flex;
+    gap: 36px;
+    align-items: stretch;
+    height: 680px;
+  }
+  .card {
+    background: #FFFFFF;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 14px;
+    box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+  }
+  .card-pad {
+    padding: 32px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #EFF6FF;
+    border: 1.5px solid #3B82F6;
+    color: #1D4ED8;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+  }
+  .badge-danger {
+    background: #FEF2F2;
+    border-color: #EF4444;
+    color: #B91C1C;
+  }
+  .metric-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 60px;
+    font-weight: 800;
+    line-height: 1;
+    color: #0F172A;
+  }
+  .metric-label {
+    font-size: 28px;
+    font-weight: 600;
+    color: #475569;
+    margin-top: 8px;
+  }
+  .caption-bar {
+    position: absolute;
+    bottom: 34px;
+    left: 160px;
+    right: 160px;
+    background: rgba(15, 23, 42, 0.94);
+    color: #F8FAFC;
+    border-radius: 12px;
+    padding: 16px 28px;
+    font-size: 30px;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    line-height: 1.3;
+  }
+</style>
+</head>
+<body>
+
+<div class="board">
+  <div class="kicker">Beat 1: Bedside Crisis</div>
+  <div class="title">Bed 04 at 02:14 AM: Marcus Vance (TCGA-G6-A8L6)</div>
+  <div class="content">
+    <div class="card" style="flex: 1.4; display: flex; flex-direction: column;">
+      <div style="background: #F8FAFC; border-bottom: 1.5px solid #E2E8F0; padding: 14px 24px; font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 600; color: #475569;">
+        Focused Bedside Header: MASIMO-RADIUS7-0101
+      </div>
+      <div style="flex: 1; position: relative; overflow: hidden; background: #FFF;">
+        <img src="../assets/shots/02-alert-stopwatch-left.png" style="width: 100%; height: 100%; object-fit: contain; object-position: center;" alt="Masimo Bedside Alarm">
+      </div>
+    </div>
+    <div style="flex: 0.8; display: flex; flex-direction: column; gap: 20px;">
+      <div class="card card-pad" style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px;">
+        <div class="badge badge-danger">CRITICAL VITAL TRIGGER</div>
+        <div class="metric-num" style="color: #DC2626;">84.0% SpO2</div>
+        <div class="metric-label">Pulse rate: 115 bpm tachycardia</div>
+      </div>
+      <div class="card card-pad" style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px;">
+        <div class="badge">DEVICE TELEMETRY</div>
+        <div class="metric-num" style="color: #0284C7; font-size: 42px;">Radius-7</div>
+        <div class="metric-label">Bed 04 continuous pulse oximetry</div>
+      </div>
+    </div>
+  </div>
+  <div class="caption-bar">
+    It is two fourteen AM in the cardiac ICU. Bed four alarms: Marcus Vance, device Masimo Radius-7, drops to eighty-four percent oxygen at one fifteen bpm.
+  </div>
+</div>
+</body>
+</html>

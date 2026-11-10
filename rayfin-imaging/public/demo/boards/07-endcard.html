@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920,height=1080">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: #FFFFFF radial-gradient(#E2E8F0 1.5px, transparent 1.5px);
+    background-size: 32px 32px;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    color: #0F172A;
+  }
+  .board {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    padding: 60px 80px;
+  }
+  .kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 600;
+    color: #0284C7;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+  .title {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 56px;
+    font-weight: 800;
+    color: #0F172A;
+    line-height: 1.12;
+    letter-spacing: -0.03em;
+  }
+  .content {
+    margin-top: 26px;
+    display: flex;
+    gap: 36px;
+    align-items: stretch;
+    height: 680px;
+  }
+  .card {
+    background: #FFFFFF;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 14px;
+    box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+  }
+  .card-pad {
+    padding: 32px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #EFF6FF;
+    border: 1.5px solid #3B82F6;
+    color: #1D4ED8;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+  }
+  .badge-danger {
+    background: #FEF2F2;
+    border-color: #EF4444;
+    color: #B91C1C;
+  }
+  .metric-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 60px;
+    font-weight: 800;
+    line-height: 1;
+    color: #0F172A;
+  }
+  .metric-label {
+    font-size: 28px;
+    font-weight: 600;
+    color: #475569;
+    margin-top: 8px;
+  }
+  .caption-bar {
+    position: absolute;
+    bottom: 34px;
+    left: 160px;
+    right: 160px;
+    background: rgba(15, 23, 42, 0.94);
+    color: #F8FAFC;
+    border-radius: 12px;
+    padding: 16px 28px;
+    font-size: 30px;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    line-height: 1.3;
+  }
+</style>
+</head>
+<body>
+
+<div class="board">
+  <div class="kicker">Beat 7: Architecture Payoff</div>
+  <div class="title">From Bedside Waveform to Boardroom Confidence</div>
+  <div class="content">
+    <div class="card" style="flex: 1.3; display: flex; flex-direction: column;">
+      <div style="background: #F8FAFC; border-bottom: 1.5px solid #E2E8F0; padding: 14px 24px; font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 600; color: #475569;">
+        Focused OneLake Architecture: Three Silos, No Copies
+      </div>
+      <div style="flex: 1; position: relative; overflow: hidden; background: #FFF;">
+        <img src="../assets/shots/08-data-map-hero.png" style="width: 100%; height: 100%; object-fit: contain; object-position: center;" alt="Zero-Copy Data Map">
+      </div>
+    </div>
+    <div class="card card-pad" style="flex: 0.8; display: flex; flex-direction: column; justify-content: space-around; background: #FAF5FF; border-color: #A855F7;">
+      <div>
+        <div class="badge" style="background: #F3E8FF; border-color: #9333EA; color: #7E22CE;">ENTERPRISE PROOF</div>
+        <div style="font-size: 38px; font-weight: 800; color: #581C87; margin-top: 12px; line-height: 1.2;">
+          15 TCGA Patients Verified
+        </div>
+        <div class="metric-label" style="color: #6B21A8; margin-top: 10px;">
+          Databricks Unity Catalog and Fabric match 15 = 15 with zero data duplication.
+        </div>
+      </div>
+      <div style="border-top: 1.5px solid #E9D5FF; padding-top: 16px;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 32px; font-weight: 800; color: #6B21A8;">
+          hls.jbatl.dev
+        </div>
+        <div class="metric-label" style="color: #7E22CE; font-size: 26px;">Microsoft Fabric Healthcare Estate</div>
+      </div>
+    </div>
+  </div>
+  <div class="caption-bar">
+    From bedside waveform to boardroom confidence, on Microsoft Fabric.
+  </div>
+</div>
+</body>
+</html>

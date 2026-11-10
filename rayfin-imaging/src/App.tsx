@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/AuthContext';
 import { AuthCallback } from '@/pages/AuthCallback.tsx';
 import { AskDataAgent } from '@/pages/AskDataAgent';
 import { DataMap } from '@/pages/DataMap';
+import { DemoBoards } from '@/pages/DemoBoards';
 import { Guide } from '@/pages/Guide';
 import { Overview } from '@/pages/Overview';
 import { Pathology } from '@/pages/Pathology';
@@ -119,6 +120,7 @@ function App() {
           <Route path="sources" element={<Sources />} />
           <Route path="standards" element={<Standards />} />
           <Route path="ask" element={<AskDataAgent />} />
+          <Route path="demo" element={<DemoBoards />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

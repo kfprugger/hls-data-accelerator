@@ -20,6 +20,7 @@ const TABS = [
   { to: '/guide', label: 'Guide', title: 'Clinical Guide & Sources', active: (p: string) => p.startsWith('/guide') || p.startsWith('/sources') },
   { to: '/standards', label: 'Standards', title: 'Standards (FHIR & DICOM)', active: (p: string) => p.startsWith('/standards') },
   { to: '/ask', label: 'Ask Data Agent', title: 'Ask Data Agent', active: (p: string) => p.startsWith('/ask') },
+  { to: '/demo', label: 'Demo Boards', title: 'Demo film boards', active: (p: string) => p.startsWith('/demo') },
 ];
 
 const WORKSPACE_ID = import.meta.env.VITE_FABRIC_WORKSPACE_ID as string | undefined;
