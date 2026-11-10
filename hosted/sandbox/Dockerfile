@@ -68,10 +68,14 @@ RUN git init /app/FabricDicomCohortingToolkit \
  && test "$(git -C /app/FabricDicomCohortingToolkit rev-parse HEAD)" = 7307b697c9ae8a460432af060af90f9fc6ac33f5 \
  && chown -R hls:hls /app/FabricDicomCohortingToolkit
 WORKDIR /app/hls-data-accelerator
+# Same two locks as setup-prereqs.ps1: add-on pipeline scripts (rayfin-imaging
+# seed_patient360_silos.py) run on this interpreter and import pyarrow.
 COPY orchestrator/requirements.lock /tmp/orchestrator-requirements.lock
+COPY utilities/repository-data-requirements.lock /tmp/repository-data-requirements.lock
 RUN python -m venv orchestrator/.venv \
- && orchestrator/.venv/bin/pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/orchestrator-requirements.lock \
- && rm -f /tmp/orchestrator-requirements.lock
+ && orchestrator/.venv/bin/pip install --no-cache-dir --require-hashes --only-binary=:all: -r /tmp/orchestrator-requirements.lock -r /tmp/repository-data-requirements.lock \
+ && orchestrator/.venv/bin/python -c "import pyarrow" \
+ && rm -f /tmp/orchestrator-requirements.lock /tmp/repository-data-requirements.lock
 # Copy only allowlisted runtime inputs.
 COPY --chown=hls:hls . /app/hls-data-accelerator/
 COPY --from=wardflow --chown=hls:hls /wardflow/ /app/wardflow/
