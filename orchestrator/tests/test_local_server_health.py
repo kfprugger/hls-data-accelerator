@@ -786,6 +786,29 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertTrue(req.skip_hds_source)
         self.assertTrue(req.skip_hds_pipelines)
 
+    def test_tagged_warn_and_info_lines_do_not_block_phase_skip(self) -> None:
+        # med-1109: a recovered "[WARN] ACL attempt 1 failed ... retry" stored at level=error made
+        # continue-from-failure re-run the 107-minute HDS pipelines phase.
+        phase = "PHASE 3: DICOM SHORTCUT + HDS PIPELINES (AUTO)"
+        recovered = [
+            "WARNING: [2026-11-09 20:10:47Z][WARN]    ACL attempt 1 failed (RBAC not yet propagated). Waiting 60s before retry...",
+            "[2026-11-10 01:10:34Z][INFO]    CMA pipeline status: Failed (0.5 min elapsed)",
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            logs = Path(tmp) / "logs"
+            logs.mkdir()
+            with patch.object(self.local_server, "DATA_DIR", Path(tmp)):
+                def blocking(messages: list[str]) -> bool:
+                    (logs / "run.jsonl").write_text(
+                        "".join(json.dumps({"phase": phase, "level": "error", "message": m}) + "\n" for m in messages),
+                        encoding="utf-8",
+                    )
+                    return self.local_server._phase_has_blocking_logs({"instanceId": "run"}, phase)
+
+                self.assertFalse(blocking(recovered))
+                self.assertTrue(blocking(recovered + ["[2026-11-10 01:10:35Z][ERROR]    Clinical pipeline Failed"]))
+                self.assertTrue(blocking(recovered + ["ERROR: (AuthorizationFailed) az role assignment create failed"]))
+
 
 if __name__ == "__main__":
     unittest.main()

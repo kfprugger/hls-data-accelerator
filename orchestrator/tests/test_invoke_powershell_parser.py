@@ -280,6 +280,16 @@ class InvokePowershellParserTests(unittest.TestCase):
                 self.assertEqual(json.loads(updates[-1][2])["status"], "succeeded")
                 self.assertEqual(warnings, [])
 
+    def test_optional_pipeline_warn_summary_is_a_warning_not_a_failed_step(self) -> None:
+        # med-1109: this row was parsed as a generic step named "Customer Insights Pipeline     WARN",
+        # emitted step_failed, and was logged at error level.
+        line = "  ✗  Customer Insights Pipeline     WARN            10.1 min"
+        with self.assertLogs(self.invoke_powershell.logger, level="INFO") as logs:
+            events = self.parse_lines(line)
+        self.assertEqual([e for e in events if e[0] == "step_failed"], [])
+        self.assertIn(("step_warning", "Customer Insights Pipeline", line.strip(), "10.1 min"), events)
+        self.assertEqual([r.levelname for r in logs.records if r.getMessage() == line], ["WARNING"])
+
     def test_reuse_fabric_rti_does_not_emit_skip_fabric(self) -> None:
         args = self.invoke_powershell._build_deploy_args({
             "expected_tenant_id": "11111111-1111-1111-1111-111111111111",

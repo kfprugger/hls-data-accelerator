@@ -1578,6 +1578,7 @@ def _phase_has_blocking_logs(deployment: dict, phase_name: str) -> bool:
         "ERROR: HEALTHCARE DATA SOLUTIONS NOT FOUND",
         "IMAGE NOT FOUND IN ACR",
     )
+    from activities.invoke_powershell import tagged_log_severity as _tagged_log_severity
 
     try:
         with log_file.open("r", encoding="utf-8") as f:
@@ -1598,7 +1599,9 @@ def _phase_has_blocking_logs(deployment: dict, phase_name: str) -> bool:
                 )
                 if transient_fabric_retry:
                     continue
-                if entry.get("level") == "error":
+                # Logs written before invoke_powershell honoured Write-Log tags stored
+                # "[INFO] ... status: Failed" polls and "[WARN] ... retrying" lines as errors.
+                if entry.get("level") == "error" and _tagged_log_severity(message) not in ("info", "warning"):
                     return True
                 ratio = _re.search(r"(?:KQL Deployment|Phase 2 Results):\s*(\d+)\s*/\s*(\d+)\s+succeeded", message, flags=_re.IGNORECASE)
                 if ratio and int(ratio.group(1)) < int(ratio.group(2)):

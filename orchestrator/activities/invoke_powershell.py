@@ -51,10 +51,11 @@ STEP_BANNER_RE = re.compile(r"^\|\s+STEP\s+(\d+):\s+(.+?)\s*\|$")
 STEP_RESULT_RE = re.compile(r"[✓✗û]\s+(.+?)\s+[-—]\s+(\d+\.?\d*\s*min|—)")
 # Fallback: summary lines use space-padded names with duration at end (no dash separator)
 STEP_SUMMARY_RE = re.compile(r"[✓✗û]\s+(.+?)\s{2,}(\d+\.?\d*\s*min|—)")
-# HDS Record-Step summary rows include a separate status column before duration.
+# HDS Record-Step summary rows include a separate status column before duration. Optional
+# pipelines (POA, Customer Insights) report WARN when they fail without failing the phase.
 PIPELINE_KIND_PATTERN = r"Clinical|Imaging|OMOP|CMA"
 PIPELINE_SUMMARY_RE = re.compile(
-    rf"[✓✗û]\s+((?:{PIPELINE_KIND_PATTERN})\s+Pipeline|Sidecar Pipeline:\s+.+?)\s+((?:COMPLETED|SUCCEEDED|INVOKED|SKIPPED|NOT STARTED|IN PROGRESS|TIMED OUT|FAILED)(?::.*)?)\s{{2,}}(\d+\.?\d*\s*(?:min|sec)|—)",
+    rf"[✓✗û]\s+((?:{PIPELINE_KIND_PATTERN}|POA|Customer Insights)\s+Pipeline(?:\s+Retry)?|Sidecar Pipeline:\s+.+?)\s+((?:COMPLETED|SUCCEEDED|INVOKED|SKIPPED|NOT STARTED|IN PROGRESS|TIMED OUT|FAILED|WARN)(?::.*)?)\s{{2,}}(\d+\.?\d*\s*(?:min|sec)|—)",
     re.IGNORECASE,
 )
 # Phase transition marker: @@PHASE|<number>|<label>|<stepCount>@@
@@ -74,6 +75,21 @@ PIPELINE_TIMEOUT_RE = re.compile(rf"\b({PIPELINE_KIND_PATTERN})(?:\s+\w+)*\s+pip
 PIPELINE_SKIP_RE = re.compile(rf"(?:SKIPPING|Skipping)\s+({PIPELINE_KIND_PATTERN})(?:\s+\w+)*\s+pipeline|\b({PIPELINE_KIND_PATTERN})(?:\s+\w+)*\s+pipeline\b.*\bSKIPPED\b", re.IGNORECASE)
 PIPELINE_INVOKE_RE = re.compile(rf"\b({PIPELINE_KIND_PATTERN})(?:\s+\w+)*\s+pipeline\b.*\b(invoking|invoked|already running|recently invoked|will poll|waiting for .*completion)\b", re.IGNORECASE)
 PIPELINE_URL_RE = re.compile(rf"\b({PIPELINE_KIND_PATTERN})(?:\s+\w+)*\s+Pipeline:\s+(https?://\S+)", re.IGNORECASE)
+# Write-Log stamps its own severity ("[...Z][INFO]", "[...Z][WARN]") and PowerShell's warning
+# stream adds "WARNING:". Those tags are authoritative: "[INFO] ... status: Failed" is a poll and
+# "WARNING: [WARN] ACL attempt 1 failed ... retry" is a recovered retry, not an error.
+WRITE_LOG_SEVERITY_RE = re.compile(r"\]\[(INFO|WARN|ERROR)\]")
+
+
+def tagged_log_severity(line: str) -> str | None:
+    """Return 'info', 'warning' or 'error' when the line carries an explicit PowerShell severity tag."""
+    tag = WRITE_LOG_SEVERITY_RE.search(line)
+    if tag:
+        return {"INFO": "info", "WARN": "warning", "ERROR": "error"}[tag.group(1)]
+    if line.lstrip().startswith("WARNING:"):
+        return "warning"
+    return None
+
 
 
 
@@ -737,8 +753,15 @@ def _run_powershell(args: list[str], step_callback: Any = None, pid_callback: An
             logger.info(line)
             continue
 
-        # Regular log line
-        if any(marker in line for marker in ["✓", "succeeded", "Succeeded", "created", "deployed", "complete"]):
+        # Regular log line: an explicit severity tag wins over keyword heuristics.
+        tagged = tagged_log_severity(line)
+        if tagged == "error":
+            logger.error(line)
+        elif tagged == "warning":
+            logger.warning(line)
+        elif tagged == "info":
+            logger.info(line)
+        elif any(marker in line for marker in ["✓", "succeeded", "Succeeded", "created", "deployed", "complete"]):
             logger.info(line)
         elif re.search(r"(?<![A-Za-z])Failed:\s*0(?!\d)", line):
             logger.info(line)
