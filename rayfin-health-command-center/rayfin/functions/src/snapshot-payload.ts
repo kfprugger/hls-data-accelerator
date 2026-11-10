@@ -50,6 +50,7 @@ function object(value: unknown, path: string, required: string[], optional: stri
     return row;
 }
 function text(value: unknown, max: number, path: string): asserts value is string {
+    // eslint-disable-next-line no-control-regex -- intentionally rejects control characters in snapshot text
     if (typeof value !== 'string' || !value.trim() || value.length > max || /[\u0000-\u001f\u007f]/.test(value)) invalid(path);
 }
 function numeric(value: unknown, path: string, unit?: unknown): asserts value is number {

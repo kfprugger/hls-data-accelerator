@@ -40,7 +40,7 @@ describe('resolveThemeVariant (med-1109 Daylight theme scoping)', () => {
       resolveThemeVariant({
         search: '',
         origin: 'https://elfin-field-43838dcb1c-westus2.webapp.fabricapps.net',
-        workspaceId: 'f306e105-78fd-4b16-bfbe-2b556d493cb7',
+        workspaceId: '66666666-6666-4666-8666-666666666666',
       })
     ).toBe('source');
     expect(
@@ -57,7 +57,7 @@ describe('resolveThemeVariant (med-1109 Daylight theme scoping)', () => {
       resolveThemeVariant({
         search: '?theme=daylight',
         origin: 'https://elfin-field-43838dcb1c-westus2.webapp.fabricapps.net',
-        workspaceId: 'f306e105-78fd-4b16-bfbe-2b556d493cb7',
+        workspaceId: '66666666-6666-4666-8666-666666666666',
       })
     ).toBe('daylight');
     expect(

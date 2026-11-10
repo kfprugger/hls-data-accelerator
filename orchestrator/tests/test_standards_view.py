@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PYTHON_EXEC = "/Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python"
+PYTHON_EXEC = sys.executable
 SCRIPT_PATH = ROOT / "rayfin-imaging" / "scripts" / "verify_standards_view.py"
 
 

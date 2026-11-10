@@ -82,7 +82,7 @@ class TestOneLakeInteropProof(unittest.TestCase):
         self.assertEqual(data["fabricP360Count"], 15)
         self.assertEqual(data["status"], "SUCCEEDED")
         self.assertTrue(data["zeroCopyVerified"])
-        self.assertIn("cbfa78a2-37ee-47b2-9476-14f23815eaa3", data["oneLakeExternalLocation"])
+        self.assertIn("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", data["oneLakeExternalLocation"])
 
         payload_str = json.dumps(data)
         forbidden_terms = [

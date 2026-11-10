@@ -596,7 +596,7 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_ensure_onelake_databricks_storage_provisions_item_and_grants_readwrite_role(self):
         runner = object.__new__(addons.AddonRunner)
-        runner.ws = "f306e105-78fd-4b16-bfbe-2b556d493cb7"
+        runner.ws = "66666666-6666-4666-8666-666666666666"
         runner.log = Mock()
         runner.cloud = Mock()
         runner.cloud.items = Mock(side_effect=[
@@ -605,17 +605,17 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         ])
         runner.cloud.call = Mock(side_effect=[
             {},
-            {"id": "328852ec-d574-4ce2-a0e4-c2bb44162933", "displayName": "hls_databricks_onelake_storage"},
+            {"id": "77777777-7777-4777-8777-777777777777", "displayName": "hls_databricks_onelake_storage"},
             {},
         ])
-        with patch.object(addons, "az_json", return_value={"identity": {"principalId": "2a408d45-6f8e-4cf7-84f2-9953e44e58e5"}}):
+        with patch.object(addons, "az_json", return_value={"identity": {"principalId": "88888888-8888-4888-8888-888888888888"}}):
             url = await runner.ensure_onelake_databricks_storage(
                 {"expected_tenant_id": "c77e97fc-1859-4575-8c8b-53d74bc35a63"},
                 "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Databricks/accessConnectors/ac",
             )
         self.assertEqual(
             url,
-            "abfss://f306e105-78fd-4b16-bfbe-2b556d493cb7@onelake.dfs.fabric.microsoft.com/328852ec-d574-4ce2-a0e4-c2bb44162933/Files/",
+            "abfss://66666666-6666-4666-8666-666666666666@onelake.dfs.fabric.microsoft.com/77777777-7777-4777-8777-777777777777/Files/",
         )
         self.assertEqual(runner.cloud.call.call_count, 3)
 

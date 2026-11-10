@@ -421,7 +421,7 @@ def deploy_activator(
 
     if dry_run:
         # Build planned entities and verify schema
-        dummy_ws = "f306e105-78fd-4b16-bfbe-2b556d493cb7"
+        dummy_ws = "00000000-0000-0000-0000-000000000002"
         dummy_kql = "00000000-0000-0000-0000-000000000001"
         entities, b64_payload = build_reflex_entities(recipient, dummy_kql, dummy_ws, execution_interval_seconds=60, include_rule=True)
         return {

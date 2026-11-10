@@ -28,10 +28,12 @@ REQUIRED_SCREENSHOTS = [
     "07-onelake-architecture.png",
 ]
 
-KOKORO_MODEL = Path("/Users/joey/.cache/hyperframes/tts/models/kokoro-v1.0.onnx")
-KOKORO_VOICES = Path("/Users/joey/.cache/hyperframes/tts/voices/voices-v1.0.bin")
-BOARD_SYNC_VENV = Path("/Users/joey/git/YouTube-AI-Motion-Graphics/skills/board-sync/.venv/bin/python")
-EXPORT_TOOL = Path("/Users/joey/git/YouTube-AI-Motion-Graphics/tools/export.py")
+MOTION_GRAPHICS_REPO = Path.home() / "git" / "YouTube-AI-Motion-Graphics"
+KOKORO_MODEL = Path.home() / ".cache" / "hyperframes" / "tts" / "models" / "kokoro-v1.0.onnx"
+KOKORO_VOICES = Path.home() / ".cache" / "hyperframes" / "tts" / "voices" / "voices-v1.0.bin"
+BOARD_SYNC_VENV = MOTION_GRAPHICS_REPO / "skills" / "board-sync" / ".venv" / "bin" / "python"
+BOARD_SYNC_SETUP = MOTION_GRAPHICS_REPO / "skills" / "board-sync" / "setup.sh"
+EXPORT_TOOL = MOTION_GRAPHICS_REPO / "tools" / "export.py"
 
 
 def check_prerequisites() -> None:
@@ -39,14 +41,14 @@ def check_prerequisites() -> None:
     if not KOKORO_MODEL.exists():
         sys.stderr.write(
             f"Error: Kokoro model missing at {KOKORO_MODEL}\n"
-            f"Run: bash /Users/joey/git/YouTube-AI-Motion-Graphics/skills/board-sync/setup.sh\n"
+            f"Run: bash {BOARD_SYNC_SETUP}\n"
         )
         sys.exit(1)
 
     if not BOARD_SYNC_VENV.exists():
         sys.stderr.write(
             f"Error: board-sync virtual environment missing at {BOARD_SYNC_VENV}\n"
-            f"Run: bash /Users/joey/git/YouTube-AI-Motion-Graphics/skills/board-sync/setup.sh\n"
+            f"Run: bash {BOARD_SYNC_SETUP}\n"
         )
         sys.exit(1)
 

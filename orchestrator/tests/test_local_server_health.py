@@ -237,7 +237,7 @@ class LocalServerHealthTests(unittest.TestCase):
             if args[0] == "az" and args[1:3] == ["account", "show"]:
                 return types.SimpleNamespace(
                     returncode=0,
-                    stdout='{"user":"cli-user@jbatl.dev","subscriptionName":"Production","subscriptionId":"SUB-123","tenantId":"TENANT-456"}',
+                    stdout='{"user":"cli-user@example.com","subscriptionName":"Production","subscriptionId":"SUB-123","tenantId":"TENANT-456"}',
                     stderr="",
                 )
             if args[0] == "pwsh":
@@ -255,7 +255,7 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertEqual(result["issues"], [])
         self.assertTrue(result["pwsh"]["loggedIn"])
         self.assertTrue(result["pwsh"].get("delegatedToCli"))
-        self.assertEqual(result["pwsh"]["user"], "cli-user@jbatl.dev")
+        self.assertEqual(result["pwsh"]["user"], "cli-user@example.com")
         self.assertEqual(result["aligned"], {"subscription": True, "tenant": True})
     def test_phase_log_matching_accepts_ui_cards_for_backend_phase_names(self) -> None:
         matching_cases = [

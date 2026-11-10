@@ -261,8 +261,8 @@ class PersistentDatabaseTests(unittest.TestCase):
             peer_dir.mkdir(parents=True)
             active_dir.mkdir(parents=True)
 
-            target_tid = "8d038e6a-9b7d-4cb8-bbcf-e84dff156478"
-            target_sub = "9bbee190-dc61-4c58-ab47-1275cb04018f"
+            target_tid = "33333333-3333-4333-8333-333333333333"
+            target_sub = "44444444-4444-4444-8444-444444444444"
 
             # 1. Populate peer sandbox (9da330f25845) with a completed deployment and a state-tracking ledger
             with patch.dict(os.environ, {"HLS_DATA_DIR": str(peer_dir), "HLS_SHARED_DATA_DIR": str(shared_root)}):
@@ -284,12 +284,12 @@ class PersistentDatabaseTests(unittest.TestCase):
                             "resource_group_name": "rg-med-1024",
                             "location": "westus2",
                             "admin_security_group": "sg-azure-admins",
-                            "alert_email": "alerts@brakekat.com",
-                            "payer_ops_email": "ops@brakekat.com",
+                            "alert_email": "alerts@example.com",
+                            "payer_ops_email": "ops@example.com",
                             "deploy_cardiology": True,
                             "cardiology_location": "eastus2",
                             "cardiology_prefix": "cardio1024",
-                            "cardiology_app_users": ["joey@brakekat.com", "alerts@brakekat.com"],
+                            "cardiology_app_users": ["user@example.com", "alerts@example.com"],
                         },
                     },
                 }
@@ -297,7 +297,7 @@ class PersistentDatabaseTests(unittest.TestCase):
                 peer_db.backfill_form_history_from_deployments()
                 self.assertEqual(peer_db.get_form_history("naming-prefix"), ["med-1024"])
                 self.assertEqual(peer_db.get_form_history("cardiology-prefix"), ["cardio1024"])
-                self.assertEqual(set(peer_db.get_form_history("cardiology-app-users")), {"joey@brakekat.com", "alerts@brakekat.com"})
+                self.assertEqual(set(peer_db.get_form_history("cardiology-app-users")), {"user@example.com", "alerts@example.com"})
 
                 # Also write a state-tracking ledger for med-1009 that was not yet in deployments table
                 peer_tracking = peer_dir / "state-tracking"
@@ -352,7 +352,7 @@ class PersistentDatabaseTests(unittest.TestCase):
                 "AZURE_CONFIG_DIR": cli_dir_str,
                 "HLS_GATEWAY_KEY": "gateway-secret-key-for-user",
                 "HLS_SANDBOX_USER_TID": "c77e97fc-1859-4575-8c8b-53d74bc35a63",
-                "HLS_SANDBOX_USER_OID": "700530be-27dd-4cd2-aa2b-1937e3b24db8",
+                "HLS_SANDBOX_USER_OID": "55555555-5555-4555-8555-555555555555",
             }
             with patch.dict(os.environ, env):
                 self.assertTrue(hosted.seal_azure_auth_cache())

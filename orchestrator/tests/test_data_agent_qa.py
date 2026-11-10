@@ -195,13 +195,13 @@ class TestDataAgentQA(unittest.TestCase):
 
         # 2. Unauthorized caller (lacking permissions on source tables) -> 403 Forbidden with 0 data rows
         verifier_auth = DataAgentVerifier(
-            workspace_name="f306e105-78fd-4b16-bfbe-2b556d493cb7",
+            workspace_name="66666666-6666-4666-8666-666666666666",
             agent_name="Patient 360",
             token="unauthorized-token",
         )
-        verifier_auth.workspace_id = "f306e105-78fd-4b16-bfbe-2b556d493cb7"
-        verifier_auth.agent_id = "9f091d45-2f69-4fa9-961e-64930a02f4b4"
-        verifier_auth.resolve_agent = MagicMock(return_value={"id": "9f091d45-2f69-4fa9-961e-64930a02f4b4", "displayName": "Patient 360"})
+        verifier_auth.workspace_id = "66666666-6666-4666-8666-666666666666"
+        verifier_auth.agent_id = "99999999-9999-4999-8999-999999999999"
+        verifier_auth.resolve_agent = MagicMock(return_value={"id": "99999999-9999-4999-8999-999999999999", "displayName": "Patient 360"})
         verifier_auth.verify_publication = MagicMock(return_value={"published": True})
         with patch("requests.post") as mock_post:
             forbidden_res = MagicMock()

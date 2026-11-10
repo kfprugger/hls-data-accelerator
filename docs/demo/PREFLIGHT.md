@@ -82,7 +82,7 @@
 
 ## 4. Board-Fix Rules Added to `YouTube-AI-Motion-Graphics/checks.md`
 
-Committed to external clone `/Users/joey/git/YouTube-AI-Motion-Graphics` on branch `joey` (commit `be6efde`):
+Committed to external clone `~/git/YouTube-AI-Motion-Graphics` on branch `joey` (commit `be6efde`):
 ```markdown
 - DO: in app-focus boards, place real UI screenshots at true 16:9 or native aspect ratio inside a crisp 1.5px border card with subtle shadow (ticket 011)
 - DON'T: show dark glow navy backgrounds (#080d1a) or equal card rows for narrative clinical explainers; use Clean minimal paper (#FFFFFF / #F8F9FA) with one clinical accent (ticket 011)
@@ -93,6 +93,6 @@ Committed to external clone `/Users/joey/git/YouTube-AI-Motion-Graphics` on bran
 ## 5. Look Ledger Entry (`design_lint.py ledger`)
 
 ```text
-已记账 → /Users/joey/.huashu-design/ledger.jsonl
+已记账 → ~/.huashu-design/ledger.jsonl
   hls-fabric-demo: docs/demo/out/hls-fabric-demo-60s.mp4 (duration 63.47s)
 ```
