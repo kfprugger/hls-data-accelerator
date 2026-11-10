@@ -165,7 +165,7 @@ if [[ -n "$ONELAKE_EXTERNAL_LOCATION_URL" ]]; then
     done
     if [[ "$stmt_state" != "SUCCEEDED" ]]; then
       err_msg="$(jq -r '.status.error.message // empty' <<<"$stmt_resp")"
-      if [[ "$onelake_sql" =~ "DROP FEATURE" ]] && [[ "$err_msg" =~ (Cannot[[:space:]]+drop[[:space:]]+feature|feature[[:space:]]+.*catalogManaged.*is[[:space:]]+not[[:space:]]+enabled|not[[:space:]]+supported[[:space:]]+or[[:space:]]+not[[:space:]]+present|is[[:space:]]+not[[:space:]]+enabled[[:space:]]+on[[:space:]]+table|CANNOT_DROP_FEATURE|DELTA_FEATURE_NOT_FOUND) ]]; then
+      if [[ "$onelake_sql" =~ "DROP FEATURE" ]] && [[ "$err_msg" =~ (Cannot[[:space:]]+drop[[:space:]]+feature|feature[[:space:]]+.*catalogManaged.*is[[:space:]]+not[[:space:]]+enabled|not[[:space:]]+supported[[:space:]]+or[[:space:]]+not[[:space:]]+present|is[[:space:]]+not[[:space:]]+enabled[[:space:]]+on[[:space:]]+table|CANNOT_DROP_FEATURE|DELTA_FEATURE_NOT_FOUND|DELTA_FEATURE_DROP_FEATURE_NOT_PRESENT) ]]; then
         echo "  [DROP FEATURE already applied: ${err_msg}]"
       else
         echo "FAIL at OneLake statement ($stmt_state): $onelake_sql" >&2

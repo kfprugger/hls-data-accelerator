@@ -12,6 +12,7 @@ import re
 import shlex
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import time
@@ -408,7 +409,6 @@ class AddonRunner:
 
     async def verify_silver_tcga_patients(self) -> int:
         """Verify the HDS Silver Lakehouse SQL endpoint has at least one seeded TCGA patient."""
-        from scripts.verify_data_agent_qa import execute_sql_query
         silver = require_one(
             [i for i in self.items if i.get("type") == "Lakehouse" and str(i.get("displayName") or "").lower().endswith("_silver")],
             "Silver Lakehouse",
@@ -419,11 +419,28 @@ class AddonRunner:
         if not host:
             raise RuntimeError("Silver Lakehouse SQL endpoint is not provisioned")
         token = await asyncio.to_thread(self.cloud.tokens.token, "https://database.windows.net")
-        query = "SELECT COUNT(*) AS tcga_count FROM dbo.Patient WHERE id_orig LIKE 'tcga-%' OR LOWER(CAST(text_div AS VARCHAR(MAX))) LIKE '%tcga-%'"
-        rows = await asyncio.to_thread(execute_sql_query, host, silver["displayName"], query, token)
-        count = int((rows[0] if rows else {}).get("tcga_count") or 0)
+        # HDS Silver flattens FHIR arrays to *_string JSON columns; seed_tcga_cohort.py tags each
+        # TCGA Patient with an identifier in the GDC barcode system.
+        query = "SELECT COUNT(*) FROM dbo.Patient WHERE identifier_string LIKE '%gdc.cancer.gov/tcga/barcode%'"
+
+        def count_tcga() -> int:
+            import pyodbc
+            raw = token.encode("utf-16-le")
+            conn = pyodbc.connect(
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};SERVER={host};DATABASE={silver['displayName']};Encrypt=yes;",
+                attrs_before={1256: struct.pack(f"<I{len(raw)}s", len(raw), raw)},  # SQL_COPT_SS_ACCESS_TOKEN
+                timeout=60,
+            )
+            try:
+                conn.timeout = 120
+                return int(conn.cursor().execute(query).fetchone()[0])
+            finally:
+                conn.close()
+
+        count = await asyncio.to_thread(count_tcga)
         if count <= 0:
             raise RuntimeError(f"Silver Lakehouse {silver['displayName']} dbo.Patient has 0 TCGA patients after FHIR export and HDS ingestion")
+        self.log(f"Silver Lakehouse {silver['displayName']}: {count} TCGA patients", "info")
         return count
     async def gold(self):
         gold = self.item("Lakehouse", "healthcare1_reporting_gold")
