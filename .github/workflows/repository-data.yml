@@ -22,11 +22,11 @@ jobs:
         run: python utilities/check_repository_data.py
       - name: Exercise dataset protection boundaries
         run: python -m unittest discover -s utilities/tests -v
-      - name: Generate canonical data from source in temporary directories
-        run: python -m unittest discover -s synthea/tests -v
       - name: Install locked backend dependencies
         run: >-
           python -m pip install --require-hashes --only-binary :all: -r orchestrator/requirements.lock
+      - name: Generate canonical data from source in temporary directories
+        run: python -m unittest discover -s synthea/tests -v
       - name: Build and validate HDS from the clean checkout
         working-directory: orchestrator
         run: python -m activities.deploy_hds_source --workspace ci-source-integrity --validate-only

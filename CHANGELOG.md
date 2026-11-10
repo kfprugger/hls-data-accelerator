@@ -2,6 +2,10 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Source-integrity CI dependency order (2026-11-10)
+
+- **Fixed** clean-checkout TCGA cohort tests failing before metadata generation because the shared Patient 360 seeder imports `requests` and `azure-identity`. Install the existing locked backend dependencies before the Synthea suite, rather than after it. The dataset guard still runs first with its schema-only dependency set.
+
 ### Daylight theme for med-1109 Rayfin Imaging & WardFlow (2026-11-10)
 
 - **Added** Joey's **Daylight** theme variant (Direction C - Broadcast placard on warm paper) to `rayfin-imaging`, scoped exclusively to the `med-1109` Fabric workspace (`8be8f60c-dae7-4c79-9307-683c5794dcf7`) and hosting domain (`elite-otter-03514eba33-westus2.webapp.fabricapps.net`).
