@@ -285,6 +285,52 @@ function Publish-DataAgentDefinition {
     throw "DataAgent publish did not complete within 5 minutes"
 }
 
+function Sync-LakehouseSqlEndpointTables {
+    # Data Agents read a lakehouse schema through its SQL analytics endpoint. Automatic
+    # discovery on that endpoint can lag a Spark write by hours, and a Data Agent that
+    # attaches the lakehouse first caches the partial table list and never refreshes it.
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [Parameter(Mandatory)][string]$LakehouseId,
+        [Parameter(Mandatory)][string]$Label,
+        [Parameter(Mandatory)][string[]]$RequiredTables
+    )
+    $lakehouse = Invoke-FabricApi -Endpoint "/workspaces/$WorkspaceId/lakehouses/$LakehouseId"
+    $endpointId = [string]$lakehouse.properties.sqlEndpointProperties.id
+    if (-not $endpointId) { throw "$Label Lakehouse has no SQL analytics endpoint yet." }
+    $headers = @{ Authorization = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
+    $response = Invoke-WebRequest -Method POST `
+        -Uri "$FabricApiBase/workspaces/$WorkspaceId/sqlEndpoints/$endpointId/refreshMetadata" `
+        -Headers $headers -Body '{}' -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop
+    $result = $null
+    if ($response.StatusCode -eq 200) {
+        $result = $response.Content | ConvertFrom-Json
+    } elseif ($response.StatusCode -eq 202) {
+        $location = $response.Headers["Location"]
+        if ($location -is [array]) { $location = $location[0] }
+        if (-not $location) { throw "$Label SQL endpoint metadata sync returned 202 without a Location header" }
+        for ($attempt = 1; $attempt -le 60 -and -not $result; $attempt++) {
+            Start-Sleep 5
+            $headers.Authorization = "Bearer $(Get-FabricAccessToken)"
+            $operation = Invoke-RestMethod -Uri $location -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
+            if ($operation.status -eq "Failed") { throw "$Label SQL endpoint metadata sync failed: $($operation.error.message)" }
+            if ($operation.status -eq "Succeeded") {
+                $result = Invoke-RestMethod -Uri "$location/result" -Headers $headers -Method GET -TimeoutSec 120 -ErrorAction Stop
+            }
+        }
+        if (-not $result) { throw "$Label SQL endpoint metadata sync did not complete within 5 minutes" }
+    } else {
+        throw "$Label SQL endpoint metadata sync returned HTTP $($response.StatusCode)"
+    }
+    $statuses = @{}
+    foreach ($table in @($result.value)) { $statuses[[string]$table.tableName] = [string]$table.status }
+    $unsynced = @($RequiredTables | Where-Object { -not $statuses.ContainsKey($_) -or $statuses[$_] -eq 'Failure' })
+    if ($unsynced.Count -gt 0) {
+        throw "$Label SQL endpoint does not expose required tables after metadata sync: $($unsynced -join ', ')"
+    }
+    Write-Host "  ✓ $Label SQL endpoint metadata synced: $($RequiredTables.Count) required tables visible" -ForegroundColor Green
+}
+
 . (Join-Path $PSScriptRoot '../utilities/data-agent-selection.ps1')
 
 function Deploy-DataAgent {
@@ -347,10 +393,28 @@ function Deploy-DataAgent {
     } catch {
         throw "DataAgent definition update failed for ${Name}: $(Get-ErrorMessage $_)"
     }
-    try {
-        foreach ($contract in $selectionContracts) { Set-DataAgentNativeSchemaSelection @contract }
-    } catch {
-        throw "DataAgent native table selection failed for ${Name}: $(Get-ErrorMessage $_)"
+    # A datasource attached while its SQL endpoint still lacked tables keeps that stale element
+    # tree; updateDefinition does not refresh it. Detaching and re-importing the datasource does.
+    $reattached = $false
+    while ($true) {
+        try {
+            foreach ($contract in $selectionContracts) { Set-DataAgentNativeSchemaSelection @contract }
+            break
+        } catch {
+            $message = Get-ErrorMessage $_
+            if ($reattached -or $message -notmatch "Missing, ambiguous, or unavailable native \w+ '[^']+' in datasource '([0-9a-fA-F-]{36})'") {
+                throw "DataAgent native table selection failed for ${Name}: $message"
+            }
+            $staleDatasourceId = $Matches[1]
+            Write-Host "  ! ${Name}: datasource $staleDatasourceId has a stale schema; re-attaching it" -ForegroundColor Yellow
+            try {
+                $null = Invoke-FabricApi -Method DELETE -Endpoint "/workspaces/$WorkspaceId/dataAgents/$agentId/staging/datasources/$staleDatasourceId"
+                Update-DataAgentDefinition -WorkspaceId $WorkspaceId -DataAgentId $agentId -Definition @{ parts = @($parts) }
+            } catch {
+                throw "DataAgent datasource re-attach failed for ${Name}: $(Get-ErrorMessage $_)"
+            }
+            $reattached = $true
+        }
     }
     try {
         $publishDescription = if ([string]::IsNullOrWhiteSpace($Description)) { "$Name production configuration" } else { $Description }
@@ -1070,6 +1134,7 @@ if ($goldLh) {
         'ImagingStudyOntology','FactDiagnosisOntology','dim_diagnosis',
         'agg_medication_adherence','agg_risk_scores'
     )
+    Sync-LakehouseSqlEndpointTables -WorkspaceId $workspaceId -LakehouseId $goldLh.id -Label 'Reporting Gold' -RequiredTables $goldTables
     $payerDataSources += (New-LakehouseDatasource -DisplayName $goldLh.displayName -LakehouseId $goldLh.id -WorkspaceId $workspaceId -Tables $goldTables -FewShots $goldFewShots -Instructions "PRIMARY source for historical and analytical facts: claims, paid/billed amounts, payer categories, care gaps, high-cost cohorts, and readmission risk. For mixed questions query Gold and KQL separately and label each result.")
     $graphDataSources += (New-LakehouseDatasource -DisplayName $goldLh.displayName -LakehouseId $goldLh.id -WorkspaceId $workspaceId -Tables $goldTables -FewShots $goldFewShots -Instructions "Use Reporting Gold only to enrich ontology entities with historical claims, paid amounts, payer category, care gaps, high-cost cohort, and readmission risk. Do not infer graph relationships from table co-occurrence.")
 } else {

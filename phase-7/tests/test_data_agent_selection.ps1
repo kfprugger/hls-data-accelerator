@@ -105,4 +105,40 @@ foreach ($function in @($functionRoot.children)) {
     Assert-Equal -Expected ($kustoFunctions -contains $function.display_name) -Actual $function.is_selected -Message "Kusto function '$($function.display_name)' selection mismatch."
 }
 
+# A datasource whose cached schema lacks a target table is detached and re-imported exactly once.
+$deployScript = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot '../deploy-payer-rti.ps1'), [ref]$null, [ref]$null)
+foreach ($functionName in @('ConvertTo-Base64', 'Get-ErrorMessage', 'Deploy-DataAgent')) {
+    $definition = $deployScript.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $functionName }, $true)
+    Assert-True ($null -ne $definition) "deploy-payer-rti.ps1 must define $functionName."
+    . ([scriptblock]::Create($definition.Extent.Text))
+}
+$staleId = '1ab47b0f-2e91-4e78-8148-c7541799f596'
+$script:apiCalls = [System.Collections.ArrayList]@()
+$script:definitionUpdates = 0
+$script:staleFailuresLeft = 1
+function Invoke-FabricApi {
+    param([string]$Method = 'GET', [string]$Endpoint, [object]$Body = $null)
+    $null = $script:apiCalls.Add("$Method $Endpoint")
+    if ($Method -eq 'GET') { return [pscustomobject]@{ value = @([pscustomobject]@{ displayName = 'Payer Ops Triage'; id = 'agent-1' }) } }
+}
+function Update-DataAgentDefinition { param([string]$WorkspaceId, [string]$DataAgentId, [object]$Definition) $script:definitionUpdates++ }
+function Publish-DataAgentDefinition { param([string]$WorkspaceId, [string]$DataAgentId, [string]$Description) }
+function Set-DataAgentNativeSchemaSelection {
+    param([string]$WorkspaceId, [string]$DataAgentId, [string]$DatasourceId, [string[]]$Tables, [string[]]$Functions, [scriptblock]$InvokeApi, [switch]$VerifyOnly, [switch]$Published)
+    if (-not $VerifyOnly -and $script:staleFailuresLeft -gt 0) {
+        $script:staleFailuresLeft--
+        throw "Missing, ambiguous, or unavailable native Table 'fact_claim' in datasource '$DatasourceId'. No selection updates were made."
+    }
+}
+$goldSource = @{ FolderName = 'lakehouse-tables-gold'; DatasourceJson = '{}'; FewShotsJson = '{}'; DatasourceId = $staleId; SelectedTables = @('fact_claim'); SelectedFunctions = @() }
+$null = Deploy-DataAgent -Name 'Payer Ops Triage' -AiInstructions 'x' -DataSources @($goldSource) -WorkspaceId 'ws-1'
+Assert-Equal -Expected 1 -Actual @($script:apiCalls | Where-Object { $_ -eq "DELETE /workspaces/ws-1/dataAgents/agent-1/staging/datasources/$staleId" }).Count -Message 'Stale datasource should be detached once.'
+Assert-Equal -Expected 2 -Actual $script:definitionUpdates -Message 'Definition should be applied, then re-applied to re-import the datasource.'
+
+$script:apiCalls.Clear(); $script:definitionUpdates = 0; $script:staleFailuresLeft = 2
+$repeatError = ''
+try { $null = Deploy-DataAgent -Name 'Payer Ops Triage' -AiInstructions 'x' -DataSources @($goldSource) -WorkspaceId 'ws-1' } catch { $repeatError = $_.Exception.Message }
+Assert-True ($repeatError -like 'DataAgent native table selection failed for Payer Ops Triage:*fact_claim*') 'A table still missing after one re-attach must fail the deployment.'
+Assert-Equal -Expected 1 -Actual @($script:apiCalls | Where-Object { $_ -like 'DELETE *' }).Count -Message 'Re-attach must not repeat.'
+
 Write-Host 'Data Agent table selection tests passed.'
