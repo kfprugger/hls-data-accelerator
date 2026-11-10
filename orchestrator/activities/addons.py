@@ -79,6 +79,13 @@ def az_json(config: dict, *args: str):
         raise RuntimeError(result.stderr.strip()[:1000] or "Azure CLI command failed")
     return json.loads(result.stdout or "null")
 
+def az(config: dict, *args: str) -> str:
+    result = subprocess.run(["az", *args, "--subscription", config["expected_subscription_id"]],
+                            capture_output=True, text=True, timeout=120)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip()[:1000] or "Azure CLI command failed")
+    return result.stdout.strip()
+
 def ensure_providers_registered(config: dict, providers: list[str] | tuple[str, ...], wait: bool = False, timeout_sec: int = 300) -> list[tuple[str, str]]:
     pending: list[tuple[str, str]] = []
     for namespace in providers:
@@ -300,6 +307,13 @@ def parse_cli_json(output: str, description: str) -> dict:
             return value
     raise RuntimeError(f"{description} returned no JSON object")
 
+
+def rayfin_origin(url: str) -> str:
+    """Exact https origin of a Rayfin hosting URL (phase 8 rejects paths and other schemes)."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme != "https" or not parts.hostname:
+        raise RuntimeError(f"Rayfin hosting URL is not an https origin: {url}")
+    return f"https://{parts.netloc.lower()}"
 
 
 def prepare_bundle(bundle: dict, user: str) -> dict:
@@ -1417,8 +1431,13 @@ class AddonRunner:
         await self.command("Refresh cardiology Gold", [sys.executable, backend / "cardiology-api/fabric/refresh_cardiology_gold.py", "--since", since])
         prefix = cfg.get("cardiology_prefix") or "cardio" + re.sub("[^a-z0-9]", "", cfg["fabric_workspace_name"].lower())[-6:]
         group = f"rg-{cfg['fabric_workspace_name']}-cardio"
-        rayfin_res = ((self.deployment.get("customStatus") or {}).get("addons") or {}).get("rayfin", {}).get("resources") or {}
-        await self.ps("Deploy cardiology app", backend / "phase-8/deploy-cardiology-app.ps1", {
+        statuses = (self.deployment.get("customStatus") or {}).get("addons") or {}
+        rayfin_res = statuses.get("rayfin", {}).get("resources") or {}
+        # Keep a previously registered Rayfin origin on reruns: phase 8 reconciles SPA
+        # redirect URIs and CORS exactly, so omitting it would revoke the hosted app.
+        prior_rayfin = (statuses.get("cardiology", {}).get("resources") or {}).get("rayfinUrl")
+        prior_origins = [rayfin_origin(prior_rayfin)] if prior_rayfin else []
+        cardio_ps_params = {
             **shared, "ResourceGroupName": group, "Location": cfg["cardiology_location"], "Prefix": prefix,
             "Tags": {**cfg.get("tags", {}), "hls-deployment": cfg["fabric_workspace_name"]},
             "FabricWorkspaceId": self.ws, "FabricSqlHost": sql["connectionString"], "FabricGoldDatabase": gold["displayName"],
@@ -1427,6 +1446,71 @@ class AddonRunner:
             "ChatModelVersion": cfg["cardiology_chat_model_version"],
             **({"RayfinImagingUrl": rayfin_res["rayfin-imaging"]} if rayfin_res.get("rayfin-imaging") else {}),
             **({"RayfinCommandCenterUrl": rayfin_res["rayfin-health-command-center"]} if rayfin_res.get("rayfin-health-command-center") else {}),
-            **({"RayfinClinicalTriageUrl": rayfin_res["rayfin-clinical-triage-app"]} if rayfin_res.get("rayfin-clinical-triage-app") else {})})
+            **({"RayfinClinicalTriageUrl": rayfin_res["rayfin-clinical-triage-app"]} if rayfin_res.get("rayfin-clinical-triage-app") else {}),
+            **({"CardiologyRayfinOrigins": prior_origins} if prior_origins else {}),
+        }
+        await self.ps("Deploy cardiology app", backend / "phase-8/deploy-cardiology-app.ps1", cardio_ps_params)
         app = await asyncio.to_thread(az_json, cfg, "containerapp", "show", "-g", group, "-n", prefix + "-app")
-        return {"resourceGroup": group, "url": "https://" + app["properties"]["configuration"]["ingress"]["fqdn"]}
+        app_url = "https://" + app["properties"]["configuration"]["ingress"]["fqdn"]
+        result = {"resourceGroup": group, "url": app_url}
+        if (wardflow / "caldova-cardio/app/rayfin/rayfin.yml").is_file():
+            hosting = await self.cardiology_rayfin(wardflow / "caldova-cardio/app", app, app_url)
+            origin = rayfin_origin(hosting)
+            result["rayfinUrl"] = hosting
+            # Record the origin before phase 8 registers it: a rerun must pass it back, or
+            # phase 8 refuses the registration's then-unlisted SPA redirect URI. Saving after
+            # registration would lose it when a later step (env update, probe) fails.
+            self.deployment.setdefault("customStatus", {}).setdefault("addons", {}).setdefault("cardiology", {})["resources"] = dict(result)
+            self.persist()
+            if origin not in prior_origins:
+                await self.ps("Register cardiology Rayfin origin", backend / "phase-8/deploy-cardiology-app.ps1",
+                              {**cardio_ps_params, "CardiologyRayfinOrigins": [origin]})
+            # After any phase-8 template deploy, which replaces the container env list.
+            await asyncio.to_thread(az, cfg, "containerapp", "update", "-g", group, "-n", prefix + "-app",
+                                    "--set-env-vars", f"CALDOVA_RAYFIN_APP_URL={hosting}")
+        return result
+
+    async def cardiology_rayfin(self, source: Path, app: dict, app_url: str) -> str:
+        """Host the cardiology static export as a Rayfin app that calls the Container App with bearer tokens."""
+        import yaml
+        cfg = self.config
+        env = {e.get("name"): e.get("value") for c in app["properties"]["template"]["containers"] for e in c.get("env", [])}
+        client_id = env.get("CALDOVA_AUTH_CLIENT_ID") or ""
+        if not re.fullmatch(r"[0-9a-fA-F-]{36}", client_id):
+            raise RuntimeError("cardiology-rayfin: Container App has no CALDOVA_AUTH_CLIENT_ID app registration")
+        root = self.working_copy(source, "caldova-cardio-rayfin")
+        config_path = root / "rayfin/rayfin.yml"
+
+        async def rayfin_env(extra=None):
+            token = await asyncio.to_thread(self.cloud.tokens.token, FABRIC)
+            return {**self.env, "RAYFIN_TOKEN": token, "RAYFIN_WORKSPACE_ID": self.ws,
+                    "RAYFIN_TENANT_ID": cfg["expected_tenant_id"], **(extra or {})}
+
+        # Same CLI version as the other Rayfin apps' lockfiles; a local bin keeps the
+        # process id rayfin_command uses to find the CLI's own diagnostic log.
+        await self.command("cardiology-rayfin: install Rayfin CLI", ["npm", "install", "--no-save", "--no-audit", "--no-fund",
+                           "@microsoft/rayfin-cli@1.36.2"], root)
+        cli = [str(root / "node_modules/.bin/rayfin")]
+        up = cli + ["up", "--workspace-id", self.ws, "--tenant", cfg["expected_tenant_id"], "--yes"]
+        # The web export needs only the platform URL and app registration, both known now.
+        build = {"NEXT_PUBLIC_PLATFORM_URL": app_url, "NEXT_PUBLIC_CALDOVA_AUTH_CLIENT_ID": client_id,
+                 "NEXT_PUBLIC_CALDOVA_AUTH_TENANT_ID": cfg["expected_tenant_id"]}
+        await self.rayfin_command("cardiology-rayfin: provision", up + ["--exclude-services", "staticHosting,functions"], root, await rayfin_env())
+        await self.rayfin_command("cardiology-rayfin: deploy static", up, root, await rayfin_env(build))
+        status = parse_cli_json(
+            await self.command("cardiology-rayfin: hosting details", cli + ["up", "status", "--json"], root, await rayfin_env(), capture=True),
+            "cardiology-rayfin hosting status",
+        )
+        hosting = status.get("deployment", {}).get("hostingUrl")
+        if not hosting:
+            raise RuntimeError("cardiology-rayfin: deployment returned no hosting origin")
+        origin = rayfin_origin(hosting)
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        redirects = config["services"]["auth"].setdefault("allowedRedirectUris", [])
+        if origin not in redirects:
+            redirects.append(origin)
+            config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+        # Same as the other Rayfin apps: the CLI's hosting callback registration is
+        # best-effort, so reapply settings without rebuilding the static export.
+        await self.rayfin_command("cardiology-rayfin: register hosting origin", up + ["--exclude-services", "staticHosting,functions"], root, await rayfin_env())
+        return hosting

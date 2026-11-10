@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
+import time
 import unittest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from activities import addons
@@ -279,6 +281,168 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         ))
         sleep.assert_awaited_once_with(10)
         runner.substep.assert_any_call("Resume MasimoTelemetryStream", "succeeded")
+
+    def cardiology_runner(self, tmp, with_rayfin=True, customStatus=None):
+        wardflow = Path(tmp) / "wardflow"
+        (wardflow / "caldova-cardio/hds-backend").mkdir(parents=True)
+        if with_rayfin:
+            (wardflow / "caldova-cardio/app/rayfin").mkdir(parents=True)
+            (wardflow / "caldova-cardio/app/rayfin/rayfin.yml").write_text("id: caldova-cardiology-app\n")
+        runner = object.__new__(addons.AddonRunner)
+        runner.ws, runner.env, runner.items = "ws", {}, []
+        runner.config = {"fabric_workspace_name": "med-test", "expected_tenant_id": "tenant", "expected_subscription_id": "sub",
+                         "resource_group_name": "rg-med-test", "cardiology_location": "eastus2", "cardiology_prefix": "cardiotest",
+                         "cardiology_app_users": ["user@example.com"], "cardiology_reviewer_users": [],
+                         "cardiology_chat_model": "chosen", "cardiology_chat_model_version": "2026-07-09"}
+        runner.deployment = {"customStatus": customStatus or {}, "output": {}}
+        runner.substep, runner.log, runner.persist = Mock(), Mock(), Mock()
+        runner.ensure_eventstream_running = AsyncMock()
+        runner.gold = AsyncMock(return_value=({"displayName": "Gold"}, {"id": "sql", "connectionString": "sql.fabric"}))
+        runner.resource = Mock(return_value={"id": "fhir", "name": "acr"})
+        runner.item = Mock(return_value={"id": "item"})
+        runner.cloud = Mock()
+        runner.cloud.call = Mock(return_value={"properties": {"queryServiceUri": "https://kql"}})
+        runner.command, runner.ps = AsyncMock(), AsyncMock()
+        runner.cardiology_rayfin = AsyncMock(return_value="https://cardio-westus2.webapp.fabricapps.net/")
+
+        def az_json(_config, *args):
+            if args[:2] == ("resource", "show"):
+                return {"properties": {"authenticationConfiguration": {"audience": "https://ws-fhir.fhir.azurehealthcareapis.com"}}}
+            if args[:2] == ("containerapp", "show"):
+                return {"properties": {"configuration": {"ingress": {"fqdn": "cardiotest-app.example.io"}}}}
+            raise AssertionError(args)
+        return runner, wardflow, az_json
+
+    async def run_cardiology(self, runner, wardflow, az_json):
+        with patch.dict(addons.os.environ, {"WARDFLOW_ROOT": str(wardflow)}), \
+             patch.object(addons, "ensure_providers_registered"), \
+             patch.object(addons, "az_json", side_effect=az_json), \
+             patch.object(addons, "az", return_value="") as az:
+            return await runner.cardiology(), az
+
+    async def test_cardiology_registers_a_new_rayfin_origin_then_records_the_companion_url(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            runner, wardflow, az_json = self.cardiology_runner(tmp)
+            result, az = await self.run_cardiology(runner, wardflow, az_json)
+        origin = "https://cardio-westus2.webapp.fabricapps.net"
+        cardio = [c for c in runner.ps.await_args_list if str(c.args[1]).endswith("deploy-cardiology-app.ps1")]
+        self.assertEqual([c.args[0] for c in cardio], ["Deploy cardiology app", "Register cardiology Rayfin origin"])
+        self.assertNotIn("CardiologyRayfinOrigins", cardio[0].args[2])
+        self.assertEqual(cardio[1].args[2]["CardiologyRayfinOrigins"], [origin])
+        runner.cardiology_rayfin.assert_awaited_once_with(wardflow / "caldova-cardio/app", ANY, "https://cardiotest-app.example.io")
+        az.assert_called_once_with(runner.config, "containerapp", "update", "-g", "rg-med-test-cardio", "-n", "cardiotest-app",
+                                   "--set-env-vars", "CALDOVA_RAYFIN_APP_URL=https://cardio-westus2.webapp.fabricapps.net/")
+        self.assertEqual(result["rayfinUrl"], "https://cardio-westus2.webapp.fabricapps.net/")
+
+    async def test_cardiology_rerun_after_a_failed_registration_or_env_update_passes_the_origin_back(self):
+        # Phase 8 refuses a registration with SPA redirect URIs it was not given, so an origin
+        # registered by a run that then failed must reach the next run's first phase-8 deploy.
+        import tempfile
+        origin = "https://cardio-westus2.webapp.fabricapps.net"
+        for failing in ("registration", "env update"):
+            with self.subTest(failing=failing), tempfile.TemporaryDirectory() as tmp:
+                runner, wardflow, az_json = self.cardiology_runner(tmp)
+                if failing == "registration":
+                    async def fail_registration(title, *_args, **_kwargs):
+                        if title == "Register cardiology Rayfin origin":
+                            raise RuntimeError("live sign-in probe failed")
+                    runner.ps.side_effect = fail_registration
+                    with self.assertRaisesRegex(RuntimeError, "probe failed"):
+                        await self.run_cardiology(runner, wardflow, az_json)
+                else:
+                    with patch.dict(addons.os.environ, {"WARDFLOW_ROOT": str(wardflow)}), \
+                         patch.object(addons, "ensure_providers_registered"), \
+                         patch.object(addons, "az_json", side_effect=az_json), \
+                         patch.object(addons, "az", side_effect=RuntimeError("ARM 503")), \
+                         self.assertRaisesRegex(RuntimeError, "ARM 503"):
+                        await runner.cardiology()
+                runner.ps.reset_mock(side_effect=True)
+                await self.run_cardiology(runner, wardflow, az_json)
+                cardio = [c for c in runner.ps.await_args_list if str(c.args[1]).endswith("deploy-cardiology-app.ps1")]
+                self.assertEqual(cardio[0].args[2]["CardiologyRayfinOrigins"], [origin])
+                self.assertEqual(len(cardio), 1, "an already-recorded origin needs no second phase-8 deploy")
+
+    async def test_cardiology_rerun_keeps_the_recorded_rayfin_origin_without_a_second_phase_8_deploy(self):
+        import tempfile
+        status = {"addons": {"cardiology": {"resources": {"rayfinUrl": "https://Cardio-westus2.webapp.fabricapps.net/"}}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            runner, wardflow, az_json = self.cardiology_runner(tmp, customStatus=status)
+            await self.run_cardiology(runner, wardflow, az_json)
+        cardio = [c for c in runner.ps.await_args_list if str(c.args[1]).endswith("deploy-cardiology-app.ps1")]
+        self.assertEqual(len(cardio), 1)
+        self.assertEqual(cardio[0].args[2]["CardiologyRayfinOrigins"], ["https://cardio-westus2.webapp.fabricapps.net"])
+
+    async def test_cardiology_without_a_rayfin_project_deploys_only_the_container_app(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            runner, wardflow, az_json = self.cardiology_runner(tmp, with_rayfin=False)
+            result, az = await self.run_cardiology(runner, wardflow, az_json)
+        runner.cardiology_rayfin.assert_not_awaited()
+        az.assert_not_called()
+        self.assertNotIn("rayfinUrl", result)
+
+    async def test_cardiology_rayfin_failure_fails_the_addon(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            runner, wardflow, az_json = self.cardiology_runner(tmp)
+            runner.cardiology_rayfin.side_effect = RuntimeError("cardiology-rayfin: deploy static failed")
+            with self.assertRaisesRegex(RuntimeError, "deploy static failed"):
+                await self.run_cardiology(runner, wardflow, az_json)
+
+    def rayfin_runner(self, tmp):
+        source = Path(tmp) / "app"
+        (source / "rayfin").mkdir(parents=True)
+        (source / "rayfin/rayfin.yml").write_text("id: caldova-cardiology-app\nservices:\n  auth:\n    enabled: true\n    allowedRedirectUris: []\n")
+        runner = object.__new__(addons.AddonRunner)
+        runner.work = Path(tmp) / "work"
+        runner.work.mkdir()
+        runner.ws, runner.env = "ws", {}
+        runner.config = {"expected_tenant_id": "tenant"}
+        runner.cloud = Mock()
+        runner.cloud.tokens.token = Mock(return_value="fabric-token")
+        runner.rayfin_command = AsyncMock()
+        runner.command = AsyncMock(side_effect=["", 'info\n{"deployment":{"hostingUrl":"https://cardio-westus2.webapp.fabricapps.net/"}}'])
+        return runner, source
+
+    def app(self, client_id):
+        return {"properties": {"template": {"containers": [{"env": [{"name": "CALDOVA_AUTH_CLIENT_ID", "value": client_id}]}]}}}
+
+    async def test_cardiology_rayfin_builds_with_bearer_config_and_registers_its_hosting_origin(self):
+        import tempfile, yaml
+        client = "0f9b5c1e-1111-4222-8333-944455556666"
+        with tempfile.TemporaryDirectory() as tmp:
+            runner, source = self.rayfin_runner(tmp)
+            hosting = await runner.cardiology_rayfin(source, self.app(client), "https://cardiotest-app.example.io")
+            config = yaml.safe_load((runner.work / "caldova-cardio-rayfin/rayfin/rayfin.yml").read_text())
+        self.assertEqual(hosting, "https://cardio-westus2.webapp.fabricapps.net/")
+        calls = runner.rayfin_command.await_args_list
+        self.assertEqual([c.args[0] for c in calls], ["cardiology-rayfin: provision", "cardiology-rayfin: deploy static",
+                                                      "cardiology-rayfin: register hosting origin"])
+        for call in (calls[0], calls[2]):
+            self.assertEqual(call.args[1][-2:], ["--exclude-services", "staticHosting,functions"])
+            self.assertNotIn("NEXT_PUBLIC_PLATFORM_URL", call.args[3])
+        self.assertNotIn("--exclude-services", calls[1].args[1])
+        self.assertEqual({k: v for k, v in calls[1].args[3].items() if k.startswith("NEXT_PUBLIC_")}, {
+            "NEXT_PUBLIC_PLATFORM_URL": "https://cardiotest-app.example.io",
+            "NEXT_PUBLIC_CALDOVA_AUTH_CLIENT_ID": client, "NEXT_PUBLIC_CALDOVA_AUTH_TENANT_ID": "tenant"})
+        self.assertEqual(calls[1].args[3]["RAYFIN_TOKEN"], "fabric-token")
+        self.assertEqual(runner.command.await_args_list[0].args[1][-1], "@microsoft/rayfin-cli@1.36.2")
+        self.assertEqual(config["services"]["auth"]["allowedRedirectUris"], ["https://cardio-westus2.webapp.fabricapps.net"])
+
+    async def test_cardiology_rayfin_refuses_to_build_without_the_app_registration(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            runner, source = self.rayfin_runner(tmp)
+            with self.assertRaisesRegex(RuntimeError, "CALDOVA_AUTH_CLIENT_ID"):
+                await runner.cardiology_rayfin(source, self.app(""), "https://cardiotest-app.example.io")
+        runner.command.assert_not_awaited()
+        runner.rayfin_command.assert_not_awaited()
+
+    def test_rayfin_origin_strips_paths_and_rejects_non_https(self):
+        self.assertEqual(addons.rayfin_origin("https://A-westus2.webapp.fabricapps.net/x?y"), "https://a-westus2.webapp.fabricapps.net")
+        with self.assertRaises(RuntimeError):
+            addons.rayfin_origin("http://a-westus2.webapp.fabricapps.net")
 
     async def test_cancelling_the_deployment_stops_remaining_addons(self):
         runner = object.__new__(addons.AddonRunner)
@@ -826,16 +990,17 @@ class WowDemoAddonWiringTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RayfinLogCollectionTests(unittest.IsolatedAsyncioTestCase):
-    # Writes a log the way the Rayfin CLI does: first record names the writing process.
+    # Writes a log the way the Rayfin CLI 1.36.2 does: uppercase levels (DEBUG/INFO/ERROR, never WARN),
+    # and the first record names the writing process.
     FAKE_RAYFIN = (
         "import json, os, pathlib, sys\n"
         "d = pathlib.Path(os.environ['HOME']) / '.rayfin' / 'logs'\n"
         "d.mkdir(parents=True, exist_ok=True)\n"
         "start = json.dumps({'schemaVersion': 1, 'commandName': 'up', 'processId': os.getpid()})\n"
         "(d / f'2026-11-10T120000.000Z-up-{os.getpid():036d}.log').write_text(\n"
-        "    f'2026-11-10T12:00:00.000Z info invocation Command started {start}\\n'\n"
-        "    '2026-11-10T12:00:01.000Z warn functions.deploy retrying publish\\n'\n"
-        "    '2026-11-10T12:00:02.000Z error functions.deploy Functions publish failed {\"status\":404}\\n')\n"
+        "    f'2026-11-10T12:00:00.000Z INFO invocation Command started {start}\\n'\n"
+        "    '2026-11-10T12:00:01.000Z DEBUG functions.deploy retrying publish\\n'\n"
+        "    '2026-11-10T12:00:02.000Z ERROR invocation Command completed {\"status\":\"failed\"}\\n')\n"
         "sys.exit(int(sys.argv[1]))\n"
     )
 
@@ -855,20 +1020,24 @@ class RayfinLogCollectionTests(unittest.IsolatedAsyncioTestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp, patch.object(addons, "DATA_DIR", Path(tmp) / "data"):
             data_dir, home = Path(tmp) / "data", Path(tmp) / "home"
-            foreign = home / ".rayfin" / "logs" / "2026-11-10T110000.000Z-up-other.log"
+            # Another invocation's log, newer than this run's, so "pick the newest log" would grab it.
+            foreign = home / ".rayfin" / "logs" / "2026-11-10T130000.000Z-up-other.log"
             foreign.parent.mkdir(parents=True)
-            foreign.write_text('2026-11-10T11:00:00.000Z info invocation Command started {"processId": 1}\n')
+            foreign.write_text('2026-11-10T13:00:00.000Z INFO invocation FOREIGN-RUN-MARKER {"processId": 1}\n')
+            future = time.time() + 3600
+            os.utime(foreign, (future, future))
             runner = self.runner(home)
             with self.assertRaisesRegex(RuntimeError, "exited with code 3"):
                 await runner.rayfin_command("rayfin-imaging: deploy", [sys.executable, "-c", self.FAKE_RAYFIN, "3"], Path(tmp), runner.env)
             kept = list((data_dir / "logs" / "rayfin" / "run-1").iterdir())
             self.assertEqual(len(kept), 1)
-            self.assertIn("Functions publish failed", kept[0].read_text())
+            self.assertIn("Command completed", kept[0].read_text())
+            self.assertNotIn("FOREIGN-RUN-MARKER", kept[0].read_text())
             rayfin = [e for e in self.jsonl(data_dir) if e.get("source") == "rayfin-cli"]
-            self.assertEqual([e["level"] for e in rayfin], ["info", "warn", "error"])
-            self.assertEqual(rayfin[-1]["message"], '[rayfin] functions.deploy Functions publish failed {"status":404}')
+            self.assertEqual([e["level"] for e in rayfin], ["info", "info", "error"])
+            self.assertEqual(rayfin[-1]["message"], '[rayfin] invocation Command completed {"status":"failed"}')
             self.assertTrue(all(e["phase"] == "Add-ons: rayfin" for e in rayfin))
-            self.assertTrue(foreign.exists(), "Another invocation's log must be left in place, not attributed to this run")
+            self.assertFalse(any("FOREIGN-RUN-MARKER" in e["message"] for e in rayfin))
 
     async def test_long_log_is_capped_in_the_run_log_but_kept_whole_on_disk(self):
         import tempfile
@@ -890,6 +1059,18 @@ class RayfinLogCollectionTests(unittest.IsolatedAsyncioTestCase):
             runner = self.runner(Path(tmp) / "home")
             self.assertEqual(await runner.rayfin_command("rayfin: noop", [sys.executable, "-c", "pass"], Path(tmp), runner.env), "")
             self.assertTrue(any("wrote no diagnostic log" in e["message"] and e["level"] == "warn" for e in self.jsonl(data_dir)))
+
+    async def test_log_collection_failure_never_replaces_the_command_result(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp, patch.object(addons, "DATA_DIR", Path(tmp) / "data"), \
+             patch.object(addons.shutil, "copyfile", side_effect=OSError("disk full")):
+            data_dir = Path(tmp) / "data"
+            runner = self.runner(Path(tmp) / "home")
+            self.assertEqual(await runner.rayfin_command("rayfin: ok", [sys.executable, "-c", self.FAKE_RAYFIN, "0"], Path(tmp), runner.env), "")
+            with self.assertRaisesRegex(RuntimeError, "exited with code 3"):
+                await runner.rayfin_command("rayfin: fail", [sys.executable, "-c", self.FAKE_RAYFIN, "3"], Path(tmp), runner.env)
+            warnings = [e for e in self.jsonl(data_dir) if e["level"] == "warn" and "could not collect Rayfin CLI log" in e["message"]]
+            self.assertEqual(len(warnings), 2)
 
 
 if __name__ == "__main__":
