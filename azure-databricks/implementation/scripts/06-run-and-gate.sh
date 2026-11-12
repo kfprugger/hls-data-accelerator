@@ -47,7 +47,9 @@ echo
 echo "== Genie spaces =="
 # They query the Gold and Silver tables the gates just verified, so a fresh workspace can
 # only create them now. Idempotent when they already exist.
-databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}"
+deploy_flags=()
+[[ "${HLS_NONINTERACTIVE:-0}" != "1" ]] || deploy_flags+=(--auto-approve)
+databricks bundle deploy -t "$ENVIRONMENT" "${common_vars[@]}" "${deploy_flags[@]}"
 
 
 echo

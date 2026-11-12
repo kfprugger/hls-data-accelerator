@@ -10,9 +10,15 @@ param (
     [string]$Location = "eastus",
     [string]$AdminSecurityGroup = "",
     [string]$DicomToolkitPath = "",
+    [string]$ExpectedTenantId = "",
+    [string]$ExpectedSubscriptionId = "",
+    [string]$CapacitySubscriptionId = "",
+    [string]$CapacityResourceGroup = "",
+    [string]$CapacityName = "",
     [switch]$Phase2,
     [switch]$Phase3,
     [switch]$Phase4,
+    [switch]$Phase5,
     [switch]$Phase7,
     [switch]$SkipImaging
 )
@@ -24,15 +30,24 @@ function Get-CachedAccessToken {
     $key = $ResourceUrl.ToLowerInvariant()
     $cached = $script:AccessTokenCache[$key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
-    $token = $tokenObj.Token
-    if ($token -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
-        try { $token = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        $token = $tokenObj.Token
+        if ($token -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+            try { $token = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        }
+        $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = $tokenObj.ExpiresOn }
+        return $token
+    } catch {
+        $subArgs = if ($ExpectedSubscriptionId) { @("--subscription", $ExpectedSubscriptionId) } else { @() }
+        $cliJson = az account get-access-token --resource $ResourceUrl @subArgs -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $token = $cliJson.accessToken
+        $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $token
     }
-    $script:AccessTokenCache[$key] = @{ Token = $token; ExpiresOn = $tokenObj.ExpiresOn }
-    return $token
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -40,18 +55,8 @@ $DicomToolkitRepoUrl = "https://github.com/kfprugger/FabricDicomCohortingToolkit
 
 function Resolve-DicomToolkitPath {
     param([string]$RequestedPath)
-
-    if (-not [string]::IsNullOrWhiteSpace($RequestedPath) -and $RequestedPath -ne "C:\git\FabricDicomCohortingToolkit") {
-        return $RequestedPath
-    }
-
-    if ($IsMacOS -or $IsLinux) {
-        $siblingPath = Join-Path (Split-Path -Parent $ScriptDir) "FabricDicomCohortingToolkit"
-        if (Test-Path $siblingPath) { return $siblingPath }
-        return $siblingPath
-    }
-
-    return "C:\git\FabricDicomCohortingToolkit"
+    if (-not [string]::IsNullOrWhiteSpace($RequestedPath)) { return $RequestedPath }
+    return Join-Path (Split-Path -Parent $ScriptDir) "FabricDicomCohortingToolkit"
 }
 
 function Ensure-DicomToolkitRepo {
@@ -190,7 +195,20 @@ try {
     Write-Host "  ✗ Bicep not installed" -ForegroundColor Red
 }
 
-# 5. Azure login
+# 5. Azure login (align context first when ExpectedSubscriptionId/ExpectedTenantId are supplied)
+if ($ExpectedSubscriptionId) {
+    $null = az account set --subscription $ExpectedSubscriptionId 2>$null
+    try {
+        $curCtx = Get-AzContext -ErrorAction SilentlyContinue
+        if (-not $curCtx -or -not $curCtx.Subscription -or $curCtx.Subscription.Id -ne $ExpectedSubscriptionId -or ($ExpectedTenantId -and $curCtx.Tenant.Id -ne $ExpectedTenantId)) {
+            if ($ExpectedTenantId) {
+                Set-AzContext -TenantId $ExpectedTenantId -SubscriptionId $ExpectedSubscriptionId -ErrorAction SilentlyContinue | Out-Null
+            } else {
+                Set-AzContext -SubscriptionId $ExpectedSubscriptionId -ErrorAction SilentlyContinue | Out-Null
+            }
+        }
+    } catch {}
+}
 try {
     $azCliAccount = az account show --output json 2>$null | ConvertFrom-Json
     if ($azCliAccount.id) {
@@ -207,33 +225,50 @@ try {
     Write-Host "  ✗ Not logged in to Azure CLI" -ForegroundColor Red
 }
 
-# 6. Az PowerShell login
+# 6. Az PowerShell login (optional when Azure CLI is authenticated)
 try {
     $azPsContext = Get-AzContext -ErrorAction Stop
     if ($azPsContext -and $azPsContext.Subscription -and $azPsContext.Subscription.Id) {
         $checks += @{ name = "Az PowerShell Login"; status = "pass"; detail = "$($azPsContext.Subscription.Name) ($($azPsContext.Subscription.Id.Substring(0,8))...)" }
         Write-Host "  ✓ Az PowerShell login: $($azPsContext.Subscription.Name)" -ForegroundColor Green
+    } elseif ($azCliAccount -and $azCliAccount.id) {
+        $checks += @{ name = "Az PowerShell Login"; status = "pass"; detail = "Delegated to Azure CLI ($($azCliAccount.name))" }
+        Write-Host "  ✓ Az PowerShell login: delegated to Azure CLI ($($azCliAccount.name))" -ForegroundColor Green
     } else {
         $checks += @{ name = "Az PowerShell Login"; status = "fail"; detail = "No active Az context" }
-        $failures += "Not logged in to Azure PowerShell. Run: Connect-AzAccount"
+        $failures += "Not logged in to Azure CLI. Run: az login"
         Write-Host "  ✗ Not logged in to Azure PowerShell" -ForegroundColor Red
     }
 } catch {
-    $checks += @{ name = "Az PowerShell Login"; status = "fail"; detail = "No active Az context" }
-    $failures += "Not logged in to Azure PowerShell. Run: Connect-AzAccount"
-    Write-Host "  ✗ Not logged in to Azure PowerShell" -ForegroundColor Red
+    if ($azCliAccount -and $azCliAccount.id) {
+        $checks += @{ name = "Az PowerShell Login"; status = "pass"; detail = "Delegated to Azure CLI ($($azCliAccount.name))" }
+        Write-Host "  ✓ Az PowerShell login: delegated to Azure CLI ($($azCliAccount.name))" -ForegroundColor Green
+    } else {
+        $checks += @{ name = "Az PowerShell Login"; status = "fail"; detail = "No active Az context" }
+        $failures += "Not logged in to Azure CLI. Run: az login"
+        Write-Host "  ✗ Not logged in to Azure PowerShell" -ForegroundColor Red
+    }
 }
 
-# 7. Account context alignment (Azure CLI vs Az PowerShell)
-if ($azCliAccount -and $azCliAccount.id -and $azPsContext -and $azPsContext.Subscription -and $azPsContext.Subscription.Id) {
+# 7. Account context alignment
+if ($azCliAccount -and $azCliAccount.id) {
     $cliSub = "$($azCliAccount.id)".Trim().ToLower()
-    $psSub = "$($azPsContext.Subscription.Id)".Trim().ToLower()
     $cliTenant = "$($azCliAccount.tenantId)".Trim().ToLower()
-    $psTenant = "$($azPsContext.Tenant.Id)".Trim().ToLower()
-
+    $psLoggedIn = [bool]($azPsContext -and $azPsContext.Subscription -and $azPsContext.Subscription.Id)
+    $psSub = if ($psLoggedIn) { "$($azPsContext.Subscription.Id)".Trim().ToLower() } else { $cliSub }
+    $psTenant = if ($psLoggedIn) { "$($azPsContext.Tenant.Id)".Trim().ToLower() } else { $cliTenant }
+    $expectedTenantNorm = "$ExpectedTenantId".Trim().ToLower()
+    $expectedSubNorm = "$ExpectedSubscriptionId".Trim().ToLower()
+    if (($expectedTenantNorm -and ($cliTenant -ne $expectedTenantNorm -or $psTenant -ne $expectedTenantNorm)) -or
+        ($expectedSubNorm -and ($cliSub -ne $expectedSubNorm -or $psSub -ne $expectedSubNorm))) {
+        $checks += @{ name = "Deployment Target"; status = "fail"; detail = "Current context differs from the requested tenant/subscription" }
+        $failures += "Sign in to the requested deployment tenant '$ExpectedTenantId' and subscription '$ExpectedSubscriptionId'."
+    } elseif ($expectedTenantNorm -or $expectedSubNorm) {
+        $checks += @{ name = "Deployment Target"; status = "pass"; detail = "Requested tenant and subscription match the signed-in context" }
+    }
     if ($cliSub -eq $psSub -and $cliTenant -eq $psTenant) {
         $checks += @{ name = "Azure Context"; status = "pass"; detail = "Subscription and tenant aligned" }
-        Write-Host "  ✓ Azure context aligned (CLI + Az PowerShell)" -ForegroundColor Green
+        Write-Host "  ✓ Azure context aligned" -ForegroundColor Green
     } else {
         $checks += @{ name = "Azure Context"; status = "fail"; detail = "CLI/Az subscription or tenant mismatch" }
         $failures += "Azure CLI and Az PowerShell contexts do not match. Align with: az account set -s <subscription> and Set-AzContext -Subscription <subscriptionId>"
@@ -242,15 +277,17 @@ if ($azCliAccount -and $azCliAccount.id -and $azPsContext -and $azPsContext.Subs
         Write-Host "    Az  sub/tenant: $psSub / $psTenant" -ForegroundColor DarkGray
     }
 } else {
-    $checks += @{ name = "Azure Context"; status = "fail"; detail = "Cannot compare CLI/Az contexts" }
-    $failures += "Cannot validate Azure account context because one or both login contexts are missing."
+    $checks += @{ name = "Azure Context"; status = "fail"; detail = "Cannot validate Azure context" }
+    $failures += "Cannot validate Azure account context because Azure CLI login is missing."
     Write-Host "  ✗ Could not validate Azure context alignment" -ForegroundColor Red
 }
 
 # 8. Required Azure control-plane access
 if ($azCliAccount -and $azCliAccount.id) {
+    $targetSubId = if ($ExpectedSubscriptionId) { $ExpectedSubscriptionId } else { $azCliAccount.id }
+    $subArgs = if ($ExpectedSubscriptionId) { @("--subscription", $ExpectedSubscriptionId) } else { @() }
     try {
-        $subInfo = az rest --method get --url "https://management.azure.com/subscriptions/$($azCliAccount.id)?api-version=2022-12-01" -o json 2>$null | ConvertFrom-Json
+        $subInfo = az rest --method get --url "https://management.azure.com/subscriptions/${targetSubId}?api-version=2022-12-01" -o json 2>$null | ConvertFrom-Json
         if ($subInfo.subscriptionId) {
             $checks += @{ name = "ARM Access"; status = "pass"; detail = "Can read subscription metadata" }
             Write-Host "  ✓ ARM access: subscription metadata readable" -ForegroundColor Green
@@ -273,16 +310,20 @@ if ($azCliAccount -and $azCliAccount.id) {
             "Microsoft.EventHub",
             "Microsoft.ContainerInstance",
             "Microsoft.Storage",
-            "Microsoft.HealthcareApis"
+            "Microsoft.HealthcareApis",
+            "Microsoft.ManagedIdentity",
+            "Microsoft.EventGrid"
         )
 
         $notRegistered = @()
         foreach ($provider in $requiredProviders) {
-            $state = az provider show -n $provider --query registrationState -o tsv 2>$null
+            $state = az provider show -n $provider @subArgs --query registrationState -o tsv 2>$null
             if (-not $state) {
-                $notRegistered += "$provider (unknown)"
+                $null = az provider register --namespace $provider @subArgs 2>$null
+                $notRegistered += "$provider (auto-registering)"
             } elseif ($state -ne "Registered") {
-                $notRegistered += "$provider ($state)"
+                $null = az provider register --namespace $provider @subArgs 2>$null
+                $notRegistered += "$provider ($state -> auto-registering)"
             }
         }
 
@@ -291,7 +332,7 @@ if ($azCliAccount -and $azCliAccount.id) {
             Write-Host "  ✓ Required resource providers registered" -ForegroundColor Green
         } else {
             $checks += @{ name = "Resource Providers"; status = "warn"; detail = ($notRegistered -join ", ") }
-            $warnings += "Some required Azure resource providers are not fully registered: $($notRegistered -join ', '). Register with: az provider register --namespace <provider>."
+            $warnings += "Some required Azure resource providers are still registering: $($notRegistered -join ', '). Auto-registration has been triggered and will run in tandem with deployment."
             Write-Host "  ⚠ Resource provider registration incomplete" -ForegroundColor Yellow
             Write-Host "    $($notRegistered -join ', ')" -ForegroundColor DarkGray
         }
@@ -381,12 +422,26 @@ try {
         try { $fabToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
         finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
     }
-    $fabHeaders = @{ "Authorization" = "Bearer $fabToken" }
+    $fabHeaders = @{ "Authorization" = "Bearer $fabToken"; "x-ms-fabric-skill" = "e2e-medallion-architecture" }
     $caps = Invoke-RestMethod -Uri "https://api.fabric.microsoft.com/v1/capacities" -Headers $fabHeaders
-    $allPaidCaps = $caps.value | Where-Object { $_.sku -like "F*" -and $_.sku -ne "FT1" -and $_.sku -ne "PP3" }
+    $candidateCaps = @($caps.value)
+    if ($CapacityName) {
+        if ($CapacitySubscriptionId -and $CapacityResourceGroup) {
+            $capacityTenant = az account show --subscription $CapacitySubscriptionId --query tenantId -o tsv 2>$null
+            if ($LASTEXITCODE -ne 0 -or $capacityTenant -ne $azCliAccount.tenantId) {
+                throw "Selected capacity subscription is not accessible in the deployment tenant."
+            }
+            $capacityId = "/subscriptions/$CapacitySubscriptionId/resourceGroups/$CapacityResourceGroup/providers/Microsoft.Fabric/capacities/$CapacityName"
+            $capacityResource = az resource show --ids $capacityId --subscription $CapacitySubscriptionId -o json 2>$null | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or -not $capacityResource.id) { throw "Selected capacity '$capacityId' is not accessible." }
+        }
+        $candidateCaps = @($candidateCaps | Where-Object { $_.displayName -eq $CapacityName })
+        if ($candidateCaps.Count -ne 1) { throw "Selected capacity '$CapacityName' is missing or ambiguous for the authenticated user." }
+    }
+    $allPaidCaps = @($candidateCaps | Where-Object { $_.sku -like "F*" -and $_.sku -notlike "FT*" -and $_.sku -ne "PP3" })
 
     if ($allPaidCaps.Count -gt 0) {
-        $activePaidCaps = $allPaidCaps | Where-Object { $_.state -eq "Active" }
+        $activePaidCaps = @($allPaidCaps | Where-Object { $_.state -eq "Active" })
         if ($activePaidCaps.Count -gt 0) {
             $cap = $activePaidCaps | Select-Object -First 1
             $checks += @{ name = "Fabric Capacity"; status = "pass"; detail = "$($cap.displayName) (SKU: $($cap.sku))" }
@@ -398,7 +453,7 @@ try {
             Write-Host "  ✗ Fabric capacity: $($cap.displayName) ($($cap.sku)) — currently paused ($($cap.state))" -ForegroundColor Red
         }
     } else {
-        $activeTrialCaps = $caps.value | Where-Object { $_.sku -eq "FT1" -and $_.state -eq "Active" }
+        $activeTrialCaps = @($candidateCaps | Where-Object { $_.sku -like "FT*" -and $_.state -eq "Active" })
         if ($activeTrialCaps.Count -gt 0) {
             $cap = $activeTrialCaps | Select-Object -First 1
             $checks += @{ name = "Fabric Capacity"; status = "fail"; detail = "$($cap.displayName) (SKU: $($cap.sku)) — trial not supported" }
@@ -411,13 +466,13 @@ try {
         }
     }
 } catch {
-    $checks += @{ name = "Fabric Capacity"; status = "fail"; detail = "API unreachable" }
-    $failures += "Cannot access Fabric API. Ensure Az login has Fabric permissions."
-    Write-Host "  ✗ Fabric API unreachable" -ForegroundColor Red
+    $checks += @{ name = "Fabric Capacity"; status = "fail"; detail = $_.Exception.Message }
+    $failures += "Fabric capacity validation failed: $($_.Exception.Message)"
+    Write-Host "  ✗ Fabric capacity validation failed: $($_.Exception.Message)" -ForegroundColor Red
 }
 
 # 12. DICOM Cohorting Toolkit repo
-$requiresDicomToolkit = -not $SkipImaging -and ($Phase2 -or $Phase3 -or (-not $Phase4 -and -not $Phase7))
+$requiresDicomToolkit = -not $SkipImaging -and ($Phase2 -or $Phase3 -or (-not $Phase4 -and -not $Phase5 -and -not $Phase7))
 if ($requiresDicomToolkit) {
     $toolkit = Ensure-DicomToolkitRepo -Path $DicomToolkitPath
     if ($toolkit.Success) {

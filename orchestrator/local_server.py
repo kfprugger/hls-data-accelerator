@@ -1,8 +1,6 @@
-"""Local development server — lightweight FastAPI replacement for Durable Functions.
+"""FastAPI deployment orchestrator for local use and private hosted sandboxes.
 
-Calls the same activity modules directly without the Durable Functions framework.
-Used for local testing only. In production, the Durable Functions app handles
-orchestration with checkpointing, retries, and human interaction gates.
+Calls activity modules directly, preserving deployment state and streaming logs.
 
 Usage:
     cd orchestrator
@@ -38,9 +36,11 @@ import uvicorn
 sys.path.insert(0, str(Path(__file__).parent))
 from shared.policy_tags import normalize_policy_tags
 from shared.teardown_scan import live_fabric_workspaces_for_teardown
+from shared.runtime_paths import DATA_DIR, state_dir
+from shared.hosted import HOSTED, install_hosted_routes, shutdown_auth, restore_azure_auth_cache, seal_azure_auth_cache, touch_hosted_activity
 
-LOG_DIR = Path(__file__).parent
-LOG_SESSION_ID = re.sub(r"[^A-Za-z0-9_.-]", "_", os.environ.get("ORCHESTRATOR_LOG_SESSION", "").strip())
+LOG_DIR = DATA_DIR
+LOG_SESSION_ID = re.sub(r"[^A-Za-z0-9_.-]", "_", os.environ.get("ORCHESTRATOR_LOG_SESSION", "").strip() or (datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") if HOSTED else ""))
 SESSION_LOG_FILE = LOG_DIR / f"orchestrator-session-{LOG_SESSION_ID}.log" if LOG_SESSION_ID else None
 LOG_HANDLERS: list[logging.Handler] = [
     logging.StreamHandler(),
@@ -57,7 +57,7 @@ logging.basicConfig(
 logger = logging.getLogger("local_server")
 
 # ── Crash diagnostics — preserve evidence before process exit ──────────
-CRASH_DUMP_FILE = Path(__file__).parent / "backend-crash-dump.log"
+CRASH_DUMP_FILE = DATA_DIR / "backend-crash-dump.log"
 _CRASH_DUMP_HANDLE = None
 _PREVIOUS_SIGNAL_HANDLERS: dict[int, object] = {}
 
@@ -110,6 +110,9 @@ def _handle_process_signal(signum, frame):
         signal_name = f"signal {signum}"
     logger.critical("BACKEND RECEIVED %s (%s); dumping stacks before exit", signal_name, signum)
     _log_thread_stacks(signal_name)
+    database = sys.modules.get("shared.database")
+    if database and hasattr(database, "backup_database"):
+        database.backup_database()
     logging.shutdown()
 
     previous = _PREVIOUS_SIGNAL_HANDLERS.get(signum, signal.SIG_DFL)
@@ -191,7 +194,7 @@ def _create_logged_task(coro, *, name: str) -> asyncio.Task:
 
 _install_process_crash_diagnostics()
 
-STATE_FILE = Path(__file__).parent / ".orchestrator-state.json"
+STATE_FILE = DATA_DIR / ".orchestrator-state.json"
 
 # ── Encoding-safe subprocess helper ────────────────────────────────────
 # All az CLI calls must use UTF-8 encoding to avoid Windows cp1252 charmap crashes.
@@ -223,7 +226,12 @@ async def lifespan(app: FastAPI):
             logger.exception("Interrupted teardown reconciliation failed")
 
     _create_logged_task(run_reconciliation(), name="startup-interrupted-teardown-reconciliation")
-    yield
+    try:
+        yield
+    finally:
+        await shutdown_auth()
+        from shared.database import shutdown_database
+        await asyncio.to_thread(shutdown_database)
 
 
 app = FastAPI(title="HLS Data Accelerator — Local Dev", lifespan=lifespan)
@@ -265,14 +273,19 @@ from shared.database import (
     get_locks, set_lock, remove_lock,
     get_form_history, add_form_history,
     get_dismissed_teardowns, dismiss_teardown,
+    record_deployment_form_history, backfill_form_history_from_deployments,
+    reconcile_from_state_tracking_dir, import_target_history_from_shared_storage,
 )
 from shared.deployment_validation import effective_validation_config, feature_presence_checks, runtime_feature_checks
 
 # Migrate from old JSON state file if it exists
 migrate_from_json(STATE_FILE)
 mark_stale_as_terminated()
-
-CACHE_FILE = Path(__file__).parent / ".orchestrator-cache.json"
+reconcile_from_state_tracking_dir(state_dir(Path(__file__).resolve().parent.parent))
+backfill_form_history_from_deployments()
+if HOSTED:
+    restore_azure_auth_cache()
+CACHE_FILE = DATA_DIR / ".orchestrator-cache.json"
 
 # Cache for resource scan results to avoid redundant Azure/Fabric API calls
 # Used by both teardown scanner and deployment check-existing endpoint
@@ -292,6 +305,8 @@ def _load_persistent_cache():
                 data = json.load(f)
                 _scan_cache = data.get("scan_cache", {})
                 _timed_cache = data.get("timed_cache", {})
+                if HOSTED:
+                    _timed_cache.pop("auth_context", None)
                 logger.info("Loaded persistent cache from %s", CACHE_FILE)
         except Exception as e:
             logger.warning("Failed to load persistent cache: %s", e)
@@ -566,7 +581,7 @@ def _get_auth_context_sync() -> dict:
             "  [PSCustomObject]@{installed=$false;loggedIn=$false;user='';subscriptionName='';subscriptionId='';tenantId='';error='Az.Accounts module not installed'} | ConvertTo-Json -Compress; exit 0 "
             "}; "
             "try { "
-            "  if ($env:AZURE_CONFIG_DIR) { "
+            "  if ($env:HLS_HOSTED -ne '1' -and $env:AZURE_CONFIG_DIR) { "
             "    $isolatedContext = Join-Path $env:AZURE_CONFIG_DIR 'azps-context.json'; "
             "    if (Test-Path $isolatedContext) { Import-AzContext -Path $isolatedContext -ErrorAction Stop | Out-Null } "
             "  }; "
@@ -580,7 +595,8 @@ def _get_auth_context_sync() -> dict:
         try:
             ps = _az_run(["pwsh", "-NoProfile", "-NonInteractive", "-Command", ps_cmd])
             if ps.returncode == 0 and ps.stdout.strip():
-                data = json.loads(ps.stdout.strip())
+                json_lines = [ln.strip() for ln in ps.stdout.splitlines() if ln.strip().startswith("{") and ln.strip().endswith("}")]
+                data = json.loads(json_lines[-1] if json_lines else ps.stdout.strip())
                 pwsh["installed"] = bool(data.get("installed", False))
                 pwsh["loggedIn"] = bool(data.get("loggedIn", False))
                 pwsh["user"] = data.get("user", "") or ""
@@ -600,6 +616,15 @@ def _get_auth_context_sync() -> dict:
         cli = cli_future.result()
         pwsh = pwsh_future.result()
 
+    if cli["loggedIn"] and pwsh[" installed" if False else "installed"] and not pwsh["loggedIn"]:
+        pwsh["loggedIn"] = True
+        pwsh["user"] = cli["user"]
+        pwsh["subscriptionName"] = cli["subscriptionName"]
+        pwsh["subscriptionId"] = cli["subscriptionId"]
+        pwsh["tenantId"] = cli["tenantId"]
+        pwsh["error"] = ""
+        pwsh["delegatedToCli"] = True
+
     sub_aligned = False
     tenant_aligned = False
     if cli["loggedIn"] and pwsh["loggedIn"]:
@@ -610,15 +635,14 @@ def _get_auth_context_sync() -> dict:
     if not cli["installed"]:
         issues.append("Azure CLI is not installed.")
     elif not cli["loggedIn"]:
-        issues.append("Azure CLI is not logged in. Run: az login")
+        issues.append("Azure CLI is not logged in. Use the sandbox sign-in panel." if HOSTED else "Azure CLI is not logged in. Run: az login --use-device-code --tenant <tenant-id> --allow-no-subscriptions")
     if not pwsh["installed"]:
         issues.append("Az PowerShell module is not installed. Run: Install-Module Az -Scope CurrentUser")
     elif not pwsh["loggedIn"]:
         issues.append("Azure PowerShell is not logged in. Run: Connect-AzAccount")
     if cli["loggedIn"] and pwsh["loggedIn"] and (not sub_aligned or not tenant_aligned):
         issues.append("Azure CLI and Az PowerShell are using different subscription/tenant contexts.")
-
-    return {
+    result = {
         "ready": len(issues) == 0,
         "cli": cli,
         "pwsh": pwsh,
@@ -628,7 +652,13 @@ def _get_auth_context_sync() -> dict:
         },
         "issues": issues,
     }
-
+    auth_tid = (cli["tenantId"] if cli["loggedIn"] else pwsh["tenantId"] if pwsh["loggedIn"] else "").strip()
+    auth_sub = (cli["subscriptionId"] if cli["loggedIn"] else pwsh["subscriptionId"] if pwsh["loggedIn"] else "").strip()
+    if auth_tid or auth_sub:
+        _sync_authenticated_target_history(auth_tid, auth_sub)
+        if HOSTED and cli["loggedIn"]:
+            seal_azure_auth_cache()
+    return result
 
 class TeardownRequest(BaseModel):
     fabric_workspace_name: str = ""
@@ -666,8 +696,17 @@ class DeployRequest(BaseModel):
     admin_security_group: str = ""
     fabric_workspace_name: str = ""
 
-    expected_tenant_id: str = "8d038e6a-9b7d-4cb8-bbcf-e84dff156478"
-    expected_subscription_id: str = "9bbee190-dc61-4c58-ab47-1275cb04018f"
+    expected_tenant_id: str
+    expected_subscription_id: str
+
+    @__import__('pydantic').field_validator('expected_tenant_id', 'expected_subscription_id')
+    @classmethod
+    def _validate_context_id(cls, value: str) -> str:
+        parsed = uuid.UUID(value)
+        if parsed.int == 0:
+            raise ValueError("Azure tenant and subscription IDs must not be empty UUIDs")
+        return str(parsed)
+
     @staticmethod
     def _check_name(v: str, info) -> str:
         return _validate_safe_name(v, info.field_name) if v else v
@@ -728,6 +767,46 @@ class DeployRequest(BaseModel):
             raise ValueError("reuse_patients and reseed_data are mutually exclusive")
         if self.use_cached_synthea:
             self.patient_count = 100
+        return self
+
+    # Appended to preserve the existing request contract and saved configurations.
+    deploy_databricks: bool = False
+    databricks_environment: str = "dev"
+    databricks_admin_group: str = ""
+    deploy_rayfin_apps: bool = False
+    deploy_cardiology: bool = False
+    cardiology_location: str = "eastus2"
+    cardiology_prefix: str = ""
+    cardiology_app_users: list[str] = []
+    cardiology_reviewer_users: list[str] = []
+    cardiology_chat_model: str = ""
+    cardiology_chat_model_version: str = ""
+
+    @model_validator(mode="after")
+    def validate_addons(self) -> "DeployRequest":
+        if self.databricks_environment not in {"dev", "test", "prod"}:
+            raise ValueError("databricks_environment must be dev, test or prod")
+        for field in ("databricks_admin_group", "cardiology_prefix", "cardiology_chat_model", "cardiology_chat_model_version"):
+            value = getattr(self, field)
+            if value and not re.fullmatch(r"[A-Za-z0-9_. @-]{1,128}", value):
+                raise ValueError(f"{field} contains unsupported characters")
+        if not re.fullmatch(r"[a-z][a-z0-9]{1,30}", self.cardiology_location):
+            raise ValueError("cardiology_location must be an Azure region name")
+        if self.cardiology_prefix and not re.fullmatch(r"[a-z][a-z0-9]{2,11}", self.cardiology_prefix):
+            raise ValueError("cardiology_prefix must be 3–12 lowercase letters/digits, starting with a letter")
+        if bool(self.cardiology_chat_model) != bool(self.cardiology_chat_model_version):
+            raise ValueError("cardiology_chat_model and cardiology_chat_model_version must be supplied together")
+        for field in ("cardiology_app_users", "cardiology_reviewer_users"):
+            users = list(dict.fromkeys(u.strip() for u in getattr(self, field)))
+            if any(not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", u) for u in users):
+                raise ValueError(f"{field} must contain sign-in UPNs")
+            setattr(self, field, users)
+        if not {u.lower() for u in self.cardiology_reviewer_users}.issubset({u.lower() for u in self.cardiology_app_users}):
+            raise ValueError("Cardiology reviewers must also be included in cardiology_app_users")
+        if self.scaffolding_only and (self.deploy_databricks or self.deploy_cardiology or self.deploy_rayfin_apps):
+            raise ValueError("Add-ons require a populated deployment, not scaffolding-only mode")
+        if self.deploy_databricks and any((self.phase2_only, self.phase3_only, self.phase4_only, self.phase7_only)):
+            raise ValueError("Databricks must be selected for a full deployment or added after completion")
         return self
 
 
@@ -840,7 +919,7 @@ def _persisted_workspace_id(ws_name: str) -> str:
                 if workspace_id:
                     return workspace_id
 
-    log_dir = Path(__file__).parent / "logs"
+    log_dir = DATA_DIR / "logs"
     for dep in matching:
         instance_id = dep.get("instanceId") or dep.get("id") or ""
         log_file = log_dir / f"{instance_id}.jsonl"
@@ -1176,10 +1255,10 @@ def _remove_deployment_state(workspace_name: str, log) -> None:
         return
     repo = Path(__file__).resolve().parent.parent
     name = f".deployment-state-{workspace_name}.json"
-    for path in (repo / "state-tracking" / name, repo / name):
+    for path in (state_dir(repo) / name, repo / name):
         if path.is_file():
             path.unlink()
-            log("info", f"Removed deployment state {path.relative_to(repo)}")
+            log("info", f"Removed deployment state {path}")
 
 
 async def _run_teardown(instance_id: str, req: TeardownRequest):
@@ -1296,8 +1375,150 @@ async def run_preflight(req: DeployRequest):
     from activities.invoke_powershell import run_preflight as _run_preflight
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(None, _run_preflight, req.model_dump())
+    from activities.addons import preflight as addon_preflight
+    checks = await asyncio.to_thread(addon_preflight, req.model_dump())
+    result["checks"].extend(checks)
+    failures = [c["message"] for c in checks if c["status"] == "fail"]
+    result["failures"].extend(failures)
+    result["passed"] = result["passed"] and not failures
     status_code = 200 if result["passed"] else 422
     return func_response(result, status_code)
+
+
+_addon_tasks: dict[str, asyncio.Task] = {}
+_ADDON_OPTIONS = {
+    "deploy_databricks", "databricks_environment", "databricks_admin_group", "deploy_rayfin_apps",
+    "deploy_cardiology", "cardiology_location", "cardiology_prefix", "cardiology_app_users",
+    "cardiology_reviewer_users", "cardiology_chat_model", "cardiology_chat_model_version",
+}
+
+
+async def _run_later_addons(
+    instance_id: str, config: dict, names: list[str], fresh_export: bool = True,
+    pause_capacity: tuple[str, str, str] | None = None,
+) -> None:
+    """Run add-ons after the base deployment is already Completed.
+
+    Add-ons never gate the base deployment: Databricks identity and metastore propagation can take
+    minutes to hours, so the base estate is reported complete first and add-on state is tracked in
+    ``customStatus.addons``. ``pause_capacity`` is applied last because Rayfin and cardiology need an
+    active Fabric capacity.
+    """
+    from activities.addons import AddonRunner
+    deployment = deployments[instance_id]
+    cs = deployment["customStatus"]
+    try:
+        await AddonRunner(instance_id, config, deployment, save_state, active_processes).run(names, fresh_export=fresh_export)
+        cs["detail"] = "Requested add-ons completed."
+    except Exception as exc:
+        cs["detail"] = f"Add-on failed: {exc}. The completed base deployment is retained."
+        for name in names:
+            state = cs["addons"][name]
+            if state.get("status") in {"pending", "running", "paused"}:
+                state.update(status="failed", detail=str(exc))
+    finally:
+        if deployment.get("runtimeStatus") != "Terminated":
+            deployment["runtimeStatus"] = "Completed"
+            cs["status"] = "succeeded"
+            cs["currentPhase"] = "Deployment Complete"
+        if pause_capacity and deployment.get("runtimeStatus") == "Completed":
+            try:
+                await asyncio.get_running_loop().run_in_executor(None, _pause_capacity_sync, *pause_capacity)
+                cs["capacityPaused"] = True
+            except Exception as exc:
+                logger.warning("Failed to auto-pause capacity '%s' after add-ons: %s", pause_capacity[2], exc)
+                cs["capacityPauseError"] = str(exc)
+        deployment["lastUpdatedTime"] = now_iso()
+        if _addon_tasks.get(instance_id) is asyncio.current_task():
+            _addon_tasks.pop(instance_id, None)
+        save_state()
+        try:
+            from shared.hosted import touch_hosted_activity
+            touch_hosted_activity()
+        except Exception:
+            pass
+
+
+@app.post("/api/deploy/{instance_id}/addons")
+async def start_addons(instance_id: str, body: dict):
+    from activities.addons import ADDON_FLAGS, preflight as addon_preflight
+    from pydantic import ValidationError
+    deployment = deployments.get(instance_id)
+    if not deployment:
+        raise HTTPException(404, "Deployment not found")
+    names = body.get("addons")
+    if not isinstance(names, list) or not names or any(not isinstance(n, str) or n not in ADDON_FLAGS for n in names) or len(set(names)) != len(names):
+        raise HTTPException(422, "addons must be a nonempty, unique list of databricks, rayfin or cardiology")
+    cs = deployment.get("customStatus") or {}
+    addons_map = cs.get("addons") or {}
+    dbx_paused_only = (
+        instance_id in _addon_tasks
+        and "databricks" not in names
+        and (addons_map.get("databricks") or {}).get("status") == "paused"
+        and all((addons_map.get(n) or {}).get("status") not in {"running", "pending"} for n in names)
+    )
+    if deployment.get("runtimeStatus") != "Completed" or (instance_id in _addon_tasks and not dbx_paused_only):
+        raise HTTPException(409, "Add-ons require a completed deployment with no active run")
+    names = [name for name in ADDON_FLAGS if name in names]
+    if set(body) - _ADDON_OPTIONS - {"addons"}:
+        raise HTTPException(422, "Only add-on options can be changed by this endpoint")
+    cs = deployment.get("customStatus") or {}
+    config = dict(cs.get("deployConfig") or {})
+    if not config.get("expected_subscription_id") or not config.get("expected_tenant_id"):
+        raise HTTPException(409, "This legacy deployment has no pinned tenant/subscription configuration")
+    for other in deployments.values():
+        other_cs = other.get("customStatus") or {}
+        if other.get("runtimeStatus") in {"Running", "Pending"} and (
+            other_cs.get("workspaceName") == cs.get("workspaceName") or other_cs.get("resourceGroupName") == cs.get("resourceGroupName")
+        ):
+            raise HTTPException(409, "Another deployment or teardown is active for this estate")
+    config.update({key: value for key, value in body.items() if key in _ADDON_OPTIONS})
+    config.update({flag: name in names for name, flag in ADDON_FLAGS.items()})
+    # Base-run phase filters do not constrain add-later execution.
+    config.update(phase2_only=False, phase3_only=False, phase4_only=False, phase7_only=False)
+    try:
+        config = DeployRequest(**config).model_dump()
+    except ValidationError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    # Reserve before awaiting preflight so simultaneous clicks cannot start twice.
+    cs["addonRunBaseCompleted"] = True
+    deployment["runtimeStatus"] = "Pending"
+    save_state()
+    try:
+        checks = await asyncio.to_thread(addon_preflight, config)
+        failures = [c["message"] for c in checks if c["status"] == "fail"]
+        if failures:
+            raise HTTPException(422, "; ".join(failures))
+    except BaseException:
+        deployment["runtimeStatus"] = "Completed"
+        save_state()
+        raise
+    cs.setdefault("addons", {}).update({name: {**({} if not isinstance(cs.get("addons", {}).get(name), dict) else {k: v for k, v in cs["addons"][name].items() if k == "resources" and v}), "status": "pending"} for name in names})
+    cs["deployConfig"] = {**cs.get("deployConfig", {}), **{key: config[key] for key in _ADDON_OPTIONS}}
+    cs["status"] = "running"
+    cs["totalPhases"] = cs.get("totalPhases", 0) + len(names)
+    deployment["runtimeStatus"] = "Running"
+    deployment["lastUpdatedTime"] = now_iso()
+    save_state()
+    record_deployment_form_history(deployment)
+    task = asyncio.create_task(_run_later_addons(instance_id, config, names, fresh_export=("databricks" in names)))
+    if not dbx_paused_only:
+        _addon_tasks[instance_id] = task
+    return {"instanceId": instance_id, "addons": names}
+
+
+@app.post("/api/deploy/{instance_id}/addons/databricks/continue")
+async def continue_databricks_addon(instance_id: str):
+    from activities.addons import CONTINUATIONS
+    deployment = deployments.get(instance_id)
+    if not deployment:
+        raise HTTPException(404, "Deployment not found")
+    state = (deployment.get("customStatus") or {}).get("addons", {}).get("databricks", {})
+    event = CONTINUATIONS.get(instance_id)
+    if state.get("status") != "paused" or event is None:
+        raise HTTPException(409, "No live Databricks metastore pause exists; restart the add-on if the sandbox restarted")
+    event.set()
+    return {"instanceId": instance_id, "status": "checking"}
 
 
 def func_response(data, status_code=200):
@@ -1317,7 +1538,7 @@ def _phase_has_blocking_logs(deployment: dict, phase_name: str) -> bool:
         return False
 
     instance_id = deployment.get("instanceId", "")
-    log_file = Path(__file__).parent / "logs" / f"{instance_id}.jsonl"
+    log_file = DATA_DIR / "logs" / f"{instance_id}.jsonl"
     if not log_file.exists():
         return False
 
@@ -1343,8 +1564,8 @@ def _phase_has_blocking_logs(deployment: dict, phase_name: str) -> bool:
                 message = str(entry.get("message", ""))
                 message_upper = message.upper()
                 transient_fabric_retry = (
-                    "REQUESTDENIEDBYINBOUNDPOLICY" in message_upper
-                    and "RETRY" in message_upper
+                    ("REQUESTDENIEDBYINBOUNDPOLICY" in message_upper and "RETRY" in message_upper)
+                    or ("SHORTCUT AUTH FAILED" in message_upper and "WAITING" in message_upper)
                 )
                 if transient_fabric_retry:
                     continue
@@ -1475,42 +1696,59 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
         )
         return False
 
-    output = prior_deploy.get("output") or {}
-    phases = output.get("phases") or []
-    if not phases:
+    chain: list[dict] = []
+    seen_ids: set[str] = set()
+    cursor: dict | None = prior_deploy
+    while cursor:
+        cid = str(cursor.get("instanceId") or "")
+        if cid and cid in seen_ids:
+            break
+        if cid:
+            seen_ids.add(cid)
+        chain.append(cursor)
+        parent_id = str(
+            ((cursor.get("customStatus") or {}).get("continuedFrom") or "")
+            or (((cursor.get("customStatus") or {}).get("deployConfig") or {}).get("continue_from_instance_id") or "")
+        ).strip()
+        cursor = deployments.get(parent_id) if parent_id else None
+
+    phase_entries: list[tuple[dict, dict]] = []
+    for dep_item in reversed(chain):
+        dep_phases = ((dep_item.get("output") or {}).get("phases") or [])
+        for ph in dep_phases:
+            phase_entries.append((dep_item, ph))
+
+    if not phase_entries:
         return False
-
-
     live_evidence = _live_resume_prerequisites(req, cloud_state)
 
-    def safely_succeeded(phase: dict) -> bool:
+    def safely_succeeded(dep_item: dict, phase: dict) -> bool:
         return (
             phase.get("status") == "succeeded"
             and not phase.get("warnings")
-            and not _phase_has_blocking_logs(prior_deploy, phase.get("phase", ""))
+            and not _phase_has_blocking_logs(dep_item, phase.get("phase", ""))
         )
 
     # -SkipOntology skips every Phase 4 ontology step and Phase 6's DevicePayerOntology, and makes
     # Deploy-All deploy the clinical agents without an ontology. A run that failed at "Ontology-Aware
     # Data Agents" still lists "Phase 4: Ontology" and "Phase 4: Ontology Deployment" as succeeded,
     # so the skip applies only when every one of those steps succeeded.
-    ontology_steps = [p for p in phases if "ONTOLOGY" in p.get("phase", "").upper()]
+    ontology_steps = [(d, p) for d, p in phase_entries if "ONTOLOGY" in p.get("phase", "").upper()]
     payer_ontology_done = req.skip_quality_measures or any(
-        "CMS QUALITY" in p.get("phase", "").upper() and safely_succeeded(p) for p in phases
+        "CMS QUALITY" in p.get("phase", "").upper() and safely_succeeded(d, p) for d, p in phase_entries
     )
-    ontology_complete = bool(ontology_steps) and payer_ontology_done and all(safely_succeeded(p) for p in ontology_steps)
+    ontology_complete = bool(ontology_steps) and payer_ontology_done and all(safely_succeeded(d, p) for d, p in ontology_steps)
 
     applied = False
     # Check each successful phase and enable corresponding skip flags.
     # A phase with error-level logs is not safe to skip: the PowerShell wrapper
     # can otherwise mark a step succeeded after a native sub-command failed.
-    for p in phases:
+    for dep_item, p in phase_entries:
         if p.get("status") != "succeeded":
             continue
-        if p.get("warnings") or _phase_has_blocking_logs(prior_deploy, p.get("phase", "")):
-            logger.info("%s not skipping phase '%s' from %s because it logged warnings/errors", mode, p.get("phase", ""), prior_deploy.get("instanceId"))
+        if p.get("warnings") or _phase_has_blocking_logs(dep_item, p.get("phase", "")):
+            logger.info("%s not skipping phase '%s' from %s because it logged warnings/errors", mode, p.get("phase", ""), dep_item.get("instanceId"))
             continue
-
         phase_name = p.get("phase", "").upper()
         prereq_ok, prereq_detail = _phase_live_prerequisites_ok(req, phase_name, live_evidence)
         if not prereq_ok:
@@ -1529,7 +1767,7 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
                         "%s preserving existing FHIR data from phase '%s' in %s but rerunning the catch-up FHIR export: patients=%s, devices=%s, exportedFiles=%s",
                         mode,
                         p.get("phase", ""),
-                        prior_deploy.get("instanceId"),
+                        dep_item.get("instanceId"),
                         patients,
                         devices,
                         exported,
@@ -1539,7 +1777,7 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
                 "%s not skipping phase '%s' from %s because live prerequisite validation failed: %s",
                 mode,
                 p.get("phase", ""),
-                prior_deploy.get("instanceId"),
+                dep_item.get("instanceId"),
                 prereq_detail,
             )
             continue
@@ -1547,7 +1785,7 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
             "%s skipping phase '%s' from %s after live prerequisite validation: %s",
             mode,
             p.get("phase", ""),
-            prior_deploy.get("instanceId"),
+            dep_item.get("instanceId"),
             prereq_detail,
         )
 
@@ -1566,7 +1804,10 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
             req.skip_rti_phase2 = True
         elif "FABRIC RTI" in phase_name:
             req.reuse_fabric_rti = True
+        elif "HDS SOURCE DEPLOYMENT" in phase_name:
+            req.skip_hds_source = True
         elif "HDS PIPELINES" in phase_name:
+            req.skip_hds_source = True
             req.skip_hds_pipelines = True
             req.skip_dicom = True
         elif "DATA AGENTS" in phase_name:
@@ -1575,7 +1816,7 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
             req.skip_imaging = True
         elif "ONTOLOGY" in phase_name:
             if not ontology_complete:
-                logger.info("%s not skipping phase '%s' from %s because not every ontology step succeeded", mode, p.get("phase", ""), prior_deploy.get("instanceId"))
+                logger.info("%s not skipping phase '%s' from %s because not every ontology step succeeded", mode, p.get("phase", ""), dep_item.get("instanceId"))
                 continue
             req.skip_ontology = True
         elif "DATA ACTIVATOR" in phase_name:
@@ -1636,15 +1877,14 @@ def _apply_live_continuation_skips(req: DeployRequest, prior_deploy: dict, mode:
         req.skip_synthea = True
         req.skip_device_assoc = True
         applied = True
-        if exported > 0:
+        if exported > 0 or req.skip_hds_pipelines:
             req.skip_fhir = True
             req.skip_fhir_export = True
-        else:
+        elif not req.skip_fhir_export:
             # Keep -SkipFhir false so Deploy-All runs its catch-up FHIR $export
             # without regenerating Synthea or reloading existing patients.
             req.skip_fhir = False
             req.skip_fhir_export = False
-
     if dicom_studies > 0:
         req.skip_dicom = True
         applied = True
@@ -1683,6 +1923,11 @@ def _apply_prior_success_skips(req: DeployRequest):
 
 @app.post("/api/deploy/start")
 async def start_deploy(req: DeployRequest):
+    from activities.addons import preflight as addon_preflight
+    checks = await asyncio.to_thread(addon_preflight, req.model_dump())
+    failures = [c["message"] for c in checks if c["status"] == "fail"]
+    if failures:
+        raise HTTPException(422, "; ".join(failures))
     _apply_scaffolding_only(req)
     _apply_reseed_data(req)
     # Continue-from-failure uses the exact failed source run. Default starts keep
@@ -1790,7 +2035,7 @@ async def start_deploy(req: DeployRequest):
     }
     deployments[instance_id] = deployment
     save_state()
-
+    record_deployment_form_history(deployment)
     # Run deployment in background
     _create_logged_task(_run_deploy(instance_id, req), name=f"deploy:{instance_id}")
 
@@ -1864,6 +2109,16 @@ async def get_auth_context(force: bool = False):
     return result
 
 
+@app.get("/api/auth/live")
+async def get_live_credentials(subscription_id: str = ""):
+    """Mint a real token per deployment audience through Azure CLI and Az PowerShell and call each service once.
+
+    Unlike ``/api/auth/context`` this never trusts cached login state. Tokens are never returned.
+    """
+    from shared.live_credentials import LiveCredentialProbe
+    return await asyncio.get_event_loop().run_in_executor(None, LiveCredentialProbe().probe, subscription_id)
+
+
 def _get_live_status() -> dict:
     database_status = "ok"
     try:
@@ -1889,7 +2144,7 @@ async def get_live():
 
 @app.get("/api/health")
 async def get_health(deep: bool = False):
-    if not deep:
+    if not deep or HOSTED:
         return _get_live_status()
 
     live = _get_live_status()
@@ -1916,7 +2171,7 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
     deploy_logs: list[dict] = []
 
     # Per-deployment log file for on-demand phase log retrieval
-    deploy_log_dir = Path(__file__).parent / "logs"
+    deploy_log_dir = DATA_DIR / "logs"
     deploy_log_dir.mkdir(exist_ok=True)
     deploy_log_file = deploy_log_dir / f"{instance_id}.jsonl"
     current_phase_name: list[str] = [""]  # mutable container for closure
@@ -2127,7 +2382,6 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
         deployment["customStatus"]["currentPhase"] = "Starting Deploy-All.ps1"
         deployment["customStatus"]["status"] = "running"
         save_state()
-
         logger.info("Starting Deploy-All.ps1 for workspace='%s', rg='%s'",
                      req.fabric_workspace_name, req.resource_group_name)
 
@@ -2195,6 +2449,12 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
             raise RuntimeError("Post-deployment live validation failed: " + "; ".join(failures))
         deployment["customStatus"]["validatedAt"] = validation.get("checkedAt")
         deployment["customStatus"]["detail"] = f"Live validation passed: {len(validation.get('checks') or [])} checks."
+        from activities.addons import selected
+        requested_addons = selected(config)
+        if requested_addons:
+            deployment["customStatus"]["addons"] = {name: {"status": "pending"} for name in requested_addons}
+            deployment["customStatus"]["detail"] += " Requested add-ons run next without gating this deployment."
+            deployment["output"] = {"status": "running", "phases": phases, "resources": result.get("resources", {})}
         deployment["runtimeStatus"] = "Completed"
         deployment["customStatus"]["status"] = "succeeded"
         deployment["customStatus"]["currentPhase"] = "Deployment Complete"
@@ -2230,8 +2490,13 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
                 deployment["output"]["resources"]["ohif_viewer_url"] = final_links["ohifViewer"]
         logger.info("Deployment %s completed (%.1fs)", instance_id, duration)
 
-        # Auto-pause Fabric capacity if requested
-        if req.pause_capacity_after_deploy and req.capacity_name:
+        if requested_addons:
+            # Add-ons start after the base is Completed; they pause the capacity when they finish.
+            _addon_tasks[instance_id] = asyncio.create_task(_run_later_addons(
+                instance_id, config, requested_addons, fresh_export=False,
+                pause_capacity=(req.capacity_subscription_id, req.capacity_resource_group, req.capacity_name)
+                if req.pause_capacity_after_deploy and req.capacity_name else None))
+        elif req.pause_capacity_after_deploy and req.capacity_name:
             try:
                 _pause_capacity_sync(
                     req.capacity_subscription_id,
@@ -2258,6 +2523,7 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
         }
 
     finally:
+        touch_hosted_activity()
         _logging.getLogger("activities.invoke_powershell").removeHandler(handler)
         deployment["lastUpdatedTime"] = now_iso()
         save_state()
@@ -2318,7 +2584,7 @@ async def get_phase_logs(instance_id: str, phase: str = ""):
       phase — phase name to filter. Canonical UI card names and backend
               PowerShell step names are both accepted.
     """
-    log_file = Path(__file__).parent / "logs" / f"{instance_id}.jsonl"
+    log_file = DATA_DIR / "logs" / f"{instance_id}.jsonl"
     if not log_file.exists():
         return []
 
@@ -2391,7 +2657,7 @@ async def stream_phase_logs(instance_id: str, phase: str = ""):
         raise HTTPException(404, "Instance not found")
 
     async def log_generator():
-        log_file = Path(__file__).parent / "logs" / f"{instance_id}.jsonl"
+        log_file = DATA_DIR / "logs" / f"{instance_id}.jsonl"
 
         # Wait for log file to be created up to 10 seconds
         for _ in range(20):
@@ -2472,7 +2738,7 @@ def _backfill_links_from_logs(instance_id: str, deployment: dict) -> None:
         custom_status["linksBackfilled"] = True
         return
 
-    log_file = Path(__file__).parent / "logs" / f"{instance_id}.jsonl"
+    log_file = DATA_DIR / "logs" / f"{instance_id}.jsonl"
     if not log_file.exists():
         return
 
@@ -2606,7 +2872,7 @@ def _backfill_successful_steps_from_state_tracking(instance_id: str, deployment:
     if not isinstance(phases, list):
         return
 
-    state_file = Path(__file__).resolve().parent.parent / "state-tracking" / f".deployment-state-{workspace_name}.json"
+    state_file = state_dir(Path(__file__).resolve().parent.parent) / f".deployment-state-{workspace_name}.json"
     if not state_file.exists():
         return
 
@@ -2971,7 +3237,7 @@ async def list_subscriptions(force: bool = False):
         subs = _list_subscriptions_sync(force=force)
         # Sort so default subscription comes first
         subs.sort(key=lambda s: not s.get("isDefault", False))
-        result = [{"id": s["id"], "name": s["name"]} for s in subs]
+        result = [{"id": s["id"], "name": s["name"], "tenantId": s.get("tenantId", "")} for s in subs]
         _set_timed_cached(cache_key, result)
         return result
     except Exception as e:
@@ -2985,7 +3251,7 @@ def _list_subscriptions_sync(force: bool = False) -> list[dict]:
         if cached is not None:
             return cached
     result = _az_run(
-        ["az", "account", "list", "--query", "[].{id:id, name:name, isDefault:isDefault}", "-o", "json"],
+        ["az", "account", "list", "--query", "[].{id:id, name:name, tenantId:tenantId, isDefault:isDefault}", "-o", "json"],
         check=True,
     )
     subs = json.loads(result.stdout)
@@ -3846,6 +4112,49 @@ def _query_fhir_counts(rg_name: str) -> dict:
     except Exception as e:
         logger.warning("FHIR count query failed: %s", e)
     return result
+
+
+def _active_hosted_runs() -> int:
+    return sum(dep.get("runtimeStatus") in {"Running", "Pending"}
+               for dep in deployments.values()
+               if (dep.get("customStatus") or {}).get("runType") != "teardownBatch") + sum(
+        not task.done() for task in _addon_tasks.values())
+
+def _sync_authenticated_target_history(tenant_id: str, subscription_id: str) -> dict[str, int]:
+    """Import prior runs, ledgers, and form_history for a verified authenticated target."""
+    outcome = import_target_history_from_shared_storage(tenant_id, subscription_id)
+    if outcome.get("importedDeployments") or outcome.get("reconstructedLedgers"):
+        for dep in db_list_deployments():
+            deployments[dep["instanceId"]] = dep
+    return outcome
+
+
+def _invalidate_auth_caches() -> None:
+    with _CACHE_LOCK:
+        _timed_cache.clear()
+        _scan_cache.clear()
+        _save_persistent_cache()
+
+
+install_hosted_routes(app, _active_hosted_runs, _invalidate_auth_caches, _sync_authenticated_target_history)
+# Register last so every API route has precedence over the SPA fallback.
+_UI_DIST = Path(__file__).resolve().parent.parent / "orchestrator-ui" / "dist"
+if _UI_DIST.is_dir():
+    from fastapi.staticfiles import StaticFiles
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    class _SPAStaticFiles(StaticFiles):
+        async def get_response(self, path, scope):
+            if path == "api" or path.startswith("api/"):
+                raise StarletteHTTPException(404)
+            try:
+                return await super().get_response(path, scope)
+            except StarletteHTTPException as exc:
+                if exc.status_code != 404 or Path(path).suffix:
+                    raise
+                return await super().get_response("index.html", scope)
+
+    app.mount("/", _SPAStaticFiles(directory=str(_UI_DIST), html=True), name="ui")
 
 
 if __name__ == "__main__":

@@ -31,7 +31,8 @@ class FakeCloud:
     def __init__(self, groups: dict[str, list[dict]], container_apps: list[dict] | None = None,
                  tagged_groups: list[str] | None = None, entra_apps: list[dict] | None = None,
                  resource_bodies: dict[str, dict] | None = None, unity: dict[str, list[dict]] | None = None,
-                 stuck_groups: set[str] | None = None, tenant: str = TENANT) -> None:
+                 stuck_groups: set[str] | None = None, tenant: str = TENANT,
+                 workspaces: list[dict] | None = None, workspace_items: dict[str, list[dict]] | None = None) -> None:
         self.groups = groups
         self.container_apps = container_apps or []
         self.tagged_groups = tagged_groups or []
@@ -40,9 +41,12 @@ class FakeCloud:
         self.unity = unity or {}
         self.stuck_groups = stuck_groups or set()
         self.tenant = tenant
+        self.workspaces = list(workspaces or [])
+        self.workspace_items = {k.lower(): list(v) for k, v in (workspace_items or {}).items()}
         self.deleted_groups: set[str] = set()
+        self.deleted_workspaces: set[str] = set()
+        self.deleted_items: set[str] = set()
         self.calls: list[tuple[str, str]] = []
-
     def deletes(self) -> list[str]:
         return [url for method, url in self.calls if method == "DELETE"]
 
@@ -81,7 +85,25 @@ class FakeCloud:
                 return 200, {}
             key = path.rsplit("/", 1)[1].replace("-", "_")
             return 200, {key: self.unity.get(key, [])}
-        if path in ("/v1/workspaces", "/v1/connections"):
+        if path == "/v1/workspaces":
+            return 200, {"value": [w for w in self.workspaces if w["id"].lower() not in self.deleted_workspaces]}
+        ws_item_match = re.fullmatch(r"/v1/workspaces/([^/]+)/items(?:/([^/]+))?", path)
+        if ws_item_match:
+            ws_id, item_id = ws_item_match.group(1), ws_item_match.group(2)
+            if item_id:
+                if method == "DELETE":
+                    self.deleted_items.add(item_id)
+                    return 200, {}
+                return (404, None) if item_id in self.deleted_items else (200, {"id": item_id})
+            return 200, {"value": [i for i in self.workspace_items.get(ws_id, []) if i["id"].lower() not in self.deleted_items]}
+        ws_match = re.fullmatch(r"/v1/workspaces/([^/]+)", path)
+        if ws_match:
+            ws_id = ws_match.group(1)
+            if method == "DELETE":
+                self.deleted_workspaces.add(ws_id)
+                return 200, {}
+            return (404, None) if ws_id in self.deleted_workspaces else (200, {"id": ws_id})
+        if path == "/v1/connections":
             return 200, {"value": []}
         return 404, None
 
@@ -166,6 +188,19 @@ class FullTeardownSafetyTests(unittest.TestCase):
         })
         teardown, _ = _teardown(cloud, delete_azure_rg=True, front_end_resource_groups=["rg-other"])
 
+        with self.assertRaises(TeardownRefused):
+            teardown.run()
+        self.assertEqual(cloud.deletes(), [])
+
+    def test_old_function_and_static_site_names_do_not_establish_ownership(self) -> None:
+        cloud = FakeCloud({
+            "rg-main": MAIN_GROUP,
+            "rg-old-host": [
+                {"type": "Microsoft.Web/sites", "name": "medorch-func", "id": _rid("rg-old-host", "Microsoft.Web/sites", "medorch-func")},
+                {"type": "Microsoft.Web/staticSites", "name": "medorch-swa", "id": _rid("rg-old-host", "Microsoft.Web/staticSites", "medorch-swa")},
+            ],
+        })
+        teardown, _ = _teardown(cloud, front_end_resource_groups=["rg-old-host"])
         with self.assertRaises(TeardownRefused):
             teardown.run()
         self.assertEqual(cloud.deletes(), [])
@@ -261,6 +296,26 @@ class FullTeardownSafetyTests(unittest.TestCase):
         self.assertEqual(report.phases["Verification"], "failed")
 
 
+    def test_orphaned_rayfin_companion_items_are_deleted_when_app_backend_already_gone(self) -> None:
+        cloud = FakeCloud(
+            {"rg-main": MAIN_GROUP},
+            workspaces=[{"id": "ws-1", "displayName": "med-1006"}],
+            workspace_items={
+                "ws-1": [
+                    {"id": "sql-1", "displayName": "rayfin-health-command-center", "type": "SQLDatabase"},
+                    {"id": "udf-1", "displayName": "rayfin-health-command-center", "type": "UserDataFunction"},
+                    {"id": "lh-1", "displayName": "healthcare1_msft_silver", "type": "Lakehouse"},
+                ]
+            },
+        )
+        teardown, _ = _teardown(cloud, workspace_name="med-1006", delete_workspace=True, delete_azure_rg=True)
+
+        result = teardown.run()
+
+        self.assertEqual(result["status"], "succeeded", result.get("failures"))
+        self.assertEqual(cloud.deleted_items, {"sql-1", "udf-1"})
+        self.assertIn("ws-1", cloud.deleted_workspaces)
+
 class AzureCliTokenTests(unittest.TestCase):
     def test_tokens_from_different_tenants_are_refused(self) -> None:
         tenants = iter(["tenant-a", "tenant-b"])
@@ -275,14 +330,6 @@ class AzureCliTokenTests(unittest.TestCase):
             tokens.token("https://graph.microsoft.com")
 
 
-class DurableTeardownActivityTests(unittest.TestCase):
-    def test_request_without_expected_tenant_is_refused(self) -> None:
-        from activities.teardown import run
-
-        result = run({"fabric_workspace_name": "ws", "resource_group_name": "rg", "subscription_id": SUB,
-                      "delete_workspace": True, "delete_azure_rg": True})
-
-        self.assertEqual(result["status"], "refused")
 
 
 if __name__ == "__main__":

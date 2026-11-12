@@ -37,10 +37,6 @@ if ($FabricWorkspaceName) {
 }
 Write-Host "  Using base resource name prefix: '$appNamePrefix'" -ForegroundColor Gray
 
-# Ensure cross-platform temp directory is populated in $env:TEMP
-if (-not $env:TEMP) {
-    $env:TEMP = [System.IO.Path]::GetTempPath()
-}
 
 # Resolve repo root (one level up from phase-1/) so relative paths work
 $RepoRoot = Split-Path -Parent $PSScriptRoot
@@ -236,7 +232,7 @@ function Invoke-ArmGroupDeployment {
 }
 
 # Serialize tags for Bicep parameter passing
-$tagsParamFile = Join-Path $env:TEMP "deploy-tags-$(Get-Random).json"
+$tagsParamFile = Join-Path ([System.IO.Path]::GetTempPath()) "deploy-tags-$(Get-Random).json"
 $tagsParamContent = @{
     '`$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
     contentVersion = '1.0.0.0'
@@ -289,18 +285,24 @@ class MasimoSimulator:
         # Initialize with slightly different baselines per device
         seed = hash(device_id) % 1000
         random.seed(seed)
-        self.spo2 = 95.0 + random.uniform(0, 4)
-        self.pr = 65.0 + random.uniform(0, 20)
-        self.pi = 2.5 + random.uniform(0, 2)
-        self.pvi = 10.0 + random.uniform(0, 8)
+        # Keep 3 devices in an alerting band for demo alerting while 97% mean-revert to healthy baselines
+        is_alert_device = device_id.endswith(("0021", "0033", "0085"))
+        self.target_spo2 = 90.5 if is_alert_device else (96.5 + random.uniform(0, 2.5))
+        self.target_pr = 118.0 if is_alert_device else (68.0 + random.uniform(0, 18))
+        self.target_pi = 2.5 + random.uniform(0, 2)
+        self.target_pvi = 10.0 + random.uniform(0, 8)
+        self.spo2 = self.target_spo2
+        self.pr = self.target_pr
+        self.pi = self.target_pi
+        self.pvi = self.target_pvi
         random.seed()  # Re-randomize
         
     def generate_reading(self):
-        # Simulate realistic vital sign variations
-        self.spo2 += random.uniform(-0.5, 0.5)
-        self.pr += random.uniform(-2, 2)
-        self.pi += random.uniform(-0.1, 0.1)
-        self.pvi += random.uniform(-1, 1)
+        # Ornstein-Uhlenbeck mean-reversion toward each device's physiological baseline
+        self.spo2 += 0.15 * (self.target_spo2 - self.spo2) + random.uniform(-0.4, 0.4)
+        self.pr += 0.15 * (self.target_pr - self.pr) + random.uniform(-1.5, 1.5)
+        self.pi += 0.10 * (self.target_pi - self.pi) + random.uniform(-0.1, 0.1)
+        self.pvi += 0.10 * (self.target_pvi - self.pvi) + random.uniform(-1, 1)
         
         # Clamp to realistic ranges
         self.spo2 = max(88, min(100, self.spo2))
@@ -323,63 +325,50 @@ class MasimoSimulator:
         return payload
 
 def run():
-    try:
-        print("Connecting to Event Hub using Managed Identity...", flush=True)
-        credential = ManagedIdentityCredential()
-        
-        # Use fully qualified namespace with credential
-        fully_qualified_namespace = f"{EVENT_HUB_NAMESPACE}.servicebus.windows.net"
-        print(f"FQNS: {fully_qualified_namespace}", flush=True)
-        
-        print("Creating producer...", flush=True)
-        producer = EventHubProducerClient(
-            fully_qualified_namespace=fully_qualified_namespace,
-            eventhub_name=EVENT_HUB_NAME,
-            credential=credential
-        )
-        
-        # Create simulators for all devices
-        simulators = {device_id: MasimoSimulator(device_id) for device_id in DEVICE_IDS}
-        print(f"Created {len(simulators)} device simulators", flush=True)
-        
-        print("Entering producer context...", flush=True)
-        with producer:
-            print("Starting multi-device telemetry loop...", flush=True)
-            cycle = 0
-            while True:
-                # Create a batch with readings from all devices
-                batch = producer.create_batch()
-                
-                for device_id in DEVICE_IDS:
-                    sim = simulators[device_id]
-                    data = sim.generate_reading()
-                    try:
-                        batch.add(EventData(json.dumps(data)))
-                    except ValueError:
-                        # Batch is full, send it and create a new one
-                        producer.send_batch(batch)
-                        batch = producer.create_batch()
-                        batch.add(EventData(json.dumps(data)))
-                
-                producer.send_batch(batch)
-                cycle += 1
-                
-                # Log progress every 10 cycles
-                if cycle % 10 == 0:
-                    print(f"Cycle {cycle}: Sent telemetry for {len(DEVICE_IDS)} devices", flush=True)
-                
-                # Wait 1 second between cycles (all devices report every second)
-                time.sleep(1)
-                
-    except Exception as e:
-        print(f"!!! Fatal Error: {e}", flush=True)
-        traceback.print_exc()
-        sys.stdout.flush()
-        sys.stderr.flush()
-        print("Sleeping 120s for log capture...", flush=True)
-        time.sleep(120)
-        exit(1)
-
+    print("Connecting to Event Hub using Managed Identity...", flush=True)
+    credential = ManagedIdentityCredential()
+    fully_qualified_namespace = f"{EVENT_HUB_NAMESPACE}.servicebus.windows.net"
+    print(f"FQNS: {fully_qualified_namespace}", flush=True)
+    simulators = {device_id: MasimoSimulator(device_id) for device_id in DEVICE_IDS}
+    print(f"Created {len(simulators)} device simulators", flush=True)
+    cycle = 0
+    attempt = 0
+    while True:
+        try:
+            print("Creating producer...", flush=True)
+            producer = EventHubProducerClient(
+                fully_qualified_namespace=fully_qualified_namespace,
+                eventhub_name=EVENT_HUB_NAME,
+                credential=credential
+            )
+            print("Entering producer context...", flush=True)
+            with producer:
+                attempt = 0
+                print("Starting multi-device telemetry loop...", flush=True)
+                while True:
+                    batch = producer.create_batch()
+                    for device_id in DEVICE_IDS:
+                        sim = simulators[device_id]
+                        data = sim.generate_reading()
+                        try:
+                            batch.add(EventData(json.dumps(data)))
+                        except ValueError:
+                            producer.send_batch(batch)
+                            batch = producer.create_batch()
+                            batch.add(EventData(json.dumps(data)))
+                    producer.send_batch(batch)
+                    cycle += 1
+                    if cycle % 10 == 0:
+                        print(f"Cycle {cycle}: Sent telemetry for {len(DEVICE_IDS)} devices", flush=True)
+                    time.sleep(1)
+        except Exception as e:
+            attempt += 1
+            delay = min(30, 2 ** min(attempt, 5))
+            print(f"!!! Transient Producer Error (attempt {attempt}, reconnecting in {delay}s): {e}", flush=True)
+            traceback.print_exc()
+            sys.stdout.flush()
+            sys.stderr.flush()
+            time.sleep(delay)
 if __name__ == "__main__":
     run()
 "@
@@ -571,14 +560,14 @@ if (-not $skipEmulatorAndBuild -and -not $SkipTelemetry) {
     # Build from a clean staging directory containing ONLY the files the Dockerfile needs.
     # `az acr build` ignores `.dockerignore` reliably on Windows, which historically caused
     # 40+ minute hangs uploading the entire 1+ GB repo. Staging keeps the upload to ~5 KB.
-    $emulatorStaging = Join-Path $env:TEMP ("masimo-emulator-build-" + [Guid]::NewGuid().ToString())
+    $emulatorStaging = Join-Path ([System.IO.Path]::GetTempPath()) ("masimo-emulator-build-" + [Guid]::NewGuid().ToString())
     New-Item -ItemType Directory -Path $emulatorStaging -Force | Out-Null
     Copy-Item -Path (Join-Path $RepoRoot "Dockerfile")   -Destination $emulatorStaging -Force
     Copy-Item -Path (Join-Path $RepoRoot "emulator.py")  -Destination $emulatorStaging -Force
     Copy-Item -Path (Join-Path $RepoRoot "emulator-requirements.lock") -Destination $emulatorStaging -Force
     Write-Host "  Build context: $emulatorStaging (Dockerfile + emulator.py + locked dependencies)" -ForegroundColor DarkGray
 
-    $acrBuildErrLog = Join-Path $env:TEMP ("acr-build-" + [Guid]::NewGuid().ToString() + ".log")
+    $acrBuildErrLog = Join-Path ([System.IO.Path]::GetTempPath()) ("acr-build-" + [Guid]::NewGuid().ToString() + ".log")
     Push-Location $emulatorStaging
     try {
         $acrBuildOutput = az acr build --registry $acrName --image "masimo-emulator:$imageTag" . --no-logs 2>$acrBuildErrLog

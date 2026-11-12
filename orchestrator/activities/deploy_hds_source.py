@@ -31,13 +31,19 @@ import requests
 from shared.fabric_client import FabricClient
 from shared.onelake_client import OneLakeClient
 from shared.poa_model import project_appointment_created_day
+from shared.cma_model import (
+    activate_care_plan_person_link,
+    orient_person_location_link,
+    repair_social_determinant_metadata_join,
+    set_fact_to_dimension_one_way,
+)
 from shared.poa_ingestion import map_marketing_created_on
 
 logger = logging.getLogger(__name__)
 
 HDS_VERSION = "1.4.0"
 DTT_VERSION = "0.3.1.1271"
-STAGING_PATCH_VERSION = "2026-10-01.1"
+STAGING_PATCH_VERSION = "2026-11-11.4"
 COMPANY_PREFIX = "healthcare1"
 TECHNICAL_PREFIX = "msft"
 DEPLOYMENT_LAKEHOUSE = "deployment_lakehouse"
@@ -689,6 +695,13 @@ def stage_source_payload(force: bool = False) -> Path:
     poa_model = json.loads(poa_model_path.read_text(encoding="utf-8"))
     project_appointment_created_day(poa_model)
     poa_model_path.write_text(json.dumps(poa_model, indent=2), encoding="utf-8")
+    cma_model_path = artifact_destination / "healthcare-artifacts" / HDS_VERSION / "care-management-analytics" / "Datasets" / "CareManagementAnalytics" / "model.bim"
+    cma_model = json.loads(cma_model_path.read_text(encoding="utf-8"))
+    repair_social_determinant_metadata_join(cma_model)
+    orient_person_location_link(cma_model)
+    set_fact_to_dimension_one_way(cma_model)
+    activate_care_plan_person_link(cma_model)
+    cma_model_path.write_text(json.dumps(cma_model, indent=2), encoding="utf-8")
     idm_adapter_path = artifact_destination / "healthcare-configuration" / HDS_VERSION / "_internal" / "idm" / "adapter.json"
     idm_adapter = json.loads(idm_adapter_path.read_text(encoding="utf-8"))
     map_marketing_created_on(idm_adapter)
@@ -1452,7 +1465,7 @@ def run(
     fabric: FabricClient | None = None,
     onelake: OneLakeClient | None = None,
 ) -> dict[str, Any]:
-    """Activity entry point used by local PowerShell and Durable Functions."""
+    """HDS source deployment entry point used by local and hosted PowerShell."""
     _reset_event_timings()
     _event("payload", "running", "Building and validating Microsoft HDS v1.4.0 payload")
     try:

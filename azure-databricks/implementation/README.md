@@ -38,7 +38,7 @@ implementation/
 │   ├── databricks.yml
 │   ├── resources/{pipelines,jobs,sql,genie}.yml
 │   └── src/                            # pipeline logic and fail-closed gate notebooks
-└── scripts/01..08, 99                  # the execution sequence below
+└── scripts/01..10, 99                 # deployment, MCP demo, validation, teardown
 ```
 
 ---
@@ -108,12 +108,17 @@ Without a browser, `export DATABRICKS_AUTH_TYPE=azure-cli` instead of `auth logi
 uses tokens from the Azure CLI profile you deployed with (`az account show` must be the target
 subscription), and the workspace creator is already a workspace admin.
 
-### Step 2b — The one manual privileged action
+### Step 2b — Regional metastore assignment
 
-In the Databricks **account console**: Catalog → Metastores → assign the regional metastore
-to this workspace.
+The hosted orchestrator checks `databricks metastores current` after foundation
+deployment, discovers the account's regional metastore through the account API,
+and attempts assignment using the Azure CLI Databricks-audience token. If it
+cannot assign unambiguously or lacks account-admin permission, it pauses with
+account-console instructions and **Continue** (24-hour deadline). Continue always
+rechecks the workspace rather than trusting the button click.
 
-An account admin can do the same from the CLI, still deliberately and by hand:
+For manual runs, an account admin can assign in the **account console** under
+Catalog → Metastores, or use the CLI:
 
 ```bash
 databricks metastores list   # pick the metastore in the workspace's region
@@ -121,9 +126,10 @@ databricks metastores assign <workspace-id> <metastore-id> hive_metastore
 databricks metastores current   # confirm
 ```
 
-**Teaching note.** Metastore assignment is account-scoped, not workspace-scoped, and it is
-irreversible in practice for a shared metastore. No script in this package performs it,
-because a wrong assignment affects every other workspace on that metastore.
+**Teaching note.** Metastore assignment is account-scoped, not workspace-scoped.
+The orchestrator never chooses between multiple matching regional metastores and
+never creates or deletes a shared metastore. Provision the selected administrator
+group into the Databricks account before the Unity Catalog grants in step 4.
 
 ## Step 3 — Give Databricks read-only stream access
 
@@ -250,6 +256,61 @@ their exact governed sources, at least five curated SQL examples each, nonempty 
 baselines, and one grounded live conversation per agent. A skipped or failed check is not a pass.
 Curation is deployed code; changes belong in `resources/genie.yml`, not an untracked portal draft.
 
+## Step 8 — Demonstrate governed MCP access through APIM
+
+The MCP demo reuses the deployed HLS provider domain instead of inventing a separate
+customer dataset. It creates one bounded, aggregate-only Unity Catalog function and exposes
+two new APIM paths alongside—never over—the existing Intermountain APIs:
+
+| Path | Databricks backend | Purpose |
+|---|---|---|
+| `hls-uc/mcp` | `hls_<env>.ops.get_imaging_modality_counts` | deterministic P0 function call and authorization proof |
+| `hls-genie/mcp` | curated HLS Multi-Layer Imaging Cohort Genie space | natural-language Genie MCP demonstration |
+
+Run the idempotent deployment with the target Databricks workspace already selected through
+`DATABRICKS_HOST` and `DATABRICKS_AUTH_TYPE`:
+
+```bash
+export ENVIRONMENT=test
+export WAREHOUSE_ID=<target-hls-serving-warehouse>
+export APIM_RESOURCE_GROUP=<existing-apim-resource-group>
+export APIM_SERVICE_NAME=<existing-apim-name>
+export APIM_BACKEND_CLIENT_ID=<apim-managed-identity-client-id>
+export APIM_CALLER_CLIENT_ID=<approved-agent-runtime-client-id>
+export GENIE_SPACE_ID=<imaging-cohort-genie-space-id>
+export MCP_JOB_ENVIRONMENT_ID=<container-apps-environment-arm-id>
+export APIM_CALLER_IDENTITY_RESOURCE_ID=<approved-runtime-identity-arm-id>
+./scripts/10-deploy-mcp-demo.sh
+```
+
+The script registers the APIM managed identity in the selected workspace, grants only the
+catalog/schema/table/function, Genie `CAN RUN`, and warehouse `CAN USE` privileges the two
+paths need, and configures Entra-authenticated APIM routes. No PAT or subscription key is
+created or persisted.
+
+When both job variables are set, the same deployment creates two manual jobs. The meeting
+operator runs each without handling a token or key:
+
+```bash
+az containerapp job start -g "$APIM_RESOURCE_GROUP" -n job-hls-uc-mcp-demo
+az containerapp job start -g "$APIM_RESOURCE_GROUP" -n job-hls-genie-mcp-demo
+```
+
+The UC job prints the bounded result and correlation IDs. The Genie job asks the reviewed
+imaging question, waits through warehouse startup, and prints the grounded SQL-backed answer.
+
+From the approved managed-identity runtime, use `scripts/09-mcp-demo-client.py` with either
+APIM URL. The client initializes MCP, lists tools, invokes the function, and handles the
+Genie query/poll sequence. The curated Genie Agent MCP is used because its two data sources,
+questions, and SQL examples are deployed code. The workspace-wide Genie One Unity Gateway
+service is a separate option and must not be claimed ready without its own `EXECUTE` grant
+and live tool-call proof.
+
+For the finalized Intermountain onsite schedule:
+
+- **11:00–12:00 (`Presentation and demonstration of MSFT/DB connections` — Jay, Joey):** run `job-hls-genie-mcp-demo` and `job-hls-uc-mcp-demo`, show anonymous `401` rejection, and explain how the pattern maps to IMH's `apim-ih-ent-eap-dev` gateway, `appi-ent-eap-dev-mcp` Application Insights logging, and Unity Catalog grants.
+- **3:00–3:30 (`Foundry end-to-end capabilities (Jay), Fabric capabilities (Joey)`):** use `med-1009` in Fabric to show the provider Eventhouse baseline (`agent_ImagingModalityCounts()`), RTI/Eventstream, and where Fabric Data Agents fit as an upstream agent client in the updated architecture diagram. Keep the published Fabric Data Agent MCP call optional because a current call can fail to ground even while the direct KQL function returns CR, CT, and DX rows. Fabric and Databricks remain separate synthetic snapshots; do not compare their counts as parity.
+
 ## Teardown
 
 ```bash
@@ -265,6 +326,25 @@ and connector by the exact resource IDs recorded at creation.
 with `created_by_bootstrap=true`. Deleting a shared metastore, credential, or storage account
 by name prefix is how a demo teardown takes out someone else's environment.
 
+## Hosted execution
+
+Select Databricks in the orchestrator's Add-ons form, or add it from a completed
+deployment. Full runs preserve `fhir-export` into `fhir-export-databricks` after the
+last export and before HDS moves the source files. Add-later runs invoke
+`phase-1/deploy-fhir.ps1 -ExportOnly -ExportContainerName fhir-export-databricks`.
+The snapshot is in the existing storage account; full RG teardown removes it.
+
+The orchestrator generates a private per-deployment `env.sh`, preserving
+`FHIR_EXPORT_URL=abfss://fhir-export-databricks@<account>.dfs.core.windows.net` even
+after reading foundation outputs. `FHIR_EXPORT_CONTAINER` controls preflight's
+container check (manual default: `fhir-export`). `HLS_NONINTERACTIVE=1` explicitly
+skips confirmation prompts in steps 02/05/06. Without that flag the manual review
+prompts remain. `DATABRICKS_AUTH_TYPE=azure-cli` uses the signed-in user's Azure
+profile; hosted bundle working copies run as that deployer, including test/prod,
+rather than requiring a separate service principal. Steps 01–06 and validation 07
+remain required and fail closed.
+
+
 ## What is still yours to decide
 
 | Decision | Why no artifact commits to it |
@@ -272,4 +352,3 @@ by name prefix is how a demo teardown takes out someone else's environment.
 | AI/BI dashboard layout | needs your reviewed visual and measure set |
 | Ontology semantics | there is no one-to-one Fabric IQ graph; encode it in comments, constraints, metric views |
 | Network isolation profile | VNet injection and private endpoints are a production profile, not a demo default |
-| Orchestrator integration | `Deploy-All.ps1` and the FastAPI activities still call Fabric; a destination adapter must migrate every caller |

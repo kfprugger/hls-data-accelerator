@@ -1,50 +1,25 @@
-import React from "react";
-import { useState, useEffect } from "react";
-import ReactDOM from "react-dom/client";
-import { FluentProvider } from "@fluentui/react-components";
-import { App } from "./App";
-import { fabricLightTheme, fabricDarkTheme } from "./theme";
+import React, { useEffect, useMemo, useState } from 'react';
+import ReactDOM from 'react-dom/client';
+import { ThemeProvider, CssBaseline } from '@mui/material';
+import { App } from './App';
+import { materialTheme } from './materialTheme';
+import './material.css';
 
-/**
- * Root wrapper that selects light/dark theme based on system preference.
- * Per the Fabric theming guide: "light/dark mode support is mandatory."
- */
-function Root() {
-  const getInitialTheme = () => {
-    if (typeof window === "undefined") return false;
-    const stored = window.localStorage.getItem("orchestrator-theme");
-    if (stored === "dark") return true;
-    if (stored === "light") return false;
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
-  };
-
-  const [isDark, setIsDark] = useState(getInitialTheme);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleThemeOverride = () => setIsDark(getInitialTheme());
-    window.addEventListener("orchestrator-theme-change", handleThemeOverride);
-    if (!window.matchMedia) return () => window.removeEventListener("orchestrator-theme-change", handleThemeOverride);
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) => {
-      if (!window.localStorage.getItem("orchestrator-theme")) setIsDark(e.matches);
-    };
-    mq.addEventListener("change", handler);
-    return () => {
-      window.removeEventListener("orchestrator-theme-change", handleThemeOverride);
-      mq.removeEventListener("change", handler);
-    };
-  }, []);
-
-  return (
-    <FluentProvider theme={isDark ? fabricDarkTheme : fabricLightTheme}>
-      <App />
-    </FluentProvider>
-  );
+function selectedMode(): 'light' | 'dark' {
+  const stored = localStorage.getItem('orchestrator-theme');
+  return stored === 'dark' || (stored !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
 }
-
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <Root />
-  </React.StrictMode>
-);
+function Root() {
+    const [mode, setMode] = useState(selectedMode);
+    const theme = useMemo(() => materialTheme(mode), [mode]);
+    useEffect(() => { document.documentElement.dataset.materialMode = mode; }, [mode]);
+    useEffect(() => {
+        const update = () => setMode(selectedMode());
+        const query = matchMedia('(prefers-color-scheme: dark)');
+        window.addEventListener('orchestrator-theme-change', update);
+        query.addEventListener('change', update);
+        return () => { window.removeEventListener('orchestrator-theme-change', update); query.removeEventListener('change', update); };
+    }, []);
+    return <ThemeProvider theme={theme}><CssBaseline /><div data-material-mode={mode}><App /></div></ThemeProvider>;
+}
+ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><Root /></React.StrictMode>);

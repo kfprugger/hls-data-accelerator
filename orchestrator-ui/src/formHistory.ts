@@ -1,11 +1,16 @@
 /**
  * Form field history — backed by the backend SQLite database.
- * Falls back to localStorage if the backend is unavailable.
+ * Local installations may fall back to localStorage; hosted history stays in SQLite.
  */
 
 import { requestJson, requestVoid } from "./api";
 
 const API_BASE = "/api";
+
+let allowBrowserHistory = false;
+export function setHostedHistoryMode(hosted: boolean): void {
+  allowBrowserHistory = !hosted;
+}
 
 export async function getHistory(field: string): Promise<string[]> {
   try {
@@ -13,6 +18,7 @@ export async function getHistory(field: string): Promise<string[]> {
       timeoutMs: 5000,
     });
   } catch { /* fall through */ }
+  if (!allowBrowserHistory) return [];
   // Fallback to localStorage
   try {
     const raw = localStorage.getItem(`form-history-${field}`);
@@ -30,6 +36,7 @@ export async function addToHistory(field: string, value: string): Promise<void> 
       timeoutMs: 5000,
     });
   } catch { /* ignore */ }
+  if (!allowBrowserHistory) return;
   // Also save to localStorage as fallback
   try {
     const raw = localStorage.getItem(`form-history-${field}`);
@@ -45,6 +52,7 @@ export async function getTagHistory(): Promise<Array<Record<string, string>>> {
     const values = await requestJson<string[]>(`${API_BASE}/form-history/tags`, { timeoutMs: 5000 });
     return values.map((v) => { try { return JSON.parse(v); } catch { return {}; } });
   } catch { /* fall through */ }
+  if (!allowBrowserHistory) return [];
   try {
     const raw = localStorage.getItem("form-history-tags");
     return raw ? JSON.parse(raw) : [];

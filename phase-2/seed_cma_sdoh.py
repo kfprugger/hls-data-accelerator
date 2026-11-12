@@ -2,12 +2,19 @@
 """Seed small deterministic SDOH tables for Healthcare Data Solutions CMA demos.
 
 Designed for Fabric notebook/Spark execution against healthcare1_msft_gold_cma.
+Rows follow the vendor Gold ETL format that the CMA model joins expect:
+social_determinant holds one row per county and measure, with location_type
+COUNTYFIPS, the county FIPS code in location_value, and the subcategory key in
+category_id.
 The pure row builders are intentionally dependency-free for local unit tests.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
+# Covers every Atlanta ZIP that Synthea assigns. Each ZIP maps to the county
+# that holds most of its land area (Census 2020 ZCTA-to-county relationships).
 ATLANTA_ZIP_FIPS = {
     "30032": ("13089", "DeKalb County"),
     "30033": ("13089", "DeKalb County"),
@@ -17,6 +24,8 @@ ATLANTA_ZIP_FIPS = {
     "30144": ("13067", "Cobb County"),
     "30303": ("13121", "Fulton County"),
     "30305": ("13121", "Fulton County"),
+    "30306": ("13121", "Fulton County"),
+    "30307": ("13089", "DeKalb County"),
     "30308": ("13121", "Fulton County"),
     "30309": ("13121", "Fulton County"),
     "30310": ("13121", "Fulton County"),
@@ -25,7 +34,8 @@ ATLANTA_ZIP_FIPS = {
     "30313": ("13121", "Fulton County"),
     "30314": ("13121", "Fulton County"),
     "30315": ("13121", "Fulton County"),
-    "30316": ("13121", "Fulton County"),
+    "30316": ("13089", "DeKalb County"),
+    "30317": ("13089", "DeKalb County"),
     "30318": ("13121", "Fulton County"),
     "30319": ("13089", "DeKalb County"),
     "30322": ("13089", "DeKalb County"),
@@ -35,8 +45,14 @@ ATLANTA_ZIP_FIPS = {
     "30328": ("13121", "Fulton County"),
     "30329": ("13089", "DeKalb County"),
     "30331": ("13121", "Fulton County"),
+    "30332": ("13121", "Fulton County"),
+    "30334": ("13121", "Fulton County"),
+    "30336": ("13121", "Fulton County"),
     "30339": ("13067", "Cobb County"),
     "30342": ("13121", "Fulton County"),
+    "30344": ("13121", "Fulton County"),
+    "30354": ("13121", "Fulton County"),
+    "30363": ("13121", "Fulton County"),
 }
 
 SDOH_CATEGORIES = [
@@ -54,15 +70,24 @@ SDOH_MEASURES = [
     (6, 3, "Observed rehospitalization rate", "LTC_AVG_OBS_REHOSP_RATE", "Index", "synthetic rehospitalization rate"),
 ]
 
+# The vendor ETL copies the dataset's location StandardColumnName into
+# location_type and routes only "%fips%" types into sdoh_fips.
+LOCATION_TYPE = "COUNTYFIPS"
+
 SDOH_SOURCE_BANNER = (
     "INFO: CMA SDOH seed uses no external SDOH sources. "
-    "Values are deterministic synthetic indicators generated from Synthea patient ZIP codes."
+    "Values are deterministic synthetic county-level indicators for the counties of Synthea patient ZIP codes."
 )
 
 
 
 def _now() -> str:
     return datetime.utcnow().isoformat(timespec="seconds")
+
+
+def _subcategory_id(category_id: int) -> int:
+    # Each synthetic category has one subcategory. The ETL keys facts by subcategory.
+    return category_id * 10
 
 
 def build_zip_to_fips_rows(zips: list[str] | None = None) -> list[dict]:
@@ -90,7 +115,7 @@ def build_sdoh_dimension_rows() -> dict[str, list[dict]]:
                 "category_id": category_id,
                 "category_name": name,
                 "category_description": description,
-                "subcategory_id": category_id * 10,
+                "subcategory_id": _subcategory_id(category_id),
                 "subcategory_name": name,
                 "subcategory_description": description,
                 "SourceTable": "SyntheticSdohSeed",
@@ -106,19 +131,19 @@ def build_sdoh_dimension_rows() -> dict[str, list[dict]]:
             {"sdoh_datasetmetadata_id": 1, "dataset_name": "Synthetic Atlanta SDOH Seed", "publisher_name": "BrakeKat synthetic emulator", "published_date": now[:10], "SourceTable": "SyntheticSdohSeed", "SourceModifiedOn": now}
         ],
         "sdoh_fips": [
-            {"fips_code": fips, "locationType": "county", "SourceTable": "SyntheticSdohSeed", "SourceModifiedOn": now}
+            {"fips_code": fips, "locationType": LOCATION_TYPE, "SourceTable": "SyntheticSdohSeed", "SourceModifiedOn": now}
             for fips in sorted({fips for fips, _ in ATLANTA_ZIP_FIPS.values()})
         ],
     }
 
 
 def build_social_determinant_rows(zip_rows: list[dict]) -> list[dict]:
+    """Emit one row per county and measure, the grain of a county-level SDOH dataset."""
     now = _now()
     rows = []
     row_id = 1
-    for zip_row in zip_rows:
-        zip_code = zip_row["zip"]
-        seed = sum(ord(ch) for ch in zip_code)
+    for county_fips in sorted({zip_row["countyFips"] for zip_row in zip_rows}):
+        seed = sum(ord(ch) for ch in county_fips)
         values = {
             "ACS_MEDIAN_HH_INC": 52000 + (seed % 34) * 1000,
             "SAIPE_TOT_POV": 8 + (seed % 18),
@@ -132,16 +157,16 @@ def build_social_determinant_rows(zip_rows: list[dict]) -> list[dict]:
             rows.append({
                 "social_determinant_id": row_id,
                 "sdoh_datasetmetadata_id": 1,
-                "category_id": category_id,
+                "category_id": _subcategory_id(category_id),
                 "unit_of_measure_id": unit_id,
                 "name": name,
                 "description": description,
                 "value": str(values[name]),
                 "value_as_number": float(values[name]),
-                "location_type": "zip",
-                "location_value": zip_code,
-                "location_JSON": f'{{"zip":"{zip_code}","countyFips":"{zip_row["countyFips"]}"}}',
-                "harmonization_key": f"{zip_code}:{name}",
+                "location_type": LOCATION_TYPE,
+                "location_value": county_fips,
+                "location_JSON": json.dumps({LOCATION_TYPE: county_fips}, separators=(",", ":")),
+                "harmonization_key": name,
                 "SourceTable": "SyntheticSdohSeed",
                 "SourceModifiedOn": now,
             })

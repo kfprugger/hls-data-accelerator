@@ -37,20 +37,13 @@ $FrontendPort = 5173
 $BackendBaseUrl = "http://127.0.0.1:$BackendPort"
 $FrontendBaseUrl = "http://127.0.0.1:$FrontendPort"
 $SessionId = Get-Date -Format "yyyyMMdd-HHmmss"
-$BackendSessionLog = Join-Path $BackendDir "orchestrator-session-$SessionId.log"
+$LogDir = if ($env:HLS_DATA_DIR) { $env:HLS_DATA_DIR } else { $BackendDir }
+New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
+$BackendSessionLog = Join-Path $LogDir "orchestrator-session-$SessionId.log"
+$FrontendLogDir = if ($env:HLS_DATA_DIR) { $env:HLS_DATA_DIR } else { $FrontendDir }
 
 
 
-# Prefer Joey's isolated BrakeKat Azure CLI profile for this repo. The backend
-# launches PowerShell deployment scripts and Azure CLI scans; letting it inherit
-# the global CLI profile can point Fabric/Azure calls at the wrong tenant.
-$BrakeKatAzureConfig = Join-Path $HOME ".azure-isolated/BrakeKat"
-if (-not $env:AZURE_CONFIG_DIR -and (Test-Path $BrakeKatAzureConfig)) {
-    $env:AZURE_CONFIG_DIR = $BrakeKatAzureConfig
-}
-if ($env:AZURE_CONFIG_DIR -eq $BrakeKatAzureConfig -and -not $env:AZURE_TENANT_ID) {
-    $env:AZURE_TENANT_ID = "8d038e6a-9b7d-4cb8-bbcf-e84dff156478"
-}
 if ($env:AZURE_CONFIG_DIR) {
     Write-Host "  Azure CLI profile: $env:AZURE_CONFIG_DIR" -ForegroundColor DarkGray
 }
@@ -379,8 +372,8 @@ $backendProc = Start-DetachedProcess `
     -FilePath $VenvPython `
     -WorkingDirectory $BackendDir `
     -ArgumentList @($BackendScript) `
-    -StandardOutputPath (Join-Path $BackendDir "backend-stdout.log") `
-    -StandardErrorPath (Join-Path $BackendDir "backend-stderr.log")
+    -StandardOutputPath (Join-Path $LogDir "backend-stdout.log") `
+    -StandardErrorPath (Join-Path $LogDir "backend-stderr.log")
 
 # Wait for backend HTTP liveness to come up (max 15 seconds)
 $waited = 0
@@ -392,10 +385,10 @@ while ($waited -lt 15) {
     $waited += 0.5
     if ($backendProc.HasExited) {
         Write-Host "  ✗ Backend process exited immediately (exit code: $($backendProc.ExitCode))" -ForegroundColor Red
-        Show-RecentLog -Path (Join-Path $BackendDir "backend-stderr.log")
-        Show-RecentLog -Path (Join-Path $BackendDir "backend-crash-dump.log")
-        Write-Host "    Check: $BackendDir\backend-stderr.log" -ForegroundColor DarkGray
-        Write-Host "    Check: $BackendDir\backend-crash-dump.log" -ForegroundColor DarkGray
+        Show-RecentLog -Path (Join-Path $LogDir "backend-stderr.log")
+        Show-RecentLog -Path (Join-Path $LogDir "backend-crash-dump.log")
+        Write-Host "    Check: $LogDir/backend-stderr.log" -ForegroundColor DarkGray
+        Write-Host "    Check: $LogDir/backend-crash-dump.log" -ForegroundColor DarkGray
         exit 1
     }
     if (Test-PortListening -Port $BackendPort) {
@@ -416,7 +409,7 @@ if ($backendReady) {
 } else {
     Write-Host "  ⚠ Backend process started but HTTP probe did not pass after ${waited}s" -ForegroundColor Yellow
     Write-Host "    PID: $($backendProc.Id) — check backend-stderr.log" -ForegroundColor DarkGray
-    Show-RecentLog -Path (Join-Path $BackendDir "backend-stderr.log") -Tail 25
+    Show-RecentLog -Path (Join-Path $LogDir "backend-stderr.log") -Tail 25
     exit 1
 }
 
@@ -429,8 +422,8 @@ $frontendProc = Start-DetachedProcess `
     -FilePath $npmExe `
     -WorkingDirectory $FrontendDir `
     -ArgumentList @("run", "dev") `
-    -StandardOutputPath (Join-Path $FrontendDir "frontend-stdout.log") `
-    -StandardErrorPath (Join-Path $FrontendDir "frontend-stderr.log")
+    -StandardOutputPath (Join-Path $FrontendLogDir "frontend-stdout.log") `
+    -StandardErrorPath (Join-Path $FrontendLogDir "frontend-stderr.log")
 
 # Wait for frontend HTTP endpoint to come up (max 15 seconds)
 $waited = 0
@@ -441,8 +434,8 @@ while ($waited -lt 15) {
     $waited += 0.5
     if ($frontendProc.HasExited) {
         Write-Host "  ✗ Frontend process exited immediately (exit code: $($frontendProc.ExitCode))" -ForegroundColor Red
-        Show-RecentLog -Path (Join-Path $FrontendDir "frontend-stderr.log")
-        Write-Host "    Check: $FrontendDir\frontend-stderr.log" -ForegroundColor DarkGray
+        Show-RecentLog -Path (Join-Path $FrontendLogDir "frontend-stderr.log")
+        Write-Host "    Check: $FrontendLogDir/frontend-stderr.log" -ForegroundColor DarkGray
         exit 1
     }
     if ((Test-PortListening -Port $FrontendPort) -and (Test-HttpEndpoint -Uri $frontendProbeUri -Label "Frontend" -Quiet)) {
@@ -456,7 +449,7 @@ if ($frontendReady) {
 } else {
     Write-Host "  ⚠ Frontend process started but HTTP probe did not pass after ${waited}s" -ForegroundColor Yellow
     Write-Host "    PID: $($frontendProc.Id) — check frontend-stderr.log" -ForegroundColor DarkGray
-    Show-RecentLog -Path (Join-Path $FrontendDir "frontend-stderr.log") -Tail 25
+    Show-RecentLog -Path (Join-Path $FrontendLogDir "frontend-stderr.log") -Tail 25
     exit 1
 }
 
@@ -470,8 +463,8 @@ if ($backendReady -and $frontendReady) {
         try { $frontendProc.Refresh() } catch { }
         if ($frontendProc.HasExited) {
             Write-Host "  ✗ Frontend exited while waiting for API proxy (exit code: $($frontendProc.ExitCode))" -ForegroundColor Red
-            Show-RecentLog -Path (Join-Path $FrontendDir "frontend-stderr.log") -Tail 25
-            Show-RecentLog -Path (Join-Path $FrontendDir "frontend-stdout.log") -Tail 25
+            Show-RecentLog -Path (Join-Path $FrontendLogDir "frontend-stderr.log") -Tail 25
+            Show-RecentLog -Path (Join-Path $FrontendLogDir "frontend-stdout.log") -Tail 25
             exit 1
         }
         if (Test-HttpEndpoint -Uri $proxyUri -Label "Frontend API proxy" -TimeoutSeconds 5 -Quiet) {
@@ -487,8 +480,8 @@ if ($backendReady -and $frontendReady) {
         if (Test-HttpEndpoint -Uri $backendProbeUri -Label "Backend direct" -Quiet) {
             Write-Host "    Backend direct probe still passes; the failure is isolated to the Vite proxy path." -ForegroundColor DarkGray
         }
-        Show-RecentLog -Path (Join-Path $FrontendDir "frontend-stderr.log") -Tail 25
-        Show-RecentLog -Path (Join-Path $FrontendDir "frontend-stdout.log") -Tail 25
+        Show-RecentLog -Path (Join-Path $FrontendLogDir "frontend-stderr.log") -Tail 25
+        Show-RecentLog -Path (Join-Path $FrontendLogDir "frontend-stdout.log") -Tail 25
         exit 1
     }
 }
@@ -496,8 +489,8 @@ if ($backendReady -and $frontendReady) {
 try { $backendProc.Refresh() } catch { }
 if ($backendProc.HasExited) {
     Write-Host "  ✗ Backend exited during startup (exit code: $($backendProc.ExitCode))" -ForegroundColor Red
-    Show-RecentLog -Path (Join-Path $BackendDir "backend-stderr.log")
-    Show-RecentLog -Path (Join-Path $BackendDir "backend-crash-dump.log")
+    Show-RecentLog -Path (Join-Path $LogDir "backend-stderr.log")
+    Show-RecentLog -Path (Join-Path $LogDir "backend-crash-dump.log")
     exit 1
 }
 
@@ -519,4 +512,5 @@ Write-Host "  │    orchestrator-ui\frontend-stderr.log                 │" -F
 Write-Host "  │                                                        │" -ForegroundColor DarkCyan
 Write-Host "  │  Stop:  .\Start-WebUI.ps1 -Stop                       │" -ForegroundColor DarkCyan
 Write-Host "  └─────────────────────────────────────────────────────────┘" -ForegroundColor DarkCyan
+if ($env:HLS_DATA_DIR) { Write-Host "  All runtime logs are under $env:HLS_DATA_DIR" -ForegroundColor DarkCyan }
 Write-Host ""

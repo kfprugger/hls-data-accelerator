@@ -5,7 +5,7 @@ This folder defines how to keep the HLS Data Accelerator's Azure source estate w
 > [!IMPORTANT]
 > This is an implementation-ready architecture and deployment contract, not a second executable deployment path in the current orchestrator. `Deploy-All.ps1`, `Preflight-Check.ps1`, deployment activities, and the evaluation harness retain Fabric dependencies. Shared teardown is the exception: `orchestrator/shared/full_teardown.py`, also exposed through `Teardown-All.ps1`, already includes a Databricks Unity Catalog phase for objects bound to the deployment's Access Connector. That cleanup capability does not prove the broader destination adapter described here is implemented or tested.
 
-Teardown pins tokens to an explicit deployment subscription and optionally checks an expected tenant. It discovers owned front ends (including Rayfin, cardiology, DICOM viewer and hosted orchestrator resources) and reports shared/unrelated groups as skipped. Preview from the repository root with `Teardown-All.ps1 -FabricWorkspaceName <workspace> -ResourceGroupName <rg> -SubscriptionId <subscription> -ExpectedTenantId <tenant> -Plan`. For a deployment without a Fabric workspace, use `python -m shared.full_teardown --subscription <subscription> --resource-group <rg> --expected-tenant <tenant> --delete-resource-group --plan` from `orchestrator/`. Neither preview deletes resources. See [root teardown guidance](../README.md#teardown).
+Teardown pins tokens to an explicit deployment subscription and optionally checks an expected tenant. It discovers owned front ends (including Rayfin, cardiology and DICOM viewer resources) and reports shared/unrelated groups as skipped. The shared hosted deployer is not deployment-owned. Preview from the repository root with `Teardown-All.ps1 -FabricWorkspaceName <workspace> -ResourceGroupName <rg> -SubscriptionId <subscription> -ExpectedTenantId <tenant> -Plan`. For a deployment without a Fabric workspace, use `python -m shared.full_teardown --subscription <subscription> --resource-group <rg> --expected-tenant <tenant> --delete-resource-group --plan` from `orchestrator/`. Neither preview deletes resources. See [root teardown guidance](../README.md#teardown).
 
 
 ## Decision
@@ -17,7 +17,7 @@ Use Azure Databricks as the governed data, analytics, AI, and operational destin
 - Azure Event Hubs namespace with `telemetry-stream` and `claim-stream`
 - Azure Container Registry and Azure Container Instances/jobs
 - Azure Key Vault, managed identities, and RBAC
-- Optional Durable Functions, Static Web App, Application Insights, and the Azure-hosted OHIF/DICOMweb surface
+- Hosted Container Apps orchestrator, Log Analytics, and the Azure-hosted OHIF/DICOMweb surface
 
 Add an Azure Databricks Premium workspace, an Access Connector for Azure Databricks, Unity Catalog storage objects, Lakeflow pipelines and jobs, Delta medallion tables, a Databricks SQL warehouse, AI/BI dashboards, Genie Agents, and Databricks SQL alerts.
 

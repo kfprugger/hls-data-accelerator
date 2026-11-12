@@ -151,14 +151,23 @@ function Get-CachedTokenValue {
     )
     $cached = $script:AccessTokenCache[$Key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
-    if ($ResourceTypeName) {
-        $resp = Get-AzAccessToken -ResourceTypeName $ResourceTypeName -ErrorAction Stop
-    } else {
-        $resp = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+    try {
+        if ($ResourceTypeName) {
+            $resp = Get-AzAccessToken -ResourceTypeName $ResourceTypeName -ErrorAction Stop
+        } else {
+            $resp = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        }
+        $token = Resolve-TokenValue -TokenResponse $resp
+        $script:AccessTokenCache[$Key] = @{ Token = $token; ExpiresOn = $resp.ExpiresOn }
+        return $token
+    } catch {
+        $cliResource = if ($ResourceUrl) { $ResourceUrl } elseif ($ResourceTypeName -eq 'Storage') { 'https://storage.azure.com' } else { $ResourceTypeName }
+        $cliJson = az account get-access-token --resource $cliResource -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $token = [string]$cliJson.accessToken
+        $script:AccessTokenCache[$Key] = @{ Token = $token; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $token
     }
-    $token = Resolve-TokenValue -TokenResponse $resp
-    $script:AccessTokenCache[$Key] = @{ Token = $token; ExpiresOn = $resp.ExpiresOn }
-    return $token
 }
 
 function Get-OneLakeAccessToken {
@@ -241,6 +250,30 @@ function Invoke-FabricApiRequest {
         try { $parsed = $content | ConvertFrom-Json -Depth 50 } catch { $parsed = $content }
     }
     return [pscustomobject]@{ Response = $parsed; StatusCode = $sc; Headers = $raw.Headers; RawContent = $content }
+}
+
+function Test-PipelineLatestRunCompleted {
+    param(
+        [Parameter(Mandatory)][string]$WorkspaceId,
+        [object]$Pipeline,
+        [Parameter(Mandatory)][hashtable]$FabricHeaders,
+        [string]$PipelineName = ''
+    )
+    if (-not $Pipeline -or -not $Pipeline.id) { return $false }
+    $pipelineId = [string]$Pipeline.id
+    $name = if ($PipelineName) { $PipelineName } else { [string]$Pipeline.displayName }
+    try {
+        $jobsResult = Invoke-FabricApiRequest -Method Get `
+            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$pipelineId/jobs/instances?limit=1" `
+            -Headers $FabricHeaders -Description "Check latest job status for '$name'"
+        $latestJob = $null
+        if ($jobsResult.Response -and $jobsResult.Response.PSObject.Properties['value']) {
+            $latestJob = $jobsResult.Response.value | Select-Object -First 1
+        }
+        return [bool]($latestJob -and $latestJob.status -eq 'Completed')
+    } catch {
+        return $false
+    }
 }
 
 function Invoke-OptionalDataPipelineNonBlocking {
@@ -369,9 +402,11 @@ function Invoke-OptionalDataPipelineSerialized {
         }
 
         $isConcurrentWrite = $failureText -match 'ConcurrentAppendException|DELTA_CONCURRENT_APPEND|concurrent update'
-        if ($isConcurrentWrite -and $attempt -lt $MaxAttempts) {
+        $isTransientSession = Test-TransientFabricNotebookSessionFailure -FailureText $failureText
+        if (($isConcurrentWrite -or $isTransientSession) -and $attempt -lt $MaxAttempts) {
             $delay = 30 * $attempt
-            Write-Log "  '$PipelineName' hit a Delta concurrent-write conflict; retrying serially in ${delay}s (attempt $($attempt + 1)/$MaxAttempts)." 'WARN'
+            $reasonLabel = if ($isConcurrentWrite) { 'Delta concurrent-write conflict' } else { 'transient notebook session/runtime failure' }
+            Write-Log "  '$PipelineName' hit a $reasonLabel; retrying serially in ${delay}s (attempt $($attempt + 1)/$MaxAttempts)." 'WARN'
             Start-Sleep -Seconds $delay
             continue
         }
@@ -396,7 +431,7 @@ function Invoke-OptionalDataPipelineSerialized {
 function Test-TransientFabricNotebookSessionFailure {
     param([AllowNull()][string]$FailureText)
     if ([string]::IsNullOrWhiteSpace($FailureText)) { return $false }
-    return $FailureText -match '(?i)Failed to create session for executing notebook|Livy.*session|Spark.*session.*(?:failed|unavailable)|session.*temporarily unavailable'
+    return $FailureText -match '(?i)Failed to create session for executing notebook|Livy.*session|Spark.*session.*(?:failed|unavailable)|session.*temporarily unavailable|tuple.*object has no attribute.*tb_frame|Failed to report Fabric capacity|Capacity is not found'
 }
 
 function Wait-FabricOperation {
@@ -985,21 +1020,21 @@ function Ensure-RoleAssignment {
         [Parameter(Mandatory)][string]$PrincipalType,
         [string]$Description = ''
     )
-    $existing = Get-AzRoleAssignment -Scope $Scope -ObjectId $PrincipalId -RoleDefinitionName $RoleDefinitionName -ErrorAction SilentlyContinue
-    if ($existing) {
+    $existingCount = az role assignment list --scope $Scope --assignee-object-id $PrincipalId --role $RoleDefinitionName --query "length(@)" -o tsv 2>$null
+    if ($LASTEXITCODE -eq 0 -and $existingCount -and ([int]$existingCount -gt 0)) {
         Write-Log "  RBAC '$RoleDefinitionName' already assigned to $Description on scope." 'INFO'
         return $false  # no new assignment
     } else {
         Write-Log "  Assigning '$RoleDefinitionName' to $Description ..." 'INFO'
-        try {
-            New-AzRoleAssignment -Scope $Scope -ObjectId $PrincipalId -RoleDefinitionName $RoleDefinitionName -ObjectType $PrincipalType -ErrorAction Stop | Out-Null
+        $assignOut = az role assignment create --scope $Scope --assignee-object-id $PrincipalId --assignee-principal-type $PrincipalType --role $RoleDefinitionName --only-show-errors 2>&1
+        if ($LASTEXITCODE -eq 0) {
             Write-Log "  RBAC assigned successfully." 'INFO'
             return $true  # new assignment
-        } catch {
-            if ($_.Exception.Message -match 'Conflict|RoleAssignmentExists|already exists') {
-                Write-Log "  RBAC already exists (race condition)." 'DEBUG'
-                return $false
-            } else { throw }
+        } elseif (($assignOut -join ' ') -match 'Conflict|RoleAssignmentExists|already exists') {
+            Write-Log "  RBAC already exists (race condition)." 'DEBUG'
+            return $false
+        } else {
+            throw "Failed to assign RBAC '$RoleDefinitionName' to ${Description}: $($assignOut -join ' ')"
         }
     }
 }
@@ -1013,29 +1048,27 @@ function Set-AdlsContainerAcl {
         [ValidateSet('user','group','sp','other')][string]$PrincipalType = 'sp',
         [string]$Permissions = 'rwx'
     )
-    $context = (Get-AzStorageAccount -ResourceGroupName $ResourceGroupName -Name $StorageAccountName).Context
     $aclType = if ($PrincipalType -eq 'group') { 'group' } else { 'user' }
-
     Write-Log "  Setting ACL on container '$ContainerName' for principal '$PrincipalId' (${aclType}:${Permissions})..." 'INFO'
 
-    $fs = Get-AzDataLakeGen2Item -Context $context -FileSystem $ContainerName -ErrorAction Stop
-    $currentAcl = $fs.ACL
-
-    $accessPattern  = "^${aclType}:${PrincipalId}:"
-    $defaultPattern = "^default:${aclType}:${PrincipalId}:"
-    $hasAccess  = $currentAcl | Where-Object { $_.ToString() -match $accessPattern }
-    $hasDefault = $currentAcl | Where-Object { $_.ToString() -match $defaultPattern }
-
-    if ($hasAccess -and $hasDefault) {
+    $currentAcl = az storage fs access show --file-system $ContainerName --path "/" --account-name $StorageAccountName --auth-mode login --query acl -o tsv 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not read ADLS Gen2 ACL on '$ContainerName': $($currentAcl -join ' ')"
+    }
+    $aclString = ($currentAcl -join "`n").Trim()
+    $accessPattern  = "(^|,)${aclType}:${PrincipalId}:"
+    $defaultPattern = "(^|,)default:${aclType}:${PrincipalId}:"
+    if ($aclString -match $accessPattern -and $aclString -match $defaultPattern) {
         Write-Log "  ACL entries already exist for principal '$PrincipalId' on '$ContainerName'." 'INFO'
         return
     }
 
-    $acl = Set-AzDataLakeGen2ItemAclObject -AccessControlType $aclType -EntityId $PrincipalId -Permission $Permissions
-    $acl = Set-AzDataLakeGen2ItemAclObject -AccessControlType $aclType -EntityId $PrincipalId -Permission $Permissions -DefaultScope -InputObject $acl
-
+    $aclSpec = "${aclType}:${PrincipalId}:${Permissions},default:${aclType}:${PrincipalId}:${Permissions}"
     Write-Log "  Applying ACL recursively on container '$ContainerName'..." 'INFO'
-    Update-AzDataLakeGen2AclRecursive -Context $context -FileSystem $ContainerName -Acl $acl -ErrorAction Stop | Out-Null
+    $aclOut = az storage fs access update-recursive --acl $aclSpec --file-system $ContainerName --path "/" --account-name $StorageAccountName --auth-mode login --only-show-errors 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to apply ADLS Gen2 ACL recursively on '$ContainerName': $($aclOut -join ' ')"
+    }
     Write-Log "  ACL applied recursively." 'INFO'
 }
 
@@ -1468,7 +1501,7 @@ function Record-Step {
 
 # ── Step 0: Import modules ──
 foreach ($mod in @('Az.Accounts','Az.Storage')) {
-    if (-not (Get-Module -Name $mod)) { Import-Module $mod -ErrorAction Stop }
+    if (Get-Module -ListAvailable -Name $mod) { Import-Module $mod -ErrorAction SilentlyContinue }
 }
 
 $script:DeploymentSubscriptionId = $ExpectedSubscriptionId
@@ -1523,22 +1556,27 @@ if (-not $storageAccountName) {
 Write-Log "  Storage Account: $storageAccountName" 'INFO'
 
 # Verify the storage account has HNS enabled (ADLS Gen2)
-$storageAccount = Get-AzStorageAccount -ResourceGroupName $ResourceGroupName -Name $storageAccountName -ErrorAction Stop
-if (-not $storageAccount.EnableHierarchicalNamespace) {
+$saJson = az storage account show -g $ResourceGroupName -n $storageAccountName --query "{id:id, isHnsEnabled:isHnsEnabled}" -o json 2>&1
+if ($LASTEXITCODE -ne 0) {
+    throw "Storage account '$storageAccountName' not found in '$ResourceGroupName': $($saJson -join ' ')"
+}
+$storageAccountInfo = ($saJson -join "`n") | ConvertFrom-Json
+if (-not $storageAccountInfo.isHnsEnabled) {
     throw "Storage account '$storageAccountName' does not have HNS (ADLS Gen2) enabled."
 }
+$storageAccount = [PSCustomObject]@{ Id = $storageAccountInfo.id }
 Write-Log "  HNS (ADLS Gen2) confirmed." 'INFO'
 
 # Verify dicom-output only when imaging ingestion is selected.
-$ctx = $storageAccount.Context
 if ($SkipImagingPipeline) {
     Write-Log "  DICOM container verification skipped; clinical and OMOP ingestion remain enabled." 'INFO'
 } else {
-    $container = Get-AzStorageContainer -Name $DicomContainerName -Context $ctx -ErrorAction SilentlyContinue
-    if (-not $container) {
+    $existsOut = az storage container exists --name $DicomContainerName --account-name $storageAccountName --auth-mode login --query exists -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or $existsOut.Trim().ToLower() -ne 'true') {
         throw "Container '$DicomContainerName' not found in storage account '$storageAccountName'."
     }
-    $blobCount = (Get-AzStorageBlob -Container $DicomContainerName -Context $ctx -MaxCount 5 | Measure-Object).Count
+    $sampledBlobs = @(az storage blob list --container-name $DicomContainerName --account-name $storageAccountName --auth-mode login --num-results 5 --query "[].name" -o tsv 2>$null | Where-Object { $_ })
+    $blobCount = $sampledBlobs.Count
     Write-Log "  Container '$DicomContainerName' exists with blobs (sampled $blobCount)." 'INFO'
     if ($blobCount -eq 0) {
         throw "Container '$DicomContainerName' exists in storage account '$storageAccountName' but contains no sampled blobs. DICOM ingestion cannot proceed."
@@ -1603,10 +1641,13 @@ try {
 # Fallback to az ad if Fabric API didn't return the SP ID
 if (-not $workspacePrincipalId) {
     Write-Log "  Falling back to az ad sp lookup..." 'INFO'
-    $workspaceSP = Get-AzADServicePrincipal -DisplayName $FabricWorkspaceName -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($workspaceSP) {
-        $workspacePrincipalId = $workspaceSP.Id
-        $workspaceAppId = $workspaceSP.AppId
+    $spRaw = az ad sp list --display-name $FabricWorkspaceName --query "[0].{id:id, appId:appId}" -o json 2>$null
+    if ($LASTEXITCODE -eq 0 -and $spRaw) {
+        $workspaceSP = $spRaw | ConvertFrom-Json
+        if ($workspaceSP) {
+            $workspacePrincipalId = $workspaceSP.id
+            $workspaceAppId = $workspaceSP.appId
+        }
     }
 }
 
@@ -1632,16 +1673,18 @@ $result1 = Ensure-RoleAssignment -Scope $storageAccount.Id `
 if ($result1) { $rbacChanged = $true }
 
 # Also ensure the current user has Storage Blob Data Owner (required for ACL operations)
-$currentUser = (Get-AzContext).Account
-Write-Log "  Current user: $($currentUser.Id)" 'INFO'
-$currentUserObj = Get-AzADUser -UserPrincipalName $currentUser.Id -ErrorAction SilentlyContinue
-if ($currentUserObj) {
-    $result2 = Ensure-RoleAssignment -Scope $storageAccount.Id `
-        -PrincipalId $currentUserObj.Id `
-        -RoleDefinitionName 'Storage Blob Data Owner' `
-        -PrincipalType 'User' `
-        -Description "current user '$($currentUser.Id)'"
-    if ($result2) { $rbacChanged = $true }
+$signedInUserRaw = az ad signed-in-user show --query "{id:id, upn:userPrincipalName}" -o json 2>$null
+if ($LASTEXITCODE -eq 0 -and $signedInUserRaw) {
+    $signedInUser = $signedInUserRaw | ConvertFrom-Json
+    if ($signedInUser -and $signedInUser.id) {
+        Write-Log "  Current user: $($signedInUser.upn)" 'INFO'
+        $result2 = Ensure-RoleAssignment -Scope $storageAccount.Id `
+            -PrincipalId $signedInUser.id `
+            -RoleDefinitionName 'Storage Blob Data Owner' `
+            -PrincipalType 'User' `
+            -Description "current user '$($signedInUser.upn)'"
+        if ($result2) { $rbacChanged = $true }
+    }
 }
 
 if ($rbacChanged) {
@@ -1674,7 +1717,7 @@ if ($SkipImagingPipeline) {
             $aclSuccess = $true
             break
         } catch {
-            if ($aclAttempt -lt $aclMaxRetries -and $_.Exception.Message -match '403|AuthorizationPermissionMismatch') {
+            if ($aclAttempt -lt $aclMaxRetries -and $_.Exception.Message -match '403|AuthorizationPermissionMismatch|required permissions|PermissionMismatch') {
                 Write-Log "  ACL attempt $aclAttempt failed (RBAC not yet propagated). Waiting 60s before retry..." 'WARN'
                 Start-Sleep -Seconds 60
             } else {
@@ -2054,11 +2097,23 @@ if ($optionalSidecarPipelines.Count -gt 0) {
     Write-Log "  Detected $($optionalSidecarPipelines.Count) optional HDS sidecar pipeline(s). Claims/CCLF writers run serially to avoid Delta conflicts; disjoint sidecars remain non-blocking." 'INFO'
     foreach ($sidecarPipeline in $serializedSidecars) {
         $sidecarName = [string]$sidecarPipeline.displayName
-        $optionalSidecarResults += Invoke-OptionalDataPipelineSerialized -WorkspaceId $workspaceId -PipelineName $sidecarName -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -StepName "Sidecar Pipeline: $sidecarName"
+        if (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -PipelineName $sidecarName) {
+            Write-Log "─── Sidecar Pipeline: ${sidecarName}: latest run already Completed — reusing ───" 'INFO'
+            Record-Step -Name "Sidecar Pipeline: $sidecarName" -Status 'COMPLETED' -Seconds 0
+            $optionalSidecarResults += [pscustomobject]@{ Name = $sidecarName; Id = [string]$sidecarPipeline.id; Status = 'COMPLETED'; Invoked = $true; AlreadyRunning = $false }
+        } else {
+            $optionalSidecarResults += Invoke-OptionalDataPipelineSerialized -WorkspaceId $workspaceId -PipelineName $sidecarName -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -StepName "Sidecar Pipeline: $sidecarName"
+        }
     }
     foreach ($sidecarPipeline in $nonBlockingSidecars) {
         $sidecarName = [string]$sidecarPipeline.displayName
-        $optionalSidecarResults += Invoke-OptionalDataPipelineNonBlocking -WorkspaceId $workspaceId -PipelineName $sidecarName -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -StepName "Sidecar Pipeline: $sidecarName"
+        if (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -PipelineName $sidecarName) {
+            Write-Log "─── Sidecar Pipeline: ${sidecarName}: latest run already Completed — reusing ───" 'INFO'
+            Record-Step -Name "Sidecar Pipeline: $sidecarName" -Status 'COMPLETED' -Seconds 0
+            $optionalSidecarResults += [pscustomobject]@{ Name = $sidecarName; Id = [string]$sidecarPipeline.id; Status = 'COMPLETED'; Invoked = $true; AlreadyRunning = $false }
+        } else {
+            $optionalSidecarResults += Invoke-OptionalDataPipelineNonBlocking -WorkspaceId $workspaceId -PipelineName $sidecarName -Pipeline $sidecarPipeline -FabricHeaders $fabHeaders -StepName "Sidecar Pipeline: $sidecarName"
+        }
     }
 } else {
     Write-Log '  No optional HDS sidecar pipelines matched the configured names/patterns in the live workspace.' 'INFO'
@@ -2207,21 +2262,27 @@ if (-not $poaPipeline) {
         if (-not $runtime) { throw 'Outreach demo enrichment requires orchestrator/.venv. Run setup-prereqs.ps1.' }
         $demoPython = $runtime.executable
     }
-    & $demoPython (Join-Path $hlsRepoRoot 'synthea/apply_demo_enrichment.py') outreach `
-        --subscription $script:DeploymentSubscriptionId --resource-group $ResourceGroupName `
-        --workspace-id $workspaceId --bronze-lakehouse-name $BronzeLakehouseName
-    if ($LASTEXITCODE -ne 0) { throw "Outreach demo source seeding failed with exit code $LASTEXITCODE" }
-    $fabHeaders = Get-FabricApiHeaders -AccessToken (Get-FabricApiAccessToken)
-    $poaResult = Invoke-OptionalDataPipelineSerialized `
-        -WorkspaceId $workspaceId `
-        -PipelineName $PoaPipelineName `
-        -Pipeline $poaPipeline `
-        -FabricHeaders $fabHeaders `
-        -StepName 'POA Pipeline' `
-        -MaxAttempts 3 `
-        -TimeoutMinutes 60
-    $poaCompleted = $poaResult.Status -eq 'COMPLETED'
-    if (-not $poaCompleted) { throw "POA pipeline did not complete" }
+    if (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $poaPipeline -FabricHeaders $fabHeaders -PipelineName $PoaPipelineName) {
+        Write-Log "  ✓ POA pipeline '$PoaPipelineName' latest run already Completed — skipping outreach re-seeding and POA rerun." 'INFO'
+        Record-Step -Name 'POA Pipeline' -Status 'COMPLETED' -Seconds 0
+        $poaCompleted = $true
+    } else {
+        & $demoPython (Join-Path $hlsRepoRoot 'synthea/apply_demo_enrichment.py') outreach `
+            --subscription $script:DeploymentSubscriptionId --resource-group $ResourceGroupName `
+            --workspace-id $workspaceId --bronze-lakehouse-name $BronzeLakehouseName
+        if ($LASTEXITCODE -ne 0) { throw "Outreach demo source seeding failed with exit code $LASTEXITCODE" }
+        $fabHeaders = Get-FabricApiHeaders -AccessToken (Get-FabricApiAccessToken)
+        $poaResult = Invoke-OptionalDataPipelineSerialized `
+            -WorkspaceId $workspaceId `
+            -PipelineName $PoaPipelineName `
+            -Pipeline $poaPipeline `
+            -FabricHeaders $fabHeaders `
+            -StepName 'POA Pipeline' `
+            -MaxAttempts 3 `
+            -TimeoutMinutes 60
+        $poaCompleted = $poaResult.Status -eq 'COMPLETED'
+        if (-not $poaCompleted) { throw "POA pipeline did not complete" }
+    }
 }
 
 # ── Step 9c: Optional CMA follow-up (non-blocking) ──
@@ -2236,6 +2297,12 @@ if (-not $cmaPipeline) {
     $cmaTimer.Stop()
     Record-Step -Name 'CMA Pipeline' -Status 'SKIPPED' -Seconds $cmaTimer.Elapsed.TotalSeconds
     $cmaResult = [pscustomobject]@{ Name = $CmaPipelineName; Id = $cmaId; Status = 'SKIPPED'; Invoked = $false; AlreadyRunning = $false }
+} elseif (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $cmaPipeline -FabricHeaders $fabHeaders -PipelineName $CmaPipelineName) {
+    Write-Log "─── Step 9c: CMA pipeline '$CmaPipelineName' latest run already Completed — reusing ───" 'INFO'
+    Record-Step -Name 'CMA Pipeline' -Status 'COMPLETED' -Seconds 0
+    $cmaResult = [pscustomobject]@{ Name = $CmaPipelineName; Id = $cmaId; Status = 'COMPLETED'; Invoked = $true; AlreadyRunning = $false }
+    $cmaInvoked = $true
+    $cmaCompleted = $true
 } else {
     $cmaResult = Invoke-OptionalDataPipelineNonBlocking -WorkspaceId $workspaceId -PipelineName $CmaPipelineName -Pipeline $cmaPipeline -FabricHeaders $fabHeaders -StepName 'CMA Pipeline'
     $cmaInvoked = [bool]$cmaResult.Invoked
@@ -2249,6 +2316,10 @@ $imgAttempt = 1
 
 if ($SkipImagingPipeline) {
     Write-Log '─── Step 9b: Imaging Ingestion Pipeline intentionally skipped ───' 'INFO'
+    $imgCompleted = $true
+    $step9Timer.Stop()
+} elseif ($clinicalCompleted -and $imagingPipeline -and (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $imagingPipeline -FabricHeaders $fabHeaders -PipelineName $ImagingPipelineName)) {
+    Write-Log "─── Step 9b: Imaging pipeline '$ImagingPipelineName' latest run already Completed — reusing ───" 'INFO'
     $imgCompleted = $true
     $step9Timer.Stop()
 } elseif ($clinicalCompleted) {
@@ -2388,6 +2459,7 @@ Record-Step -Name 'Imaging Pipeline' -Status $(if ($SkipImagingPipeline) { 'SKIP
 # IMPORTANT: OMOP cannot run in parallel with any other HDS pipeline.
 $step10Timer = [System.Diagnostics.Stopwatch]::StartNew()
 $omopPipeline = $null  # Initialize to avoid unset variable errors in summary
+$omopId = $null
 
 if (-not $clinicalCompleted -or (-not $SkipImagingPipeline -and -not $imgCompleted)) {
     Write-Log '─── Step 10: SKIPPING OMOP pipeline (required ingestion prerequisite incomplete) ───' 'WARN'
@@ -2415,6 +2487,7 @@ if ($pipelineResult2.Response.PSObject.Properties['value']) {
 }
 
 $omopPipeline = $pipelines2 | Where-Object { $_.displayName -eq $OmopPipelineName } | Select-Object -First 1
+$omopId = if ($omopPipeline) { [string]$omopPipeline.id } else { $null }
 if (-not $omopPipeline) {
     Write-Log "  OMOP pipeline '$OmopPipelineName' not found." 'WARN'
     Write-Log "  Available pipelines:" 'INFO'
@@ -2422,6 +2495,11 @@ if (-not $omopPipeline) {
     Write-Log "  Skipping OMOP pipeline — it may not be deployed yet." 'WARN'
     $step10Timer.Stop()
     Record-Step -Name 'OMOP Pipeline' -Status 'NOT FOUND' -Seconds $step10Timer.Elapsed.TotalSeconds
+} elseif (Test-PipelineLatestRunCompleted -WorkspaceId $workspaceId -Pipeline $omopPipeline -FabricHeaders $fabHeaders -PipelineName $OmopPipelineName) {
+    Write-Log "  ✓ OMOP pipeline '$OmopPipelineName' latest run already Completed — skipping OMOP rerun." 'INFO'
+    $omopCompleted = $true
+    $step10Timer.Stop()
+    Record-Step -Name 'OMOP Pipeline' -Status 'COMPLETED' -Seconds $step10Timer.Elapsed.TotalSeconds
 } else {
     $omopId = $omopPipeline.id
     Write-Log "  Found '$OmopPipelineName' (ID: $omopId)" 'INFO'
@@ -2432,7 +2510,6 @@ if (-not $omopPipeline) {
     $omopInvoked = $false
     $omopCompleted = $false
     $omopFailed = $false
-
     try {
         Invoke-FabricApiRequest -Method Post -Uri $omopRunUri -Headers $fabHeaders -Description "Run pipeline '$OmopPipelineName'"
         Write-Log "  OMOP pipeline invoked successfully (202 Accepted)." 'INFO'
@@ -2584,10 +2661,9 @@ $ciPrerequisitesReady = $false
 if ($ciPipeline -and $clinicalCompleted) {
     try {
         Use-DeploymentAzSubscription
-        $ciStorageContext = New-AzStorageContext -StorageAccountName $storageAccountName -UseConnectedAccount
-        $ciContainer = Get-AzStorageContainer -Name $CustomerInsightsContainerName -Context $ciStorageContext -ErrorAction SilentlyContinue
-        if (-not $ciContainer) {
-            $null = New-AzStorageContainer -Name $CustomerInsightsContainerName -Context $ciStorageContext -Permission Off
+        $ciExists = az storage container exists --name $CustomerInsightsContainerName --account-name $storageAccountName --auth-mode login --query exists -o tsv 2>$null
+        if ($LASTEXITCODE -ne 0 -or $ciExists.Trim().ToLower() -ne 'true') {
+            az storage container create --name $CustomerInsightsContainerName --account-name $storageAccountName --auth-mode login --only-show-errors | Out-Null
             Write-Log "  Created Customer Insights ADLS container '$CustomerInsightsContainerName'." 'INFO'
         } else {
             Write-Log "  Customer Insights ADLS container '$CustomerInsightsContainerName' already exists." 'INFO'
@@ -2691,7 +2767,7 @@ Write-Host "  Step Summary:" -ForegroundColor White
 Write-Host "  $('─' * 55)" -ForegroundColor DarkGray
 
 foreach ($r in $stepResults) {
-    $icon = if ($r.Status -in @('OK','COMPLETED','INVOKED','SKIPPED','ALREADY RUNNING','ASSIGNED','OVERWRITTEN/BOUND')) { '✓' } else { '✗' }
+    $icon = if ($r.Status -in @('OK','EXISTS','COMPLETED','INVOKED','SKIPPED','ALREADY RUNNING','ASSIGNED','OVERWRITTEN/BOUND')) { '✓' } else { '✗' }
     $color = if ($icon -eq '✓') { 'Green' } else { 'Yellow' }
     $line = "  $icon  $($r.Step.PadRight(30)) $($r.Status.PadRight(15)) $($r.Duration)"
     Write-Host $line -ForegroundColor $color

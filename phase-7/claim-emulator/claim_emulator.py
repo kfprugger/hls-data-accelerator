@@ -4,9 +4,10 @@ import random
 import sys
 import time
 import traceback
+import threading
 import uuid
 from datetime import datetime, timezone
-
+from http.server import BaseHTTPRequestHandler, HTTPServer
 # Force stdout/stderr to be unbuffered for ACI logging
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
@@ -39,6 +40,54 @@ print(f"PATIENT_COUNT: {PATIENT_COUNT}", flush=True)
 print(f"FRAUD_VELOCITY_PROVIDER_ID: {FRAUD_VELOCITY_PROVIDER_ID}", flush=True)
 print(f"FRAUD_AMOUNT_MULTIPLIER: {FRAUD_AMOUNT_MULTIPLIER}", flush=True)
 
+
+METRICS = {
+    "started_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "cycles_completed": 0,
+    "events_sent": 0,
+    "reconnect_attempts": 0,
+    "last_batch_at": None,
+    "last_error": None,
+    "healthy": True,
+}
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ("/healthz", "/readyz", "/"):
+            code = 200 if METRICS["healthy"] else 503
+            body = json.dumps({"status": "ok" if METRICS["healthy"] else "degraded", "rate_per_minute": CLAIM_EVENT_RATE_PER_MINUTE, **METRICS}).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/metrics":
+            lines = [
+                f"claim_emulator_rate_per_minute {CLAIM_EVENT_RATE_PER_MINUTE}",
+                f"claim_emulator_cycles_total {METRICS['cycles_completed']}",
+                f"claim_emulator_events_sent_total {METRICS['events_sent']}",
+                f"claim_emulator_reconnect_attempts_total {METRICS['reconnect_attempts']}",
+                f"claim_emulator_healthy {1 if METRICS['healthy'] else 0}",
+            ]
+            body = ("\n".join(lines) + "\n").encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+    def log_message(self, format, *args):
+        return
+
+def start_health_server():
+    port = int(os.getenv("HEALTH_PORT", "8080"))
+    try:
+        srv = HTTPServer(("0.0.0.0", port), HealthHandler)
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        print(f"Claim emulator health & metrics server listening on :{port} (/healthz, /metrics)", flush=True)
+    except Exception as exc:
+        print(f"Health server warning: {exc}", flush=True)
 DIAGNOSIS_PROFILES = {
     "E11.9": {
         "procedures": [("99213", 36), ("99214", 30), ("80053", 22), ("99215", 8), ("99282", 2), ("99283", 2)],
@@ -177,69 +226,81 @@ def generate_claim(counter: int) -> dict:
 
 
 def run():
-    try:
-        if EventHubProducerClient is None or ManagedIdentityCredential is None or EventData is None:
-            raise RuntimeError("Azure SDK packages azure-eventhub and azure-identity are required when running the sender loop")
-        print("Connecting to Event Hub using Managed Identity...", flush=True)
-        credential = ManagedIdentityCredential()
+    if EventHubProducerClient is None or ManagedIdentityCredential is None or EventData is None:
+        raise RuntimeError("Azure SDK packages azure-eventhub and azure-identity are required when running the sender loop")
+    start_health_server()
+    print("Connecting to Event Hub using Managed Identity...", flush=True)
+    credential = ManagedIdentityCredential()
+    fully_qualified_namespace = f"{EVENT_HUB_NAMESPACE}.servicebus.windows.net"
+    print(f"FQNS: {fully_qualified_namespace}", flush=True)
+    events_per_second = CLAIM_EVENT_RATE_PER_MINUTE / 60.0
+    accumulator = 0.0
+    # Seed starting counter from current UTC epoch seconds so container restarts
+    # never re-emit duplicate event_id or claim_id keys from counter=1..N.
+    counter = int(os.getenv("CLAIM_START_COUNTER", str(int(time.time()))))
+    cycle = 0
+    attempt = 0
+    last_payload = None
 
-        fully_qualified_namespace = f"{EVENT_HUB_NAMESPACE}.servicebus.windows.net"
-        print(f"FQNS: {fully_qualified_namespace}", flush=True)
+    while True:
+        try:
+            print("Creating producer...", flush=True)
+            producer = EventHubProducerClient(
+                fully_qualified_namespace=fully_qualified_namespace,
+                eventhub_name=EVENT_HUB_NAME,
+                credential=credential,
+            )
+            print("Entering producer context...", flush=True)
+            with producer:
+                attempt = 0
+                print(f"Starting claim event loop (starting counter={counter})...", flush=True)
+                while True:
+                    accumulator += events_per_second
+                    count = int(accumulator)
+                    if count <= 0:
+                        time.sleep(1)
+                        continue
+                    accumulator -= count
 
-        print("Creating producer...", flush=True)
-        producer = EventHubProducerClient(
-            fully_qualified_namespace=fully_qualified_namespace,
-            eventhub_name=EVENT_HUB_NAME,
-            credential=credential,
-        )
+                    batch = producer.create_batch()
+                    sent = 0
+                    for _ in range(count):
+                        counter += 1
+                        payload = generate_claim(counter)
+                        last_payload = payload
+                        try:
+                            batch.add(EventData(json.dumps(payload)))
+                        except ValueError:
+                            producer.send_batch(batch)
+                            batch = producer.create_batch()
+                            batch.add(EventData(json.dumps(payload)))
+                        sent += 1
 
-        events_per_second = CLAIM_EVENT_RATE_PER_MINUTE / 60.0
-        accumulator = 0.0
-        counter = 0
-        cycle = 0
-        last_payload = None
+                    producer.send_batch(batch)
+                    cycle += 1
+                    METRICS["cycles_completed"] = cycle
+                    METRICS["events_sent"] += sent
+                    METRICS["last_batch_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    METRICS["healthy"] = True
 
-        print("Entering producer context...", flush=True)
-        with producer:
-            print("Starting claim event loop...", flush=True)
-            while True:
-                accumulator += events_per_second
-                count = int(accumulator)
-                if count <= 0:
+                    if cycle % 10 == 0 and last_payload is not None:
+                        print(
+                            f"Cycle {cycle}: sent {sent} claim events to {EVENT_HUB_NAMESPACE}/{EVENT_HUB_NAME}; "
+                            f"last_provider={last_payload['provider_id']}; last_flags={last_payload['injected_fraud_flags']}",
+                            flush=True,
+                        )
+
                     time.sleep(1)
-                    continue
-                accumulator -= count
-
-                batch = producer.create_batch()
-                sent = 0
-                for _ in range(count):
-                    counter += 1
-                    payload = generate_claim(counter)
-                    last_payload = payload
-                    try:
-                        batch.add(EventData(json.dumps(payload)))
-                    except ValueError:
-                        producer.send_batch(batch)
-                        batch = producer.create_batch()
-                        batch.add(EventData(json.dumps(payload)))
-                    sent += 1
-
-                producer.send_batch(batch)
-                cycle += 1
-
-                if cycle % 10 == 0 and last_payload is not None:
-                    print(
-                        f"Cycle {cycle}: sent {sent} claim events to {EVENT_HUB_NAMESPACE}/{EVENT_HUB_NAME}; "
-                        f"last_provider={last_payload['provider_id']}; last_flags={last_payload['injected_fraud_flags']}",
-                        flush=True,
-                    )
-
-                time.sleep(1)
-    except Exception as e:
-        print(f"!!! Fatal Error: {e}", flush=True)
-        traceback.print_exc()
-        time.sleep(60)
-        raise
+        except Exception as e:
+            attempt += 1
+            METRICS["reconnect_attempts"] += 1
+            METRICS["last_error"] = str(e)
+            METRICS["healthy"] = False
+            delay = min(30, 2 ** min(attempt, 5))
+            print(f"!!! Transient Claim Producer Error (attempt {attempt}, reconnecting in {delay}s): {e}", flush=True)
+            sys.stdout.flush()
+            sys.stderr.flush()
+            time.sleep(delay)
 
 
 if __name__ == "__main__":

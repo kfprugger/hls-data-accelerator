@@ -1,11 +1,10 @@
-import { MessageBar, MessageBarBody } from "@fluentui/react-components";
+import { Alert, Box } from "@mui/material";
+
 
 export function MockDataBanner() {
-  return (
-    <MessageBar intent="warning" style={{ marginBottom: 12 }}>
-      <MessageBarBody>
+    return (<Alert style={{ marginBottom: 12 }} severity={"warning"}>
+      <Box>
         <strong>Mock data in use</strong> — The backend is unavailable. Displaying simulated data.
-      </MessageBarBody>
-    </MessageBar>
-  );
+      </Box>
+    </Alert>);
 }

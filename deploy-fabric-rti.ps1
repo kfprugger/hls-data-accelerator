@@ -101,17 +101,25 @@ function Get-AccessTokenForResource {
     $cached = $script:AccessTokenCache[$key]
     if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
 
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
-    $rawToken = $tokenObj.Token
-    if ($rawToken -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
-        try { $rawToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-    } elseif ($rawToken -isnot [string]) {
-        $rawToken = $rawToken | ConvertFrom-SecureString -AsPlainText
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        $rawToken = $tokenObj.Token
+        if ($rawToken -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
+            try { $rawToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        } elseif ($rawToken -isnot [string]) {
+            $rawToken = $rawToken | ConvertFrom-SecureString -AsPlainText
+        }
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = $tokenObj.ExpiresOn }
+        return $rawToken
+    } catch {
+        $cliJson = az account get-access-token --resource $ResourceUrl -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $rawToken = [string]$cliJson.accessToken
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $rawToken
     }
-    $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = $tokenObj.ExpiresOn }
-    return $rawToken
 }
 
 function Get-FabricAccessToken {
@@ -1117,7 +1125,7 @@ dependencies:
     # small local table instead of snapshotting the alert result itself.
     Write-Host ""
     Write-Host "  Refreshing patient-to-facility location mapping..." -ForegroundColor White
-    $cmd = '.set-or-replace PatientLocationDashboard <| let patient_encounters = external_table(''SilverEncounter'') | mv-expand loc = location | extend patient_orig_id = coalesce(tostring(subject.idOrig), replace_string(tostring(subject.msftSourceReference), "Patient/", ""), tostring(subject.identifier.value)), location_key = coalesce(tostring(loc.location.id), tostring(loc.location.identifier.value)) | where isnotempty(patient_orig_id) and isnotempty(location_key) | summarize arg_max(todatetime(period.start), location_key) by patient_orig_id | project patient_orig_id, location_key; let location_info = external_table(''SilverLocation'') | where isnotempty(position) | extend location_keys = pack_array(tostring(id), tostring(idOrig)) | mv-expand location_key = location_keys | where isnotempty(location_key) | project location_key = tostring(location_key), location_name = name, latitude = todouble(position.latitude), longitude = todouble(position.longitude), city = tostring(address.city), state = tostring(address.state); patient_encounters | join kind=leftouter location_info on location_key | project patient_id = patient_orig_id, location_name = coalesce(location_name, "Unknown (no Encounter Location match)"), city = coalesce(city, "Unknown"), state = coalesce(state, ""), latitude, longitude'
+    $cmd = '.set-or-replace PatientLocationDashboard <| (external_table(''SilverEncounter'') | mv-expand loc = location | extend patient_orig_id = coalesce(tostring(subject.idOrig), replace_string(tostring(subject.msftSourceReference), "Patient/", ""), tostring(subject.identifier.value)), location_key = coalesce(tostring(loc.location.id), tostring(loc.location.identifier.value)) | where isnotempty(patient_orig_id) and isnotempty(location_key) | summarize arg_max(todatetime(period.start), location_key) by patient_orig_id | project patient_orig_id, location_key) | join kind=leftouter (external_table(''SilverLocation'') | where isnotempty(position) | extend location_keys = pack_array(tostring(id), tostring(idOrig)) | mv-expand location_key = location_keys | where isnotempty(location_key) | project location_key = tostring(location_key), location_name = name, latitude = todouble(position.latitude), longitude = todouble(position.longitude), city = tostring(address.city), state = tostring(address.state)) on location_key | project patient_id = patient_orig_id, location_name = coalesce(location_name, "Unknown (no Encounter Location match)"), city = coalesce(city, "Unknown"), state = coalesce(state, ""), latitude, longitude'
     if (Invoke-KustoMgmt -Command $cmd -Label "PatientLocationDashboard mapping" @kqlParams) { $p2Success++ } else { $p2Fail++ }
 
     Write-Host "  Deploying fn_AlertLocationMap (live alerts + cached location mapping)..." -ForegroundColor White
@@ -1357,20 +1365,20 @@ Write-Host ""
 Write-Host "--- STEP 0: VALIDATING PREREQUISITES ---" -ForegroundColor Cyan
 
 # Verify Az module
-if (-not (Get-Module -ListAvailable -Name Az.Accounts)) {
-    Write-Host "ERROR: Az PowerShell module not found. Run: Install-Module Az" -ForegroundColor Red
-    exit 1
-}
-Write-Host "  ✓ Az PowerShell module found" -ForegroundColor Green
-
-# Verify logged in
+# Verify logged in via Azure CLI (with Az PowerShell fallback)
 try {
-    $azContext = Get-AzContext
-    if (-not $azContext) { throw "No Az context" }
-    Write-Host "  ✓ Authenticated as: $($azContext.Account.Id)" -ForegroundColor Green
-    Write-Host "  ✓ Subscription: $($azContext.Subscription.Name) ($($azContext.Subscription.Id))" -ForegroundColor Green
+    $cliAcct = az account show -o json 2>$null | ConvertFrom-Json
+    if ($cliAcct -and $cliAcct.id) {
+        Write-Host "  ✓ Authenticated as: $($cliAcct.user.name)" -ForegroundColor Green
+        Write-Host "  ✓ Subscription: $($cliAcct.name) ($($cliAcct.id))" -ForegroundColor Green
+    } else {
+        $azContext = Get-AzContext -ErrorAction Stop
+        if (-not $azContext) { throw "No Az context" }
+        Write-Host "  ✓ Authenticated as: $($azContext.Account.Id)" -ForegroundColor Green
+        Write-Host "  ✓ Subscription: $($azContext.Subscription.Name) ($($azContext.Subscription.Id))" -ForegroundColor Green
+    }
 } catch {
-    Write-Host "ERROR: Not logged in. Run: Connect-AzAccount" -ForegroundColor Red
+    Write-Host "ERROR: Not logged in. Run: az login" -ForegroundColor Red
     exit 1
 }
 
@@ -1848,21 +1856,19 @@ if (-not $ehConnStr) {
             Write-Host "  ✓ Cloud connection already exists: $connectionName (ID: $dataConnectionId)" -ForegroundColor Green
         }
 
-        # Clean up stale connections from previous deployments that used the old
-        # non-unique name format ("masimo-eh-<EventHubName>") or unique names from
-        # other namespaces. These point at deleted Event Hub namespaces and break
-        # the Eventstream source if Fabric picks them up.
-        $staleNamePattern = "^masimo-eh-(.+-)?$([regex]::Escape($EventHubName))$"
+        # Clean up only the legacy non-unique connection name ("masimo-eh-<EventHubName>").
+        # Never delete connections belonging to other Event Hub namespaces (e.g., side-by-side workspaces).
+        $legacyName = "masimo-eh-$EventHubName"
         $staleConns = $existingConns.value | Where-Object {
-            $_.displayName -match $staleNamePattern -and $_.displayName -ne $connectionName
+            $_.displayName -eq $legacyName -and $_.displayName -ne $connectionName
         }
         foreach ($stale in $staleConns) {
-            Write-Host "  Removing stale Event Hub connection '$($stale.displayName)' ($($stale.id))..." -ForegroundColor Yellow
+            Write-Host "  Removing legacy non-unique Event Hub connection '$($stale.displayName)' ($($stale.id))..." -ForegroundColor Yellow
             try {
                 Invoke-FabricApi -Method "DELETE" -Endpoint "/connections/$($stale.id)" | Out-Null
-                Write-Host "  ✓ Removed stale connection" -ForegroundColor Green
+                Write-Host "  ✓ Removed legacy connection" -ForegroundColor Green
             } catch {
-                Write-Host "  ⚠ Could not remove stale connection: $_" -ForegroundColor Yellow
+                Write-Host "  ⚠ Could not remove legacy connection: $_" -ForegroundColor Yellow
             }
         }
     } catch {

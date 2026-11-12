@@ -84,6 +84,12 @@ class LocalServerHealthTests(unittest.TestCase):
         module.add_form_history = lambda *args, **kwargs: None
         module.get_dismissed_teardowns = lambda *args, **kwargs: []
         module.dismiss_teardown = lambda *args, **kwargs: None
+        module.record_deployment_form_history = lambda *args, **kwargs: 0
+        module.backfill_form_history_from_deployments = lambda *args, **kwargs: 0
+        module.reconcile_from_state_tracking_dir = lambda *args, **kwargs: []
+        module.import_target_history_from_shared_storage = lambda *args, **kwargs: {
+            "importedDeployments": 0, "importedFormHistory": 0, "reconstructedLedgers": 0
+        }
         return module
 
     def _import_local_server(self):
@@ -223,6 +229,34 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertTrue(result["ready"])
         self.assertEqual(result["aligned"], {"subscription": True, "tenant": True})
 
+
+    def test_auth_probe_delegates_az_powershell_when_only_azure_cli_is_logged_in(self) -> None:
+        def fake_az_run(args: list[str], **kwargs):
+            if args[0] == "az" and args[1] == "version":
+                return types.SimpleNamespace(returncode=0, stdout="{}", stderr="")
+            if args[0] == "az" and args[1:3] == ["account", "show"]:
+                return types.SimpleNamespace(
+                    returncode=0,
+                    stdout='{"user":"cli-user@jbatl.dev","subscriptionName":"Production","subscriptionId":"SUB-123","tenantId":"TENANT-456"}',
+                    stderr="",
+                )
+            if args[0] == "pwsh":
+                return types.SimpleNamespace(
+                    returncode=0,
+                    stdout='{"installed":true,"loggedIn":false,"user":"","subscriptionName":"","subscriptionId":"","tenantId":"","error":"No active Az context"}',
+                    stderr="",
+                )
+            raise AssertionError(f"unexpected command: {args!r}")
+
+        with patch.object(self.local_server, "_az_run", side_effect=fake_az_run):
+            result = self.local_server._get_auth_context_sync()
+
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["issues"], [])
+        self.assertTrue(result["pwsh"]["loggedIn"])
+        self.assertTrue(result["pwsh"].get("delegatedToCli"))
+        self.assertEqual(result["pwsh"]["user"], "cli-user@jbatl.dev")
+        self.assertEqual(result["aligned"], {"subscription": True, "tenant": True})
     def test_phase_log_matching_accepts_ui_cards_for_backend_phase_names(self) -> None:
         matching_cases = [
             (
@@ -258,31 +292,35 @@ class LocalServerHealthTests(unittest.TestCase):
         )
 
 
+    def test_deploy_request_requires_explicit_nonempty_azure_targets(self) -> None:
+        with self.assertRaises(ValueError):
+            self.local_server.DeployRequest(fabric_workspace_name="test")
+        for invalid in ("", "not-a-uuid", "00000000-0000-0000-0000-000000000000"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                self.local_server.DeployRequest(
+                    expected_tenant_id=invalid,
+                    expected_subscription_id="22222222-2222-2222-2222-222222222222",
+                )
+
     def test_local_deploy_request_defaults_reseed_off_and_rejects_reuse(self) -> None:
-        request = self.local_server.DeployRequest(fabric_workspace_name="med-test")
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test")
 
         self.assertFalse(request.reseed_data)
-        cached = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test", patient_count=250, use_cached_synthea=True
-        )
+        cached = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test", patient_count=250, use_cached_synthea=True)
         self.assertEqual(cached.patient_count, 100)
         with self.assertRaisesRegex(ValueError, "mutually exclusive"):
-            self.local_server.DeployRequest(
-                fabric_workspace_name="med-test",
-                reuse_patients=True,
-                reseed_data=True,
-            )
+            self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+            reuse_patients=True,
+            reseed_data=True,)
 
     def test_local_reseed_overrides_resume_and_skip_flags(self) -> None:
-        request = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test",
-            reseed_data=True,
-            skip_fhir=True,
-            skip_synthea=True,
-            skip_device_assoc=True,
-            skip_fhir_export=True,
-            skip_hds_pipelines=True,
-        )
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+        reseed_data=True,
+        skip_fhir=True,
+        skip_synthea=True,
+        skip_device_assoc=True,
+        skip_fhir_export=True,
+        skip_hds_pipelines=True,)
         request.reuse_patients = True  # Simulate a live auto-resume mutation.
 
         self.local_server._apply_reseed_data(request)
@@ -336,10 +374,8 @@ class LocalServerHealthTests(unittest.TestCase):
         )
 
     def test_continuation_reuses_rti_without_disabling_downstream_features(self) -> None:
-        request = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test",
-            resource_group_name="rg-med-test",
-        )
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+        resource_group_name="rg-med-test",)
         prior = {
             "instanceId": "prior-run",
             "output": {
@@ -367,7 +403,7 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertFalse(request.skip_graph_agent)
 
     def _live_continuation(self, cloud_state: dict, counts: dict):
-        request = self.local_server.DeployRequest(fabric_workspace_name="med-test", resource_group_name="rg-med-test")
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test", resource_group_name="rg-med-test")
         with (
             patch.object(self.local_server, "_cloud_state_sync", return_value=cloud_state),
             patch.object(self.local_server, "_live_resume_prerequisites", return_value={"fhirCounts": counts}),
@@ -399,10 +435,8 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertEqual(state["resourceGroup"]["status"], "unreachable")
 
     def _ontology_resume(self, phases: list[dict]):
-        request = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test",
-            resource_group_name="rg-med-test",
-        )
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+        resource_group_name="rg-med-test",)
         prior = {"instanceId": "prior-run", "output": {"phases": phases}}
         with (
             patch.object(self.local_server, "_cloud_state_sync", return_value={"workspace": {"exists": True}, "resourceGroup": {"exists": True}}),
@@ -434,7 +468,7 @@ class LocalServerHealthTests(unittest.TestCase):
             return {"instanceId": instance_id, "runtimeStatus": status, "createdTime": created,
                     "customStatus": {"workspaceName": "med-test", "resourceGroupName": "rg-med-test"}}
 
-        request = self.local_server.DeployRequest(fabric_workspace_name="med-test", resource_group_name="rg-med-test")
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test", resource_group_name="rg-med-test")
         self.local_server.deployments.clear()
         self.local_server.deployments["older-failed"] = record("older-failed", "Failed", "2026-10-05T13:42:27Z")
         self.local_server.deployments["newer-completed"] = record("newer-completed", "Completed", "2026-10-05T14:19:12Z")
@@ -448,11 +482,9 @@ class LocalServerHealthTests(unittest.TestCase):
         self.local_server.deployments.clear()
 
     def test_scaffolding_only_disables_all_data_producers(self) -> None:
-        request = self.local_server.DeployRequest(
-            fabric_workspace_name="med-test",
-            resource_group_name="rg-med-test",
-            scaffolding_only=True,
-        )
+        request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
+        resource_group_name="rg-med-test",
+        scaffolding_only=True,)
 
         self.local_server._apply_scaffolding_only(request)
 
@@ -676,6 +708,83 @@ class LocalServerHealthTests(unittest.TestCase):
 
         self.assertFalse((repo / "state-tracking" / ".deployment-state-ws-a.json").exists())
         self.assertTrue(other.exists())
+
+    def test_deploy_request_rejects_cardiology_prefix_longer_than_twelve_chars(self) -> None:
+        base = {
+            "fabric_workspace_name": "med-1028",
+            "resource_group_name": "rg-med-1028",
+            "expected_tenant_id": "8d038e6a-9b7d-4cb8-bbcf-e84dff156478",
+            "expected_subscription_id": "9bbee190-dc61-4c58-ab47-1275cb04018f",
+        }
+        valid = self.local_server.DeployRequest(**base, cardiology_prefix="cardioed1028")
+        self.assertEqual(valid.cardiology_prefix, "cardioed1028")
+        with self.assertRaisesRegex(Exception, "3–12 lowercase letters/digits"):
+            self.local_server.DeployRequest(**base, cardiology_prefix="cardiomed1027")
+
+    def test_chained_continuation_inherits_successful_phases_from_ancestor_runs(self) -> None:
+        run_a = {
+            "instanceId": "run-a",
+            "runtimeStatus": "Failed",
+            "customStatus": {"workspaceName": "med-1102", "resourceGroupName": "rg-med-1102", "logs": []},
+            "output": {
+                "phases": [
+                    {"phase": "Phase 2: Fabric RTI", "status": "succeeded"},
+                    {"phase": "Phase 3: HDS Source Deployment", "status": "succeeded"},
+                    {"phase": "Phase 2: Fabric RTI Enrichment (auto)", "status": "succeeded"},
+                ]
+            },
+        }
+        run_b = {
+            "instanceId": "run-b",
+            "runtimeStatus": "Failed",
+            "customStatus": {
+                "workspaceName": "med-1102",
+                "resourceGroupName": "rg-med-1102",
+                "continuedFrom": "run-a",
+                "logs": [],
+            },
+            "output": {
+                "phases": [
+                    {"phase": "Phase 3: DICOM Shortcut + HDS Pipelines (auto)", "status": "succeeded"},
+                ]
+            },
+        }
+        self.local_server.deployments["run-a"] = run_a
+        self.local_server.deployments["run-b"] = run_b
+        self.addCleanup(self.local_server.deployments.pop, "run-a", None)
+        self.addCleanup(self.local_server.deployments.pop, "run-b", None)
+
+        req = self.local_server.DeployRequest(
+            fabric_workspace_name="med-1102",
+            resource_group_name="rg-med-1102",
+            expected_tenant_id="c77e97fc-1859-4575-8c8b-53d74bc35a63",
+            expected_subscription_id="0525a464-e087-4084-a24e-a90396a83c15",
+            continue_from_instance_id="run-b",
+        )
+        with (
+            patch.object(
+                self.local_server,
+                "_cloud_state_sync",
+                return_value={"workspace": {"exists": True}, "resourceGroup": {"exists": True}},
+            ),
+            patch.object(
+                self.local_server,
+                "_live_resume_prerequisites",
+                return_value={},
+            ),
+            patch.object(
+                self.local_server,
+                "_phase_live_prerequisites_ok",
+                return_value=(True, "ok"),
+            ),
+        ):
+            applied = self.local_server._apply_success_skips_from_deployment(req, run_b, "Continue-from-failure")
+
+        self.assertTrue(applied)
+        self.assertTrue(req.reuse_fabric_rti)
+        self.assertTrue(req.skip_rti_phase2)
+        self.assertTrue(req.skip_hds_source)
+        self.assertTrue(req.skip_hds_pipelines)
 
 
 if __name__ == "__main__":

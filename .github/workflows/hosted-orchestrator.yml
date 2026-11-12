@@ -1,0 +1,58 @@
+name: Hosted HLS orchestrator
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      wardflow_commit:
+        description: 'Full WardFlow commit SHA of a published hls-wardflow-bundle (empty uses vars.WARDFLOW_REF)'
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: hosted-orchestrator-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out HLS source
+        uses: actions/checkout@v4
+        with:
+          path: source
+          persist-credentials: false
+      - name: Require a published WardFlow bundle revision
+        shell: pwsh
+        env:
+          WARDFLOW_REF: ${{ inputs.wardflow_commit || vars.WARDFLOW_REF }}
+        run: |
+          if ($env:WARDFLOW_REF -notmatch '^[0-9a-f]{40}$') { throw 'Set repository variable WARDFLOW_REF to the full commit of a published WardFlow bundle (Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle).' }
+      - name: Sign in to the deployment tenant
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build images and release gateway
+        shell: pwsh
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          WARDFLOW_REF: ${{ inputs.wardflow_commit || vars.WARDFLOW_REF }}
+        run: |
+          az extension add --name containerapp --upgrade --only-show-errors
+          if ($LASTEXITCODE -ne 0) { throw 'Container Apps CLI extension setup failed.' }
+          $tag = "$($env:GITHUB_SHA.Substring(0, 12))-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          ./source/hosted/Deploy-HostedOrchestrator.ps1 `
+            -SubscriptionId $env:AZURE_SUBSCRIPTION_ID `
+            -TenantId $env:AZURE_TENANT_ID `
+            -WardflowCommit $env:WARDFLOW_REF `
+            -ImageTag $tag `
+            -SkipInfra

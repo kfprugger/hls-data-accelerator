@@ -24,7 +24,7 @@ Legend:
 | ACR | Preserve | Same images for Synthea, loaders, telemetry, and claim producers | image digests and successful pulls |
 | ACI/jobs and managed identities | Preserve | Same producer workloads and RBAC | terminal job state and output artifacts/events |
 | Key Vault | Preserve | Holds unavoidable Event Hubs listener secret and other external secrets | secret references resolve without exposing values |
-| Durable Functions + Static Web App orchestrator | Optional | Keep after adding destination adapter | Databricks plan, run, repair, validation, and teardown paths |
+| Hosted Container Apps gateway + per-user FastAPI sandbox | Preserve | Run the destination adapter with each user's device-code credentials | Databricks plan, run, repair, validation, and teardown paths |
 | Application Insights + Log Analytics | Preserve/extend | Keep orchestrator telemetry; add Databricks system-table/job evidence | trace/run correlation without PHI payload logging |
 
 ## Fabric platform replacements
@@ -80,9 +80,9 @@ Legend:
 |---|---|---|
 | `Deploy-All.ps1` | Rebuild platform boundary | shared Azure-source phase plus Fabric and Databricks destination adapters |
 | `Preflight-Check.ps1` | Rebuild destination checks | Databricks CLI/account/workspace/UC/bundle readiness instead of Fabric capacity |
-| `orchestrator/shared/models.py` | Clean migration | destination-neutral config plus platform-specific resource state; migrate every caller |
-| local FastAPI orchestrator | Extend | plan/start/status/continue/validate/teardown for Databricks runs |
-| Durable Functions activities | Extend | Databricks workspace, bundle, pipeline/job, SQL, agent, alert, and teardown activities |
+| `orchestrator/local_server.py` request models | Clean migration | destination-neutral config plus platform-specific resource state; migrate every caller |
+| local and hosted FastAPI orchestrator | Extend | plan/start/status/continue/validate/teardown for Databricks runs |
+| PowerShell deployment scripts and add-on runner | Extend | Databricks workspace, bundle, pipeline/job, SQL, agent, alert, and teardown operations |
 | deployment state JSON/SQLite | Extend | workspace host/ID, catalog, bundle target, job/pipeline/warehouse IDs, evidence |
 | resume/repair switches | Rebuild | named Databricks recovery boundaries; do not overload historical Fabric phase numbers |
 | `eval/deployment_eval_harness.py` | Rebuild destination probes | Azure metrics + Databricks REST/SQL + real rendered surfaces |

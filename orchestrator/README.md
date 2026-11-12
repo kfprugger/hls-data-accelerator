@@ -1,10 +1,10 @@
 # Deployment Orchestrator — FastAPI Backend + React UI
 
-The orchestrator provides a visual deployment experience for the HLS Data Accelerator. It consists of a Python FastAPI backend and a React + Fluent UI frontend. Deployment invokes `Deploy-All.ps1`; local and Durable teardown use the same `shared/full_teardown.py` implementation as the root `Teardown-All.ps1` wrapper.
+The orchestrator provides a visual deployment experience for the HLS Data Accelerator. It consists of a Python FastAPI backend and a React + Fluent UI frontend. Deployment invokes `Deploy-All.ps1`; local and hosted teardown use the same `shared/full_teardown.py` implementation as the root `Teardown-All.ps1` wrapper. The [hosted deployer](../hosted/README.md) runs this backend in isolated per-user Container Apps behind an Entra-authenticated gateway.
 
-`POST /api/teardown/start` and each job in `POST /api/teardown/batch/start` require an explicit deployment `subscription_id`, with an optional `expected_tenant_id` guard. Missing subscriptions return HTTP 400; an invalid batch is rejected before any job starts. The local API never defaults from `HLS_SUBSCRIPTION_ID` or the Azure CLI account. Front-end discovery includes owned Rayfin, cardiology, DICOM viewer and hosted orchestrator resources; shared/unrelated groups are skipped with reasons. `front_end_resource_groups` explicitly selects groups subject to ownership checks, and `discover_front_ends: false` disables automatic group discovery. The **Databricks Unity Catalog** phase removes objects bound to the deployment's Access Connector before Azure resource group deletion.
+`POST /api/teardown/start` and each job in `POST /api/teardown/batch/start` require an explicit deployment `subscription_id`, with an optional `expected_tenant_id` guard. Missing subscriptions return HTTP 400; an invalid batch is rejected before any job starts. The API never defaults from `HLS_SUBSCRIPTION_ID` or the Azure CLI account. Front-end discovery includes owned Rayfin, cardiology and DICOM viewer resources; shared/unrelated groups are skipped with reasons. `front_end_resource_groups` explicitly selects groups subject to ownership checks, and `discover_front_ends: false` disables automatic group discovery. The **Databricks Unity Catalog** phase removes objects bound to the deployment's Access Connector before Azure resource group deletion. The shared hosted control plane is not a deployment-owned front end.
 
-The Durable Functions `/teardown/start` endpoint requires **both** `subscription_id` and `expected_tenant_id`; it returns HTTP 400 if either is absent.
+The former Azure Functions host and its name-based front-end ownership exception have been removed. The backend is FastAPI in both local and hosted modes.
 
 Records preserve `customStatus.subscriptionId`, `customStatus.expectedTenantId` and `customStatus.frontEndResourceGroups`; final results are in `output.teardown` (`plan`, `deleted`, `failures`, `skipped`, `status`). Interrupted-teardown reconciliation uses only the record's pinned `subscriptionId` and skips legacy unpinned records.
 
@@ -60,11 +60,42 @@ Open your browser and navigate to [http://localhost:5173](http://localhost:5173)
 
 ## Runtime Database Files
 
-The orchestrator uses a local SQLite database under `orchestrator/shared/` at runtime.
-You may see sidecar files such as `orchestrator.db-wal` and `orchestrator.db-shm` while
-the app is running. These are SQLite write-ahead logging artifacts, are machine-local,
-and are not required for end users to build or run from source in a fresh environment.
-They should remain gitignored.
+Without `HLS_DATA_DIR`, the orchestrator keeps the existing local layout: SQLite
+under `orchestrator/shared/`, logs and cache under `orchestrator/`, and deployment
+ledgers under the repository's `state-tracking/`. Do not commit SQLite WAL/SHM files.
+
+When `HLS_DATA_DIR` is set, it contains deployment history, form history, logs,
+session logs, resource caches, graph backups and `state-tracking/`. The live SQLite
+database is **always on local disk** in a private temporary directory, never on the
+Azure Files mount. Startup restores `HLS_DATA_DIR/orchestrator.db`; committed changes
+are snapshotted with SQLite's backup API every ten seconds and on graceful shutdown.
+`HLS_STATE_DIR` points child PowerShell processes at the durable deployment ledgers.
+Azure CLI and PowerShell credentials remain in container-local `HOME`, not this volume.
+
+### Sandbox image locally
+
+Use a clean build context containing this repository at its root and the pinned
+Wardflow checkout at `wardflow/`, including `wardflow/.pinned-commit`. The image's
+`hosted/sandbox/Dockerfile.dockerignore` replaces the emulator's root ignore rules;
+it excludes local state, secrets, virtual environments and `node_modules`.
+
+```bash
+docker build --platform linux/amd64 -f hosted/sandbox/Dockerfile -t hls-sandbox .
+docker volume create hls-sandbox-data
+docker run --rm --init -p 127.0.0.1:7071:7071 \
+  -e HLS_DATA_DIR=/data -v hls-sandbox-data:/data hls-sandbox
+```
+
+This local command leaves `HLS_HOSTED` unset and serves the built UI at
+`http://localhost:7071`. To exercise the hosted sign-in panel, use the gateway or
+set `HLS_HOSTED=1`, a random `HLS_GATEWAY_KEY`, and `HLS_SANDBOX_USER_EMAIL`,
+`HLS_SANDBOX_USER_OID`, `HLS_SANDBOX_USER_TID`; every request except `GET /api/health`
+must then carry the matching `X-HLS-Gateway-Key`. The gateway supplies trusted
+`X-HLS-User-*` headers. Bind mounts must be writable by UID 10001. Mount only `/data`,
+never `/home/hls`: removing the container must also remove Azure sign-in caches.
+The image uses `WARDFLOW_ROOT=/app/wardflow`, listens on 7071, and runs Python 3.13
+and PowerShell 7 as a non-root user. Deployment requests require explicit tenant
+and subscription UUIDs; the UI obtains them from the authenticated Azure context.
 
 ## API Endpoints
 

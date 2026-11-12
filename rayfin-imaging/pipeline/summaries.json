@@ -1,0 +1,170 @@
+{
+  "generated_by": "Drafted at build time by an AI assistant (GitHub Copilot) from the fields in clinical_lakehouse, genomics_lakehouse and imaging_lakehouse; every statement maps to a stored value. Not reviewed by a clinician; not for clinical use.",
+  "patients": {
+    "TCGA-G6-A8L6": {
+      "headline": "Metastatic clear cell kidney cancer with the classic 3p triple hit, three targeted therapies in ten months.",
+      "summary": "A 55-year-old Black man, a lifelong non-smoker, was diagnosed with stage IV, grade 3 clear cell renal cell carcinoma of the left kidney. He started sunitinib on day 73 with stable disease, moved to axitinib on day 252 and bevacizumab on day 276. Progression was recorded on day 304 and he died on day 313. The tumour carries truncating mutations in VHL, PBRM1 and SETD2, three genes that sit together on chromosome 3p, and very few other changes.",
+      "points": [
+        {"source": "genomics", "text": "VHL R82Afs*50, PBRM1 Y409Tfs*29 and SETD2 P2380Tfs*31: all frameshifts, the textbook clear cell pattern."},
+        {"source": "clinical", "text": "Three lines in under a year: sunitinib (day 73), axitinib (day 252), bevacizumab (day 276)."},
+        {"source": "genomics", "text": "Only 2.9% of the genome altered, lower than 91% of clear cell tumours in TCGA."},
+        {"source": "clinical", "text": "Platelets elevated at diagnosis; ECOG 0 and Karnofsky 90 when assessed."},
+        {"source": "radiology", "text": "Contrast CT one week before diagnosis is available in 3D."}
+      ]
+    },
+    "TCGA-E2-A152": {
+      "headline": "HER2-amplified breast cancer that spread early, treated with trastuzumab, tumour-free nearly six years later.",
+      "summary": "A 56-year-old postmenopausal woman had a stage I (T1c N0) invasive ductal carcinoma of the right breast. HER2 was 3+ by immunohistochemistry and ERBB2 is amplified and highly expressed in the tumour RNA. Despite the early stage, liver and bone metastases were recorded on days 54 and 83. She received docetaxel, cyclophosphamide and trastuzumab from day 42, nab-paclitaxel, then anastrozole from day 231. A breast recurrence on day 966 was resected on day 1044, and she was tumour-free at last contact on day 2128.",
+      "points": [
+        {"source": "clinical", "text": "HER2 IHC 3+; progesterone receptor negative; oestrogen receptor reported both positive and negative."},
+        {"source": "genomics", "text": "ERBB2 amplified (RNA z-score +3.3); PAM50 subtype HER2-enriched."},
+        {"source": "clinical", "text": "Trastuzumab from day 42, the targeted match for the amplification."},
+        {"source": "genomics", "text": "64% of the genome altered, higher than 93% of TCGA breast cancers."},
+        {"source": "radiology", "text": "Contrast breast MRI one week before diagnosis."}
+      ]
+    },
+    "TCGA-J2-8192": {
+      "headline": "EGFR exon 19 deletion in a never-smoker with three previous cancers, switched to erlotinib at recurrence.",
+      "summary": "A 65-year-old woman who never smoked was diagnosed with stage IIA (T2a N1) adenocarcinoma of the left upper lobe. Her record lists three earlier primary cancers, of the uterus, cervix and breast. She had cisplatin and pemetrexed from day 105 and was tumour-free on day 154. A locoregional recurrence was confirmed by biopsy on day 482, and she started erlotinib on day 641. The clinical EGFR test and the tumour sequencing agree: an exon 19 deletion, E746_A750del.",
+      "points": [
+        {"source": "genomics", "text": "EGFR E746_A750del at 34% allele fraction; clinical test also positive for an exon 19 deletion, KRAS negative."},
+        {"source": "clinical", "text": "Erlotinib, an EGFR inhibitor, started on day 641 after recurrence."},
+        {"source": "genomics", "text": "CDKN2A deep deletion; tumour mutation burden low (2.3 per Mb)."},
+        {"source": "clinical", "text": "Pulmonary function before treatment: FEV1 77% predicted, DLCO 112%."},
+        {"source": "radiology", "text": "Chest CT with an AI segmentation of both lungs (3.2 litres) and one small nodule."}
+      ]
+    },
+    "TCGA-60-2722": {
+      "headline": "Squamous lung cancer in a 90 pack-year smoker, resected, then a distant recurrence at 28 months.",
+      "summary": "A 66-year-old man with a 90 pack-year smoking history, who quit in 2008, had a stage IIB (T2 N1 M0) squamous cell carcinoma of the right upper lobe, removed with clear margins. He received adjuvant carboplatin and paclitaxel from day 110 to day 272 and was tumour-free on day 733. A recurrence was recorded on day 851, treated with external beam radiation to a distant site from day 873. The genome shows the squamous signature: TP53 and KEAP1 mutations, CDKN2A loss and amplification of SOX2 and TP63 on chromosome 3q.",
+      "points": [
+        {"source": "genomics", "text": "TP53 H179R and FBXW7 R505G at about 80% allele fraction; KEAP1 G480W."},
+        {"source": "genomics", "text": "SOX2, TP63 and PIK3CA amplified (3q); CDKN2A deeply deleted."},
+        {"source": "clinical", "text": "R0 resection, adjuvant carboplatin and paclitaxel, recurrence on day 851."},
+        {"source": "genomics", "text": "NECTIN4 RNA above the cancer-type average (z +1.8)."},
+        {"source": "pathology", "text": "AI lymphocyte map flags 17% of tissue tiles as lymphocyte-rich, the highest in this cohort."}
+      ]
+    },
+    "TCGA-25-2042": {
+      "headline": "Stage IIIC high-grade serous ovarian cancer that progressed on platinum, with three CT scans across treatment.",
+      "summary": "A 60-year-old American Indian or Alaska Native woman had bilateral, grade 3 serous ovarian carcinoma, FIGO stage IIIC. Carboplatin and paclitaxel ran from diagnosis to day 123, followed by surgery for progressive disease. From day 184 she received second-line chemotherapy (carboplatin, paclitaxel, gemcitabine, liposomal doxorubicin and topotecan are recorded). Distant progression is recorded and she died on day 396. Three CT scans of the abdomen and pelvis, a week before diagnosis and on days 45 and 127, show the course of the disease.",
+      "points": [
+        {"source": "radiology", "text": "Three abdominal CTs at day −7, 45 and 127: compare them in the radiology viewer."},
+        {"source": "clinical", "text": "Progression during first-line platinum, then multiple second-line agents."},
+        {"source": "genomics", "text": "HRD score 51, in the range associated with homologous-recombination deficiency."},
+        {"source": "genomics", "text": "Mesenchymal expression subtype; CD276 (B7-H3) RNA high (z +1.7)."},
+        {"source": "pathology", "text": "3.1 GB whole-slide image of the diagnostic H&E section."}
+      ]
+    },
+    "TCGA-DD-A1EH": {
+      "headline": "Hepatitis B related liver cancer at 23, AFP over 94,000, resected and treated for four years.",
+      "summary": "A 23-year-old man with hepatitis B infection and bridging fibrosis (Child-Pugh B) had a stage III, grade 3 hepatocellular carcinoma. Alpha-fetoprotein at diagnosis was 94,340 ng/mL. The tumour was resected; AI segmentation of his CT scans measures the liver at 1,896 mL before surgery and 1,049 mL on day 115. Recurrence in the liver and lung followed on day 120, treated with radiofrequency ablation, then sorafenib (partial response), doxorubicin, and cisplatin, gemcitabine and everolimus. He was alive with disease on day 1495.",
+      "points": [
+        {"source": "clinical", "text": "AFP 94,340 ng/mL at diagnosis; albumin 4.7, bilirubin 1.0, platelets 212."},
+        {"source": "radiology", "text": "AI-measured liver volume fell from 1,896 mL to 1,049 mL after resection."},
+        {"source": "genomics", "text": "Two ARID1A truncating mutations and an AXIN1 frameshift (WNT pathway)."},
+        {"source": "clinical", "text": "Sorafenib from day 358 to 863 with partial response."},
+        {"source": "clinical", "text": "Family history: one relative with cancer."}
+      ]
+    },
+    "TCGA-FD-A3SJ": {
+      "headline": "Bladder cancer after BCG for non-invasive disease, nodal stage IV, a smoker exposed at work.",
+      "summary": "A 59-year-old man, a current smoker with 40 pack-years who worked as an electrical equipment installer, had an earlier non-invasive papillary bladder cancer treated with BCG. He then presented with high-grade muscle-invasive urothelial carcinoma, stage IV (T2b N2), and had surgery at diagnosis. He received MVAC (methotrexate, vinblastine, doxorubicin and cisplatin) from day 274, then gemcitabine with cisplatin and carboplatin. Metastases appeared in lymph nodes on day 281 and in the liver and lung on day 548. He died on day 739.",
+      "points": [
+        {"source": "genomics", "text": "PIK3CA H1047L, TP53 S241F and KDM6A G137V; CCNE1 and MET amplified."},
+        {"source": "genomics", "text": "HRD score 55, the highest in this cohort."},
+        {"source": "clinical", "text": "Occupational and tobacco exposure, both recognised bladder cancer risk factors."},
+        {"source": "clinical", "text": "Progression through two chemotherapy regimens: nodes (day 281), liver and lung (day 548)."},
+        {"source": "radiology", "text": "Contrast CT of abdomen and pelvis with 226 images."}
+      ]
+    },
+    "TCGA-FI-A2D5": {
+      "headline": "POLE-ultramutated endometrial cancer: 13,853 mutations, yet an aggressive course.",
+      "summary": "A 56-year-old postmenopausal woman with a BMI of 35.9 had a grade 3 endometrioid endometrial carcinoma, FIGO stage IVB, with a synchronous lung adenocarcinoma. After surgery she received carboplatin and paclitaxel from day 133 to day 245. A vaginal metastasis appeared on day 280, treated with external beam radiation in 30 fractions, and she died on day 421. The tumour carries POLE V411L, an exonuclease-domain hotspot, and 13,853 somatic mutations: a tumour mutation burden of 466 per Mb, higher than 99% of endometrial cancers in TCGA.",
+      "points": [
+        {"source": "genomics", "text": "POLE V411L, the proofreading defect behind the ultramutated subtype."},
+        {"source": "genomics", "text": "466 mutations per Mb; almost no copy-number change."},
+        {"source": "clinical", "text": "POLE-mutant endometrial cancers usually do well; this course was unusually aggressive."},
+        {"source": "genomics", "text": "TROP2 (TACSTD2) RNA very low (z −4.4)."},
+        {"source": "pathology", "text": "Leukocytes make up about 23% of the tumour sample; AI lymphocyte map on the slide."}
+      ]
+    },
+    "TCGA-VS-A9V3": {
+      "headline": "Stage IVB cervical cancer with a complete response to chemoradiation, then nodal relapse.",
+      "summary": "A 62-year-old woman from Brazil, a lifelong non-smoker, had grade 3 squamous cell carcinoma of the cervix, stage IVB (T4). She received cisplatin with external beam radiation (4,500 cGy in 25 fractions, plus a 900 cGy boost) and high-dose-rate brachytherapy (2,600 cGy in 4 fractions), with a complete response. She was tumour-free on day 253. Metastases then appeared in the intrathoracic lymph nodes on day 456 and in neck nodes on day 601.",
+      "points": [
+        {"source": "clinical", "text": "Complete response to cisplatin, pelvic radiation and brachytherapy."},
+        {"source": "genomics", "text": "PIK3CA E545K hotspot; two RB1 loss-of-function mutations; FGFR2 T320M."},
+        {"source": "genomics", "text": "PD-L1 (CD274) RNA high, z +2.4 for cervical cancer."},
+        {"source": "clinical", "text": "Distant nodal relapse on days 456 and 601."},
+        {"source": "radiology", "text": "Pelvic MRI, T1-weighted 3D, before treatment."}
+      ]
+    },
+    "TCGA-VQ-A91D": {
+      "headline": "MSI-high gastric cancer driven by MLH1 loss, 2,141 mutations, died within a year.",
+      "summary": "A 70-year-old man from Brazil had a stage IIIC (T4b N2 M0) intestinal-type adenocarcinoma of the body of the stomach, resected with clear margins. He received fluorouracil from day 147 to day 242 with progressive disease, a locoregional recurrence on day 351, and died of cancer on day 356. The tumour is microsatellite unstable (MSI-high) with a truncating MLH1 mutation, which explains the instability, and 2,141 somatic mutations (72 per Mb).",
+      "points": [
+        {"source": "genomics", "text": "MLH1 K255* at 72% allele fraction: loss of mismatch repair."},
+        {"source": "genomics", "text": "MSI-high (MANTIS 1.18); 72 mutations per Mb, higher than 97% of TCGA gastric cancers."},
+        {"source": "genomics", "text": "MSI-high tumours respond to checkpoint inhibitors, which were not yet available in 2010."},
+        {"source": "genomics", "text": "PD-L1 (CD274) and LAG3 RNA above average; leukocytes about 23% of the tumour sample."},
+        {"source": "pathology", "text": "AI lymphocyte map flags 13% of tissue tiles as lymphocyte-rich."}
+      ]
+    },
+    "TCGA-G4-6303": {
+      "headline": "Stage IV colon cancer, KRAS wild-type, five lines of therapy over five and a half years.",
+      "summary": "A 54-year-old woman with a history of colon polyps had a stage IV (T3 N1 M1) adenocarcinoma of the sigmoid colon, resected with clear margins. Her clinical KRAS test was negative. She received fluorouracil, leucovorin and oxaliplatin from day 516, then after progression on day 872, fluorouracil with bevacizumab, irinotecan-based therapy, irinotecan with cetuximab (day 1596) and oxaliplatin with bevacizumab. She died on day 2003. The tumour has truncating APC and TP53 mutations and a chromosomally unstable genome.",
+      "points": [
+        {"source": "clinical", "text": "KRAS negative on clinical testing, which made her eligible for cetuximab (day 1596)."},
+        {"source": "genomics", "text": "APC Q1378* and TP53 R213* at high allele fraction; FGFR1 amplified."},
+        {"source": "clinical", "text": "Five chemotherapy regimens over 1,478 days; CEA 3.8 ng/mL."},
+        {"source": "radiology", "text": "Prone CT colonography with contrast, 1,362 thin slices."},
+        {"source": "genomics", "text": "Chromosomally unstable (CIN) subtype, 40% of the genome altered."}
+      ]
+    },
+    "TCGA-VR-AA4D": {
+      "headline": "HER2-amplified oesophageal adenocarcinoma after reflux, metastatic at 27 months.",
+      "summary": "A 53-year-old man from Brazil with gastro-oesophageal reflux disease had a grade 2 adenocarcinoma of the lower third of the oesophagus, stage IIB (T1 N1 M0), treated with surgery. Fluorouracil and leucovorin ran from day 166 to day 288, with 4,500 cGy of external beam radiation in 25 fractions. Metastases to the liver, lung and adrenal gland were recorded on day 832, and he died on day 1405. The tumour shows ERBB2 (HER2) amplification with very high RNA expression.",
+      "points": [
+        {"source": "genomics", "text": "ERBB2 amplified (RNA z +3.2); BRCA2 also amplified."},
+        {"source": "genomics", "text": "TP53 R248W hotspot and an in-frame CDKN2A deletion."},
+        {"source": "clinical", "text": "No HER2-targeted therapy appears in the record."},
+        {"source": "clinical", "text": "Reflux disease recorded as comorbidity and risk factor."},
+        {"source": "radiology", "text": "Portal-venous CT with 348 thin slices."}
+      ]
+    },
+    "TCGA-KM-8441": {
+      "headline": "Stage I chromophobe kidney cancer, AI-measured tumour 49 mL, a second kidney primary.",
+      "summary": "A 61-year-old woman, a lifelong non-smoker, had a stage I (T1b) chromophobe renal cell carcinoma of the right kidney; her record also lists an earlier stage I kidney carcinoma. No systemic therapy is recorded. She was tumour-free on days 114 and 400, then recorded with tumour at last contact on day 876. An AI model segments a 49 mL mass in the right kidney on her arterial-phase CT. The genome is quiet: 24 mutations, including MTOR I2017T, and almost no copy-number change.",
+      "points": [
+        {"source": "radiology", "text": "AI kidney segmentation (RCC-AID): one 49.1 mL mass in the right kidney."},
+        {"source": "genomics", "text": "MTOR I2017T; tumour mutation burden 0.8 per Mb."},
+        {"source": "genomics", "text": "PD-L1 (CD274) RNA very high (z +3.3); NECTIN4 also high (z +2.6)."},
+        {"source": "clinical", "text": "Prior kidney primary; ECOG 1 and Karnofsky 90."},
+        {"source": "pathology", "text": "19-level pyramid of a 9.8-gigapixel slide."}
+      ]
+    },
+    "TCGA-G7-A8LE": {
+      "headline": "Papillary kidney cancer with a MET kinase mutation, recurred at four years, tumour-free at six.",
+      "summary": "A 62-year-old man with 40 pack-years of smoking, who quit in 2005, had a stage I (T1a) papillary renal cell carcinoma of the left kidney. A locoregional recurrence on day 1447 was treated with surgery on day 1505, and he was tumour-free at last contact on day 2453. His CT AI segmentation outlines the kidneys, a 35 mL mass and 155 mL of cysts. The tumour carries MET Y1230H, a kinase-domain mutation in the pathway that defines papillary kidney cancer.",
+      "points": [
+        {"source": "genomics", "text": "MET Y1230H at 54% allele fraction, an activating kinase-domain change."},
+        {"source": "radiology", "text": "AI segmentation: kidneys 484 mL, mass 35 mL, cysts 155 mL."},
+        {"source": "clinical", "text": "Recurrence day 1447, resected day 1505, tumour-free day 2453."},
+        {"source": "clinical", "text": "Low calcium and haemoglobin and raised white cells at diagnosis; Karnofsky 100."},
+        {"source": "genomics", "text": "CLDN18 RNA high (z +2.1)."}
+      ]
+    },
+    "TCGA-J4-A6G3": {
+      "headline": "Gleason 8 prostate cancer with SPOP mutation, positive margins and biochemical recurrence.",
+      "summary": "A 57-year-old man had a Gleason 8 (4+4) prostate adenocarcinoma, pT3b N0 with seminal vesicle invasion, removed with positive margins (R1). He started leuprolide on day 30 and received 6,660 cGy of external beam radiation in 37 fractions from day 367. Biochemical recurrence was recorded on day 618, with a PSA of 0.4 ng/mL. The tumour carries SPOP F133V, the mutation that defines the SPOP subclass of prostate cancer.",
+      "points": [
+        {"source": "genomics", "text": "SPOP F133V; TCGA subtype PRAD.5-SPOP."},
+        {"source": "clinical", "text": "Gleason 8, pT3b, R1 margins; androgen deprivation with leuprolide."},
+        {"source": "clinical", "text": "Biochemical recurrence on day 618 after radiation."},
+        {"source": "radiology", "text": "Contrast 3D fat-suppressed pelvic MRI before surgery."},
+        {"source": "pathology", "text": "An 11.5-gigapixel slide: 162,789 × 70,613 pixels."}
+      ]
+    }
+  }
+}

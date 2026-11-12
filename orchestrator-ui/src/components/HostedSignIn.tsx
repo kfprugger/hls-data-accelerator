@@ -1,0 +1,71 @@
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Box, Button, Chip, CircularProgress, Divider, Link, Stack, TextField, Typography } from '@mui/material';
+import { useAuthentication } from '../AuthenticationState';
+import { useAppState } from '../AppState';
+
+export function HostedSignIn() {
+    const auth = useAuthentication();
+    const { authContext, refreshAuthContext } = useAppState();
+    const [copyError, setCopyError] = useState('');
+    const bottom = useRef<HTMLDivElement>(null);
+    const followSignIn = useRef(false);
+    useEffect(() => {
+        if (!followSignIn.current) return;
+        bottom.current?.scrollIntoView({ block: 'end', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        if (!auth.busy) followSignIn.current = false;
+    }, [auth.busy, auth.code?.session_id, auth.error, auth.message]);
+    const disabled = auth.busy;
+    const cliContext = authContext?.cli;
+    const ready = Boolean(authContext?.ready && cliContext?.loggedIn);
+    const tenantMatchesPortal = Boolean(auth.identity?.tid && auth.tenant.trim().toLowerCase() === auth.identity.tid.toLowerCase());
+    return <Stack spacing={3}>
+    <Box><Typography variant="overline">Portal account</Typography><Typography sx={{
+        overflowWrap: 'anywhere'
+    }}>{auth.identity?.email || 'Local operator'}</Typography></Box>
+    <Alert severity="info">{auth.identity?.notice || 'Local deployment uses this machine’s Azure credentials.'}</Alert>
+    <Box><Typography variant="overline">Deployment account</Typography><Typography sx={{
+        overflowWrap: 'anywhere'
+    }}>{authContext?.cli.user || authContext?.pwsh.user || 'Not signed in'}</Typography></Box>
+    {authContext?.issues.map((issue, index) => <Alert key={`${issue}-${index}`} severity="warning">{issue}</Alert>)}
+    <Divider />
+    <TextField label="Deployment tenant ID" value={auth.tenant} disabled={disabled} onChange={event => auth.setTenant(event.target.value)} helperText={tenantMatchesPortal ? 'Matched to your portal sign-in tenant' : undefined} fullWidth/>
+    <TextField label="Deployment subscription ID" value={auth.subscription} disabled={disabled} onChange={event => auth.setSubscription(event.target.value)} fullWidth/>
+    <Stack spacing={1}>
+      <Stack direction="row" sx={{
+        alignItems: "center",
+        justifyContent: "space-between"
+      }}><Typography sx={{
+        fontWeight: 600
+      }}>Azure Deployment Credentials</Typography><Chip label={ready ? 'Signed in & persisted' : 'Sign-in required'} color={ready ? 'success' : 'warning'} size="small"/></Stack>
+      <Typography variant="body2" sx={{
+        overflowWrap: 'anywhere'
+      }}>{cliContext?.user || 'Single sign-in covers Azure CLI and PowerShell across sandbox restarts'}</Typography>
+      <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>Tenant: {cliContext?.tenantId || 'not signed in'} · Subscription: {cliContext?.subscriptionName || cliContext?.subscriptionId || 'not selected'}</Typography>
+      {!cliContext?.loggedIn && <Button variant="contained" disabled={disabled || !auth.tenant.trim() || !auth.subscription.trim()} onClick={() => { followSignIn.current = true; void auth.begin('az'); }}>Sign in to Azure</Button>}
+    </Stack>
+    {auth.busy && <Stack direction="row" spacing={1} sx={{
+        alignItems: "center"
+    }}><CircularProgress size={20}/><Typography role="status">{auth.code ? 'Waiting for sign-in' : 'Requesting device code'}</Typography></Stack>}
+    {auth.code && <Alert severity="info"><Stack spacing={1}>
+      <Typography>Enter this code in Microsoft device sign-in:</Typography>
+      <Typography component="strong" variant="h5" sx={{
+            letterSpacing: 2
+        }}>{auth.code.user_code}</Typography>
+      <Button variant="outlined" onClick={() => { void navigator.clipboard.writeText(auth.code!.user_code).catch(() => setCopyError('Unable to copy. Select the code and copy it manually.')); }}>Copy code</Button>
+      <Stack spacing={0.75}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Next step</Typography>
+        <Button component="a" href={auth.code.verification_uri} target="_blank" rel="noopener noreferrer" variant="contained" color="success" onClick={() => { void navigator.clipboard.writeText(auth.code!.user_code).catch(() => {}); }}>Next: Copy code & open Microsoft sign-in</Button>
+      </Stack>
+      <Button variant="outlined" color="warning" onClick={() => { followSignIn.current = true; void auth.reissue(); }}>Request new token</Button>
+      <Typography variant="caption">Use this only if Microsoft rejects the code. It restarts this pending sign-in.</Typography>
+      <Typography variant="body2">Expires in {Math.floor(auth.remaining / 60)}:{String(auth.remaining % 60).padStart(2, '0')}. You may hide this panel; sign-in continues.</Typography>
+    </Stack></Alert>}
+    {copyError && <Alert severity="warning">{copyError}</Alert>}
+    {auth.error && <Alert severity="error">{auth.error}</Alert>}
+    {auth.message && <Alert severity="success">{auth.message}</Alert>}
+    <Button variant="outlined" disabled={disabled} onClick={() => void refreshAuthContext()}>Refresh sign-in status</Button>
+    <Button color="error" disabled={disabled} onClick={() => void auth.logout()}>Sign out of Azure tools</Button>
+    {auth.identity?.hosted && <Link href="/gateway/me">Manage private sandbox</Link>}
+    <Box ref={bottom} aria-hidden="true" />
+  </Stack>;
+}

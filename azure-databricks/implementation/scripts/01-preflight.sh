@@ -35,6 +35,15 @@ if command -v az >/dev/null 2>&1; then
   echo "== Resource providers =="
   for provider in Microsoft.Databricks Microsoft.Storage Microsoft.EventHub Microsoft.KeyVault Microsoft.EventGrid; do
     state="$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || echo missing)"
+    if [[ "$state" != "Registered" ]]; then
+      note "WARN" "$provider is $state; auto-registering and waiting for Registered state..."
+      az provider register --namespace "$provider" >/dev/null 2>&1 || true
+      for _ in $(seq 1 36); do
+        state="$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || echo missing)"
+        [[ "$state" == "Registered" ]] && break
+        sleep 5
+      done
+    fi
     [[ "$state" == "Registered" ]] && note "ok" "$provider" || { note "FAIL" "$provider is $state"; fail=1; }
   done
 
@@ -45,7 +54,7 @@ if command -v az >/dev/null 2>&1; then
   storage_region="$(az storage account show -g "$AZ_RESOURCE_GROUP" -n "$STORAGE_ACCOUNT_NAME" --query location -o tsv 2>/dev/null || echo missing)"
   [[ "$storage_region" == "$AZ_LOCATION" ]] && note "ok" "storage region matches target" || note "WARN" "storage is in $storage_region, target is $AZ_LOCATION (egress risk)"
 
-  for container in fhir-export dicom-output; do
+  for container in "${FHIR_EXPORT_CONTAINER:-fhir-export}" dicom-output; do
     exists="$(az storage container exists --account-name "$STORAGE_ACCOUNT_NAME" --name "$container" --auth-mode login --query exists -o tsv 2>/dev/null || echo false)"
     [[ "$exists" == "true" ]] && note "ok" "container $container" || { note "FAIL" "container $container missing"; fail=1; }
   done

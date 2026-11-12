@@ -2,8 +2,11 @@
 // Adds the Azure Databricks destination plane beside the existing HLS source estate.
 // It never recreates FHIR, ADLS, Event Hubs, ACR, ACI, or Key Vault.
 
-@description('Location for the workspace and access connector. Must match the existing ADLS account region.')
+@description('Location for the access connector. Must match the existing ADLS account region.')
 param location string = resourceGroup().location
+
+@description('Location for the Databricks workspace. Defaults to location, or falls back to eastus2 when regional control plane is uninitialized.')
+param workspaceLocation string = location
 
 @description('Existing ADLS Gen2 account that already holds fhir-export and dicom-output.')
 param storageAccountName string
@@ -60,15 +63,17 @@ resource accessConnector 'Microsoft.Databricks/accessConnectors@2023-05-01' = {
 }
 
 // Premium is required for Unity Catalog controls and Databricks Apps.
+var wsSuffix = workspaceLocation != location ? '-${workspaceLocation}-ws' : '-ws'
+var managedRgSuffix = workspaceLocation != location ? '-${workspaceLocation}-managed-rg' : '-managed-rg'
 resource workspace 'Microsoft.Databricks/workspaces@2024-05-01' = {
-  name: '${appName}-ws'
-  location: location
+  name: '${appName}${wsSuffix}'
+  location: workspaceLocation
   tags: resourceTags
   sku: {
     name: 'premium'
   }
   properties: {
-    managedResourceGroupId: subscriptionResourceId('Microsoft.Resources/resourceGroups', '${appName}-managed-rg')
+    managedResourceGroupId: subscriptionResourceId('Microsoft.Resources/resourceGroups', '${appName}${managedRgSuffix}')
     publicNetworkAccess: 'Enabled'
   }
 }

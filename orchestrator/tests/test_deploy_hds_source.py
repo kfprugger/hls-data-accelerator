@@ -687,14 +687,14 @@ class HdsSourceTests(unittest.TestCase):
         self.assertEqual(location, "https://api.fabric.test/jobs/instance")
         method, endpoint, body = fabric.request
         self.assertEqual(method, "POST")
-        self.assertEqual(endpoint, "/workspaces/workspace/items/notebook/jobs/RunNotebook/instances")
+        self.assertEqual(endpoint, "/workspaces/workspace/items/notebook/jobs/instances?jobType=RunNotebook")
         self.assertEqual(
-            body["parameters"],
-            [
-                {"name": "HYDRATION_LAKEHOUSE_KEYS", "value": "silver", "type": "Text"},
-                {"name": "retry", "value": 2, "type": "Number"},
-                {"name": "enabled", "value": True, "type": "Boolean"},
-            ],
+            body["executionData"]["parameters"],
+            {
+                "HYDRATION_LAKEHOUSE_KEYS": {"value": "silver", "type": "string"},
+                "retry": {"value": 2, "type": "int"},
+                "enabled": {"value": True, "type": "bool"},
+            },
         )
 
     def test_two_hydration_shards_are_disjoint_and_concurrent(self):

@@ -282,6 +282,8 @@ class InvokePowershellParserTests(unittest.TestCase):
 
     def test_reuse_fabric_rti_does_not_emit_skip_fabric(self) -> None:
         args = self.invoke_powershell._build_deploy_args({
+            "expected_tenant_id": "11111111-1111-1111-1111-111111111111",
+            "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
             "fabric_workspace_name": "med-test",
             "reuse_fabric_rti": True,
             "skip_fabric": False,
@@ -293,6 +295,8 @@ class InvokePowershellParserTests(unittest.TestCase):
 
     def test_hds_source_skip_preserves_pipeline_execution(self) -> None:
         args = self.invoke_powershell._build_deploy_args({
+            "expected_tenant_id": "11111111-1111-1111-1111-111111111111",
+            "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
             "fabric_workspace_name": "med-test",
             "skip_hds_source": True,
             "skip_hds_pipelines": False,
@@ -306,6 +310,8 @@ class InvokePowershellParserTests(unittest.TestCase):
         for tags in ({}, {"Owner": "Clinical Ops"}):
             with self.subTest(tags=tags):
                 args = self.invoke_powershell._build_deploy_args({
+                    "expected_tenant_id": "11111111-1111-1111-1111-111111111111",
+                    "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
                     "fabric_workspace_name": "med-test",
                     "scaffolding_only": True,
                     "tags": tags,
@@ -318,6 +324,8 @@ class InvokePowershellParserTests(unittest.TestCase):
         for tags in ({}, {"Owner": "Clinical Ops"}):
             with self.subTest(tags=tags):
                 args = self.invoke_powershell._build_deploy_args({
+                    "expected_tenant_id": "11111111-1111-1111-1111-111111111111",
+                    "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
                     "fabric_workspace_name": "med-test",
                     "reseed_data": True,
                     "tags": tags,
@@ -329,6 +337,8 @@ class InvokePowershellParserTests(unittest.TestCase):
 
     def test_reseed_data_defaults_to_omitted_switch(self) -> None:
         args = self.invoke_powershell._build_deploy_args({
+            "expected_tenant_id": "11111111-1111-1111-1111-111111111111",
+            "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
             "fabric_workspace_name": "med-test",
         })
 
