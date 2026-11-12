@@ -47,53 +47,74 @@ class CmaSdohSeedTests(unittest.TestCase):
         self.assertEqual("13121", rows[2]["countyFips"])
         self.assertEqual("Fulton County", rows[2]["countyName"])
 
-    def test_dimension_rows_have_stable_keys_and_metadata_for_cma_model_tables(self) -> None:
+    def test_seed_rows_match_every_cma_model_join_key(self) -> None:
         with patch.object(self.seed, "_now", return_value="2026-07-01T12:00:00"):
+            zip_rows = self.seed.build_zip_to_fips_rows()
             dims = self.seed.build_sdoh_dimension_rows()
+            social_rows = self.seed.build_social_determinant_rows(zip_rows)
 
         self.assertEqual(
             {"sdoh_category", "sdoh_unitofmeasure", "sdoh_datasetmetadata", "sdoh_fips"},
             set(dims),
         )
-        self.assertEqual(
-            [category_id for category_id, _, _ in self.seed.SDOH_CATEGORIES],
-            [row["category_id"] for row in dims["sdoh_category"]],
-        )
-        self.assertEqual(
-            [(1, "USD"), (2, "Index")],
-            [(row["unit_of_measure_id"], row["abbreviation"]) for row in dims["sdoh_unitofmeasure"]],
-        )
-        self.assertEqual("Synthetic Atlanta SDOH Seed", dims["sdoh_datasetmetadata"][0]["dataset_name"])
-        self.assertEqual("2026-07-01", dims["sdoh_datasetmetadata"][0]["published_date"])
-        self.assertEqual(
-            sorted({fips for fips, _ in self.seed.ATLANTA_ZIP_FIPS.values()}),
-            [row["fips_code"] for row in dims["sdoh_fips"]],
-        )
+        keys = {
+            "fips_code": [row["fips_code"] for row in dims["sdoh_fips"]],
+            "subcategory_id": [row["subcategory_id"] for row in dims["sdoh_category"]],
+            "unit_of_measure_id": [row["unit_of_measure_id"] for row in dims["sdoh_unitofmeasure"]],
+            "sdoh_datasetmetadata_id": [row["sdoh_datasetmetadata_id"] for row in dims["sdoh_datasetmetadata"]],
+        }
+        for key, values in keys.items():
+            self.assertEqual(len(values), len(set(values)), key)
 
-    def test_social_determinant_rows_emit_one_deterministic_measure_per_zip_and_measure(self) -> None:
+        # Many-side columns of the SDOH links in the CMA relationships.tmdl.
+        joins = [
+            ("zip_to_fips_mapping.countyFips", [row["countyFips"] for row in zip_rows], "fips_code"),
+            ("social_determinant.location_value", [row["location_value"] for row in social_rows], "fips_code"),
+            ("social_determinant.category_id", [row["category_id"] for row in social_rows], "subcategory_id"),
+            ("social_determinant.unit_of_measure_id", [row["unit_of_measure_id"] for row in social_rows], "unit_of_measure_id"),
+            ("social_determinant.sdoh_datasetmetadata_id", [row["sdoh_datasetmetadata_id"] for row in social_rows], "sdoh_datasetmetadata_id"),
+        ]
+        for column, values, key in joins:
+            self.assertEqual(set(), set(values) - set(keys[key]), column)
+
+        # The vendor ETL routes only "%fips%" location types into sdoh_fips.
+        location_types = {row["location_type"] for row in social_rows} | {row["locationType"] for row in dims["sdoh_fips"]}
+        self.assertEqual(set(), {value for value in location_types if "fips" not in value.lower()})
+
+    def test_social_determinant_rows_are_one_per_county_and_measure(self) -> None:
         zip_rows = [
-            {
-                "zip": "30309",
-                "countyFips": "13121",
-            }
+            {"zip": "30309", "countyFips": "13121"},
+            {"zip": "30303", "countyFips": "13121"},
+            {"zip": "30032", "countyFips": "13089"},
         ]
 
         with patch.object(self.seed, "_now", return_value="2026-07-01T12:00:00"):
             rows = self.seed.build_social_determinant_rows(zip_rows)
+            dims = self.seed.build_sdoh_dimension_rows()
 
-        self.assertEqual(len(self.seed.SDOH_MEASURES), len(rows))
-        self.assertEqual(list(range(1, len(rows) + 1)), [row["social_determinant_id"] for row in rows])
-        rows_by_name = {row["name"]: row for row in rows}
-        self.assertEqual({measure[3] for measure in self.seed.SDOH_MEASURES}, set(rows_by_name))
+        # Two ZIPs in one county must not double-count that county's values.
+        measures = [measure[3] for measure in self.seed.SDOH_MEASURES]
+        self.assertCountEqual(
+            [(fips, name) for fips in ("13089", "13121") for name in measures],
+            [(row["location_value"], row["name"]) for row in rows],
+        )
+        ids = [row["social_determinant_id"] for row in rows]
+        self.assertEqual(len(ids), len(set(ids)))
+        units = {row["unit_of_measure_id"]: row["abbreviation"] for row in dims["sdoh_unitofmeasure"]}
+        income = next(row for row in rows if row["name"] == "ACS_MEDIAN_HH_INC")
+        self.assertEqual("USD", units[income["unit_of_measure_id"]])
 
-        seed_value = sum(ord(ch) for ch in "30309")
-        self.assertEqual(float(52000 + (seed_value % 34) * 1000), rows_by_name["ACS_MEDIAN_HH_INC"]["value_as_number"])
-        self.assertEqual("USD", next(measure[4] for measure in self.seed.SDOH_MEASURES if measure[3] == "ACS_MEDIAN_HH_INC"))
-        self.assertEqual(1, rows_by_name["ACS_MEDIAN_HH_INC"]["unit_of_measure_id"])
-        self.assertEqual(2, rows_by_name["SAIPE_TOT_POV"]["unit_of_measure_id"])
-        self.assertEqual("30309:FFR16", rows_by_name["FFR16"]["harmonization_key"])
-        self.assertEqual('{"zip":"30309","countyFips":"13121"}', rows_by_name["NEPHTN_ARSENIC_MEAN_POP"]["location_JSON"])
-        self.assertEqual("SyntheticSdohSeed", rows_by_name["LTC_AVG_OBS_REHOSP_RATE"]["SourceTable"])
+    def test_zip_table_covers_every_atlanta_zip_synthea_assigns(self) -> None:
+        # Atlanta, GA rows of Synthea's geography/zipcodes.csv. A patient in an
+        # unmapped ZIP gets no county and no SDOH values.
+        synthea_atlanta_zips = {
+            "30032", "30303", "30305", "30306", "30307", "30308", "30309", "30310",
+            "30311", "30312", "30313", "30314", "30315", "30316", "30317", "30318",
+            "30319", "30324", "30326", "30327", "30331", "30332", "30334", "30336",
+            "30342", "30344", "30354", "30363",
+        }
+
+        self.assertEqual(set(), synthea_atlanta_zips - set(self.seed.ATLANTA_ZIP_FIPS))
 
 
 if __name__ == "__main__":
