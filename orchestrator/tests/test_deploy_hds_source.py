@@ -766,6 +766,30 @@ class HdsSourceTests(unittest.TestCase):
                 self.lock = threading.Lock()
                 self.initial_barrier = threading.Barrier(2)
 
+            def find_item(self, workspace_id, display_name, item_type=None):
+                if item_type == "Lakehouse":
+                    return {
+                        "id": "cma-lakehouse-id",
+                        "displayName": display_name,
+                        "type": "Lakehouse",
+                        "properties": {
+                            "sqlEndpointProperties": {
+                                "connectionString": "server.database.fabric.microsoft.com",
+                                "id": "endpoint-id",
+                            }
+                        },
+                    }
+                return {"id": f"existing-{display_name}", "displayName": display_name, "type": item_type}
+
+            def list_items(self, workspace_id, item_type=None):
+                return []
+
+            def call(self, method, endpoint, body=None):
+                return {"id": "cma-item-id"}
+
+            def update_item_definition(self, workspace_id, item_id, definition):
+                pass
+
             def run_notebook_job(self, workspace_id, item_id, parameters=None):
                 with self.lock:
                     self.started.append(item_id)
@@ -792,7 +816,7 @@ class HdsSourceTests(unittest.TestCase):
         fabric = Fabric()
         items = {name: {"id": name} for name in hds.DEPLOYMENT_STAGE_NAMES}
         with patch.object(hds, "_event"):
-            jobs = hds._run_deployment_stages(fabric, "workspace", items)
+            jobs = hds._run_deployment_stages(fabric, "workspace", "workspace-name", items)
 
         self.assertEqual(fabric.max_active, hds.CONTROL_PLANE_CONCURRENCY)
         for stage_name, dependencies in hds.DEPLOYMENT_STAGE_DEPENDENCIES.items():
@@ -809,6 +833,30 @@ class HdsSourceTests(unittest.TestCase):
             def __init__(self):
                 self.started = []
 
+            def find_item(self, workspace_id, display_name, item_type=None):
+                if item_type == "Lakehouse":
+                    return {
+                        "id": "cma-lakehouse-id",
+                        "displayName": display_name,
+                        "type": "Lakehouse",
+                        "properties": {
+                            "sqlEndpointProperties": {
+                                "connectionString": "server.database.fabric.microsoft.com",
+                                "id": "endpoint-id",
+                            }
+                        },
+                    }
+                return {"id": f"existing-{display_name}", "displayName": display_name, "type": item_type}
+
+            def list_items(self, workspace_id, item_type=None):
+                return []
+
+            def call(self, method, endpoint, body=None):
+                return {"id": "cma-item-id"}
+
+            def update_item_definition(self, workspace_id, item_id, definition):
+                pass
+
             def run_notebook_job(self, workspace_id, item_id, parameters=None):
                 self.started.append(item_id)
                 return f"https://example.test/jobs/{item_id}"
@@ -823,7 +871,7 @@ class HdsSourceTests(unittest.TestCase):
         items = {name: {"id": name} for name in hds.DEPLOYMENT_STAGE_NAMES}
         with patch.object(hds, "_event") as emit:
             with self.assertRaisesRegex(RuntimeError, "powerbi_deployer: synthetic Power BI failure"):
-                hds._run_deployment_stages(fabric, "workspace", items)
+                hds._run_deployment_stages(fabric, "workspace", "workspace-name", items)
 
         self.assertNotIn("deployment_validator", fabric.started)
         blocked = {call.args[0] for call in emit.call_args_list if len(call.args) > 1 and call.args[1] == "blocked"}
@@ -895,6 +943,216 @@ class HdsSourceTests(unittest.TestCase):
         self.assertIn("--recursive=true", command)
         self.assertEqual(uploaded, {"Files/hds-build-artifacts/config.json": 2})
 
+
+    def test_cma_items_target_binding_replaces_tokens_and_constructs_connection_string(self):
+        class Fabric:
+            def __init__(self):
+                self.created = []
+                self.updated = []
+
+            def find_item(self, workspace_id, display_name, item_type=None):
+                if item_type == "Lakehouse" and display_name == "healthcare1_msft_gold_cma":
+                    return {
+                        "id": "lh-guid-1234",
+                        "displayName": "healthcare1_msft_gold_cma",
+                        "type": "Lakehouse",
+                        "properties": {
+                            "sqlEndpointProperties": {
+                                "connectionString": "target-sql.fabric.microsoft.com",
+                                "id": "endpoint-guid-5678",
+                            }
+                        },
+                    }
+                return None
+
+            def list_items(self, workspace_id, item_type=None):
+                return []
+
+            def call(self, method, endpoint, body=None):
+                if method == "POST" and endpoint.endswith("/items"):
+                    item_id = f"id-{body['displayName']}"
+                    self.created.append((body["displayName"], body["type"], body["definition"]))
+                    return {"id": item_id, "displayName": body["displayName"], "type": body["type"]}
+                return {}
+
+            def update_item_definition(self, workspace_id, item_id, definition):
+                self.updated.append((item_id, definition))
+
+        fabric = Fabric()
+        with patch.object(hds, "_event"):
+            model_item, report_item = hds._ensure_cma_items(fabric, "ws-id-42", "ws-target-name")
+
+        self.assertEqual(model_item["id"], "id-healthcare1_msft_cma_semantic_model")
+        self.assertEqual(report_item["id"], "id-healthcare1_msft_cma_report")
+        self.assertEqual(len(fabric.created), 2)
+
+        model_name, model_type, model_def = fabric.created[0]
+        self.assertEqual(model_name, "healthcare1_msft_cma_semantic_model")
+        self.assertEqual(model_type, "SemanticModel")
+        self.assertEqual(model_def["format"], "TMDL")
+        self.assertFalse(any(p["path"] == ".platform" or ".platform" in p["path"] for p in model_def["parts"]))
+        care_plan_part = next(p for p in model_def["parts"] if "care_plan.tmdl" in p["path"])
+        care_plan_text = base64.b64decode(care_plan_part["payload"]).decode("utf-8")
+        self.assertIn('Sql.Database("target-sql.fabric.microsoft.com", "healthcare1_msft_gold_cma")', care_plan_text)
+        self.assertNotIn("__SQL_ENDPOINT__", care_plan_text)
+        self.assertNotIn("__DATABASE_NAME__", care_plan_text)
+
+        report_name, report_type, report_def = fabric.created[1]
+        self.assertEqual(report_name, "healthcare1_msft_cma_report")
+        self.assertEqual(report_type, "Report")
+        self.assertEqual(report_def["format"], "PBIR-Legacy")
+        pbir_part = next(p for p in report_def["parts"] if p["path"] == "definition.pbir")
+        pbir_text = base64.b64decode(pbir_part["payload"]).decode("utf-8")
+        expected_conn = (
+            "Data Source=powerbi://api.powerbi.com/v1.0/myorg/ws-target-name;"
+            "initial catalog=healthcare1_msft_cma_semantic_model;"
+            "integrated security=ClaimsToken;"
+            "semanticmodelid=id-healthcare1_msft_cma_semantic_model"
+        )
+        self.assertIn(expected_conn, pbir_text)
+        self.assertNotIn("__SEMANTIC_MODEL_CONNECTION__", pbir_text)
+
+    def test_cma_items_idempotent_upsert_retains_existing_ids(self):
+        class Fabric:
+            def __init__(self):
+                self.updated = []
+
+            def find_item(self, workspace_id, display_name, item_type=None):
+                if item_type == "Lakehouse":
+                    return {
+                        "id": "lh-guid-1234",
+                        "displayName": display_name,
+                        "type": "Lakehouse",
+                        "properties": {
+                            "sqlEndpointProperties": {
+                                "connectionString": "target-sql.fabric.microsoft.com",
+                                "id": "endpoint-guid-5678",
+                            }
+                        },
+                    }
+                return None
+
+            def list_items(self, workspace_id, item_type=None):
+                return [
+                    {"id": "existing-model-guid", "displayName": "healthcare1_msft_cma_semantic_model", "type": "SemanticModel"},
+                    {"id": "existing-report-guid", "displayName": "healthcare1_msft_cma_report", "type": "Report"},
+                ]
+
+            def call(self, method, endpoint, body=None):
+                raise AssertionError("POST /items must not be called when items already exist")
+
+            def update_item_definition(self, workspace_id, item_id, definition):
+                self.updated.append((workspace_id, item_id, definition))
+
+        fabric = Fabric()
+        with patch.object(hds, "_event"):
+            model_item, report_item = hds._ensure_cma_items(fabric, "ws-id-42", "ws-target-name")
+
+        self.assertEqual(model_item["id"], "existing-model-guid")
+        self.assertEqual(report_item["id"], "existing-report-guid")
+        self.assertEqual(len(fabric.updated), 2)
+        self.assertEqual(fabric.updated[0][1], "existing-model-guid")
+        self.assertEqual(fabric.updated[1][1], "existing-report-guid")
+
+        report_def = fabric.updated[1][2]["definition"]
+        pbir_part = next(p for p in report_def["parts"] if p["path"] == "definition.pbir")
+        pbir_text = base64.b64decode(pbir_part["payload"]).decode("utf-8")
+        self.assertIn("semanticmodelid=existing-model-guid", pbir_text)
+
+    def test_cma_items_missing_lakehouse_or_endpoint_fails_before_vendor_notebook(self):
+        class MissingLakehouseFabric:
+            def __init__(self):
+                self.notebook_ran = False
+
+            def find_item(self, workspace_id, display_name, item_type=None):
+                return None
+
+            def list_items(self, workspace_id, item_type=None):
+                return []
+
+            def run_notebook_job(self, workspace_id, item_id, parameters=None):
+                self.notebook_ran = True
+                return "https://example.test/job"
+
+        fabric1 = MissingLakehouseFabric()
+        bootstrap_items = {"powerbi_deployer": {"id": "pbi-deployer-nb-id"}}
+        with patch.object(hds, "_event"):
+            with self.assertRaisesRegex(RuntimeError, "Target CMA Gold lakehouse 'healthcare1_msft_gold_cma' was not found"):
+                hds._run_deployment_stage(fabric1, "ws-id", "ws-name", bootstrap_items, "powerbi_deployer")
+        self.assertFalse(fabric1.notebook_ran)
+
+        class MissingEndpointFabric:
+            def __init__(self):
+                self.notebook_ran = False
+
+            def find_item(self, workspace_id, display_name, item_type=None):
+                if item_type == "Lakehouse":
+                    return {"id": "lh-id", "displayName": display_name, "type": "Lakehouse"}
+                return None
+
+            def list_items(self, workspace_id, item_type=None):
+                return []
+
+            def call(self, method, endpoint, body=None):
+                return {"id": "lh-id", "displayName": "healthcare1_msft_gold_cma", "properties": {}}
+
+            def run_notebook_job(self, workspace_id, item_id, parameters=None):
+                self.notebook_ran = True
+                return "https://example.test/job"
+
+        fabric2 = MissingEndpointFabric()
+        with patch.object(hds, "_event"):
+            with self.assertRaisesRegex(RuntimeError, "does not expose a ready SQL endpoint connectionString"):
+                hds._run_deployment_stage(fabric2, "ws-id", "ws-name", bootstrap_items, "powerbi_deployer")
+        self.assertFalse(fabric2.notebook_ran)
+
+    def test_cma_definition_builder_replacement_mismatch_and_unresolved_tokens_fail_before_vendor_notebook(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            model_dir = Path(temp_dir) / "Test.SemanticModel"
+            model_dir.mkdir()
+            (model_dir / "table.tmdl").write_text('Source = Sql.Database("__SQL_ENDPOINT__", "__DATABASE_NAME__")', encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "Required replacement tokens did not match any content"):
+                hds._item_definition_from_directory(
+                    model_dir,
+                    "TMDL",
+                    {"__SQL_ENDPOINT__": "server.test", "__DATABASE_NAME__": "db", "__NONEXISTENT__": "val"},
+                )
+
+            with self.assertRaisesRegex(ValueError, "Unresolved deployment tokens in table.tmdl"):
+                hds._item_definition_from_directory(
+                    model_dir,
+                    "TMDL",
+                    {"__SQL_ENDPOINT__": "server.test"},
+                )
+
+        class ErrorFabric:
+            def __init__(self):
+                self.notebook_ran = False
+
+            def find_item(self, workspace_id, display_name, item_type=None):
+                if item_type == "Lakehouse":
+                    return {
+                        "id": "lh-id",
+                        "displayName": display_name,
+                        "properties": {"sqlEndpointProperties": {"connectionString": "server.test"}},
+                    }
+                return None
+
+            def list_items(self, workspace_id, item_type=None):
+                return []
+
+            def run_notebook_job(self, workspace_id, item_id, parameters=None):
+                self.notebook_ran = True
+                return "https://example.test/job"
+
+        fabric = ErrorFabric()
+        bootstrap_items = {"powerbi_deployer": {"id": "pbi-deployer-nb-id"}}
+        with patch.object(hds, "_item_definition_from_directory", side_effect=ValueError("synthetic token replacement error")):
+            with patch.object(hds, "_event"):
+                with self.assertRaisesRegex(ValueError, "synthetic token replacement error"):
+                    hds._run_deployment_stage(fabric, "ws-id", "ws-name", bootstrap_items, "powerbi_deployer")
+        self.assertFalse(fabric.notebook_ran)
 
 if __name__ == "__main__":
     unittest.main()

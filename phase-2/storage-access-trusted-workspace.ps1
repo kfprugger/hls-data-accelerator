@@ -517,135 +517,6 @@ function Sync-LakehouseSqlEndpoint {
     }
 }
 
-function New-FabricItemDefinitionFromDirectory {
-    param(
-        [Parameter(Mandatory)][string]$ItemDirectory,
-        [Parameter(Mandatory)][ValidateSet('TMDL','PBIR-Legacy')][string]$Format,
-        [hashtable]$Replacements = @{}
-    )
-
-    if (-not (Test-Path $ItemDirectory)) {
-        throw "Fabric item artifact directory not found: $ItemDirectory"
-    }
-
-    $parts = @()
-    $root = (Resolve-Path $ItemDirectory).Path
-    foreach ($file in Get-ChildItem -Path $root -Recurse -File | Sort-Object FullName) {
-        $rel = $file.FullName.Substring($root.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) -replace '\\', '/'
-        $content = [System.IO.File]::ReadAllText($file.FullName)
-        foreach ($key in $Replacements.Keys) { $content = $content.Replace([string]$key, [string]$Replacements[$key]) }
-        $parts += @{
-            path = $rel
-            payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($content))
-            payloadType = 'InlineBase64'
-        }
-    }
-
-    if ($parts.Count -eq 0) { throw "Fabric item artifact directory is empty: $ItemDirectory" }
-    return @{ format = $Format; parts = $parts }
-}
-
-function Set-ReportDefinitionSemanticModelConnection {
-    param(
-        [Parameter(Mandatory)][hashtable]$Definition,
-        [Parameter(Mandatory)][string]$WorkspaceName,
-        [Parameter(Mandatory)][string]$SemanticModelName,
-        [Parameter(Mandatory)][string]$SemanticModelId
-    )
-
-    $connectionString = "Data Source=powerbi://api.powerbi.com/v1.0/myorg/$WorkspaceName;initial catalog=$SemanticModelName;integrated security=ClaimsToken;semanticmodelid=$SemanticModelId"
-    foreach ($part in $Definition.parts) {
-        if ($part.path -ne 'definition.pbir') { continue }
-        $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($part.payload)) | ConvertFrom-Json -Depth 50
-        if (-not $json.datasetReference) { $json | Add-Member -NotePropertyName datasetReference -NotePropertyValue ([pscustomobject]@{}) }
-        if (-not $json.datasetReference.byConnection) { $json.datasetReference | Add-Member -NotePropertyName byConnection -NotePropertyValue ([pscustomobject]@{}) }
-        $json.datasetReference.byConnection.connectionString = $connectionString
-        $part.payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($json | ConvertTo-Json -Depth 50)))
-        $part.payloadType = 'InlineBase64'
-        return $Definition
-    }
-    throw 'Report definition is missing definition.pbir'
-}
-
-function Invoke-CmaSemanticModelFinalization {
-    param(
-        [Parameter(Mandatory)][string]$WorkspaceId,
-        [Parameter(Mandatory)][string]$WorkspaceName,
-        [Parameter(Mandatory)][hashtable]$FabricHeaders
-    )
-
-    $semanticModelName = 'healthcare1_msft_cma_semantic_model'
-    $reportName = 'healthcare1_msft_cma_report'
-    $artifactRoot = Join-Path $PSScriptRoot 'cma-report'
-
-    Write-Log '─── Step 9d: Finalizing CMA semantic model and report binding ───' 'INFO'
-    $timer = [System.Diagnostics.Stopwatch]::StartNew()
-
-    $modelsResult = Invoke-FabricApiRequest -Method Get `
-        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items?type=SemanticModel" `
-        -Headers $FabricHeaders -Description 'List semantic models for CMA finalization'
-    $semanticModel = $modelsResult.Response.value | Where-Object { $_.displayName -eq $semanticModelName } | Select-Object -First 1
-    if (-not $semanticModel) {
-        Write-Log "  CMA semantic model '$semanticModelName' not found; skipping finalization." 'WARN'
-        $timer.Stop()
-        Record-Step -Name 'CMA Semantic Model' -Status 'NOT FOUND' -Seconds $timer.Elapsed.TotalSeconds
-        return
-    }
-
-    $lakehousesResult = Invoke-FabricApiRequest -Method Get `
-        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items?type=Lakehouse" `
-        -Headers $FabricHeaders -Description 'List lakehouses for CMA datasource rewrite'
-    $cmaLakehouse = $lakehousesResult.Response.value | Where-Object { $_.displayName -eq 'healthcare1_msft_gold_cma' } | Select-Object -First 1
-    if (-not $cmaLakehouse) { throw "CMA Gold lakehouse 'healthcare1_msft_gold_cma' not found." }
-    $cmaDetail = Invoke-FabricApiRequest -Method Get `
-        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/lakehouses/$($cmaLakehouse.id)" `
-        -Headers $FabricHeaders -Description 'Get CMA Gold SQL endpoint'
-    $cmaSqlEndpoint = [string]$cmaDetail.Response.properties.sqlEndpointProperties.connectionString
-    if ([string]::IsNullOrWhiteSpace($cmaSqlEndpoint)) { throw 'CMA Gold SQL endpoint is unavailable.' }
-    $exportedCmaEndpoint = 'nkhahdl5to4ezo6p5bg76flepa-knddbdlugufetk2sy3oxghm6ly.datawarehouse.fabric.microsoft.com'
-
-    $semanticDefinition = New-FabricItemDefinitionFromDirectory `
-        -ItemDirectory (Join-Path $artifactRoot "$semanticModelName.SemanticModel") `
-        -Format 'TMDL' `
-        -Replacements @{ $exportedCmaEndpoint = $cmaSqlEndpoint }
-    $modelUpdate = Invoke-FabricApiRequest -Method Post `
-        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$($semanticModel.id)/updateDefinition" `
-        -Headers $FabricHeaders -Body @{ definition = $semanticDefinition } `
-        -Description "Overwrite CMA semantic model '$semanticModelName'"
-    Wait-FabricOperation -OperationResult $modelUpdate -Headers $FabricHeaders -Description "Overwrite CMA semantic model '$semanticModelName'"
-
-    $reportDefinition = New-FabricItemDefinitionFromDirectory `
-        -ItemDirectory (Join-Path $artifactRoot "$reportName.Report") `
-        -Format 'PBIR-Legacy'
-    $reportDefinition = Set-ReportDefinitionSemanticModelConnection `
-        -Definition $reportDefinition `
-        -WorkspaceName $WorkspaceName `
-        -SemanticModelName $semanticModelName `
-        -SemanticModelId $semanticModel.id
-
-    $reportsResult = Invoke-FabricApiRequest -Method Get `
-        -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items?type=Report" `
-        -Headers $FabricHeaders -Description 'List reports for CMA finalization'
-    $report = $reportsResult.Response.value | Where-Object { $_.displayName -eq $reportName } | Select-Object -First 1
-    if ($report) {
-        $reportUpdate = Invoke-FabricApiRequest -Method Post `
-            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items/$($report.id)/updateDefinition" `
-            -Headers $FabricHeaders -Body @{ definition = $reportDefinition } `
-            -Description "Bind CMA report '$reportName' to '$semanticModelName'"
-        Wait-FabricOperation -OperationResult $reportUpdate -Headers $FabricHeaders -Description "Bind CMA report '$reportName'"
-    } else {
-        $reportCreate = Invoke-FabricApiRequest -Method Post `
-            -Uri "$FabricManagementEndpoint/v1/workspaces/$WorkspaceId/items" `
-            -Headers $FabricHeaders -Body @{ displayName = $reportName; type = 'Report'; definition = $reportDefinition } `
-            -Description "Create CMA report '$reportName'"
-        Wait-FabricOperation -OperationResult $reportCreate -Headers $FabricHeaders -Description "Create CMA report '$reportName'"
-    }
-
-    $timer.Stop()
-    Record-Step -Name 'CMA Semantic Model' -Status 'OVERWRITTEN/BOUND' -Seconds $timer.Elapsed.TotalSeconds
-    Write-Log "  ✓ CMA semantic model overwritten and report bound to '$semanticModelName'." 'INFO'
-}
-
 function Resolve-OptionalSidecarPipelines {
     param(
         [Parameter(Mandatory)][object[]]$Pipelines,
@@ -2153,6 +2024,7 @@ $cmaAlreadyRunning = $false
 $cmaCompleted = $false
 $cmaFailed = $false
 $cmaResult = $null
+$cmaSdohCompleted = $false
 
 
 $clinInvoked = $false
@@ -2616,8 +2488,8 @@ if (-not $omopPipeline) {
 } # end: if ($imgCompleted) — OMOP only runs after imaging completes
 
 if ($cmaPipeline -and ($cmaInvoked -or $cmaAlreadyRunning)) {
-    $cmaFinalizeTimer = [System.Diagnostics.Stopwatch]::StartNew()
-    Write-Log '─── Step 9d: Waiting for CMA pipeline before semantic model finalization ───' 'INFO'
+    $cmaWaitTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Log '─── Step 9d: Waiting for CMA pipeline before SDOH demo source seeding ───' 'INFO'
     $maxPollMin = 60
     $pollStart = Get-Date
     while ((New-TimeSpan -Start $pollStart).TotalMinutes -lt $maxPollMin) {
@@ -2642,7 +2514,7 @@ if ($cmaPipeline -and ($cmaInvoked -or $cmaAlreadyRunning)) {
                 if ($cmaJobStatus -eq 'Completed') {
                     $cmaCompleted = $true
                 } elseif ($cmaJobStatus -in @('Failed', 'Cancelled')) {
-                    Write-Log "  ✗ CMA pipeline $cmaJobStatus; skipping semantic model finalization." 'WARN'
+                    Write-Log "  ✗ CMA pipeline $cmaJobStatus; skipping SDOH demo source seeding." 'WARN'
                     $cmaFailed = $true
                 }
             }
@@ -2661,6 +2533,7 @@ if ($cmaPipeline -and ($cmaInvoked -or $cmaAlreadyRunning)) {
     }
 
     if ($cmaCompleted) {
+        $cmaWaitTimer.Stop()
         # CMA is a writer of these Gold tables: seed only after its successful
         # terminal state, never while the non-blocking pipeline is still running.
         $sdohTimer = [System.Diagnostics.Stopwatch]::StartNew()
@@ -2669,13 +2542,13 @@ if ($cmaPipeline -and ($cmaInvoked -or $cmaAlreadyRunning)) {
         if ($LASTEXITCODE -ne 0) { throw "CMA SDOH demo source seeding failed with exit code $LASTEXITCODE" }
         $sdohTimer.Stop()
         Record-Step -Name 'CMA SDOH Demo Sources' -Status 'OK' -Seconds $sdohTimer.Elapsed.TotalSeconds
+        $cmaSdohCompleted = $true
         $fabricToken = Get-FabricApiAccessToken
         $fabHeaders = Get-FabricApiHeaders -AccessToken $fabricToken
-        Invoke-CmaSemanticModelFinalization -WorkspaceId $workspaceId -WorkspaceName $FabricWorkspaceName -FabricHeaders $fabHeaders
     } else {
-        $cmaFinalizeTimer.Stop()
-        Record-Step -Name 'CMA Semantic Model' -Status $(if ($cmaFailed) { 'SKIPPED (CMA failed)' } else { 'TIMEOUT' }) -Seconds $cmaFinalizeTimer.Elapsed.TotalSeconds
-        Write-Log '  ⚠ CMA semantic model finalization skipped because the CMA pipeline did not complete.' 'WARN'
+        $cmaWaitTimer.Stop()
+        Record-Step -Name 'CMA SDOH Demo Sources' -Status $(if ($cmaFailed) { 'SKIPPED (CMA failed)' } else { 'TIMEOUT' }) -Seconds $cmaWaitTimer.Elapsed.TotalSeconds
+        Write-Log "  ⚠ CMA SDOH demo source seeding skipped because the CMA pipeline $(if ($cmaFailed) { 'failed' } else { 'timed out' })." 'WARN'
     }
 }
 
@@ -2796,7 +2669,7 @@ Write-Host "  Step Summary:" -ForegroundColor White
 Write-Host "  $('─' * 55)" -ForegroundColor DarkGray
 
 foreach ($r in $stepResults) {
-    $icon = if ($r.Status -in @('OK','EXISTS','COMPLETED','INVOKED','SKIPPED','ALREADY RUNNING','ASSIGNED','OVERWRITTEN/BOUND')) { '✓' } else { '✗' }
+    $icon = if ($r.Status -in @('OK','EXISTS','COMPLETED','INVOKED','SKIPPED','ALREADY RUNNING','ASSIGNED')) { '✓' } else { '✗' }
     $color = if ($icon -eq '✓') { 'Green' } else { 'Yellow' }
     $line = "  $icon  $($r.Step.PadRight(30)) $($r.Status.PadRight(15)) $($r.Duration)"
     Write-Host $line -ForegroundColor $color
@@ -2816,14 +2689,16 @@ Write-Host "    1. Optional sidecars — claims/CCLF serialized with retry; disj
 Write-Host "    2. Clinical Foundation pipeline — $(if ($clinicalCompleted) { 'COMPLETED ✓' } else { 'IN PROGRESS / NOT COMPLETED' })" -ForegroundColor $(if ($clinicalCompleted) { 'Green' } else { 'Yellow' })
 Write-Host "    3. Patient Outreach Analytics pipeline — $(if ($poaCompleted) { 'COMPLETED ✓' } else { 'NOT COMPLETED' })" -ForegroundColor $(if ($poaCompleted) { 'Green' } else { 'Yellow' })
 if ($cmaPipeline) {
-    $cmaStatus = if ($cmaCompleted) {
-        'COMPLETED ✓; semantic model overwritten and report rebound'
+    $cmaStatus = if ($cmaCompleted -and $cmaSdohCompleted) {
+        'COMPLETED ✓; SDOH demo sources seeded'
+    } elseif ($cmaCompleted) {
+        'COMPLETED ✓; SDOH demo source seeding did not complete'
     } elseif ($cmaFailed) {
-        'FAILED; semantic model finalization skipped'
+        'FAILED; SDOH demo source seeding skipped'
     } elseif ($cmaInvoked) {
-        'INVOKED after Clinical/Silver readiness; awaiting finalization'
+        'INVOKED after Clinical/Silver readiness; awaiting completion'
     } elseif ($cmaAlreadyRunning) {
-        'ALREADY RUNNING after Clinical/Silver readiness; awaiting finalization'
+        'ALREADY RUNNING after Clinical/Silver readiness; awaiting completion'
     } elseif (-not $clinicalCompleted) {
         'SKIPPED (waiting for Clinical/Silver readiness)'
     } else {
@@ -2893,7 +2768,7 @@ if (-not $imgCompleted) {
     Write-Host "  └──────────────────────────────────────────────────────────────┘" -ForegroundColor Green
     Write-Host ""
     if ($cmaPipeline) {
-        $cmaMessage = if ($cmaCompleted) { 'CMA pipeline completed; semantic model was overwritten from the exported PBIP and report binding was refreshed.' } elseif ($cmaFailed) { 'CMA pipeline failed; semantic model finalization was skipped.' } elseif ($cmaInvoked) { 'CMA pipeline was invoked after Clinical/Silver readiness; finalization did not complete.' } elseif ($cmaAlreadyRunning) { 'CMA pipeline was already running after Clinical/Silver readiness; finalization did not complete.' } else { 'CMA pipeline was not invoked; check warnings above.' }
+        $cmaMessage = if ($cmaCompleted -and $cmaSdohCompleted) { 'CMA pipeline completed and SDOH demo sources were seeded.' } elseif ($cmaCompleted) { 'CMA pipeline completed; SDOH demo source seeding did not complete.' } elseif ($cmaFailed) { 'CMA pipeline failed; SDOH demo source seeding was skipped.' } elseif ($cmaInvoked) { 'CMA pipeline was invoked after Clinical/Silver readiness; pipeline completion and SDOH seeding did not finish.' } elseif ($cmaAlreadyRunning) { 'CMA pipeline was already running after Clinical/Silver readiness; pipeline completion and SDOH seeding did not finish.' } else { 'CMA pipeline was not invoked; check warnings above.' }
         Write-Host "  $cmaMessage" -ForegroundColor $(if ($cmaInvoked -or $cmaAlreadyRunning) { 'Green' } else { 'Yellow' })
         if ($cmaUrl) { Write-Host "  $cmaUrl" -ForegroundColor DarkCyan }
         Write-Host ""

@@ -3484,12 +3484,24 @@ Emit-PhaseTransition -Phase 6 -Label "CMS Quality & Performance" -StepCount 1
             )
             if (-not (Test-Path $ItemDirectory)) { throw "Fabric artifact directory not found: $ItemDirectory" }
             $root = (Resolve-Path $ItemDirectory).Path
+            $matchedKeys = @{}
             $parts = @()
             foreach ($file in Get-ChildItem -Path $root -Recurse -File | Sort-Object FullName) {
                 $relativePath = $file.FullName.Substring($root.Length).TrimStart([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) -replace '\\', '/'
+                if ($file.Name -eq '.platform' -or ($relativePath -split '/') -contains '.platform') { continue }
                 $content = [IO.File]::ReadAllText($file.FullName)
+                foreach ($key in $Replacements.Keys) {
+                    $keyStr = [string]$key
+                    if ($content.Contains($keyStr)) { $matchedKeys[$keyStr] = $true }
+                }
                 foreach ($key in $Replacements.Keys) { $content = $content.Replace([string]$key, [string]$Replacements[$key]) }
                 $parts += @{ path = $relativePath; payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($content)); payloadType = 'InlineBase64' }
+            }
+            if ($Replacements -and $Replacements.Count -gt 0) {
+                $unmatched = @($Replacements.Keys | Where-Object { -not $matchedKeys.ContainsKey([string]$_) } | Sort-Object)
+                if ($unmatched.Count -gt 0) {
+                    throw "Required replacement tokens did not match any content in $($ItemDirectory): $($unmatched -join ', ')"
+                }
             }
             if ($parts.Count -eq 0) { throw "Fabric artifact directory is empty: $ItemDirectory" }
             return @{ format = $Format; parts = $parts }

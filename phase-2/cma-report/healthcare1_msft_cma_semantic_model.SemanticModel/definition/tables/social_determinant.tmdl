@@ -156,7 +156,7 @@ table social_determinant
 		mode: directQuery
 		source =
 				let
-				    Source = Sql.Database("nkhahdl5to4ezo6p5bg76flepa-knddbdlugufetk2sy3oxghm6ly.datawarehouse.fabric.microsoft.com", "healthcare1_msft_gold_cma"),
+				    Source = Sql.Database("__SQL_ENDPOINT__", "__DATABASE_NAME__"),
 				    dbo_social_determinant = Source{[Schema="dbo",Item="social_determinant"]}[Data]
 				in
 				    dbo_social_determinant

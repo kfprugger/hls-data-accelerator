@@ -69,7 +69,7 @@ table zip_to_fips_mapping
 		mode: directQuery
 		source =
 				let
-				    Source = Sql.Database("nkhahdl5to4ezo6p5bg76flepa-knddbdlugufetk2sy3oxghm6ly.datawarehouse.fabric.microsoft.com", "healthcare1_msft_gold_cma"),
+				    Source = Sql.Database("__SQL_ENDPOINT__", "__DATABASE_NAME__"),
 				    dbo_zip_to_fips_mapping = Source{[Schema="dbo",Item="zip_to_fips_mapping"]}[Data]
 				in
 				    dbo_zip_to_fips_mapping

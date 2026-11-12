@@ -31,19 +31,13 @@ import requests
 from shared.fabric_client import FabricClient
 from shared.onelake_client import OneLakeClient
 from shared.poa_model import project_appointment_created_day
-from shared.cma_model import (
-    activate_care_plan_person_link,
-    orient_person_location_link,
-    repair_social_determinant_metadata_join,
-    set_fact_to_dimension_one_way,
-)
 from shared.poa_ingestion import map_marketing_created_on
 
 logger = logging.getLogger(__name__)
 
 HDS_VERSION = "1.4.0"
 DTT_VERSION = "0.3.1.1271"
-STAGING_PATCH_VERSION = "2026-11-11.4"
+STAGING_PATCH_VERSION = "2026-11-12.1"
 COMPANY_PREFIX = "healthcare1"
 TECHNICAL_PREFIX = "msft"
 DEPLOYMENT_LAKEHOUSE = "deployment_lakehouse"
@@ -695,13 +689,6 @@ def stage_source_payload(force: bool = False) -> Path:
     poa_model = json.loads(poa_model_path.read_text(encoding="utf-8"))
     project_appointment_created_day(poa_model)
     poa_model_path.write_text(json.dumps(poa_model, indent=2), encoding="utf-8")
-    cma_model_path = artifact_destination / "healthcare-artifacts" / HDS_VERSION / "care-management-analytics" / "Datasets" / "CareManagementAnalytics" / "model.bim"
-    cma_model = json.loads(cma_model_path.read_text(encoding="utf-8"))
-    repair_social_determinant_metadata_join(cma_model)
-    orient_person_location_link(cma_model)
-    set_fact_to_dimension_one_way(cma_model)
-    activate_care_plan_person_link(cma_model)
-    cma_model_path.write_text(json.dumps(cma_model, indent=2), encoding="utf-8")
     idm_adapter_path = artifact_destination / "healthcare-configuration" / HDS_VERSION / "_internal" / "idm" / "adapter.json"
     idm_adapter = json.loads(idm_adapter_path.read_text(encoding="utf-8"))
     map_marketing_created_on(idm_adapter)
@@ -875,6 +862,168 @@ def _ensure_folder(fabric: FabricClient, workspace_id: str, name: str) -> str:
     if not isinstance(created, dict) or not created.get("id"):
         raise RuntimeError(f"Fabric did not return folder id for {name}")
     return str(created["id"])
+
+
+def _item_definition_from_directory(
+    directory: Path,
+    format_name: str,
+    replacements: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Build a Fabric item definition from a local artifact directory.
+
+    Requires replacement tokens to match and rejects unresolved deployment tokens.
+    Excludes .platform files, encodes parts as InlineBase64, and returns the
+    definition envelope with format (e.g. TMDL or PBIR-Legacy).
+    """
+    if not directory.is_dir():
+        raise FileNotFoundError(f"Item definition directory not found: {directory}")
+
+    token_pattern = re.compile(r"__[A-Z][A-Z0-9_]+__|%%[A-Za-z0-9_]+%%")
+    replacements = replacements or {}
+    matched_tokens: set[str] = set()
+    parts: list[dict[str, str]] = []
+
+    files = sorted(
+        [p for p in directory.rglob("*") if p.is_file()],
+        key=lambda p: p.relative_to(directory).as_posix(),
+    )
+
+    for file_path in files:
+        if file_path.name == ".platform" or ".platform" in file_path.parts:
+            continue
+        rel_path = file_path.relative_to(directory).as_posix()
+        content = file_path.read_text(encoding="utf-8")
+
+        for token, value in replacements.items():
+            if token in content:
+                matched_tokens.add(token)
+                content = content.replace(token, value)
+
+        unresolved = token_pattern.findall(content)
+        if unresolved:
+            raise ValueError(
+                f"Unresolved deployment tokens in {rel_path}: {sorted(set(unresolved))}"
+            )
+
+        payload = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+        parts.append({
+            "path": rel_path,
+            "payload": payload,
+            "payloadType": "InlineBase64",
+        })
+
+    if replacements:
+        unmatched = set(replacements.keys()) - matched_tokens
+        if unmatched:
+            raise ValueError(
+                f"Required replacement tokens did not match any content in {directory}: {sorted(unmatched)}"
+            )
+
+    if not parts:
+        raise ValueError(f"Item definition directory is empty: {directory}")
+
+    return {
+        "format": format_name,
+        "parts": parts,
+    }
+
+
+def _ensure_cma_items(
+    fabric: FabricClient,
+    workspace_id: str,
+    workspace_name: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Pre-create or update the CMA semantic model and report from repo TMDL/PBIR.
+
+    Binds the semantic model to the target CMA Gold lakehouse and SQL endpoint,
+    and binds the report to the semantic model via an XMLA connection string.
+    Emits stage progress via _event and raises on error to fail before the
+    vendor Power BI deployer runs.
+    """
+    lakehouse_name = managed_artifact_name("cma-gold")
+    lakehouse = fabric.find_item(workspace_id, lakehouse_name, "Lakehouse")
+
+    if not lakehouse or not lakehouse.get("id"):
+        raise RuntimeError(
+            f"Target CMA Gold lakehouse '{lakehouse_name}' was not found in workspace '{workspace_name}' ({workspace_id})"
+        )
+
+    lakehouse_id = str(lakehouse["id"])
+    sql_props = (lakehouse.get("properties") or {}).get("sqlEndpointProperties") or {}
+    sql_endpoint = sql_props.get("connectionString")
+    database_name = lakehouse.get("displayName") or lakehouse_name
+
+    if not sql_endpoint:
+        details = fabric.call("GET", f"/workspaces/{workspace_id}/lakehouses/{lakehouse_id}")
+        if isinstance(details, dict):
+            sql_props = (details.get("properties") or {}).get("sqlEndpointProperties") or {}
+            sql_endpoint = sql_props.get("connectionString")
+            database_name = details.get("displayName") or database_name
+
+    if not sql_endpoint or not str(sql_endpoint).strip():
+        raise RuntimeError(
+            f"Lakehouse '{database_name}' ({lakehouse_id}) does not expose a ready SQL endpoint connectionString"
+        )
+
+    database_name = str(database_name or lakehouse_name)
+    sql_endpoint = str(sql_endpoint).strip()
+
+    model_name = managed_artifact_name("care management analytics semantic model")
+    _event("powerbi_deployer", "running", f"Deploying CMA semantic model {model_name}")
+
+    cma_root = REPO_ROOT / "phase-2" / "cma-report"
+    model_dir = cma_root / f"{model_name}.SemanticModel"
+    if not model_dir.is_dir():
+        raise FileNotFoundError(f"CMA semantic model directory not found: {model_dir}")
+
+    model_definition = _item_definition_from_directory(
+        model_dir,
+        "TMDL",
+        {
+            "__SQL_ENDPOINT__": sql_endpoint,
+            "__DATABASE_NAME__": database_name,
+        },
+    )
+    model_item = _ensure_item(
+        fabric,
+        workspace_id,
+        model_name,
+        "SemanticModel",
+        model_definition,
+    )
+    model_id = str(model_item.get("id") or "")
+    if not model_id:
+        raise RuntimeError(f"Fabric did not return an ID for CMA semantic model '{model_name}'")
+
+    report_name = managed_artifact_name("care management analytics bi report")
+    _event("powerbi_deployer", "running", f"Deploying CMA report {report_name}")
+
+    report_dir = cma_root / f"{report_name}.Report"
+    if not report_dir.is_dir():
+        raise FileNotFoundError(f"CMA report directory not found: {report_dir}")
+
+    connection_string = (
+        f"Data Source=powerbi://api.powerbi.com/v1.0/myorg/{workspace_name};"
+        f"initial catalog={model_name};"
+        f"integrated security=ClaimsToken;"
+        f"semanticmodelid={model_id}"
+    )
+    report_definition = _item_definition_from_directory(
+        report_dir,
+        "PBIR-Legacy",
+        {
+            "__SEMANTIC_MODEL_CONNECTION__": connection_string,
+        },
+    )
+    report_item = _ensure_item(
+        fabric,
+        workspace_id,
+        report_name,
+        "Report",
+        report_definition,
+    )
+
+    return model_item, report_item
 
 
 def expected_source_contract(build_root: Path) -> dict[str, set[str]]:
@@ -1362,6 +1511,7 @@ def _run_hydration_shards(
 def _run_deployment_stage(
     fabric: FabricClient,
     workspace_id: str,
+    workspace_name: str,
     bootstrap_items: dict[str, dict[str, Any]],
     stage_name: str,
 ) -> dict[str, Any]:
@@ -1373,6 +1523,8 @@ def _run_deployment_stage(
         f"HDS stage {index}/{len(DEPLOYMENT_STAGE_NAMES)} starting",
     )
     try:
+        if stage_name == "powerbi_deployer":
+            _ensure_cma_items(fabric, workspace_id, workspace_name)
         if stage_name == "lakehouses_and_tables_deployer":
             job = _run_hydration_shards(fabric, workspace_id, str(stage["id"]))
         else:
@@ -1403,6 +1555,7 @@ def _mark_blocked(stage_names: tuple[str, ...], detail: str) -> None:
 def _run_deployment_stages(
     fabric: FabricClient,
     workspace_id: str,
+    workspace_name: str,
     bootstrap_items: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Run the Microsoft stages as a fail-fast bounded dependency scheduler."""
@@ -1427,6 +1580,7 @@ def _run_deployment_stages(
                         _run_deployment_stage,
                         fabric,
                         workspace_id,
+                        workspace_name,
                         bootstrap_items,
                         stage_name,
                     )
@@ -1507,7 +1661,7 @@ def run(
 
     _event("master", "running", "Running isolated HDS deployment stages")
     try:
-        deployment_jobs = _run_deployment_stages(fabric, workspace_id, bootstrap_items)
+        deployment_jobs = _run_deployment_stages(fabric, workspace_id, workspace_name, bootstrap_items)
     except Exception as exc:
         _event("master", "failed", str(exc))
         raise

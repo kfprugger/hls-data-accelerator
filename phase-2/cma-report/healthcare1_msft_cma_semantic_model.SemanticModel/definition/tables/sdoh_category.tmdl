@@ -80,7 +80,7 @@ table sdoh_category
 		mode: directQuery
 		source =
 				let
-				    Source = Sql.Database("nkhahdl5to4ezo6p5bg76flepa-knddbdlugufetk2sy3oxghm6ly.datawarehouse.fabric.microsoft.com", "healthcare1_msft_gold_cma"),
+				    Source = Sql.Database("__SQL_ENDPOINT__", "__DATABASE_NAME__"),
 				    dbo_sdoh_category = Source{[Schema="dbo",Item="sdoh_category"]}[Data]
 				in
 				    dbo_sdoh_category
