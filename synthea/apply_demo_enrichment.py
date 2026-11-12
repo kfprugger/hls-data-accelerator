@@ -27,11 +27,11 @@ FABRIC = "https://api.fabric.microsoft.com"
 def azure_json(subscription: str, *arguments: str):
     result = subprocess.run(
         ["az", *arguments, "--subscription", subscription, "-o", "json"],
-        capture_output=True, text=True, shell=sys.platform == "win32", check=False,
+        capture_output=True, text=True, shell=sys.platform == "win32", check=False, timeout=120,
     )
     if result.returncode:
         raise RuntimeError(f"Azure CLI {arguments[0]} failed: {result.stderr.strip()}")
-    return json.loads(result.stdout)
+    return json.loads(result.stdout) if result.stdout.strip() else None
 
 
 class Client:
@@ -181,14 +181,16 @@ def notebook_definition(code: str, workspace_id: str, lakehouse: dict) -> dict:
             "payload": base64.b64encode(json.dumps(notebook).encode()).decode()}]}
 
 
-def resolve_lakehouse(client: Client, workspace_id: str, name: str | None) -> dict:
+def resolve_lakehouse(client: Client, workspace_id: str, name: str | None, *, resume_capacity: bool) -> dict:
     root = f"/v1/workspaces/{workspace_id}"
     _, _, workspace = client.request("GET", root)
     capacities = list(client.items("/v1/capacities"))
     cap = next((item for item in capacities if item["id"] == workspace.get("capacityId")), None)
-    if cap and cap.get("state") != "Active" and cap.get("azureResourceId"):
-        print(f"Capacity {cap.get('displayName')} is {cap.get('state')}; auto-resuming via ARM...", flush=True)
-        subprocess.run(["az", "rest", "--method", "post", "--url", f"https://management.azure.com{cap['azureResourceId']}/resume?api-version=2023-11-01"], check=False)
+    if resume_capacity and cap and cap.get("state") != "Active" and cap.get("azureResourceId"):
+        print(f"Capacity {cap.get('displayName')} is {cap.get('state')}; resuming via ARM "
+              "(pass --no-capacity-resume to fail instead)...", flush=True)
+        azure_json(client.subscription, "rest", "--method", "post", "--url",
+                   f"https://management.azure.com{cap['azureResourceId']}/resume?api-version=2023-11-01")
         for _ in range(24):
             time.sleep(10)
             capacities = list(client.items("/v1/capacities"))
@@ -235,8 +237,9 @@ def run_seed_notebook(client: Client, workspace_id: str, lakehouse: dict, name: 
     return client.wait(job_url, "Completed")
 
 
-def apply_outreach(client: Client, patients: list[dict], as_of: date, workspace_id: str, bronze_name: str | None):
-    lakehouse = resolve_lakehouse(client, workspace_id, bronze_name)
+def apply_outreach(client: Client, patients: list[dict], as_of: date, workspace_id: str, bronze_name: str | None,
+                   *, resume_capacity: bool):
+    lakehouse = resolve_lakehouse(client, workspace_id, bronze_name, resume_capacity=resume_capacity)
     rows = build_outreach_sources(patients, as_of)
     run_seed_notebook(client, workspace_id, lakehouse, "Seed_Outreach_Demo_Sources",
                       outreach_definition(rows, workspace_id, lakehouse))
@@ -246,8 +249,8 @@ def apply_outreach(client: Client, patients: list[dict], as_of: date, workspace_
     return counts
 
 
-def apply_sdoh(client: Client, workspace_id: str):
-    lakehouse = resolve_lakehouse(client, workspace_id, "healthcare1_msft_gold_cma")
+def apply_sdoh(client: Client, workspace_id: str, *, resume_capacity: bool):
+    lakehouse = resolve_lakehouse(client, workspace_id, "healthcare1_msft_gold_cma", resume_capacity=resume_capacity)
     source = Path(__file__).resolve().parents[1] / "phase-2" / "seed_cma_sdoh.py"
     # Execute the existing seed source unchanged, then verify its persisted tables.
     code = source.read_text(encoding="utf-8") + '''
@@ -279,11 +282,13 @@ def main():
     parser.add_argument("--as-of", type=date.fromisoformat, default=datetime.now(timezone.utc).date())
     parser.add_argument("--workspace-id")
     parser.add_argument("--bronze-lakehouse-name")
+    parser.add_argument("--no-capacity-resume", action="store_true",
+                        help="fail instead of resuming a paused workspace capacity (a resumed capacity bills until paused)")
     args = parser.parse_args()
     if args.mode in {"outreach", "sdoh"} and not args.workspace_id:
         parser.error(f"{args.mode} requires --workspace-id")
     if args.mode == "sdoh":
-        apply_sdoh(Client(FABRIC, args.subscription), args.workspace_id)
+        apply_sdoh(Client(FABRIC, args.subscription), args.workspace_id, resume_capacity=not args.no_capacity_resume)
         return
     if not args.fhir_url and not args.resource_group:
         parser.error(f"{args.mode} requires --fhir-url or --resource-group")
@@ -303,7 +308,8 @@ def main():
     if args.mode == "fhir":
         apply_fhir(fhir, patients, args.as_of)
     else:
-        apply_outreach(Client(FABRIC, args.subscription), patients, args.as_of, args.workspace_id, args.bronze_lakehouse_name)
+        apply_outreach(Client(FABRIC, args.subscription), patients, args.as_of, args.workspace_id,
+                       args.bronze_lakehouse_name, resume_capacity=not args.no_capacity_resume)
 
 
 if __name__ == "__main__":

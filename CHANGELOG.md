@@ -2,6 +2,11 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Demo enrichment capacity resume (2026-11-11)
+
+- **Fixed** `synthea/apply_demo_enrichment.py` hiding a failed capacity resume. When the workspace capacity is paused, the `outreach` and `sdoh` modes resume it through ARM. The resume request ignored its exit code and had no timeout, so a denied resume waited 240 s and then reported only "Workspace must be assigned to an active Fabric capacity". The request now times out after 120 s, and a failed request stops the run with the Azure CLI error. The runner's other Azure CLI calls use the same 120 s timeout.
+- **Added** `--no-capacity-resume` to `synthea/apply_demo_enrichment.py`. A resumed capacity bills until someone pauses it. With the flag, a paused capacity stops the run and stays paused. Deployments keep the default and resume the capacity, the same as `eval/deployment_eval_harness.py`.
+
 ### Source-integrity CI dependency order (2026-11-10)
 
 - **Fixed** clean-checkout TCGA cohort tests failing before metadata generation because the shared Patient 360 seeder imports `requests` and `azure-identity`. Install the existing locked backend dependencies before the Synthea suite, rather than after it. The dataset guard still runs first with its schema-only dependency set.
