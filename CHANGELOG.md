@@ -2,6 +2,11 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Demo enrichment capacity resume (2026-11-11)
+
+- **Fixed** `synthea/apply_demo_enrichment.py` hiding a failed capacity resume. When the workspace capacity is paused, the `outreach` and `sdoh` modes resume it through ARM. The resume request ignored its exit code and had no timeout, so a denied resume waited 240 s and then reported only "Workspace must be assigned to an active Fabric capacity". The request now times out after 120 s, and a failed request stops the run with the Azure CLI error. The runner's other Azure CLI calls use the same 120 s timeout.
+- **Added** `--no-capacity-resume` to `synthea/apply_demo_enrichment.py`. A resumed capacity bills until someone pauses it. With the flag, a paused capacity stops the run and stays paused. Deployments keep the default and resume the capacity, the same as `eval/deployment_eval_harness.py`.
+
 ### Material 3 frontend redesign (2026-10-09)
 
 - Replaced Fluent UI components and icons with current MUI components, a restrained Material 3 Expressive theme, and platform-neutral **HLS Data Accelerator** branding. The standalone Griffel styling engine remains for feature layouts; no Fluent component dependency remains.

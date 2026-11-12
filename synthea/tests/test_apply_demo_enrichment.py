@@ -5,12 +5,32 @@ from datetime import date
 import importlib.util
 import io
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 from unittest.mock import patch
 
 
 SYNTHEA_DIR = Path(__file__).resolve().parents[1]
+
+
+class CapacityFabric:
+    """Fabric fake whose workspace capacity reports the given states in order."""
+
+    subscription = "sub"
+
+    def __init__(self, *states):
+        self.states = list(states)
+
+    def request(self, method, url, body=None):
+        return 200, {}, {"capacityId": "cap"}
+
+    def items(self, url):
+        if url.endswith("/lakehouses"):
+            return [{"id": "lh", "displayName": "demo_bronze"}]
+        state = self.states.pop(0) if len(self.states) > 1 else self.states[0]
+        return [{"id": "cap", "displayName": "F64", "state": state,
+                 "azureResourceId": "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Fabric/capacities/f64"}]
 
 
 class DemoEnrichmentTests(unittest.TestCase):
@@ -82,6 +102,29 @@ class DemoEnrichmentTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "no Patients"):
             self.runner.load_patients(Fhir())
+
+    def test_failed_capacity_resume_stops_with_cli_error_before_polling(self):
+        failed = subprocess.CompletedProcess([], 1, stdout="", stderr="AuthorizationFailed")
+        with patch.object(self.runner.subprocess, "run", return_value=failed), \
+                patch.object(self.runner.time, "sleep") as sleep, redirect_stdout(io.StringIO()), \
+                self.assertRaisesRegex(RuntimeError, "AuthorizationFailed"):
+            self.runner.resolve_lakehouse(CapacityFabric("Inactive"), "ws", None, resume_capacity=True)
+        sleep.assert_not_called()
+
+    def test_no_capacity_resume_fails_fast_without_resuming(self):
+        with patch.object(self.runner.subprocess, "run") as run, \
+                self.assertRaisesRegex(RuntimeError, "active Fabric capacity"):
+            self.runner.resolve_lakehouse(CapacityFabric("Inactive"), "ws", None, resume_capacity=False)
+        run.assert_not_called()
+
+    def test_resumed_capacity_is_polled_until_active(self):
+        accepted = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        with patch.object(self.runner.subprocess, "run", return_value=accepted) as run, \
+                patch.object(self.runner.time, "sleep"), redirect_stdout(io.StringIO()):
+            lakehouse = self.runner.resolve_lakehouse(CapacityFabric("Inactive", "Inactive", "Active"), "ws", None,
+                                                      resume_capacity=True)
+        self.assertEqual("lh", lakehouse["id"])
+        run.assert_called_once()
 
 
 if __name__ == "__main__":
