@@ -84,6 +84,12 @@ class LocalServerHealthTests(unittest.TestCase):
         module.add_form_history = lambda *args, **kwargs: None
         module.get_dismissed_teardowns = lambda *args, **kwargs: []
         module.dismiss_teardown = lambda *args, **kwargs: None
+        module.record_deployment_form_history = lambda *args, **kwargs: 0
+        module.backfill_form_history_from_deployments = lambda *args, **kwargs: 0
+        module.reconcile_from_state_tracking_dir = lambda *args, **kwargs: []
+        module.import_target_history_from_shared_storage = lambda *args, **kwargs: {
+            "importedDeployments": 0, "importedFormHistory": 0, "reconstructedLedgers": 0
+        }
         return module
 
     def _import_local_server(self):
@@ -223,6 +229,34 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertTrue(result["ready"])
         self.assertEqual(result["aligned"], {"subscription": True, "tenant": True})
 
+
+    def test_auth_probe_delegates_az_powershell_when_only_azure_cli_is_logged_in(self) -> None:
+        def fake_az_run(args: list[str], **kwargs):
+            if args[0] == "az" and args[1] == "version":
+                return types.SimpleNamespace(returncode=0, stdout="{}", stderr="")
+            if args[0] == "az" and args[1:3] == ["account", "show"]:
+                return types.SimpleNamespace(
+                    returncode=0,
+                    stdout='{"user":"cli-user@jbatl.dev","subscriptionName":"Production","subscriptionId":"SUB-123","tenantId":"TENANT-456"}',
+                    stderr="",
+                )
+            if args[0] == "pwsh":
+                return types.SimpleNamespace(
+                    returncode=0,
+                    stdout='{"installed":true,"loggedIn":false,"user":"","subscriptionName":"","subscriptionId":"","tenantId":"","error":"No active Az context"}',
+                    stderr="",
+                )
+            raise AssertionError(f"unexpected command: {args!r}")
+
+        with patch.object(self.local_server, "_az_run", side_effect=fake_az_run):
+            result = self.local_server._get_auth_context_sync()
+
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["issues"], [])
+        self.assertTrue(result["pwsh"]["loggedIn"])
+        self.assertTrue(result["pwsh"].get("delegatedToCli"))
+        self.assertEqual(result["pwsh"]["user"], "cli-user@jbatl.dev")
+        self.assertEqual(result["aligned"], {"subscription": True, "tenant": True})
     def test_phase_log_matching_accepts_ui_cards_for_backend_phase_names(self) -> None:
         matching_cases = [
             (
@@ -674,6 +708,83 @@ class LocalServerHealthTests(unittest.TestCase):
 
         self.assertFalse((repo / "state-tracking" / ".deployment-state-ws-a.json").exists())
         self.assertTrue(other.exists())
+
+    def test_deploy_request_rejects_cardiology_prefix_longer_than_twelve_chars(self) -> None:
+        base = {
+            "fabric_workspace_name": "med-1028",
+            "resource_group_name": "rg-med-1028",
+            "expected_tenant_id": "8d038e6a-9b7d-4cb8-bbcf-e84dff156478",
+            "expected_subscription_id": "9bbee190-dc61-4c58-ab47-1275cb04018f",
+        }
+        valid = self.local_server.DeployRequest(**base, cardiology_prefix="cardioed1028")
+        self.assertEqual(valid.cardiology_prefix, "cardioed1028")
+        with self.assertRaisesRegex(Exception, "3–12 lowercase letters/digits"):
+            self.local_server.DeployRequest(**base, cardiology_prefix="cardiomed1027")
+
+    def test_chained_continuation_inherits_successful_phases_from_ancestor_runs(self) -> None:
+        run_a = {
+            "instanceId": "run-a",
+            "runtimeStatus": "Failed",
+            "customStatus": {"workspaceName": "med-1102", "resourceGroupName": "rg-med-1102", "logs": []},
+            "output": {
+                "phases": [
+                    {"phase": "Phase 2: Fabric RTI", "status": "succeeded"},
+                    {"phase": "Phase 3: HDS Source Deployment", "status": "succeeded"},
+                    {"phase": "Phase 2: Fabric RTI Enrichment (auto)", "status": "succeeded"},
+                ]
+            },
+        }
+        run_b = {
+            "instanceId": "run-b",
+            "runtimeStatus": "Failed",
+            "customStatus": {
+                "workspaceName": "med-1102",
+                "resourceGroupName": "rg-med-1102",
+                "continuedFrom": "run-a",
+                "logs": [],
+            },
+            "output": {
+                "phases": [
+                    {"phase": "Phase 3: DICOM Shortcut + HDS Pipelines (auto)", "status": "succeeded"},
+                ]
+            },
+        }
+        self.local_server.deployments["run-a"] = run_a
+        self.local_server.deployments["run-b"] = run_b
+        self.addCleanup(self.local_server.deployments.pop, "run-a", None)
+        self.addCleanup(self.local_server.deployments.pop, "run-b", None)
+
+        req = self.local_server.DeployRequest(
+            fabric_workspace_name="med-1102",
+            resource_group_name="rg-med-1102",
+            expected_tenant_id="c77e97fc-1859-4575-8c8b-53d74bc35a63",
+            expected_subscription_id="0525a464-e087-4084-a24e-a90396a83c15",
+            continue_from_instance_id="run-b",
+        )
+        with (
+            patch.object(
+                self.local_server,
+                "_cloud_state_sync",
+                return_value={"workspace": {"exists": True}, "resourceGroup": {"exists": True}},
+            ),
+            patch.object(
+                self.local_server,
+                "_live_resume_prerequisites",
+                return_value={},
+            ),
+            patch.object(
+                self.local_server,
+                "_phase_live_prerequisites_ok",
+                return_value=(True, "ok"),
+            ),
+        ):
+            applied = self.local_server._apply_success_skips_from_deployment(req, run_b, "Continue-from-failure")
+
+        self.assertTrue(applied)
+        self.assertTrue(req.reuse_fabric_rti)
+        self.assertTrue(req.skip_rti_phase2)
+        self.assertTrue(req.skip_hds_source)
+        self.assertTrue(req.skip_hds_pipelines)
 
 
 if __name__ == "__main__":

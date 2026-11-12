@@ -28,7 +28,7 @@ class KustoClient:
     def __init__(self, kusto_uri: str, database_name: str) -> None:
         self.kusto_uri = kusto_uri.rstrip("/")
         self.database_name = database_name
-        self.credential = DefaultAzureCredential()
+        self.credential = DefaultAzureCredential(exclude_managed_identity_credential=True)
         self._token: str | None = None
         self._token_expires: float = 0
 

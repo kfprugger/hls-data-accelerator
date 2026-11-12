@@ -1,0 +1,22 @@
+{
+  "name": "rayfin-functions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/src/function_app.js",
+  "scripts": {
+    "build": "tsc --build",
+    "build:watch": "tsc --build --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@azure/storage-file-datalake": "^12.31.0",
+    "@microsoft/fabric-user-data-functions": "1.36.2",
+    "mssql": "^12.7.11"
+  },
+  "devDependencies": {
+    "@types/mssql": "^12.3.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.8.0"
+  }
+}

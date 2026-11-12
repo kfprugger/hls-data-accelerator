@@ -29,6 +29,8 @@ sys.stderr.reconfigure(line_buffering=True)
 print("=== FHIR LOADER STARTING ===", flush=True)
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from azure.identity import ManagedIdentityCredential, DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient
 
@@ -74,6 +76,20 @@ class FHIRClient:
         self.token_lock = threading.Lock()
         # Use the FHIR URL itself as the resource scope
         self.resource_scope = f"{fhir_url}/.default"
+        self.session = requests.Session()
+        adapter = HTTPAdapter(
+            max_retries=Retry(
+                total=6,
+                connect=6,
+                read=3,
+                status=5,
+                backoff_factor=2.0,
+                status_forcelist=[429, 500, 502, 503, 504],
+                allowed_methods=None,
+            )
+        )
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
         
     def _get_token(self) -> str:
         """Get access token using Managed Identity"""
@@ -108,7 +124,7 @@ class FHIRClient:
     
     def post_bundle(self, bundle: Dict) -> Dict:
         """Post a transaction bundle to FHIR"""
-        response = requests.post(
+        response = self.session.post(
             self.fhir_url,
             headers=self._headers(),
             json=bundle,
@@ -122,7 +138,7 @@ class FHIRClient:
     def post_resource(self, resource: Dict) -> Dict:
         """Post a single resource to FHIR"""
         resource_type = resource['resourceType']
-        response = requests.post(
+        response = self.session.post(
             f"{self.fhir_url}/{resource_type}",
             headers=self._headers(),
             json=resource,
@@ -134,7 +150,7 @@ class FHIRClient:
     def put_resource(self, resource: Dict, resource_id: str) -> Dict:
         """Put (update/create) a resource with specific ID"""
         resource_type = resource['resourceType']
-        response = requests.put(
+        response = self.session.put(
             f"{self.fhir_url}/{resource_type}/{resource_id}",
             headers=self._headers(),
             json=resource,
@@ -145,7 +161,7 @@ class FHIRClient:
     
     def search(self, resource_type: str, params: Dict = None) -> List[Dict]:
         """Search for resources"""
-        response = requests.get(
+        response = self.session.get(
             f"{self.fhir_url}/{resource_type}",
             headers=self._headers(),
             params=params or {},
@@ -157,7 +173,7 @@ class FHIRClient:
     
     def get_count(self, resource_type: str) -> int:
         """Get count of resources"""
-        response = requests.get(
+        response = self.session.get(
             f"{self.fhir_url}/{resource_type}",
             headers=self._headers(),
             params={'_summary': 'count'},
@@ -170,13 +186,13 @@ class FHIRClient:
         """Delete all resources before an authoritative replacement load."""
         headers = self._headers()
         headers['Prefer'] = 'respond-async'
-        response = requests.delete(f"{self.fhir_url}/$bulk-delete", headers=headers, timeout=120)
+        response = self.session.delete(f"{self.fhir_url}/$bulk-delete", headers=headers, timeout=120)
         if response.status_code not in (200, 202, 204):
             raise RuntimeError(f"FHIR bulk delete failed: {response.status_code} {response.text[:500]}")
         poll_url = response.headers.get('Content-Location') or response.headers.get('Location')
         if response.status_code == 202 and poll_url:
             for _ in range(180):
-                poll = requests.get(poll_url, headers=self._headers(), timeout=60)
+                poll = self.session.get(poll_url, headers=self._headers(), timeout=60)
                 if poll.status_code in (200, 204):
                     return
                 if poll.status_code not in (202, 201):

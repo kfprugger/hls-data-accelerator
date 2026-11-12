@@ -1,6 +1,7 @@
 """Offline checks for the hosted sandbox trust boundary and device-code contract."""
 import asyncio
 import importlib.util
+import json
 import os
 import sqlite3
 import sys
@@ -8,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from fastapi import FastAPI, HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from shared import hosted
@@ -30,7 +32,7 @@ class HostedGuardTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_only_get_health_bypasses_gateway_key(self):
         self.assertEqual(await self.response("/api/health"), 204)
-        for path, method in [("/", "GET"), ("/api/hosted/whoami", "GET"), ("/api/health", "POST"), ("/api/deploy/a/logs/stream", "GET")]:
+        for path, method in [("/", "GET"), ("/api/hosted/whoami", "GET"), ("/api/auth/state", "GET"), ("/api/auth/target", "PUT"), ("/api/auth/device-login/flow/cancel", "POST"), ("/api/health", "POST"), ("/api/deploy/a/logs/stream", "GET")]:
             self.assertEqual(await self.response(path, method), 403)
             self.assertEqual(await self.response(path, method, "wrong-key"), 403)
             self.assertEqual(await self.response(path, method, "private-key"), 204)
@@ -87,6 +89,120 @@ class DeviceCodeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("run the deployer locally", session["error_hint"])
 
 
+class AuthenticationRefreshTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.directory = Path(directory.name)
+        environment = patch.dict(os.environ, {"HLS_DATA_DIR": directory.name})
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.store = self.load_store()
+        modules = patch.dict(sys.modules, {"shared.database": self.store})
+        modules.start()
+        self.addCleanup(modules.stop)
+        sessions = patch.dict(hosted._sessions, {}, clear=True)
+        sessions.start()
+        self.addCleanup(sessions.stop)
+        self.target = {"tenant_id": "11111111-1111-1111-1111-111111111111",
+                       "subscription_id": "22222222-2222-2222-2222-222222222222"}
+        self.active = 0
+        self.app = FastAPI()
+        hosted.install_hosted_routes(self.app, lambda: self.active, lambda: None)
+
+    def load_store(self):
+        path = Path(__file__).resolve().parents[1] / "shared" / "database.py"
+        spec = importlib.util.spec_from_file_location("refresh_database_test", path)
+        module = importlib.util.module_from_spec(spec)
+        with patch("atexit.register"):
+            spec.loader.exec_module(module)
+        self.addCleanup(module.shutdown_database)
+        self.addCleanup(module.get_db().close)
+        return module
+
+    def endpoint(self, path):
+        return next(route.endpoint for route in self.app.routes if route.path == path)
+
+    async def test_target_survives_restart_without_persisting_device_codes(self):
+        await self.endpoint("/api/auth/target")(hosted.DeploymentTarget(**self.target))
+        self.store.backup_database()
+        self.store.shutdown_database()
+        restored = self.load_store()
+        with patch.dict(sys.modules, {"shared.database": restored}):
+            state = await self.endpoint("/api/auth/state")()
+        self.assertEqual(state, {"target": self.target, "pending": None})
+        with sqlite3.connect(self.directory / "orchestrator.db") as db:
+            saved = db.execute("SELECT value FROM form_history WHERE field='deployment-auth-target'").fetchone()[0]
+        db.close()
+        self.assertEqual(json.loads(saved), self.target)
+
+    async def test_refresh_resumes_same_code_with_original_expiration(self):
+        await self.endpoint("/api/auth/target")(hosted.DeploymentTarget(**self.target))
+        hosted._sessions["flow"] = {"status": "pending", "tool": "azps", "target": self.target,
+            "created": 100, "user_code": "RESTORE123", "verification_uri": "https://login.microsoft.com/device",
+            "process": object(), "token": "must-not-be-returned"}
+        with patch.object(hosted.time, "monotonic", return_value=160):
+            first = await self.endpoint("/api/auth/state")()
+        with patch.object(hosted.time, "monotonic", return_value=190):
+            second = await self.endpoint("/api/auth/state")()
+        self.assertEqual(first["pending"]["session_id"], "flow")
+        self.assertEqual(first["pending"]["user_code"], "RESTORE123")
+        self.assertEqual(second["pending"]["user_code"], "RESTORE123")
+        self.assertEqual(first["pending"]["expires_in"], 840)
+        self.assertEqual(second["pending"]["expires_in"], 810)
+        self.assertNotIn("token", second["pending"])
+        self.assertNotIn("process", second["pending"])
+
+    async def test_expired_code_no_longer_blocks_target_selection(self):
+        hosted._sessions["flow"] = {"status": "pending", "tool": "az", "target": self.target,
+                                   "created": 100, "user_code": "EXPIRED123"}
+        with patch.object(hosted.time, "monotonic", return_value=1000):
+            state = await self.endpoint("/api/auth/state")()
+        self.assertIsNone(state["pending"])
+        self.assertEqual(hosted._sessions["flow"]["status"], "failed")
+        self.assertEqual(await self.endpoint("/api/auth/target")(hosted.DeploymentTarget(**self.target)), self.target)
+
+    async def test_active_run_accepts_the_saved_target_but_rejects_a_change(self):
+        endpoint = self.endpoint("/api/auth/target")
+        target = hosted.DeploymentTarget(**self.target)
+        await endpoint(target)
+        self.active = 1
+        self.assertEqual(await endpoint(target), self.target)
+        changed = hosted.DeploymentTarget(**{**self.target, "subscription_id": "33333333-3333-3333-3333-333333333333"})
+        with self.assertRaises(HTTPException) as error:
+            await endpoint(changed)
+        self.assertEqual(error.exception.status_code, 409)
+
+    async def test_cancel_stops_only_pending_task_without_touching_other_tool_cache(self):
+        cache = self.directory / "other-tool-token-cache"
+        cache.write_text("existing-authenticated-session")
+        task = asyncio.create_task(asyncio.Event().wait())
+        await asyncio.sleep(0)
+        hosted._sessions["flow"] = {"status": "pending", "task": task, "tool": "az", "target": self.target}
+        with patch.object(hosted, "_run", side_effect=AssertionError("Cancellation must not clear Azure account caches")):
+            result = await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow")
+        self.assertEqual(result, {"status": "cancelled"})
+        self.assertTrue(task.cancelled())
+        self.assertEqual(hosted._sessions["flow"]["status"], "failed")
+        self.assertEqual(cache.read_text(), "existing-authenticated-session")
+        self.assertEqual(await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow"), result)
+
+    async def test_cancel_cannot_invalidate_completed_sign_in(self):
+        hosted._sessions["flow"] = {"status": "succeeded", "account": {"tenantId": self.target["tenant_id"]}}
+        with self.assertRaises(HTTPException) as error:
+            await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow")
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(hosted._sessions["flow"]["status"], "succeeded")
+
+    async def test_cancel_refuses_when_deployment_is_active(self):
+        self.active = 1
+        hosted._sessions["flow"] = {"status": "pending"}
+        with self.assertRaises(HTTPException) as error:
+            await self.endpoint("/api/auth/device-login/{session_id}/cancel")("flow")
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertEqual(hosted._sessions["flow"]["status"], "pending")
+
+
 class PersistentDatabaseTests(unittest.TestCase):
     def load_database(self):
         path = Path(__file__).resolve().parents[1] / "shared" / "database.py"
@@ -137,5 +253,134 @@ class PersistentDatabaseTests(unittest.TestCase):
             db.shutdown_database()
 
 
+    def test_backfill_and_state_tracking_reconcile_and_peer_target_import(self):
+        with tempfile.TemporaryDirectory() as shared_root_str:
+            shared_root = Path(shared_root_str)
+            peer_dir = shared_root / "9da330f25845"
+            active_dir = shared_root / "398c6e793157"
+            peer_dir.mkdir(parents=True)
+            active_dir.mkdir(parents=True)
+
+            target_tid = "8d038e6a-9b7d-4cb8-bbcf-e84dff156478"
+            target_sub = "9bbee190-dc61-4c58-ab47-1275cb04018f"
+
+            # 1. Populate peer sandbox (9da330f25845) with a completed deployment and a state-tracking ledger
+            with patch.dict(os.environ, {"HLS_DATA_DIR": str(peer_dir), "HLS_SHARED_DATA_DIR": str(shared_root)}):
+                peer_db = self.load_database()
+                peer_dep = {
+                    "name": "deploy_all_orchestrator",
+                    "runtimeStatus": "Completed",
+                    "createdTime": "2026-10-25T16:39:43+00:00",
+                    "lastUpdatedTime": "2026-10-25T18:10:00+00:00",
+                    "customStatus": {
+                        "status": "succeeded",
+                        "workspaceName": "med-1024",
+                        "resourceGroupName": "rg-med-1024",
+                        "capacityName": "fabrjbwu2",
+                        "deployConfig": {
+                            "expected_tenant_id": target_tid,
+                            "expected_subscription_id": target_sub,
+                            "fabric_workspace_name": "med-1024",
+                            "resource_group_name": "rg-med-1024",
+                            "location": "westus2",
+                            "admin_security_group": "sg-azure-admins",
+                            "alert_email": "alerts@brakekat.com",
+                            "payer_ops_email": "ops@brakekat.com",
+                            "deploy_cardiology": True,
+                            "cardiology_location": "eastus2",
+                            "cardiology_prefix": "cardio1024",
+                            "cardiology_app_users": ["joey@brakekat.com", "alerts@brakekat.com"],
+                        },
+                    },
+                }
+                peer_db.save_deployment("P1234567-20261025-163943", peer_dep)
+                peer_db.backfill_form_history_from_deployments()
+                self.assertEqual(peer_db.get_form_history("naming-prefix"), ["med-1024"])
+                self.assertEqual(peer_db.get_form_history("cardiology-prefix"), ["cardio1024"])
+                self.assertEqual(set(peer_db.get_form_history("cardiology-app-users")), {"joey@brakekat.com", "alerts@brakekat.com"})
+
+                # Also write a state-tracking ledger for med-1009 that was not yet in deployments table
+                peer_tracking = peer_dir / "state-tracking"
+                peer_tracking.mkdir(parents=True, exist_ok=True)
+                (peer_tracking / ".deployment-state-med-1009.json").write_text(json.dumps({
+                    "phases": [{
+                        "phase": "Phase1+2+3+4+5+6+7",
+                        "timestamp": "2026-10-10T00:00:10Z",
+                        "resources": {"ResourceGroupName": "rg-med-1009", "FabricWorkspaceName": "med-1009", "Location": "westus2"},
+                        "steps": [{"name": "Phase 1: Fabric Workspace", "success": True, "duration": "0.2 min"}],
+                    }]
+                }))
+                peer_db.backup_database()
+                peer_db.shutdown_database()
+
+            # 2. Start active sandbox (398c6e793157) and verify peer history is NOT imported for an unrelated subscription
+            with patch.dict(os.environ, {"HLS_DATA_DIR": str(active_dir), "HLS_SHARED_DATA_DIR": str(shared_root)}):
+                active_db = self.load_database()
+                unrelated = active_db.import_target_history_from_shared_storage(
+                    "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"
+                )
+                self.assertEqual(unrelated["importedDeployments"], 0)
+                self.assertEqual(len(active_db.list_deployments()), 0)
+
+                # 3. Now authenticate to the matching (target_tid, target_sub) and verify runs + ledgers + form_history import
+                imported = active_db.import_target_history_from_shared_storage(target_tid, target_sub)
+                self.assertEqual(imported["importedDeployments"], 1)
+                self.assertEqual(imported["reconstructedLedgers"], 1)
+                workspaces = {d["customStatus"]["workspaceName"] for d in active_db.list_deployments()}
+                self.assertEqual(workspaces, {"med-1024", "med-1009"})
+                self.assertIn("med-1024", active_db.get_form_history("naming-prefix"))
+                self.assertEqual(active_db.get_form_history("admin-security-group"), ["sg-azure-admins"])
+                self.assertEqual(active_db.get_form_history("cardiology-prefix"), ["cardio1024"])
+                active_db.shutdown_database()
+
+    def test_encrypted_azure_auth_seal_roundtrip_and_tamper_rejection(self):
+        with tempfile.TemporaryDirectory() as data_dir_str, tempfile.TemporaryDirectory() as cli_dir_str:
+            data_dir = Path(data_dir_str)
+            cli_dir = Path(cli_dir_str)
+            (cli_dir / "azureProfile.json").write_text(json.dumps({
+                "subscriptions": [{"id": "0525a464-e087-4084-a24e-a90396a83c15", "tenantId": "c77e97fc-1859-4575-8c8b-53d74bc35a63", "isDefault": True}]
+            }))
+            (cli_dir / "msal_token_cache.json").write_text(json.dumps({
+                "AccessToken": {"at-1": {"secret": "must-be-stripped"}},
+                "IdToken": {"id-1": {"secret": "must-be-stripped"}},
+                "RefreshToken": {"rt-1": {"secret": "refresh-secret-value"}},
+                "Account": {"acct-1": {"username": "joey@jbatl.dev"}},
+                "AppMetadata": {},
+            }))
+            env = {
+                "HLS_DATA_DIR": data_dir_str,
+                "AZURE_CONFIG_DIR": cli_dir_str,
+                "HLS_GATEWAY_KEY": "gateway-secret-key-for-user",
+                "HLS_SANDBOX_USER_TID": "c77e97fc-1859-4575-8c8b-53d74bc35a63",
+                "HLS_SANDBOX_USER_OID": "700530be-27dd-4cd2-aa2b-1937e3b24db8",
+            }
+            with patch.dict(os.environ, env):
+                self.assertTrue(hosted.seal_azure_auth_cache())
+                seal_file = data_dir / ".encrypted-azure-auth.bin"
+                self.assertTrue(seal_file.is_file())
+                raw_seal = seal_file.read_bytes()
+                self.assertNotIn(b"refresh-secret-value", raw_seal)
+                self.assertNotIn(b"must-be-stripped", raw_seal)
+
+                # Simulate container reap (wipe cli_dir AND rotate HLS_GATEWAY_KEY) and restore
+                for f in cli_dir.iterdir():
+                    f.unlink()
+                self.assertFalse((cli_dir / "msal_token_cache.json").exists())
+                with patch.dict(os.environ, {"HLS_GATEWAY_KEY": "rotated-gateway-key-after-reap"}):
+                    self.assertTrue(hosted.restore_azure_auth_cache())
+                restored_msal = json.loads((cli_dir / "msal_token_cache.json").read_text())
+                self.assertEqual(restored_msal["AccessToken"], {})
+                self.assertEqual(restored_msal["IdToken"], {})
+                self.assertEqual(restored_msal["RefreshToken"]["rt-1"]["secret"], "refresh-secret-value")
+                # Verify wrong identity cannot decrypt the seal
+                for f in cli_dir.iterdir():
+                    f.unlink()
+                with patch.dict(os.environ, {"HLS_SANDBOX_USER_OID": "00000000-0000-0000-0000-000000000000"}):
+                    self.assertFalse(hosted.restore_azure_auth_cache())
+                    self.assertFalse((cli_dir / "msal_token_cache.json").exists())
+
+                # Verify logout clears the seal
+                hosted.clear_azure_auth_seal()
+                self.assertFalse(seal_file.exists())
 if __name__ == "__main__":
     unittest.main()

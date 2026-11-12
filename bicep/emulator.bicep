@@ -47,6 +47,15 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
               value: string(deviceCount)
             }
           ]
+          livenessProbe: {
+            httpGet: {
+              path: '/healthz'
+              port: 8080
+              scheme: 'Http'
+            }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          }
         }
       }
     ]

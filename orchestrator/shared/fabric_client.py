@@ -62,7 +62,7 @@ class FabricClient:
 
     def __init__(self, api_base: str = FABRIC_API_BASE) -> None:
         self.api_base = api_base
-        self.credential = DefaultAzureCredential()
+        self.credential = DefaultAzureCredential(exclude_managed_identity_credential=True)
         self._token: str | None = None
         self._token_expires: float = 0
 
@@ -315,24 +315,25 @@ class FabricClient:
         """Start a notebook job and return its instance URL or identifier."""
         endpoint = (
             f"/workspaces/{workspace_id}/items/{item_id}"
-            "/jobs/RunNotebook/instances"
+            "/jobs/instances?jobType=RunNotebook"
         )
         body: dict[str, Any] = {}
         if parameters:
-            encoded_parameters = []
+            encoded_parameters: dict[str, dict[str, Any]] = {}
             for name, value in parameters.items():
                 if isinstance(value, bool):
-                    parameter_type = "Boolean"
-                elif isinstance(value, (int, float)):
-                    parameter_type = "Number"
+                    parameter_type = "bool"
+                elif isinstance(value, int):
+                    parameter_type = "int"
+                elif isinstance(value, float):
+                    parameter_type = "float"
                 else:
-                    parameter_type = "Text"
-                encoded_parameters.append({
-                    "name": name,
+                    parameter_type = "string"
+                encoded_parameters[name] = {
                     "value": value,
                     "type": parameter_type,
-                })
-            body["parameters"] = encoded_parameters
+                }
+            body["executionData"] = {"parameters": encoded_parameters}
         response = self.request_raw("POST", endpoint, body)
         location = response.headers.get("Location")
         if location:

@@ -1,0 +1,2113 @@
+/*
+ * Rayfin theme (shared with Rayfin Imaging).
+ * Warm editorial neutrals, one orange accent (#b0450a; #ff8f52 in dark), Fira Sans
+ * (Condensed for display).
+ * No gradients, glows, blur or decorative motion: every rule here has a job.
+ * Light and dark share one set of semantic tokens; [data-theme] on <html> picks the values.
+ */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #faf9f5;
+  --surface: #f0eee6;
+  --well: #e9e6dc;
+  --plate: #f4f2ec;
+  --field: #ffffff;
+  --line: #dedacd;
+  --line-strong: #c9c4b4;
+  --ink: #141413;
+  --ink-2: #57564f;
+  --ink-3: #85837a;
+  /* The one orange. Text and lines use it as is; washes are tints of it. */
+  --accent: #b0450a;
+  --accent-ink: var(--accent);
+  --accent-wash: color-mix(in srgb, var(--accent) 16%, var(--bg));
+  --on-accent: #ffffff;
+  /* Data colours: one muted hue per modality, plus gain/loss and alert. Never used as decoration. */
+  --c-clin: #141413;
+  --c-path: #8a3f86;
+  --c-rad: #2f5f8a;
+  --c-gen: #1d7a6f;
+  --c-syn: #a39f93;
+  --c-alert: #b42318;
+  --c-gain: #c0392b;
+  --c-loss: #2b6cb0;
+  --c-good: #2f7d4f;
+  /* Body systems for conditions and medicines on the timeline; muted, told apart by hue. */
+  --sys-circ: #b8336a;
+  --sys-meta: #b07d05;
+  --sys-resp: #2d7fb8;
+  --sys-uro: #3a9a6f;
+  --sys-mind: #6a55c9;
+  --sys-msk: #8b6440;
+  --sys-oral: #22939f;
+  --sys-other: #77736a;
+  --c-vax: #3a9a6f;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #1d1c1a;
+  --surface: #262522;
+  --well: #141413;
+  /* Thumbnails stay on a lit plate in dark mode, like a slide on a light box. */
+  --plate: #e6e2d8;
+  --field: #262522;
+  --line: #34332f;
+  --line-strong: #4a4843;
+  --ink: #f1efe8;
+  --ink-2: #b9b6ac;
+  --ink-3: #8a877e;
+  --accent: #ff8f52;
+  --accent-ink: var(--accent);
+  --accent-wash: color-mix(in srgb, var(--accent) 20%, var(--bg));
+  --on-accent: #141413;
+  --c-clin: #f1efe8;
+  --c-path: #d08ccb;
+  --c-rad: #7fb0dc;
+  --c-gen: #5cc2b4;
+  --c-syn: #6f6c64;
+  --c-alert: #f0715f;
+  --c-gain: #f07a6a;
+  --c-loss: #6fa8e8;
+  --c-good: #6cc495;
+  --sys-circ: #e57aa4;
+  --sys-meta: #e2b448;
+  --sys-resp: #6fb3e3;
+  --sys-uro: #6cc79b;
+  --sys-mind: #a597ef;
+  --sys-msk: #c9a07a;
+  --sys-oral: #63c6d1;
+  --sys-other: #aaa69c;
+  --c-vax: #6cc79b;
+}
+
+:root {
+  --font: 'Fira Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Fira Sans Condensed', 'Fira Sans', system-ui, sans-serif;
+  --font-mono: 'Fira Mono', ui-monospace, Menlo, monospace;
+}
+
+body.atlas {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.55;
+  font-feature-settings: 'kern' 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+body.atlas ::selection {
+  background: var(--accent-wash);
+  color: var(--ink);
+}
+
+body.atlas :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Narrow display setting for headings. */
+.t-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.04;
+}
+
+.t-mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  letter-spacing: -0.01em;
+}
+
+.t-label {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.t-muted {
+  color: var(--ink-2);
+}
+
+.t-faint {
+  color: var(--ink-3);
+}
+
+.t-accent {
+  color: var(--accent-ink);
+}
+
+.hair {
+  border-color: var(--line);
+}
+
+.link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* Buttons: flat, square-ish, text-first. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  border-color: var(--ink);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  border-color: var(--line);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 500;
+}
+
+.btn-primary:hover {
+  background: #d4520f;
+  border-color: #d4520f;
+}
+
+.btn-ink {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+  font-weight: 500;
+}
+
+.btn-ink:hover {
+  border-color: var(--ink);
+  opacity: 0.86;
+}
+
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.seg > button {
+  height: 28px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  border-left: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.seg > button:first-child {
+  border-left: 0;
+}
+
+.seg > button:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.seg > button[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.field {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--field);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.field::placeholder {
+  color: var(--ink-3);
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--ink);
+}
+
+/* Slide index */
+.specimen {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  transition: border-color 120ms linear;
+}
+
+.specimen:hover {
+  border-color: var(--ink);
+}
+
+.specimen:hover .specimen-title {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 4px;
+}
+
+.specimen-plate {
+  background: var(--plate);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Multiply drops the white-balanced thumbnail background into the plate colour. */
+.specimen-plate img {
+  mix-blend-mode: multiply;
+}
+
+/* Viewer */
+.slide-canvas {
+  background: var(--well);
+}
+
+.slide-canvas .navigator {
+  background: var(--bg) !important;
+  border: 1px solid var(--ink) !important;
+  border-radius: 0;
+  margin: 0 0 12px 12px !important;
+}
+
+.slide-pin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transform: translate(7px, 0);
+  pointer-events: auto;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.slide-pin-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #faf9f5;
+  box-shadow: 0 0 0 1px #141413;
+}
+
+/* Pin labels sit on the tissue, so they keep fixed light colours in both themes. */
+.slide-pin-label {
+  font: 500 12.5px/1 var(--font);
+  color: #141413;
+  background: #faf9f5;
+  border: 1px solid #141413;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+.statusbar {
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.scalebar {
+  height: 6px;
+  border: 1px solid var(--ink);
+  border-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Section tabs in the shell header. */
+.tab {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--ink-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab.active {
+  color: var(--ink);
+  font-weight: 500;
+  border-bottom-color: var(--accent);
+}
+
+/* Study / slide list on the left of the workspaces. */
+.list-row {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  padding: 8px 12px 8px 10px;
+  border-left: 2px solid transparent;
+  text-align: left;
+}
+
+.list-row:hover {
+  background: var(--surface);
+}
+
+.list-row[aria-current='true'] {
+  background: var(--surface);
+  border-left-color: var(--accent);
+}
+
+.list-thumb {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  object-fit: contain;
+  background: var(--plate);
+  border: 1px solid var(--line);
+  mix-blend-mode: normal;
+}
+
+.list-heading {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  padding: 14px 12px 6px;
+}
+
+/* Native range and checkbox inputs, themed. */
+.range {
+  accent-color: var(--accent);
+  height: 4px;
+}
+
+.check {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+}
+
+.timeline-tick {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-tick[aria-current='true'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.volume-canvas {
+  background: var(--well);
+  outline: none;
+}
+
+/* Data tables on the overview page. */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-3);
+  font-size: 12px;
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.data-table td {
+  padding: 9px 12px 9px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+/* Fluorescence slides are imaged on black. */
+.slide-canvas-dark {
+  background: #000;
+}
+
+.marker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.marker-chip[aria-pressed='true'] {
+  color: var(--ink);
+  border-color: var(--ink-3);
+}
+
+.marker-chip .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  opacity: 0.35;
+}
+
+.marker-chip[aria-pressed='true'] .swatch {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px currentColor;
+}
+
+/* ------------------------------------------------------------------ Patient 360 */
+
+/* Section headings inside the patient workspace: small, quiet, ruled. */
+.sec {
+  border-top: 1px solid var(--line);
+  padding: 22px 28px 26px;
+}
+
+.sec-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-bottom: 14px;
+}
+
+.sec-title {
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.sec-note {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* A square swatch that names the silo or modality a value comes from. */
+.swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+.sw-clinical { background: var(--c-clin); }
+.sw-genomics { background: var(--c-gen); }
+.sw-pathology { background: var(--c-path); }
+.sw-radiology { background: var(--c-rad); }
+.sw-imaging { background: var(--c-rad); }
+.sw-synthetic {
+  background: transparent;
+  border: 1px dashed var(--c-syn);
+}
+
+/* Synthetic data is always marked the same way: dashed, grey, labelled. */
+.syn-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ink-3);
+  border: 1px dashed var(--c-syn);
+  border-radius: 3px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.src {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* Definition lists: term above value in tight columns, no boxes. */
+.facts {
+  display: grid;
+  gap: 14px 28px;
+}
+
+.fact dt {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+
+.fact dd {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.fact .big {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.kv dt {
+  color: var(--ink-3);
+}
+
+.kv-tight {
+  grid-template-columns: max-content 1fr;
+  align-content: start;
+}
+
+.detail-kv:not(:last-child) {
+  margin-bottom: 22px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The patient list. */
+.pt-row {
+  display: block;
+  width: 100%;
+  padding: 9px 12px 9px 14px;
+  border-left: 2px solid transparent;
+  text-align: left;
+}
+
+.pt-row:hover {
+  background: var(--surface);
+}
+
+.pt-row[aria-current='true'] {
+  background: var(--surface);
+  border-left-color: var(--accent);
+}
+
+.read-in-place {
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.read-in-place:hover {
+  color: var(--ink);
+}
+
+/* Instance scrubber: timeline events, slides, scan timepoints, report pages. */
+.scrub {
+  display: flex;
+  align-items: flex-start;
+  user-select: none;
+}
+
+.scrub-lead {
+  flex: none;
+  padding: 6px 14px 0 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--ink-3);
+}
+
+.scrub-track {
+  position: relative;
+  height: 44px;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+.scrub-track.labelled {
+  height: 40px;
+}
+
+.scrub-track:focus-visible {
+  outline: 1px dashed var(--accent);
+  outline-offset: 2px;
+}
+
+.scrub-rule {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 14px;
+  height: 1px;
+  background: var(--line-strong);
+}
+
+.scrub-tick {
+  position: absolute;
+  top: 10px;
+  width: 1px;
+  height: 9px;
+  background: var(--ink-3);
+}
+
+.scrub-ticklabel {
+  position: absolute;
+  top: 22px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.scrub-ticklabel.on {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.scrub-thumb {
+  position: absolute;
+  top: 2px;
+  width: 0;
+  height: 25px;
+  pointer-events: none;
+}
+
+.scrub-thumb::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 0;
+  width: 2px;
+  height: 25px;
+  background: var(--accent);
+}
+
+.scrub-thumb::after {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--accent);
+}
+
+.scrub-caption {
+  position: absolute;
+  top: 27px;
+  font-size: 11.5px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.scrub-caption.center {
+  transform: translateX(-50%);
+}
+
+.scrub-caption.end {
+  right: 0;
+}
+
+.scrub-edges {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  margin-top: -2px;
+}
+
+/* Primary care trend charts. */
+.trend-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.trend-axis {
+  font-size: 10px;
+  fill: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Timeline zoom control and overview strip. */
+.zoomer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.zoomer input[type='range'] {
+  width: 76px;
+  accent-color: var(--accent);
+}
+
+.zoomer .btn {
+  min-width: 28px;
+  padding-left: 0;
+  padding-right: 0;
+  justify-content: center;
+}
+
+/* Viewer wells (pathology and radiology). */
+.well {
+  position: relative;
+  background: var(--well);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.well-dark {
+  background: #0d0d0c;
+}
+
+.well.expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  border: 0;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.overlay-note {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #f1efe8;
+  background: rgba(20, 20, 19, 0.72);
+  padding: 4px 7px;
+  pointer-events: none;
+}
+
+.overlay-legend {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  font-size: 11.5px;
+  color: #141413;
+  background: #faf9f5;
+  border: 1px solid #141413;
+  padding: 6px 8px;
+  pointer-events: none;
+}
+
+/* Charts: SVG text inherits the page fonts. */
+.chart text {
+  font-family: var(--font);
+  font-size: 11px;
+  fill: var(--ink-3);
+}
+
+.chart .axis line,
+.chart .axis path {
+  stroke: var(--line-strong);
+}
+
+.chart .grid line {
+  stroke: var(--line);
+}
+
+.tl-lane-label {
+  font-size: 11.5px;
+  fill: var(--ink-2) !important;
+}
+
+.tl-tip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  max-width: 320px;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  padding: 7px 9px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+/* Summary text: editorial measure. */
+.lede {
+  font-size: 16.5px;
+  line-height: 1.6;
+  max-width: 74ch;
+}
+
+.points li {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}
+
+.points li:first-child {
+  border-top: 0;
+}
+
+.points .swatch {
+  margin-top: 6px;
+}
+
+/* Pathology report: monospaced scan text with highlighted findings. */
+.report {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--field);
+  border: 1px solid var(--line);
+  padding: 14px 16px;
+}
+
+.report mark {
+  background: var(--accent-wash);
+  color: var(--ink);
+  padding: 0 1px;
+}
+
+/* Small tables. */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.tbl th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--line-strong);
+  white-space: nowrap;
+}
+
+.tbl td {
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.tbl tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Horizontal bar used for fractions and z-scores. */
+.hbar {
+  position: relative;
+  height: 8px;
+  background: var(--surface);
+}
+
+.hbar > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.prov-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(560px, 92vw);
+  z-index: 40;
+  background: var(--bg);
+  border-left: 1px solid var(--ink);
+  overflow-y: auto;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(20, 20, 19, 0.18);
+}
+
+.code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+.loading-bar {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+}
+
+.loading-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30%;
+  background: var(--accent);
+  animation: loading-slide 1.1s linear infinite;
+}
+
+@keyframes loading-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}
+
+/* Collapse control for the patient list, and the initials rail shown when it is collapsed. */
+.list-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ink-2);
+}
+
+.list-toggle:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.rail-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 34px;
+  border-left: 2px solid transparent;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+
+.rail-item:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.rail-item[aria-current='true'] {
+  background: var(--surface);
+  border-left-color: var(--accent);
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ The record: timeline left, tabs right */
+
+.record {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.rec-head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  min-height: 52px;
+  gap: 6px 14px;
+  padding: 14px 22px 12px;
+  min-width: 0;
+}
+
+.rec-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.rec-timeline {
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The divider between timeline and tabs: a hairline that turns orange on hover or while dragged. */
+/* The divider between timeline and tabs: just the timeline panel's edge. Hovering it shows the orange resize line. */
+.rec-split {
+  flex: none;
+  width: 10px;
+  margin: 0 -5px;
+  position: relative;
+  z-index: 3;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.rec-split::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 1px;
+  background: var(--line-strong);
+  transition: background 160ms ease, width 160ms ease, left 160ms ease;
+}
+
+.rec-split:hover::before,
+.rec-split:active::before,
+.rec-split:focus-visible::before {
+  background: var(--accent);
+  width: 3px;
+  left: 4px;
+}
+
+body.atlas .rec-split:focus-visible {
+  outline: none;
+}
+
+.rec-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rec-tabs {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  padding: 2px 22px 0;
+  /* Drawn behind the tabs, between the same margins as the orange rule, so the open tab covers it. */
+  background: linear-gradient(var(--line-strong), var(--line-strong)) no-repeat 22px 100% / calc(100% - 44px) 1px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.rec-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.rec-tabs.clip-r {
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
+
+.rec-tabs.clip-l {
+  mask-image: linear-gradient(to right, transparent, #000 36px);
+}
+
+.rec-tabs.clip-l.clip-r {
+  mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+}
+
+.rec-tab-group {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  position: relative;
+}
+
+/* Groups are set apart by a short upright rule. */
+.rec-tab-group.sep {
+  margin-left: 9px;
+  padding-left: 9px;
+}
+
+.rec-tab-group.sep::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 11px;
+  height: 16px;
+  width: 1px;
+  background: var(--line-strong);
+}
+
+.rec-tab-row {
+  display: flex;
+  gap: 1px;
+}
+
+/* Folder tabs: the selected one is open to the page below, with an orange edge on top. */
+.rec-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  font-size: 13px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.rec-tab:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.rec-tab[aria-selected='true'] {
+  background: var(--bg);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: inset 0 2px 0 var(--ink);
+}
+
+.rec-tab .n {
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.rec-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.rec-pane {
+  padding: 18px 26px 72px;
+}
+
+/* Tab changes slide in from the side the tab sits on; item changes rise into place. */
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--tab-dir, 1) * 14px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.tab-in {
+  animation: tab-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.rise {
+  animation: rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Index of a tab's items. */
+.tbl.idx tbody tr {
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.tbl.idx tbody tr:hover {
+  background: var(--surface);
+}
+
+.tbl.idx tbody tr.on {
+  background: var(--accent-wash);
+}
+
+.tbl.idx tbody tr.on td:first-child {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.note-row {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 200ms ease;
+}
+
+.note-row:hover {
+  background: var(--surface);
+}
+
+.note-row.on {
+  border-left-color: var(--accent);
+  background: var(--surface);
+}
+
+/* Lifetime timeline, down the left or across the top. */
+.tl {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.tl-plot {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  user-select: none;
+}
+
+/* Zoom, layout, key and collapse: in the timeline's empty top-left corner. */
+.tl-controls {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tl-controls.v:not(.collapsed) {
+  flex-wrap: wrap;
+  width: 120px;
+  gap: 4px;
+}
+
+.rec-head-controls {
+  margin-left: auto;
+  align-self: center;
+  flex: none;
+}
+
+.tl-controls.in-head {
+  position: static;
+  transform: none;
+}
+
+/* Zoom: − slider + and the factor (press it to see the whole life). On the left the factor wraps under the slider. */
+.tl-zoom {
+  align-items: center;
+}
+
+.tl-zoom-range {
+  width: 84px;
+  margin: 0 6px;
+  accent-color: var(--accent);
+}
+
+.tl-controls.v .tl-zoom {
+  flex-wrap: wrap;
+  width: 120px;
+}
+
+.tl-controls.v .tl-zoom-range {
+  width: 58px;
+  margin: 0 4px;
+}
+
+.tl-controls.v .tl-zoom .tl-ctl-num {
+  flex: 1;
+  border-left: 0;
+  border-top: 1px solid var(--line);
+}
+
+.tl-controls.v.collapsed {
+  flex-direction: column;
+  align-items: stretch;
+  width: 56px;
+  gap: 4px;
+}
+
+.tl-controls.h.collapsed {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tl-ctl-group {
+  display: flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.tl-controls.v.collapsed .tl-ctl-group {
+  justify-content: stretch;
+}
+
+.tl-controls.v.collapsed .tl-ctl {
+  flex: 1;
+}
+
+.tl-ctl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.tl-ctl + .tl-ctl {
+  border-left: 1px solid var(--line);
+}
+
+.tl-ctl:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.tl-ctl:disabled {
+  color: var(--ink-3);
+  opacity: 0.6;
+}
+
+.tl-ctl[aria-pressed='true'],
+.tl-ctl[aria-expanded='true'] {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.tl-ctl-num {
+  min-width: 32px;
+}
+
+.tl-ctl-text {
+  padding: 0 7px;
+}
+
+.tl-key {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 6;
+  width: min(680px, calc(100% - 8px));
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--ink);
+  color: var(--ink-2);
+}
+
+.chart .tl-strip-row {
+  fill: var(--surface);
+  opacity: 0.6;
+}
+
+.chart .tl-lens {
+  fill: var(--accent-wash);
+  opacity: 0.32;
+}
+
+.chart .tl-lane-rule {
+  stroke: var(--line-strong);
+  pointer-events: none;
+}
+
+.chart .tl-lane-hit {
+  cursor: default;
+}
+
+.chart .tl-lane-grip {
+  fill: transparent;
+  transition: fill 150ms ease;
+}
+
+.chart .tl-lane-grip.h {
+  cursor: row-resize;
+}
+
+.chart .tl-lane-grip.v {
+  cursor: col-resize;
+}
+
+.chart .tl-lane-grip:hover,
+.chart .tl-lane-grip:active {
+  fill: var(--accent);
+  fill-opacity: 0.35;
+}
+
+.chart .tl-lane-name {
+  font-size: 13px;
+  font-weight: 500;
+  fill: var(--ink);
+  transition: fill 200ms ease;
+}
+
+.chart .tl-lane-name.on {
+  fill: var(--accent-ink);
+}
+
+.chart .tl-lane-note,
+.chart .tl-row-name,
+.chart .tl-axis-head {
+  font-size: 11.5px;
+  fill: var(--ink-2);
+}
+
+.chart .tl-age {
+  font-size: 12px;
+  fill: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart .tl-year {
+  font-size: 12px;
+  fill: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart .tl-year.small {
+  font-size: 11px;
+  font-weight: 400;
+  fill: var(--ink-2);
+}
+
+.chart .tl-marker-label,
+.chart .tl-band-label,
+.chart .tl-bar-label {
+  paint-order: stroke;
+  stroke: var(--tl-bg, var(--bg));
+  stroke-linejoin: round;
+}
+
+.chart .tl-marker-label {
+  font-size: 12px;
+  font-weight: 500;
+  fill: var(--ink);
+  stroke-width: 3.5px;
+}
+
+.chart .tl-band-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  stroke-width: 3px;
+}
+
+.chart .tl-bar-label {
+  font-size: 12.5px;
+  fill: var(--ink);
+  stroke-width: 3px;
+}
+
+.chart .tl-cursor-label {
+  font-size: 11px;
+  font-weight: 500;
+  fill: var(--on-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-mini {
+  position: absolute;
+  touch-action: none;
+  cursor: grab;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+}
+
+.tl-mini:active {
+  cursor: grabbing;
+}
+
+.tl-mini-window {
+  position: absolute;
+  border: 2px solid var(--ink-3);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ink-3) 18%, transparent);
+}
+
+/* The timeline sits on the page; the lane and time column under the pointer are shaded. */
+.rec-timeline {
+  --tl-bg: var(--bg);
+}
+
+.chart .tl-hover-lane {
+  fill: var(--surface);
+}
+
+.chart .tl-hover-col {
+  fill: var(--surface);
+  opacity: 0.7;
+}
+
+/* The timeline folds and unfolds smoothly; not while its divider is being dragged. */
+.rec-timeline {
+  transition: height 300ms cubic-bezier(0.2, 0.8, 0.2, 1), width 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.rec-body.resizing .rec-timeline {
+  transition: none;
+}
+
+.rec-body.tl-folded .rec-split {
+  cursor: default;
+}
+
+.rec-body.tl-folded .rec-split:hover::before {
+  background: var(--line-strong);
+  height: 1px;
+  width: auto;
+}
+
+/* Timeline on top: the divider runs across the record and resizes the timeline's height. */
+.rec-body.is-top {
+  flex-direction: column;
+}
+
+.rec-body.is-top .rec-timeline {
+  width: auto !important;
+  border-bottom: 0;
+}
+
+.rec-body.is-top .rec-split {
+  width: auto;
+  height: 10px;
+  margin: -5px 0;
+  cursor: row-resize;
+}
+
+.rec-body.is-top .rec-split::before {
+  top: 5px;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 1px;
+}
+
+.rec-body.is-top .rec-split:hover::before,
+.rec-body.is-top .rec-split:active::before,
+.rec-body.is-top .rec-split:focus-visible::before {
+  top: 4px;
+  left: 0;
+  width: auto;
+  height: 3px;
+}
+
+.rec-body.is-top .rec-main {
+  min-height: 0;
+  flex: 1;
+}
+
+.rec-body.is-left .rec-timeline {
+  height: auto !important;
+}
+
+@media (max-width: 1023px) {
+  .rec-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .rec-timeline {
+    width: 100% !important;
+    height: 560px;
+  }
+
+  .rec-split {
+    display: none;
+  }
+
+  .rec-scroll {
+    overflow: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-in,
+  .rise {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------------ Record chapters */
+
+.chap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.chap-rule {
+  position: relative;
+  flex: none;
+  height: 32px;
+}
+
+.chap-rule::before {
+  content: '';
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 15px;
+  height: 2px;
+  background: var(--accent);
+  transition: height 160ms ease, top 160ms ease, background 160ms ease;
+}
+
+.chap-pill-wrap {
+  position: absolute;
+  left: 22px;
+  top: 5px;
+  padding-right: 10px;
+  background: var(--bg);
+}
+
+.chap-pill {
+  display: inline-grid;
+  place-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 600 11.5px/1 var(--font);
+  letter-spacing: 0.02em;
+}
+
+.chap-act-wrap {
+  position: absolute;
+  right: 22px;
+  top: 4px;
+  padding-left: 10px;
+  background: var(--bg);
+}
+
+.chap-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.chap-act:hover {
+  color: var(--ink);
+}
+
+.chap-chev {
+  transition: transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.chap-chev.open {
+  transform: rotate(180deg);
+}
+
+/* The Details rule is also the timeline's resize handle (timeline on top). */
+.chap-rule.split {
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.chap-rule.split:hover::before,
+.chap-rule.split:active::before {
+  top: 14px;
+  height: 4px;
+  background: var(--accent);
+}
+
+body.atlas .chap-rule.split:focus-visible {
+  outline: none;
+}
+
+body.atlas .chap-rule.split:focus-visible::before {
+  background: var(--accent);
+}
+
+.rec-body.tl-folded .chap-rule.split {
+  cursor: default;
+}
+
+/* Timeline chapter: title and description on the left, the chart on the right (timeline on top). */
+.chap-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0 22px 4px 40px;
+}
+
+.chap-side {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.chap-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.chap-lede {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.chap-controls .tl-controls {
+  flex-wrap: wrap;
+}
+
+.chap-tl .rec-timeline {
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  width: auto !important;
+  transition: none;
+}
+
+/* Timeline on the left: the side column sits above the chart. */
+.rec-body.is-left .chap-grid {
+  padding: 0 4px 0 14px;
+}
+
+.rec-body.is-left.tl-folded .chap-grid {
+  padding: 0 4px;
+}
+
+.rec-body.is-left .chap-side {
+  padding: 0 14px;
+  gap: 6px;
+}
+
+.rec-body.is-left .chap-title {
+  font-size: 18px;
+}
+
+.rec-body.is-left .chap-lede {
+  display: none;
+}
+
+.rec-body.is-left.tl-folded .chap-rule::before {
+  left: 8px;
+  right: 8px;
+}
+
+.rec-body.is-left.tl-folded .chap-act-wrap {
+  right: 50%;
+  transform: translateX(50%);
+  padding: 0 4px;
+}
+
+.rec-body.is-left.tl-folded .chap-side {
+  padding: 0 6px;
+  align-items: center;
+}
+
+.chap-tl {
+  transition: height 300ms cubic-bezier(0.2, 0.8, 0.2, 1), width 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.rec-body.resizing .chap-tl {
+  transition: none;
+}
+
+.chart .tl-age.small {
+  font-size: 10px;
+}
+
+.chart .tl-strip-name {
+  font-size: 9.5px;
+  fill: var(--ink-2);
+}
+
+.chart .tl-strip-name.on {
+  fill: var(--accent-ink);
+}
+
+/* ------------------------------------------------------------------ The record scrolls as one page */
+
+.record {
+  display: block;
+  height: auto;
+  min-height: 100%;
+}
+
+.rec-body.is-top {
+  display: flex;
+  flex-direction: column;
+}
+
+.rec-body.is-top .rec-main {
+  flex: none;
+}
+
+.rec-scroll {
+  flex: none;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* The tab bar stays pinned to the top while the details scroll. */
+.rec-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 7;
+  background-color: var(--bg);
+}
+
+/* Timeline on the left: it stays in view, a full screen tall, while the details scroll beside it. */
+.rec-body.is-left {
+  display: flex;
+  align-items: stretch;
+}
+
+.rec-body.is-left .chap-tl {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: calc(100dvh - 57px);
+}
+
+.rec-body.is-left .rec-main {
+  flex: 1;
+}
+
+/* Date picker on the timeline axis: drag it, it snaps from event to event with a small click. */
+.chart .tl-pick-band {
+  cursor: ew-resize;
+}
+
+.tl-v .chart .tl-pick-band {
+  cursor: ns-resize;
+}
+
+.chart .tl-picker {
+  cursor: grab;
+  outline: none;
+}
+
+.chart .tl-picker:active {
+  cursor: grabbing;
+}
+
+.chart .tl-pill {
+  fill: var(--accent);
+  transition: fill 160ms ease;
+}
+
+.chart .tl-pill.idle {
+  fill: var(--ink-3);
+}
+
+.chart .tl-picker:focus-visible .tl-pill {
+  stroke: var(--ink);
+  stroke-width: 1.5px;
+}
+
+.chart .tl-cursor-label.small {
+  font-size: 10px;
+}
+
+.chart .tl-detent {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: tl-detent 170ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes tl-detent {
+  0% {
+    transform: scale(1.16);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.chart .tl-ridge {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+}
+
+.chart .tl-ridge.on {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart .tl-detent {
+    animation: none;
+  }
+}
+
+/* Picking up the date picker: hovering the pill or its line lifts the pill and thickens the line. */
+.chart .tl-pick-line {
+  cursor: grab;
+}
+
+.chart .tl-pick-line:active {
+  cursor: grabbing;
+}
+
+.chart .tl-sel-line {
+  stroke: var(--accent);
+  stroke-width: 1.4px;
+  opacity: 0.9;
+  transition: stroke-width 140ms ease, opacity 140ms ease;
+}
+
+.chart .tl-sel-line.thick {
+  stroke-width: 2px;
+}
+
+.chart .tl-sel-line.up {
+  stroke-width: 2.8px;
+  opacity: 1;
+}
+
+.chart .tl-sel-line.thick.up {
+  stroke-width: 4px;
+}
+
+.chart .tl-pill-lift {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.chart .tl-pill-lift.up {
+  transform: translateY(-2px) scale(1.06);
+  filter: drop-shadow(0 2px 2px color-mix(in srgb, var(--ink) 28%, transparent));
+}
+
+/* While the date picker is dragged, details change in place: no entrance animations. */
+body.tl-picking .rise,
+body.tl-picking .tab-in {
+  animation: none;
+}
+
+body.tl-picking {
+  cursor: grabbing;
+  user-select: none;
+}
+
+
+/* Full screen: the workspace covers the window (and the screen, where the browser allows native full screen). */
+.workspace-max {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--bg);
+}
+
+.workspace-max .workspace-header {
+  display: none;
+}
+
+/* Collapsible side panels: a quiet square toggle, and a slim labelled rail when collapsed. */
+.icon-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ink-2);
+}
+
+.icon-btn:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 36px;
+  padding-top: 14px;
+  color: var(--ink-3);
+}
+
+.rail:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.rail-chevron {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.rail-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}

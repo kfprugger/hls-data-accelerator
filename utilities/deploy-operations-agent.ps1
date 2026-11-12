@@ -39,15 +39,21 @@ $ErrorActionPreference = "Stop"
 # ============================================================================
 
 function Get-FabricAccessToken {
-    $tokenObj = Get-AzAccessToken -ResourceUrl "https://api.fabric.microsoft.com"
-    $rawToken = $tokenObj.Token
-    if ($rawToken -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
-        try { return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl "https://api.fabric.microsoft.com" -ErrorAction Stop
+        $rawToken = $tokenObj.Token
+        if ($rawToken -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
+            try { return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        }
+        elseif ($rawToken -is [string]) { return $rawToken }
+        else { return $rawToken | ConvertFrom-SecureString -AsPlainText }
+    } catch {
+        $cliJson = az account get-access-token --resource "https://api.fabric.microsoft.com" -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        return $cliJson.accessToken
     }
-    elseif ($rawToken -is [string]) { return $rawToken }
-    else { return $rawToken | ConvertFrom-SecureString -AsPlainText }
 }
 
 function ConvertTo-Base64 {

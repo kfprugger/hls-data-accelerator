@@ -1,6 +1,6 @@
-import os, sys, time, json, random, traceback
+import os, sys, time, json, random, traceback, threading
 from datetime import datetime
-
+from http.server import BaseHTTPRequestHandler, HTTPServer
 # Force stdout/stderr to be unbuffered for ACI logging
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
@@ -30,6 +30,54 @@ print(f"DEVICE_COUNT: {DEVICE_COUNT}", flush=True)
 DEVICE_IDS = [f"MASIMO-RADIUS7-{i:04d}" for i in range(1, DEVICE_COUNT + 1)]
 print(f"Devices: {DEVICE_IDS[0]} to {DEVICE_IDS[-1]}", flush=True)
 
+
+METRICS = {
+    "started_at": datetime.utcnow().isoformat() + "Z",
+    "cycles_completed": 0,
+    "events_sent": 0,
+    "reconnect_attempts": 0,
+    "last_batch_at": None,
+    "last_error": None,
+    "healthy": True,
+}
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ("/healthz", "/readyz", "/"):
+            code = 200 if METRICS["healthy"] else 503
+            body = json.dumps({"status": "ok" if METRICS["healthy"] else "degraded", "device_count": DEVICE_COUNT, **METRICS}).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/metrics":
+            lines = [
+                f"masimo_emulator_devices {DEVICE_COUNT}",
+                f"masimo_emulator_cycles_total {METRICS['cycles_completed']}",
+                f"masimo_emulator_events_sent_total {METRICS['events_sent']}",
+                f"masimo_emulator_reconnect_attempts_total {METRICS['reconnect_attempts']}",
+                f"masimo_emulator_healthy {1 if METRICS['healthy'] else 0}",
+            ]
+            body = ("\n".join(lines) + "\n").encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+    def log_message(self, format, *args):
+        return
+
+def start_health_server():
+    port = int(os.getenv("HEALTH_PORT", "8080"))
+    try:
+        srv = HTTPServer(("0.0.0.0", port), HealthHandler)
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        print(f"Health & metrics HTTP server listening on :{port} (/healthz, /metrics)", flush=True)
+    except Exception as exc:
+        print(f"Health server warning: {exc}", flush=True)
 class MasimoSimulator:
     """Simulates a single Masimo Radius-7 pulse oximeter"""
     def __init__(self, device_id: str):
@@ -77,6 +125,7 @@ class MasimoSimulator:
         return payload
 
 def run():
+    start_health_server()
     print("Connecting to Event Hub using Managed Identity...", flush=True)
     credential = ManagedIdentityCredential()
     fully_qualified_namespace = f"{EVENT_HUB_NAMESPACE}.servicebus.windows.net"
@@ -110,14 +159,20 @@ def run():
                             batch.add(EventData(json.dumps(data)))
                     producer.send_batch(batch)
                     cycle += 1
+                    METRICS["cycles_completed"] = cycle
+                    METRICS["events_sent"] += len(DEVICE_IDS)
+                    METRICS["last_batch_at"] = datetime.utcnow().isoformat() + "Z"
+                    METRICS["healthy"] = True
                     if cycle % 10 == 0:
                         print(f"Cycle {cycle}: Sent telemetry for {len(DEVICE_IDS)} devices", flush=True)
                     time.sleep(1)
         except Exception as e:
             attempt += 1
+            METRICS["reconnect_attempts"] += 1
+            METRICS["last_error"] = str(e)
+            METRICS["healthy"] = False
             delay = min(30, 2 ** min(attempt, 5))
             print(f"!!! Transient Producer Error (attempt {attempt}, reconnecting in {delay}s): {e}", flush=True)
-            traceback.print_exc()
             sys.stdout.flush()
             sys.stderr.flush()
             time.sleep(delay)

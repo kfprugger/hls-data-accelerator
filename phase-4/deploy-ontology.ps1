@@ -58,17 +58,31 @@ $ErrorActionPreference = "Stop"
 # AUTH HELPERS (same pattern as deploy-fabric-rti.ps1)
 # ============================================================================
 
+$script:AccessTokenCache = @{}
 function Get-AccessTokenForResource {
     param ([string]$ResourceUrl)
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl
-    $rawToken = $tokenObj.Token
-    if ($rawToken -is [System.Security.SecureString]) {
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
-        try { return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-        finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    $key = $ResourceUrl.ToLowerInvariant()
+    $cached = $script:AccessTokenCache[$key]
+    if ($cached -and $cached.ExpiresOn -gt (Get-Date).AddMinutes(5)) { return $cached.Token }
+    try {
+        $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+        $rawToken = $tokenObj.Token
+        if ($rawToken -is [System.Security.SecureString]) {
+            $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($rawToken)
+            try { $rawToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+            finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        } elseif ($rawToken -isnot [string]) {
+            $rawToken = $rawToken | ConvertFrom-SecureString -AsPlainText
+        }
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = $tokenObj.ExpiresOn }
+        return $rawToken
+    } catch {
+        $cliJson = az account get-access-token --resource $ResourceUrl -o json 2>$null | ConvertFrom-Json
+        if (-not $cliJson -or -not $cliJson.accessToken) { throw }
+        $rawToken = [string]$cliJson.accessToken
+        $script:AccessTokenCache[$key] = @{ Token = $rawToken; ExpiresOn = (Get-Date).AddMinutes(50) }
+        return $rawToken
     }
-    elseif ($rawToken -is [string]) { return $rawToken }
-    else { return $rawToken | ConvertFrom-SecureString -AsPlainText }
 }
 
 function Get-FabricAccessToken { return Get-AccessTokenForResource -ResourceUrl "https://api.fabric.microsoft.com" }
@@ -299,316 +313,142 @@ try {
 } catch {}
 if ($existingOntology) {
     if ($existingOntology -is [array]) { $existingOntology = $existingOntology[0] }
-    if (-not $ReplaceExisting) {
-        Write-Host "  ✓ Ontology '$OntologyName' already exists ($($existingOntology.id)); preserving existing item to avoid an ontology gap." -ForegroundColor Green
-        Write-Host "    Existing ontology will be used for Data Agent binding. Pass -ReplaceExisting to rebuild the definition." -ForegroundColor DarkGray
-        exit 0
-    }
-    Write-Host "  Existing ontology '$OntologyName' ($($existingOntology.id)) will be updated in place..." -ForegroundColor Yellow
-}
+    $existingIsV2 = $false
+    try {
+        $chkHeaders = @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" }
+        $chkResp = Invoke-WebRequest -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies/$($existingOntology.id)/getDefinition" -Headers $chkHeaders -Method POST -ErrorAction Stop
+        if ($chkResp.Content) {
+            $chkDef = $chkResp.Content | ConvertFrom-Json
+        } else {
+            $chkOpId = $chkResp.Headers["x-ms-operation-id"]; if ($chkOpId -is [array]) { $chkOpId = $chkOpId[0] }
+            $chkLoc = $chkResp.Headers["Location"]; if ($chkLoc -is [array]) { $chkLoc = $chkLoc[0] }
+            if ($chkLoc -and $chkLoc -notmatch '^https?://') { $chkLoc = "https://api.fabric.microsoft.com/v1/$($chkLoc.TrimStart('/'))" }
+            if (-not $chkLoc -and $chkOpId) { $chkLoc = "https://api.fabric.microsoft.com/v1/operations/$chkOpId" }
+            for ($p = 0; $p -lt 30 -and $chkLoc; $p++) {
+                Start-Sleep -Seconds 2
+                $chkOp = Invoke-RestMethod -Uri $chkLoc -Headers $chkHeaders -ErrorAction Stop
+                if ($chkOp.status -eq "Succeeded") {
+                    $resUri = if ($chkLoc -match '/result$') { $chkLoc } else { "$chkLoc/result" }
+                    $chkDef = Invoke-RestMethod -Uri $resUri -Headers $chkHeaders -ErrorAction Stop
+                    break
+                }
+                if ($chkOp.status -eq "Failed") { break }
+            }
+        }
+        if ($chkDef -and $chkDef.definition -and $chkDef.definition.parts) {
+            $existingIsV2 = @($chkDef.definition.parts | Where-Object { $_.path -eq "database.tmdl" -or $_.path -like "entities/*.tmdl" }).Count -gt 0
+        }
+    } catch {}
 
-# ============================================================================
-# BUILD ONTOLOGY DEFINITION (raw JSON strings — required by Fabric API)
-# ============================================================================
-
-Write-Host ""
-Write-Host "  Building ontology definition..." -ForegroundColor White
-
-# Helper: generate a unique positive 64-bit ID
-$script:idSeq = 1000000
-function NextId { $script:idSeq++; return $script:idSeq }
-
-# Helper: build a property JSON fragment
-function PropJson([string]$id, [string]$name, [string]$vt = "String") {
-    return '{"id":"'+$id+'","name":"'+$name+'","redefines":null,"baseTypeNamespaceType":null,"valueType":"'+$vt+'"}'
-}
-
-# Helper: build an entity type JSON
-function EtJson([string]$id, [string]$name, [string]$keyId, [string]$dispId, [string]$propsJson, [string]$tsJson = "") {
-    return '{"id":"'+$id+'","namespace":"usertypes","baseEntityTypeId":null,"name":"'+$name+'","entityIdParts":["'+$keyId+'"],"displayNamePropertyId":"'+$dispId+'","namespaceType":"Custom","visibility":"Visible","properties":['+$propsJson+'],"timeseriesProperties":['+$tsJson+']}'
-}
-
-
-# Determine target lakehouse based on ontology (cross-lakehouse edges load zero graph nodes)
-$targetLhId = if ($OntologyName -eq "DevicePayerOntology") { $goldLhId } else { $silverLhId }
-
-# Helper: build a Lakehouse NonTimeSeries data binding JSON
-function LhBind([string]$bindings, [string]$tbl) {
-    $bid = [guid]::NewGuid().ToString()
-    return @{ id = $bid; json = '{"id":"'+$bid+'","dataBindingConfiguration":{"dataBindingType":"NonTimeSeries","propertyBindings":['+$bindings+'],"sourceTableProperties":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$targetLhId+'","sourceTableName":"'+$tbl+'"}}}' }
-}
-
-# Helper: build an Eventhouse TimeSeries data binding JSON
-function EhBind([string]$tsCol, [string]$bindings, [string]$tbl) {
-    $bid = [guid]::NewGuid().ToString()
-    return @{ id = $bid; json = '{"id":"'+$bid+'","dataBindingConfiguration":{"dataBindingType":"TimeSeries","timestampColumnName":"'+$tsCol+'","propertyBindings":['+$bindings+'],"sourceTableProperties":{"sourceType":"KustoTable","workspaceId":"'+$workspaceId+'","itemId":"'+$eventhouseId+'","clusterUri":"'+$kustoUri+'","databaseName":"'+$kqlDbName+'","sourceTableName":"'+$tbl+'"}}}' }
-}
-
-# Helper: relationship type JSON
-function RtJson([string]$id, [string]$name, [string]$src, [string]$tgt) {
-    return '{"namespace":"usertypes","id":"'+$id+'","name":"'+$name+'","namespaceType":"Custom","source":{"entityTypeId":"'+$src+'"},"target":{"entityTypeId":"'+$tgt+'"}}'
-}
-
-# Helper: Lakehouse contextualization JSON
-function LhCtx([string]$tbl, [string]$sc, [string]$sp, [string]$tc, [string]$tp) {
-    $cid = [guid]::NewGuid().ToString()
-    return @{ id = $cid; json = '{"id":"'+$cid+'","dataBindingTable":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$targetLhId+'","sourceTableName":"'+$tbl+'"},"sourceKeyRefBindings":[{"sourceColumnName":"'+$sc+'","targetPropertyId":"'+$sp+'"}],"targetKeyRefBindings":[{"sourceColumnName":"'+$tc+'","targetPropertyId":"'+$tp+'"}]}' }
-}
-
-# Helper: Eventhouse/KQL contextualization JSON
-function EhCtx([string]$tbl, [string]$sc, [string]$sp, [string]$tc, [string]$tp) {
-    $cid = [guid]::NewGuid().ToString()
-    return @{ id = $cid; json = '{"id":"'+$cid+'","dataBindingTable":{"sourceType":"KustoTable","workspaceId":"'+$workspaceId+'","itemId":"'+$eventhouseId+'","clusterUri":"'+$kustoUri+'","databaseName":"'+$kqlDbName+'","sourceTableName":"'+$tbl+'"},"sourceKeyRefBindings":[{"sourceColumnName":"'+$sc+'","targetPropertyId":"'+$sp+'"}],"targetKeyRefBindings":[{"sourceColumnName":"'+$tc+'","targetPropertyId":"'+$tp+'"}]}' }
-}
-
-
-# --- Entity & Relationship Construction ---
-$ets = @()
-$rels = @()
-
-# 1. Patient Entity (Include if either Clinical or DICOM is selected)
-if ($IncludeFhir -or $IncludeDicom) {
-    $eP = NextId; $pPid = NextId; $pPnm = NextId; $pPgn = NextId; $pPbd = NextId
-    $ejP = EtJson $eP "Patient" $pPid $pPnm ((PropJson $pPid "patientId"),(PropJson $pPnm "patientName"),(PropJson $pPgn "gender"),(PropJson $pPbd "birthDate") -join ',')
-    # CDF-enabled HDS managed tables load zero graph nodes, so we bind to the non-CDF projection tables
-    $dbP = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pPid+'"},{"sourceColumnName":"name_string","targetPropertyId":"'+$pPnm+'"},{"sourceColumnName":"gender","targetPropertyId":"'+$pPgn+'"},{"sourceColumnName":"birthDate","targetPropertyId":"'+$pPbd+'"}') "PatientOntology"
-    $ets += @{id=$eP;j=$ejP;b=$dbP}
-}
-
-# 2. Clinical Ingestion Entities (FHIR)
-if ($IncludeFhir) {
-    # Encounter
-    $eE = NextId; $pEid = NextId; $pEcl = NextId; $pEst = NextId; $pEps = NextId; $pEpr = NextId
-    $ejE = EtJson $eE "Encounter" $pEid $pEid ((PropJson $pEid "encounterId"),(PropJson $pEcl "encounterClass"),(PropJson $pEst "encounterStatus"),(PropJson $pEps "periodStart"),(PropJson $pEpr "patientRef") -join ',')
-    $dbE = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pEid+'"},{"sourceColumnName":"class_string","targetPropertyId":"'+$pEcl+'"},{"sourceColumnName":"status","targetPropertyId":"'+$pEst+'"},{"sourceColumnName":"period_start","targetPropertyId":"'+$pEps+'"},{"sourceColumnName":"patient_id","targetPropertyId":"'+$pEpr+'"}') "EncounterOntology"
-    $ets += @{id=$eE;j=$ejE;b=$dbE}
-
-    # Condition
-    $eC = NextId; $pCid = NextId; $pCdn = NextId; $pCcs = NextId; $pCpr = NextId
-    $ejC = EtJson $eC "Condition" $pCid $pCdn ((PropJson $pCid "conditionId"),(PropJson $pCdn "conditionName"),(PropJson $pCcs "clinicalStatus"),(PropJson $pCpr "patientRef") -join ',')
-    $dbC = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pCid+'"},{"sourceColumnName":"code_string","targetPropertyId":"'+$pCdn+'"},{"sourceColumnName":"clinicalStatus_string","targetPropertyId":"'+$pCcs+'"},{"sourceColumnName":"patient_id","targetPropertyId":"'+$pCpr+'"}') "ConditionOntology"
-    $ets += @{id=$eC;j=$ejC;b=$dbC}
-
-    # MedicationRequest
-    $eM = NextId; $pMid = NextId; $pMmd = NextId; $pMst = NextId; $pMau = NextId; $pMpr = NextId
-    $ejM = EtJson $eM "MedRequest" $pMid $pMmd ((PropJson $pMid "medicationRequestId"),(PropJson $pMmd "medication"),(PropJson $pMst "medStatus"),(PropJson $pMau "authoredOn"),(PropJson $pMpr "patientRef") -join ',')
-    $dbM = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pMid+'"},{"sourceColumnName":"medicationCodeableConcept_string","targetPropertyId":"'+$pMmd+'"},{"sourceColumnName":"status","targetPropertyId":"'+$pMst+'"},{"sourceColumnName":"authoredOn","targetPropertyId":"'+$pMau+'"},{"sourceColumnName":"patient_id","targetPropertyId":"'+$pMpr+'"}') "MedicationRequestOntology"
-    $ets += @{id=$eM;j=$ejM;b=$dbM}
-
-    # Observation
-    $eO = NextId; $pOid = NextId; $pOco = NextId; $pOvl = NextId; $pOun = NextId; $pOef = NextId; $pOpr = NextId
-    $ejO = EtJson $eO "Observation" $pOid $pOco ((PropJson $pOid "observationId"),(PropJson $pOco "observationCode"),(PropJson $pOvl "observationValue"),(PropJson $pOun "observationUnit"),(PropJson $pOef "effectiveDateTime"),(PropJson $pOpr "patientRef") -join ',')
-    $dbO = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pOid+'"},{"sourceColumnName":"code_string","targetPropertyId":"'+$pOco+'"},{"sourceColumnName":"valueQuantity_value","targetPropertyId":"'+$pOvl+'"},{"sourceColumnName":"valueQuantity_unit","targetPropertyId":"'+$pOun+'"},{"sourceColumnName":"effectiveDateTime","targetPropertyId":"'+$pOef+'"},{"sourceColumnName":"patient_id","targetPropertyId":"'+$pOpr+'"}') "ObservationOntology"
-    $ets += @{id=$eO;j=$ejO;b=$dbO}
-
-    # Relationships
-    $rels += @(
-        @{id=(NextId);n="hasEncounter";s=$eP;t=$eE;ctx=(LhCtx "EncounterOntology" "patient_id" $pPid "idOrig" $pEid)},
-        @{id=(NextId);n="hasCondition";s=$eP;t=$eC;ctx=(LhCtx "ConditionOntology" "patient_id" $pPid "idOrig" $pCid)},
-        @{id=(NextId);n="hasObservation";s=$eP;t=$eO;ctx=(LhCtx "ObservationOntology" "patient_id" $pPid "idOrig" $pOid)},
-        @{id=(NextId);n="hasMedication";s=$eP;t=$eM;ctx=(LhCtx "MedicationRequestOntology" "patient_id" $pPid "idOrig" $pMid)}
-    )
-}
-
-# 3. Medical Imaging Ingestion Entities (DICOM)
-if ($IncludeDicom) {
-    # ImagingStudy
-    $eI = NextId; $pIid = NextId; $pIdesc = NextId; $pIpr = NextId; $pInos = NextId; $pInoi = NextId
-    $ejI = EtJson $eI "ImagingStudy" $pIid $pIdesc ((PropJson $pIid "studyId"),(PropJson $pIdesc "description"),(PropJson $pIpr "patientRef"),(PropJson $pInos "numberOfSeries" "BigInt"),(PropJson $pInoi "numberOfInstances" "BigInt") -join ',')
-    $dbI = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pIid+'"},{"sourceColumnName":"description","targetPropertyId":"'+$pIdesc+'"},{"sourceColumnName":"patient_id","targetPropertyId":"'+$pIpr+'"},{"sourceColumnName":"numberOfSeries","targetPropertyId":"'+$pInos+'"},{"sourceColumnName":"numberOfInstances","targetPropertyId":"'+$pInoi+'"}') "ImagingStudyOntology"
-    $ets += @{id=$eI;j=$ejI;b=$dbI}
-
-    # Relationship
-    if ($IncludeFhir -or $IncludeDicom) {
-        $rels += @(
-            @{id=(NextId);n="hasImagingStudy";s=$eP;t=$eI;ctx=(LhCtx "ImagingStudyOntology" "patient_id" $pPid "idOrig" $pIid)}
-        )
+    if (-not $existingIsV2) {
+        Write-Host "  Existing ontology '$OntologyName' ($($existingOntology.id)) uses legacy v1 JSON definition; replacing with Ontology v2 (TMDL)..." -ForegroundColor Yellow
+        $ReplaceExisting = $true
+    } elseif (-not $ReplaceExisting) {
+        Write-Host "  ✓ Ontology '$OntologyName' already exists in v2 TMDL format ($($existingOntology.id)); preserving existing item." -ForegroundColor Green
+    } else {
+        Write-Host "  Existing v2 ontology '$OntologyName' ($($existingOntology.id)) will be updated in place..." -ForegroundColor Yellow
     }
 }
 
-# 4. Telemetry Entities (Eventhouse)
-if ($IncludeTelemetry) {
-    # Device
-    $eD = NextId; $pDid = NextId; $pDty = NextId; $pDst = NextId
-    $ejD = EtJson $eD "Device" $pDid $pDid ((PropJson $pDid "deviceId"),(PropJson $pDty "deviceType"),(PropJson $pDst "deviceStatus") -join ',')
-    # CDF-enabled HDS managed tables load zero graph nodes, so we bind to the non-CDF projection tables
-    $dbD = LhBind ('{"sourceColumnName":"idOrig","targetPropertyId":"'+$pDid+'"},{"sourceColumnName":"type_string","targetPropertyId":"'+$pDty+'"},{"sourceColumnName":"status","targetPropertyId":"'+$pDst+'"}') "DeviceOntology"
-    $ets += @{id=$eD;j=$ejD;b=$dbD}
-
-    # DeviceAssociation
-    $eA = NextId; $pAid = NextId; $pAdr = NextId; $pApn = NextId; $pApi = NextId
-    $ejA = EtJson $eA "DeviceAssoc" $pAid $pApn ((PropJson $pAid "associationId"),(PropJson $pAdr "deviceRef"),(PropJson $pApn "assocPatientName"),(PropJson $pApi "assocPatientId") -join ',')
-    $dbA = LhBind ('{"sourceColumnName":"id","targetPropertyId":"'+$pAid+'"},{"sourceColumnName":"device_ref","targetPropertyId":"'+$pAdr+'"},{"sourceColumnName":"patient_name","targetPropertyId":"'+$pApn+'"},{"sourceColumnName":"patient_id","targetPropertyId":"'+$pApi+'"}') "DeviceAssociation"
-    $ets += @{id=$eA;j=$ejA;b=$dbA}
-
-    # ClinicalAlert is intentionally excluded from the automated ontology definition for now.
-    # Isolated imports on med-0701 show Eventhouse DeviceTelemetry succeeds, while AlertHistory-backed
-    # ClinicalAlert fails Fabric ALM import for both Static and TimeSeries binding shapes.
-    # Keep clinical alerts available through KQL functions / Data Activator until Fabric exposes
-    # actionable import diagnostics for AlertHistory ontology bindings.
-
-    # DeviceTelemetry (Eventhouse TimeSeries binding)
-    $eT = NextId; $pTdi = NextId; $pTts = NextId; $pTspo2 = NextId; $pTpr = NextId; $pTpi = NextId; $pTpvi = NextId
-    $ejT = EtJson $eT "DeviceTelemetry" $pTdi $pTdi `
-        (PropJson $pTdi "telemetryDeviceId") `
-        ((PropJson $pTts "telemetryTimestamp" "DateTime"),(PropJson $pTspo2 "spo2" "Double"),(PropJson $pTpr "pulseRate" "Double"),(PropJson $pTpi "perfusionIndex" "Double"),(PropJson $pTpvi "plethVariability" "Double") -join ',')
-    $dbT = EhBind "timestamp" ('{"sourceColumnName":"device_id","targetPropertyId":"'+$pTdi+'"},{"sourceColumnName":"timestamp","targetPropertyId":"'+$pTts+'"},{"sourceColumnName":"telemetry.spo2","targetPropertyId":"'+$pTspo2+'"},{"sourceColumnName":"telemetry.pr","targetPropertyId":"'+$pTpr+'"},{"sourceColumnName":"telemetry.pi","targetPropertyId":"'+$pTpi+'"},{"sourceColumnName":"telemetry.pvi","targetPropertyId":"'+$pTpvi+'"}') "TelemetryRaw"
-    $ets += @{id=$eT;j=$ejT;b=$dbT}
-
-    if ($IncludeFhir -or $IncludeDicom) {
-        $rels += @(
-            @{id=(NextId);n="linkedToDevice";s=$eP;t=$eD;ctx=(LhCtx "DeviceAssociation" "patient_id" $pPid "device_ref" $pDid)}
-        )
-    }
-
-    $rels += @(
-        @{id=(NextId);n="generatesTelemetry";s=$eD;t=$eT;ctx=(EhCtx "TelemetryRaw" "device_id" $pDid "device_id" $pTdi)}
-    )
-}
-
-# 5. Claims & Quality Entities (Gold Lakehouse — only if Gold LH exists)
+$existingIsV1 = $existingOntology -and (-not $existingIsV2)
+$totalEntities = 0
+$totalRels = 0
 $claimEntities = @()
-$claimRels = @()
 
-if ($IncludeGold -and $goldLhId) {
-    Write-Host "  Building claims & quality entities (Gold Lakehouse)..." -ForegroundColor White
-
-    # Helper: Gold Lakehouse data binding
-    function GoldLhBind([string]$bindings, [string]$tbl) {
-        $bid = [guid]::NewGuid().ToString()
-        return @{ id = $bid; json = '{"id":"'+$bid+'","dataBindingConfiguration":{"dataBindingType":"NonTimeSeries","propertyBindings":['+$bindings+'],"sourceTableProperties":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$goldLhId+'","sourceTableName":"'+$tbl+'"}}}' }
-    }
-
-    # Helper: Gold Lakehouse contextualization
-    function GoldLhCtx([string]$tbl, [string]$sc, [string]$sp, [string]$tc, [string]$tp) {
-        $cid = [guid]::NewGuid().ToString()
-        return @{ id = $cid; json = '{"id":"'+$cid+'","dataBindingTable":{"sourceType":"LakehouseTable","workspaceId":"'+$workspaceId+'","itemId":"'+$goldLhId+'","sourceTableName":"'+$tbl+'"},"sourceKeyRefBindings":[{"sourceColumnName":"'+$sc+'","targetPropertyId":"'+$sp+'"}],"targetKeyRefBindings":[{"sourceColumnName":"'+$tc+'","targetPropertyId":"'+$tp+'"}]}' }
-    }
-
-    # Claim entity (from fact_claim)
-    $eCl = NextId; $pClid = NextId; $pClcid = NextId; $pClty = NextId; $pClst = NextId
-    $pClba = NextId; $pClpa = NextId; $pClallow = NextId; $pClresp = NextId; $pCldf = NextId; $pClpr = NextId; $pClpid = NextId; $pClcov = NextId; $pClpc = NextId; $pClsd = NextId
-    $ejCl = EtJson $eCl "Claim" $pClid $pClcid `
-        ((PropJson $pClid "claimKey" "BigInt"),(PropJson $pClcid "claimId"),(PropJson $pClty "claimType"),(PropJson $pClst "claimStatus"),(PropJson $pClba "billedAmount" "Double"),(PropJson $pClpa "paidAmount" "Double"),(PropJson $pClallow "allowedAmount" "Double"),(PropJson $pClresp "patientResponsibility" "Double"),(PropJson $pCldf "denialFlag" "BigInt"),(PropJson $pClpr "claimPatientRef"),(PropJson $pClpid "claimPatientId"),(PropJson $pClcov "coverageId"),(PropJson $pClpc "claimPayerCategory"),(PropJson $pClsd "serviceDate") -join ',')
-    $dbCl = GoldLhBind ('{"sourceColumnName":"claim_key","targetPropertyId":"'+$pClid+'"},{"sourceColumnName":"claim_id","targetPropertyId":"'+$pClcid+'"},{"sourceColumnName":"claim_type","targetPropertyId":"'+$pClty+'"},{"sourceColumnName":"claim_status","targetPropertyId":"'+$pClst+'"},{"sourceColumnName":"billed_amount","targetPropertyId":"'+$pClba+'"},{"sourceColumnName":"paid_amount","targetPropertyId":"'+$pClpa+'"},{"sourceColumnName":"allowed_amount","targetPropertyId":"'+$pClallow+'"},{"sourceColumnName":"patient_responsibility","targetPropertyId":"'+$pClresp+'"},{"sourceColumnName":"denial_flag","targetPropertyId":"'+$pCldf+'"},{"sourceColumnName":"patient_ref","targetPropertyId":"'+$pClpr+'"},{"sourceColumnName":"patient_id","targetPropertyId":"'+$pClpid+'"},{"sourceColumnName":"coverage_id","targetPropertyId":"'+$pClcov+'"},{"sourceColumnName":"payer_category","targetPropertyId":"'+$pClpc+'"},{"sourceColumnName":"service_date","targetPropertyId":"'+$pClsd+'"}') "fact_claim"
-    $claimEntities += @{id=$eCl;j=$ejCl;b=$dbCl}
-
-    # Payer entity (from dim_payer; payer_id is the relationship key when Coverage data exists)
-    $ePy = NextId; $pPyid = NextId; $pPykey = NextId; $pPynm = NextId; $pPyty = NextId; $pPycat = NextId
-    $ejPy = EtJson $ePy "Payer" $pPyid $pPynm `
-        ((PropJson $pPyid "payerId"),(PropJson $pPykey "payerKey" "BigInt"),(PropJson $pPynm "payerName"),(PropJson $pPyty "payerType"),(PropJson $pPycat "payerCategory") -join ',')
-    $dbPy = GoldLhBind ('{"sourceColumnName":"payer_id","targetPropertyId":"'+$pPyid+'"},{"sourceColumnName":"payer_key","targetPropertyId":"'+$pPykey+'"},{"sourceColumnName":"payer_name","targetPropertyId":"'+$pPynm+'"},{"sourceColumnName":"payer_type","targetPropertyId":"'+$pPyty+'"},{"sourceColumnName":"payer_category","targetPropertyId":"'+$pPycat+'"}') "dim_payer"
-    $claimEntities += @{id=$ePy;j=$ejPy;b=$dbPy}
-
-    # Diagnosis entity (from dim_diagnosis)
-    $eDx = NextId; $pDxid = NextId; $pDxcd = NextId; $pDxds = NextId; $pDxsys = NextId; $pDxch = NextId
-    $ejDx = EtJson $eDx "Diagnosis" $pDxcd $pDxds `
-        ((PropJson $pDxid "diagnosisKey" "BigInt"),(PropJson $pDxcd "icdCode"),(PropJson $pDxds "icdDescription"),(PropJson $pDxsys "codeSystem"),(PropJson $pDxch "isChronic" "BigInt") -join ',')
-    $dbDx = GoldLhBind ('{"sourceColumnName":"diagnosis_key","targetPropertyId":"'+$pDxid+'"},{"sourceColumnName":"icd_code","targetPropertyId":"'+$pDxcd+'"},{"sourceColumnName":"icd_description","targetPropertyId":"'+$pDxds+'"},{"sourceColumnName":"code_system","targetPropertyId":"'+$pDxsys+'"},{"sourceColumnName":"is_chronic","targetPropertyId":"'+$pDxch+'"}') "dim_diagnosis"
-    $claimEntities += @{id=$eDx;j=$ejDx;b=$dbDx}
-
-    # PatientDiagnosis (bridge from fact_diagnosis)
-    $ePD = NextId; $pPDid = NextId; $pPDdid = NextId; $pPDic = NextId; $pPDds = NextId; $pPDtp = NextId; $pPDpr = NextId; $pPDdate = NextId
-    $ejPD = EtJson $ePD "PatientDiagnosis" $pPDid $pPDds `
-        ((PropJson $pPDid "factDiagnosisKey" "BigInt"),(PropJson $pPDdid "diagnosisId"),(PropJson $pPDic "diagIcdCode"),(PropJson $pPDds "diagDescription"),(PropJson $pPDtp "diagnosisType"),(PropJson $pPDpr "diagPatientRef"),(PropJson $pPDdate "diagnosisDate") -join ',')
-    $dbPD = GoldLhBind ('{"sourceColumnName":"fact_diagnosis_key","targetPropertyId":"'+$pPDid+'"},{"sourceColumnName":"diagnosis_id","targetPropertyId":"'+$pPDdid+'"},{"sourceColumnName":"icd_code","targetPropertyId":"'+$pPDic+'"},{"sourceColumnName":"diagnosis_description","targetPropertyId":"'+$pPDds+'"},{"sourceColumnName":"diagnosis_type","targetPropertyId":"'+$pPDtp+'"},{"sourceColumnName":"patient_ref","targetPropertyId":"'+$pPDpr+'"},{"sourceColumnName":"diagnosis_date","targetPropertyId":"'+$pPDdate+'"}') "FactDiagnosisOntology"
-    $claimEntities += @{id=$ePD;j=$ejPD;b=$dbPD}
-
-    # MedicationAdherence (from agg_medication_adherence)
-    $eMA = NextId; $pMApi = NextId; $pMAmc = NextId; $pMApd = NextId; $pMAac = NextId; $pMAgd = NextId; $pMAtf = NextId
-    $ejMA = EtJson $eMA "MedAdherence" $pMApi $pMAmc `
-        ((PropJson $pMApi "adherencePatientId"),(PropJson $pMAmc "medicationClass"),(PropJson $pMApd "pdcScore" "Double"),(PropJson $pMAac "adherenceCategory"),(PropJson $pMAgd "gapDays" "BigInt"),(PropJson $pMAtf "totalFills" "BigInt") -join ',')
-    $dbMA = GoldLhBind ('{"sourceColumnName":"patient_id","targetPropertyId":"'+$pMApi+'"},{"sourceColumnName":"medication_class","targetPropertyId":"'+$pMAmc+'"},{"sourceColumnName":"pdc_score","targetPropertyId":"'+$pMApd+'"},{"sourceColumnName":"adherence_category","targetPropertyId":"'+$pMAac+'"},{"sourceColumnName":"gap_days","targetPropertyId":"'+$pMAgd+'"},{"sourceColumnName":"total_fills","targetPropertyId":"'+$pMAtf+'"}') "agg_medication_adherence"
-    $claimEntities += @{id=$eMA;j=$ejMA;b=$dbMA}
-
-    # CareGap (from care_gaps)
-    $eCg = NextId; $pCgp = NextId; $pCgm = NextId; $pCgt = NextId; $pCgs = NextId; $pCgd = NextId; $pCga = NextId
-    $ejCg = EtJson $eCg "CareGap" $pCgp $pCgt `
-        ((PropJson $pCgp "careGapPatientId"),(PropJson $pCgm "measureId"),(PropJson $pCgt "gapType"),(PropJson $pCgs "gapStatus"),(PropJson $pCgd "daysOverdue" "BigInt"),(PropJson $pCga "recommendedAction") -join ',')
-    $dbCg = GoldLhBind ('{"sourceColumnName":"patient_id","targetPropertyId":"'+$pCgp+'"},{"sourceColumnName":"measure_id","targetPropertyId":"'+$pCgm+'"},{"sourceColumnName":"gap_type","targetPropertyId":"'+$pCgt+'"},{"sourceColumnName":"gap_status","targetPropertyId":"'+$pCgs+'"},{"sourceColumnName":"days_overdue","targetPropertyId":"'+$pCgd+'"},{"sourceColumnName":"recommended_action","targetPropertyId":"'+$pCga+'"}') "care_gaps"
-    $claimEntities += @{id=$eCg;j=$ejCg;b=$dbCg}
-
-    # PatientRisk (from agg_risk_scores)
-    $eRs = NextId; $pRsp = NextId; $pRraf = NextId; $pRtier = NextId; $pRhcc = NextId; $pRrev = NextId; $pRpc = NextId
-    $ejRs = EtJson $eRs "PatientRisk" $pRsp $pRtier `
-        ((PropJson $pRsp "riskPatientId"),(PropJson $pRraf "rafScore" "Double"),(PropJson $pRtier "riskTier"),(PropJson $pRhcc "hccCount" "BigInt"),(PropJson $pRrev "annualRevenue" "Double"),(PropJson $pRpc "riskPayerCategory") -join ',')
-    $dbRs = GoldLhBind ('{"sourceColumnName":"patient_id","targetPropertyId":"'+$pRsp+'"},{"sourceColumnName":"raf_score","targetPropertyId":"'+$pRraf+'"},{"sourceColumnName":"risk_tier","targetPropertyId":"'+$pRtier+'"},{"sourceColumnName":"hcc_count","targetPropertyId":"'+$pRhcc+'"},{"sourceColumnName":"annual_revenue","targetPropertyId":"'+$pRrev+'"},{"sourceColumnName":"payer_category","targetPropertyId":"'+$pRpc+'"}') "agg_risk_scores"
-    $claimEntities += @{id=$eRs;j=$ejRs;b=$dbRs}
-
-    # HighCostClaimant (from agg_high_cost_claimants)
-    $eHc = NextId; $pHcp = NextId; $pHcpc = NextId; $pHcpaid = NextId; $pHcbill = NextId; $pHccnt = NextId; $pHcden = NextId; $pHcstop = NextId
-    $ejHc = EtJson $eHc "HighCostClaimant" $pHcp $pHcpc `
-        ((PropJson $pHcp "highCostPatientId"),(PropJson $pHcpc "highCostPayerCategory"),(PropJson $pHcpaid "totalPaid" "Double"),(PropJson $pHcbill "totalBilled" "Double"),(PropJson $pHccnt "claimCount" "BigInt"),(PropJson $pHcden "deniedClaims" "BigInt"),(PropJson $pHcstop "isStopLoss") -join ',')
-    $dbHc = GoldLhBind ('{"sourceColumnName":"patient_id","targetPropertyId":"'+$pHcp+'"},{"sourceColumnName":"payer_category","targetPropertyId":"'+$pHcpc+'"},{"sourceColumnName":"total_paid","targetPropertyId":"'+$pHcpaid+'"},{"sourceColumnName":"total_billed","targetPropertyId":"'+$pHcbill+'"},{"sourceColumnName":"claim_count","targetPropertyId":"'+$pHccnt+'"},{"sourceColumnName":"denied_claims","targetPropertyId":"'+$pHcden+'"},{"sourceColumnName":"is_stop_loss","targetPropertyId":"'+$pHcstop+'"}') "agg_high_cost_claimants"
-    $claimEntities += @{id=$eHc;j=$ejHc;b=$dbHc}
-
-    $ets += $claimEntities
-    Write-Host "  ✓ $($claimEntities.Count) payer/claims/quality entities built" -ForegroundColor Green
-
-    # Relationships for payer ontology entities
-    if ($IncludeFhir -or $IncludeDicom) {
-        $claimRels = @(
-            @{id=(NextId);n="hasClaim";s=$eP;t=$eCl;ctx=(GoldLhCtx "fact_claim" "patient_id" $pPid "claim_key" $pClid)},
-            @{id=(NextId);n="coveredBy";s=$eCl;t=$ePy;ctx=(GoldLhCtx "fact_claim" "claim_key" $pClid "coverage_id" $pPyid)},
-            @{id=(NextId);n="hasDiagnosis";s=$eP;t=$ePD;ctx=(GoldLhCtx "FactDiagnosisOntology" "patient_id" $pPid "fact_diagnosis_key" $pPDid)},
-            @{id=(NextId);n="diagnosisClassifiedAs";s=$ePD;t=$eDx;ctx=(GoldLhCtx "FactDiagnosisOntology" "fact_diagnosis_key" $pPDid "icd_code" $pDxcd)},
-            @{id=(NextId);n="hasAdherence";s=$eP;t=$eMA;ctx=(GoldLhCtx "agg_medication_adherence" "patient_id" $pPid "patient_id" $pMApi)},
-            @{id=(NextId);n="hasCareGap";s=$eP;t=$eCg;ctx=(GoldLhCtx "care_gaps" "patient_id" $pPid "patient_id" $pCgp)},
-            @{id=(NextId);n="hasRiskScore";s=$eP;t=$eRs;ctx=(GoldLhCtx "agg_risk_scores" "patient_id" $pPid "patient_id" $pRsp)},
-            @{id=(NextId);n="hasHighCostProfile";s=$eP;t=$eHc;ctx=(GoldLhCtx "agg_high_cost_claimants" "patient_id" $pPid "patient_id" $pHcp)}
-        )
-        $rels += $claimRels
-        Write-Host "  ✓ $($claimRels.Count) payer/claims/quality relationships built" -ForegroundColor Green
-    }
-}
-
-# --- Assemble parts ---
-
-Write-Host "  Assembling definition payload..." -ForegroundColor White
-
-$parts = @()
-$pl = '{"metadata":{"type":"Ontology","displayName":"'+$OntologyName+'"}}'
-$parts += '{"path":".platform","payload":"'+(ConvertTo-Base64 $pl)+'","payloadType":"InlineBase64"}'
-$parts += '{"path":"definition.json","payload":"'+(ConvertTo-Base64 '{}')+'","payloadType":"InlineBase64"}'
-
-# Entity types with bindings
-foreach ($e in $ets) {
-    $parts += '{"path":"EntityTypes/'+$e.id+'/definition.json","payload":"'+(ConvertTo-Base64 $e.j)+'","payloadType":"InlineBase64"}'
-    if ($e.b) { $parts += '{"path":"EntityTypes/'+$e.id+'/DataBindings/'+$e.b.id+'.json","payload":"'+(ConvertTo-Base64 $e.b.json)+'","payloadType":"InlineBase64"}' }
-}
-
-# Relationship types with contextualizations
-foreach ($r in $rels) {
-    if (-not $r.ctx) { continue }
-    $rj = RtJson $r.id $r.n $r.s $r.t
-    $parts += '{"path":"RelationshipTypes/'+$r.id+'/definition.json","payload":"'+(ConvertTo-Base64 $rj)+'","payloadType":"InlineBase64"}'
-    $parts += '{"path":"RelationshipTypes/'+$r.id+'/Contextualizations/'+$r.ctx.id+'.json","payload":"'+(ConvertTo-Base64 $r.ctx.json)+'","payloadType":"InlineBase64"}'
-}
-
-$totalEntities = $ets.Count
-$totalRels = ($rels | Where-Object { $_.ctx }).Count
-Write-Host "  ✓ Definition assembled: $($parts.Count) parts" -ForegroundColor Green
-Write-Host "    Entity types: $totalEntities active across components" -ForegroundColor DarkGray
-Write-Host "    Relationships: $totalRels with contextualizations" -ForegroundColor DarkGray
-
+if (-not $existingOntology -or $ReplaceExisting) {
 # ============================================================================
-# DEPLOY ONTOLOGY — single create call with definition inline
+# BUILD ONTOLOGY v2 (TMDL) DEFINITION
 # ============================================================================
 
 Write-Host ""
-Write-Host "  Deploying ontology '$OntologyName'..." -ForegroundColor White
+Write-Host "  Building Ontology v2 (TMDL) definition..." -ForegroundColor White
 
-$ontologyDescription = if ($IncludeGold) { "Payer-oriented healthcare graph linking devices, patients, diagnoses, claims, payer categories, care gaps, RAF risk, high-cost cohorts, and telemetry." } else { "Clinical device ontology for patient-device relationships, encounters, conditions, observations, medications, imaging studies, and real-time device telemetry." }
-$bodyJson = '{"displayName":"'+$OntologyName+'","description":"'+$ontologyDescription+'","definition":{"parts":['+($parts -join ',')+']}}'
+$targetLhId = if ($OntologyName -eq "DevicePayerOntology") { $goldLhId } else { $silverLhId }
+$targetLhDetail = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/lakehouses/$targetLhId"
+$sqlEndpoint = $null
+$sqlEndpointId = $null
+try {
+    $sqlEndpoint = [string]$targetLhDetail.properties.sqlEndpointProperties.connectionString
+    $sqlEndpointId = [string]$targetLhDetail.properties.sqlEndpointProperties.id
+} catch {}
+if ([string]::IsNullOrWhiteSpace($sqlEndpoint) -or [string]::IsNullOrWhiteSpace($sqlEndpointId)) {
+    throw "Could not resolve SQL analytics endpoint connectionString/id for lakehouse $targetLhId"
+}
+Write-Host "  ✓ Backing SQL Endpoint: $sqlEndpoint ($sqlEndpointId)" -ForegroundColor Green
 
+$v2Builder = Join-Path $PSScriptRoot 'build_ontology_v2.py'
+if (-not (Test-Path $v2Builder)) { throw "Required Ontology v2 builder is missing: $v2Builder" }
+$lockedPython = if ($IsWindows) { Join-Path $PSScriptRoot '../orchestrator/.venv/Scripts/python.exe' } else { Join-Path $PSScriptRoot '../orchestrator/.venv/bin/python' }
+$pythonPath = if (Test-Path $lockedPython) { $lockedPython } else { $null }
+if (-not $pythonPath) {
+    $pythonCommand = Get-Command python3 -ErrorAction SilentlyContinue
+    if (-not $pythonCommand) { $pythonCommand = Get-Command python -ErrorAction SilentlyContinue }
+    if (-not $pythonCommand) { throw 'Python is required to build the Ontology v2 (TMDL) definition' }
+    $pythonPath = $pythonCommand.Source
+}
+
+$builderArgs = @(
+    $v2Builder,
+    "--ontology-name", $OntologyName,
+    "--sql-endpoint", $sqlEndpoint,
+    "--sql-endpoint-id", $sqlEndpointId
+)
+if ($IncludeFhir) { $builderArgs += "--include-fhir" }
+if ($IncludeDicom) { $builderArgs += "--include-dicom" }
+if ($IncludeTelemetry) { $builderArgs += "--include-telemetry" }
+if ($IncludeGold -and $goldLhId) { $builderArgs += "--include-gold" }
+
+$builtJsonRaw = & $pythonPath @builderArgs
+if ($LASTEXITCODE -ne 0) { throw "build_ontology_v2.py failed (exit $LASTEXITCODE)" }
+$builtObj = $builtJsonRaw | ConvertFrom-Json -Depth 30
+$parts = @($builtObj.parts)
+$totalEntities = [int]$builtObj.entityCount
+$totalRels = [int]$builtObj.relationshipCount
+$claimEntities = if ([int]$builtObj.goldEntityCount -gt 0) { @(1..([int]$builtObj.goldEntityCount)) } else { @() }
+
+Write-Host "  ✓ Ontology v2 (TMDL) definition assembled: $($parts.Count) parts" -ForegroundColor Green
+Write-Host "    Entity types: $totalEntities ($($builtObj.tableCount) DirectLake backing tables)" -ForegroundColor DarkGray
+Write-Host "    Relationships: $totalRels in entityRelationships.tmdl" -ForegroundColor DarkGray
+
+if ($existingIsV1) {
+    Write-Host "  Removing legacy v1 ontology '$OntologyName' ($($existingOntology.id)) before creating v2 TMDL item..." -ForegroundColor Yellow
+    $delHeaders = @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" }
+    try {
+        Invoke-RestMethod -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies/$($existingOntology.id)" -Headers $delHeaders -Method DELETE -ErrorAction Stop | Out-Null
+    } catch {}
+    try {
+        $oldGms = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/items?type=GraphModel"
+        foreach ($gm in @($oldGms.value | Where-Object { $_.displayName -like "$OntologyName`_graph_*" })) {
+            Invoke-RestMethod -Uri "$FabricApiBase/workspaces/$workspaceId/items/$($gm.id)" -Headers $delHeaders -Method DELETE -ErrorAction SilentlyContinue | Out-Null
+        }
+    } catch {}
+    $existingOntology = $null
+    Start-Sleep -Seconds 5
+}
+
+# ============================================================================
+# DEPLOY ONTOLOGY v2 (TMDL)
+# ============================================================================
+
+Write-Host ""
+Write-Host "  Deploying Ontology v2 '$OntologyName'..." -ForegroundColor White
+
+$ontologyDescription = if ($IncludeGold) { "Payer-oriented healthcare ontology (v2 TMDL) linking devices, patients, diagnoses, claims, payer categories, care gaps, RAF risk, high-cost cohorts, and telemetry." } else { "Clinical device ontology (v2 TMDL) for patient-device relationships, encounters, conditions, observations, medications, imaging studies, and real-time device telemetry." }
+$bodyJson = (@{
+    displayName = $OntologyName
+    description = $ontologyDescription
+    definition  = @{ parts = $parts }
+} | ConvertTo-Json -Depth 30 -Compress)
+$updateBody = (@{
+    definition = @{ parts = $parts }
+} | ConvertTo-Json -Depth 30 -Compress)
 $createCompleted = $false
 for ($attempt = 1; $attempt -le 10 -and -not $createCompleted; $attempt++) {
     try {
         $cToken = Get-FabricAccessToken
-        $cHeaders = @{ "Authorization" = "Bearer $cToken"; "Content-Type" = "application/json" }
-                if ($existingOntology -and $ReplaceExisting) {
-            $updateBody = '{"definition":{"parts":['+($parts -join ',')+']}}'
-            $cResp = Invoke-WebRequest -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies/$($existingOntology.id)/updateDefinition" -Headers $cHeaders -Method POST -Body $updateBody -ErrorAction Stop
+        $cHeaders = @{ "Authorization" = "Bearer $cToken"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" }
+        if ($existingOntology -and $ReplaceExisting) {
+            $cResp = Invoke-WebRequest -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies/$($existingOntology.id)/updateDefinition?updateMetadata=true" -Headers $cHeaders -Method POST -Body $updateBody -ErrorAction Stop
         } else {
             $cResp = Invoke-WebRequest -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies" -Headers $cHeaders -Method POST -Body $bodyJson -ErrorAction Stop
         }
@@ -671,16 +511,21 @@ for ($attempt = 1; $attempt -le 10 -and -not $createCompleted; $attempt++) {
         exit 1
     }
 }
+}
 
-# Fetch ontology ID
-Start-Sleep -Seconds 3
-$ontologies = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/ontologies"
-$ontology = $ontologies.value | Where-Object { $_.displayName -eq $OntologyName }
-if ($ontology -is [array]) { $ontology = $ontology[0] }
-$ontologyId = if ($ontology) { $ontology.id } else { "unknown" }
-if ($ontologyId -eq "unknown") {
-    Write-Host "  ✗ Ontology '$OntologyName' was not discoverable after create/update." -ForegroundColor Red
-    exit 1
+if ($existingOntology -and -not $ReplaceExisting) {
+    $ontologyId = $existingOntology.id
+} else {
+    # Fetch ontology ID
+    Start-Sleep -Seconds 3
+    $ontologies = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/ontologies"
+    $ontology = $ontologies.value | Where-Object { $_.displayName -eq $OntologyName }
+    if ($ontology -is [array]) { $ontology = $ontology[0] }
+    $ontologyId = if ($ontology) { $ontology.id } else { "unknown" }
+    if ($ontologyId -eq "unknown") {
+        Write-Host "  ✗ Ontology '$OntologyName' was not discoverable after create/update." -ForegroundColor Red
+        exit 1
+    }
 }
 
 
@@ -691,101 +536,22 @@ if ($ontologyId -eq "unknown") {
     exit 1
 }
 
-# Graph hydration runs on the auto-generated GraphModel companion item, not on the Ontology item:
-# posting jobType=RefreshGraph to the Ontology id returns 400 InvalidJobType.
-Write-Host "  Resolving graph model for '$OntologyName'..." -ForegroundColor White
+# In the new Ontology v2 (TMDL) experience, ontology definitions are virtual over bound DirectLake
+# tables and do not require companion GraphModel materialization or RefreshGraph jobs by default.
 $graphModels = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/items?type=GraphModel"
 $graphModel = $graphModels.value | Where-Object { $_.displayName -like "$OntologyName`_graph_*" } | Select-Object -First 1
-if (-not $graphModel) {
-    throw "Graph model for ontology '$OntologyName' was not found; the ontology cannot be hydrated"
+if ($graphModel) {
+    Write-Host "  ℹ Companion GraphModel present: $($graphModel.displayName) ($($graphModel.id))" -ForegroundColor DarkGray
+} else {
+    Write-Host "  ✓ Ontology v2 (TMDL) operates virtually over DirectLake tables (no GraphModel RefreshGraph required)" -ForegroundColor Green
 }
-$graphModelId = $graphModel.id
-Write-Host "  ✓ Graph model: $($graphModel.displayName) ($graphModelId)" -ForegroundColor Green
-
-# An auto-generated companion can be an empty shell. Populate that definition
-# before the single verified refresh instead of suppressing a failed hydration.
-$graphMaterializer = Join-Path $PSScriptRoot 'deploy-graph-model.py'
-if (-not (Test-Path $graphMaterializer)) { throw "Required graph materializer is missing: $graphMaterializer" }
-$lockedPython = if ($IsWindows) { Join-Path $PSScriptRoot '../orchestrator/.venv/Scripts/python.exe' } else { Join-Path $PSScriptRoot '../orchestrator/.venv/bin/python' }
-$pythonPath = if (Test-Path $lockedPython) { $lockedPython } else { $null }
-if (-not $pythonPath) {
-    $pythonCommand = Get-Command python3 -ErrorAction SilentlyContinue
-    if (-not $pythonCommand) { $pythonCommand = Get-Command python -ErrorAction SilentlyContinue }
-    if (-not $pythonCommand) { throw 'Python is required to materialize the ontology companion graph' }
-    $pythonPath = $pythonCommand.Source
-}
-& $pythonPath $graphMaterializer --workspace-id $workspaceId --ontology-id $ontologyId --graph-id $graphModelId --if-empty --skip-refresh
-if ($LASTEXITCODE -ne 0) { throw "Graph definition materialization failed (exit $LASTEXITCODE); refresh was not started" }
-
-function Invoke-GraphModelRefresh {
-    # Refreshes the GraphModel and waits for the job this call submitted. Fabric answers a refresh
-    # submitted while another is in flight (for example the one it starts for a new graph) with
-    # Deduped; wait for that run to finish, then refresh again so the graph reflects every table
-    # written before this call.
-    param(
-        [Parameter(Mandatory)][string]$JobsUri,
-        [Parameter(Mandatory)][scriptblock]$RequestJob,
-        [int]$TimeoutMinutes = 30,
-        [int]$MaxSubmissions = 3,
-        [int]$PollSeconds = 15
-    )
-    $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
-    for ($submission = 1; $submission -le $MaxSubmissions -and (Get-Date) -lt $deadline; $submission++) {
-        $jobUri = & $RequestJob 'POST' "$JobsUri`?jobType=RefreshGraph"
-        Write-Host "  ✓ Graph refresh invoked (submission $submission)" -ForegroundColor Green
-        $job = $null
-        while ((Get-Date) -lt $deadline) {
-            Start-Sleep -Seconds $PollSeconds
-            $job = & $RequestJob 'GET' $jobUri
-            if ($job -and $job.status -in @('Completed', 'Failed', 'Cancelled', 'Canceled', 'Deduped')) { break }
-            $statusStr = if ($job) { $job.status } else { 'Unknown' }
-            Write-Host "    Status: $statusStr..." -ForegroundColor DarkGray
-        }
-        if (-not $job -or $job.status -notin @('Completed', 'Failed', 'Cancelled', 'Canceled', 'Deduped')) { break }
-        if ($job.status -eq 'Completed') { return }
-        if ($job.status -ne 'Deduped') { throw "Graph hydration failed: $($job | ConvertTo-Json -Depth 10)" }
-        Write-Host "    Another graph refresh is already running; waiting for it before refreshing again..." -ForegroundColor Yellow
-        while ((Get-Date) -lt $deadline) {
-            $jobs = & $RequestJob 'GET' $JobsUri
-            if ($jobs -and -not @($jobs.value | Where-Object { $_.status -in @('NotStarted', 'InProgress') })) { break }
-            Start-Sleep -Seconds $PollSeconds
-        }
-    }
-    throw "Graph hydration did not complete within $TimeoutMinutes minutes ($MaxSubmissions submissions)"
-}
-
-$graphJobRequest = {
-    param([string]$Method, [string]$Uri)
-    $headers = @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" }
-    try {
-        if ($Method -eq 'POST') {
-            $response = Invoke-WebRequest -Method POST -Uri $Uri -Headers $headers -Body '{"jobType":"RefreshGraph"}' -UseBasicParsing -ErrorAction Stop
-            $location = $response.Headers["Location"]; if ($location -is [array]) { $location = $location[0] }
-            if (-not $location) { throw "Graph refresh was accepted without a job instance Location" }
-            return $location
-        }
-        return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec 30 -ErrorAction Stop
-    } catch {
-        $jobStatusCode = $null
-        try { $jobStatusCode = [int]$_.Exception.Response.StatusCode } catch {}
-        if ($Method -eq 'GET' -and ($jobStatusCode -in @(429, 500, 502, 503, 504) -or ($jobStatusCode -eq 403 -and $_.ErrorDetails.Message -match "RequestDeniedByInboundPolicy"))) {
-            Write-Host "    Graph refresh status transient HTTP $jobStatusCode — retrying..." -ForegroundColor Yellow
-            return $null
-        }
-        throw
-    }
-}
-
-Write-Host "  Triggering graph hydration for '$OntologyName'..." -ForegroundColor White
-Invoke-GraphModelRefresh -JobsUri "$FabricApiBase/workspaces/$workspaceId/items/$graphModelId/jobs/instances" -RequestJob $graphJobRequest
-Write-Host "  ✓ Graph hydration completed successfully" -ForegroundColor Green
 
 Write-Host ""
-Write-Host "  Verifying..." -ForegroundColor White
-Start-Sleep -Seconds 5
+Write-Host "  Verifying Ontology v2 (TMDL) definition..." -ForegroundColor White
+Start-Sleep -Seconds 3
 
 try {
-    $vH = @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json" }
+    $vH = @{ "Authorization" = "Bearer $(Get-FabricAccessToken)"; "Content-Type" = "application/json"; "x-ms-fabric-skill" = "fabriciq-ontology-cli" }
     $vR = Invoke-WebRequest -Uri "$FabricApiBase/workspaces/$workspaceId/ontologies/$ontologyId/getDefinition" -Headers $vH -Method POST
     if ($vR.Content) {
         $vDef = $vR.Content | ConvertFrom-Json
@@ -808,12 +574,13 @@ try {
         $resultUri = if ($vLoc -match '/result$') { $vLoc } else { "$vLoc/result" }
         $vDef = Invoke-RestMethod -Uri $resultUri -Headers $vH
     }
-    $vEt = ($vDef.definition.parts | Where-Object { $_.path -match "EntityTypes/.*/definition\.json" } | Measure-Object).Count
-    $vDb = ($vDef.definition.parts | Where-Object { $_.path -match "DataBindings/" } | Measure-Object).Count
-    $vRl = ($vDef.definition.parts | Where-Object { $_.path -match "RelationshipTypes/" } | Measure-Object).Count
-    Write-Host "  ✓ Verified: $vEt entity types, $vDb data bindings, $vRl relationship parts" -ForegroundColor Green
-    if ($vEt -eq 0 -or $vDb -eq 0) {
-        throw "Ontology definition verification returned missing entity types or data bindings. EntityTypes=$vEt DataBindings=$vDb Relationships=$vRl"
+    $vEt = @($vDef.definition.parts | Where-Object { $_.path -like "entities/*.tmdl" }).Count
+    $vDb = @($vDef.definition.parts | Where-Object { $_.path -like "tables/*.tmdl" }).Count
+    $vRl = @($vDef.definition.parts | Where-Object { $_.path -eq "entityRelationships.tmdl" -or $_.path -eq "relationships.tmdl" }).Count
+    $hasDbTmdl = @($vDef.definition.parts | Where-Object { $_.path -eq "database.tmdl" }).Count -gt 0
+    Write-Host "  ✓ Verified Ontology v2 (TMDL): $vEt entity .tmdl files, $vDb table .tmdl files, $vRl relationship .tmdl files" -ForegroundColor Green
+    if (-not $hasDbTmdl -or $vEt -eq 0 -or $vDb -eq 0) {
+        throw "Ontology v2 TMDL verification failed: database.tmdl=$hasDbTmdl Entities=$vEt Tables=$vDb Relationships=$vRl"
     }
 } catch {
     Write-Host "  ✗ Could not verify ontology definition: $_" -ForegroundColor Red
@@ -832,33 +599,14 @@ Write-Host ""
 Write-Host "  Ontology: $OntologyName" -ForegroundColor White
 Write-Host "  ID:       $ontologyId" -ForegroundColor White
 Write-Host ""
-Write-Host "  Deployed:" -ForegroundColor Cyan
-Write-Host ("    {0} entity types total ({1} Gold payer/claims entities)" -f $totalEntities, $claimEntities.Count) -ForegroundColor White
-Write-Host "    $totalRels relationship types with contextualizations" -ForegroundColor White
-Write-Host ""
-Write-Host "  Next steps (Fabric portal):" -ForegroundColor Yellow
-Write-Host "    1. Open the ontology → Preview tab → 'Refresh graph model'" -ForegroundColor White
-Write-Host "    2. Connect the ontology as a datasource on your Data Agents" -ForegroundColor White
-
-
-Write-Host ""
-Write-Host "  Populating GraphModel for '$OntologyName'..." -ForegroundColor White
-$ontologyIdWithoutDashes = $ontologyId -replace '-', ''
-$items = Invoke-FabricApi -Endpoint "/workspaces/$workspaceId/items"
-$graphModel = $items.value | Where-Object { $_.type -eq "GraphModel" -and $_.displayName -match "$ontologyIdWithoutDashes$" }
-if ($graphModel) {
-    if ($graphModel -is [array]) { $graphModel = $graphModel[0] }
-    $pyScript = Join-Path $PSScriptRoot "deploy-graph-model.py"
-    if (Test-Path $pyScript) {
-        $pyProc = Start-Process python3 -ArgumentList @($pyScript, "--workspace-id", $workspaceId, "--ontology-id", $ontologyId, "--graph-id", $graphModel.id) -NoNewWindow -Wait -PassThru
-        if ($pyProc.ExitCode -ne 0) {
-            Write-Host "  ⚠ Failed to populate GraphModel. (Exit code: $($pyProc.ExitCode))" -ForegroundColor Yellow
-        } else {
-            Write-Host "  ✓ GraphModel populated and refresh triggered." -ForegroundColor Green
-        }
-    } else {
-        Write-Host "  ⚠ Cannot find deploy-graph-model.py." -ForegroundColor Yellow
-    }
+if ($totalEntities -gt 0) {
+    Write-Host "  Deployed:" -ForegroundColor Cyan
+    Write-Host ("    {0} entity types total ({1} Gold payer/claims entities)" -f $totalEntities, $claimEntities.Count) -ForegroundColor White
+    Write-Host "    $totalRels relationship types with contextualizations" -ForegroundColor White
 } else {
-    Write-Host "  ⚠ GraphModel item not found for this ontology. Manual populate required." -ForegroundColor Yellow
+    Write-Host "  Verified:" -ForegroundColor Cyan
+    Write-Host "    $vEt entity types, $vDb data bindings, $vRl relationship parts" -ForegroundColor White
 }
+Write-Host ""
+Write-Host "  Next steps:" -ForegroundColor Yellow
+Write-Host "    1. Connect the ontology as a datasource on your Data Agents" -ForegroundColor White

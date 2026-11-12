@@ -38,7 +38,7 @@ implementation/
 │   ├── databricks.yml
 │   ├── resources/{pipelines,jobs,sql,genie}.yml
 │   └── src/                            # pipeline logic and fail-closed gate notebooks
-└── scripts/01..08, 99                  # the execution sequence below
+└── scripts/01..10, 99                 # deployment, MCP demo, validation, teardown
 ```
 
 ---
@@ -255,6 +255,61 @@ freshness, pipelines, and the clinical alert. The second requires all five Genie
 their exact governed sources, at least five curated SQL examples each, nonempty direct SQL
 baselines, and one grounded live conversation per agent. A skipped or failed check is not a pass.
 Curation is deployed code; changes belong in `resources/genie.yml`, not an untracked portal draft.
+
+## Step 8 — Demonstrate governed MCP access through APIM
+
+The MCP demo reuses the deployed HLS provider domain instead of inventing a separate
+customer dataset. It creates one bounded, aggregate-only Unity Catalog function and exposes
+two new APIM paths alongside—never over—the existing Intermountain APIs:
+
+| Path | Databricks backend | Purpose |
+|---|---|---|
+| `hls-uc/mcp` | `hls_<env>.ops.get_imaging_modality_counts` | deterministic P0 function call and authorization proof |
+| `hls-genie/mcp` | curated HLS Multi-Layer Imaging Cohort Genie space | natural-language Genie MCP demonstration |
+
+Run the idempotent deployment with the target Databricks workspace already selected through
+`DATABRICKS_HOST` and `DATABRICKS_AUTH_TYPE`:
+
+```bash
+export ENVIRONMENT=test
+export WAREHOUSE_ID=<target-hls-serving-warehouse>
+export APIM_RESOURCE_GROUP=<existing-apim-resource-group>
+export APIM_SERVICE_NAME=<existing-apim-name>
+export APIM_BACKEND_CLIENT_ID=<apim-managed-identity-client-id>
+export APIM_CALLER_CLIENT_ID=<approved-agent-runtime-client-id>
+export GENIE_SPACE_ID=<imaging-cohort-genie-space-id>
+export MCP_JOB_ENVIRONMENT_ID=<container-apps-environment-arm-id>
+export APIM_CALLER_IDENTITY_RESOURCE_ID=<approved-runtime-identity-arm-id>
+./scripts/10-deploy-mcp-demo.sh
+```
+
+The script registers the APIM managed identity in the selected workspace, grants only the
+catalog/schema/table/function, Genie `CAN RUN`, and warehouse `CAN USE` privileges the two
+paths need, and configures Entra-authenticated APIM routes. No PAT or subscription key is
+created or persisted.
+
+When both job variables are set, the same deployment creates two manual jobs. The meeting
+operator runs each without handling a token or key:
+
+```bash
+az containerapp job start -g "$APIM_RESOURCE_GROUP" -n job-hls-uc-mcp-demo
+az containerapp job start -g "$APIM_RESOURCE_GROUP" -n job-hls-genie-mcp-demo
+```
+
+The UC job prints the bounded result and correlation IDs. The Genie job asks the reviewed
+imaging question, waits through warehouse startup, and prints the grounded SQL-backed answer.
+
+From the approved managed-identity runtime, use `scripts/09-mcp-demo-client.py` with either
+APIM URL. The client initializes MCP, lists tools, invokes the function, and handles the
+Genie query/poll sequence. The curated Genie Agent MCP is used because its two data sources,
+questions, and SQL examples are deployed code. The workspace-wide Genie One Unity Gateway
+service is a separate option and must not be claimed ready without its own `EXECUTE` grant
+and live tool-call proof.
+
+For the finalized Intermountain onsite schedule:
+
+- **11:00–12:00 (`Presentation and demonstration of MSFT/DB connections` — Jay, Joey):** run `job-hls-genie-mcp-demo` and `job-hls-uc-mcp-demo`, show anonymous `401` rejection, and explain how the pattern maps to IMH's `apim-ih-ent-eap-dev` gateway, `appi-ent-eap-dev-mcp` Application Insights logging, and Unity Catalog grants.
+- **3:00–3:30 (`Foundry end-to-end capabilities (Jay), Fabric capabilities (Joey)`):** use `med-1009` in Fabric to show the provider Eventhouse baseline (`agent_ImagingModalityCounts()`), RTI/Eventstream, and where Fabric Data Agents fit as an upstream agent client in the updated architecture diagram. Keep the published Fabric Data Agent MCP call optional because a current call can fail to ground even while the direct KQL function returns CR, CT, and DX rows. Fabric and Databricks remain separate synthetic snapshots; do not compare their counts as parity.
 
 ## Teardown
 

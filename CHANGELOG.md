@@ -17,6 +17,12 @@
 - **Fixed** the demo SDOH seed (`phase-2/seed_cma_sdoh.py`) to write the vendor Gold format that these joins expect: one row per county and measure, `location_type` `COUNTYFIPS` with the county FIPS code in `location_value`, and the subcategory key in `category_id`. The old ZIP-typed rows matched neither join. The ZIP-to-county table adds the nine Atlanta ZIPs that Synthea assigns but the table lacked; 37 of 100 med-1024 patients and 26 of 100 med-1028 patients had no SDOH values. ZIP 30316 moves to DeKalb County, which holds 84% of its land area.
 - **Documented** tables left intentionally unlinked. Quality `fact_claim`, `dim_payer`, and other tables share no true keys with the model. OMOP `concept` has no link because the `concept_id` columns to join are not chosen. POA `AttributionModelDim` has no foreign key. Vendor tables regenerate on each sync, so they are not deleted. Unlinked dimensions do not break filters.
 
+### Governed APIM-to-Databricks MCP demo (2026-10-13)
+
+- Added a bounded Unity Catalog table function over the synthetic imaging cohort, plus an idempotent deployment script that registers the APIM managed identity, grants least-privilege catalog/table/function, Genie and SQL warehouse access, and creates parallel Entra-protected APIM routes without changing the existing Intermountain APIs.
+- Added a standard-library MCP client for managed-identity or Azure CLI callers. It supports MCP initialization/tool discovery, deterministic UC function invocation, and the asynchronous curated Genie query/poll flow without printing tokens.
+- Live-proved the med-1009 Databricks paths through APIM: the UC tool returned CR 13/13 and CT 87/87 study/patient aggregates from `hls_test.gold.agent_imaging_cohort`, and the curated imaging Genie route returned the same grounded SQL result. The corresponding Fabric estate is a separate synthetic snapshot: use direct `agent_ImagingModalityCounts()` KQL as its deterministic proof because the published Data Agent can intermittently fail grounding even while the function returns CR 8/8, CT 50/50, and DX 42/42.
+
 ### Material 3 frontend redesign (2026-10-09)
 
 - Replaced Fluent UI components and icons with current MUI components, a restrained Material 3 Expressive theme, and platform-neutral **HLS Data Accelerator** branding. The standalone Griffel styling engine remains for feature layouts; no Fluent component dependency remains.

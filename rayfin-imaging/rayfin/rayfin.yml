@@ -1,0 +1,31 @@
+id: rayfin-imaging
+name: rayfin-imaging
+version: 1.0.0
+services:
+  auth:
+    enabled: true
+    fabric:
+      enabled: true
+    password:
+      enabled: false
+    allowedRedirectUris:
+      - http://localhost:5173
+      - http://127.0.0.1:5173
+      # `rayfin up` appends your app's hosting URL here on first deploy.
+  data:
+    enabled: true
+    dialect: mssql
+  staticHosting:
+    enabled: true
+    folder: dist
+    buildCommand: npm run build:fabric
+    indexDocument: index.html
+    assetAccess: protected
+  functions:
+    enabled: true
+    path: rayfin/functions
+    auth:
+      type: application
+    buildCommand: npm run build
+  storage:
+    enabled: false

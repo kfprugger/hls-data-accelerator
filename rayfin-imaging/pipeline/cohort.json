@@ -1,0 +1,27 @@
+{
+  "description": "Fifteen real TCGA patients, one per cancer type. Each has a pre-treatment CT or MR in NCI Imaging Data Commons, a diagnostic H&E slide in the GDC, a pathology report in TCGA-Reports and a PanCancer Atlas sample in cBioPortal. Radiology series are chosen by description and study date.",
+  "patients": [
+    {"id": "TCGA-G6-A8L6", "project": "TCGA-KIRC", "cbio": "kirc", "series": [{"desc": "OMNIPAQUE 300", "date": "2005-03-25", "role": "primary"}]},
+    {"id": "TCGA-E2-A152", "project": "TCGA-BRCA", "cbio": "brca", "series": [{"desc": "SAG 3D (POST-CONTRAST)", "date": "2002-01-25", "role": "primary"}]},
+    {"id": "TCGA-J2-8192", "project": "TCGA-LUAD", "cbio": "luad", "series": [{"desc": "LUNG", "date": "2005-04-02", "role": "primary"}]},
+    {"id": "TCGA-60-2722", "project": "TCGA-LUSC", "cbio": "lusc", "series": [{"desc": "HELICAL MODE", "date": "1997-08-10", "role": "primary"}]},
+    {"id": "TCGA-25-2042", "project": "TCGA-OV", "cbio": "ov", "series": [
+      {"desc": "AP routine  5.0  B40f", "date": "1988-01-27", "role": "primary"},
+      {"desc": "AP Routine  5.0  B40f", "date": "1988-03-19", "role": "followup"},
+      {"desc": "AP routine  5.0  B40f", "date": "1988-06-09", "role": "followup"}
+    ]},
+    {"id": "TCGA-DD-A1EH", "project": "TCGA-LIHC", "cbio": "lihc", "series": [
+      {"desc": "arterial phase  3.0  B40f", "date": "2001-02-27", "role": "primary"},
+      {"desc": "Arterial  3.0  B40f", "date": "2001-06-29", "role": "followup"}
+    ]},
+    {"id": "TCGA-FD-A3SJ", "project": "TCGA-BLCA", "cbio": "blca", "series": [{"desc": "AXL W/", "date": "1997-05-10", "role": "primary"}]},
+    {"id": "TCGA-FI-A2D5", "project": "TCGA-UCEC", "cbio": "ucec", "series": [{"desc": "CAP  3.0  B20f", "date": "1998-10-12", "role": "primary"}]},
+    {"id": "TCGA-VS-A9V3", "project": "TCGA-CESC", "cbio": "cesc", "series": [{"desc": "AXI T1 3D SPIR", "date": "2007-05-13", "role": "primary"}]},
+    {"id": "TCGA-VQ-A91D", "project": "TCGA-STAD", "cbio": "stad", "series": [{"desc": "PORTAL", "date": "1998-10-16", "role": "primary"}]},
+    {"id": "TCGA-G4-6303", "project": "TCGA-COAD", "cbio": "coadread", "series": [{"desc": "AXIAL PRONE W/CONTRAST", "date": "1998-12-22", "role": "primary"}]},
+    {"id": "TCGA-VR-AA4D", "project": "TCGA-ESCA", "cbio": "esca", "series": [{"desc": "VOLUME PORTAL TX AS", "date": "2004-02-20", "role": "primary"}]},
+    {"id": "TCGA-KM-8441", "project": "TCGA-KICH", "cbio": "kich", "series": [{"desc": "ARTERIAL  3.0  B30f -Soft Tissue", "date": "2003-05-06", "role": "primary"}]},
+    {"id": "TCGA-G7-A8LE", "project": "TCGA-KIRP", "cbio": "kirp", "series": [{"desc": "AXIAL CAP/KIDNEYS", "date": "2006-01-11", "role": "primary"}]},
+    {"id": "TCGA-J4-A6G3", "project": "TCGA-PRAD", "cbio": "prad", "series": [{"desc": "C+3D AX FS Post", "date": "2007-01-08", "role": "primary"}]}
+  ]
+}

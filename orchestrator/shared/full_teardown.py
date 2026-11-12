@@ -57,6 +57,7 @@ FRONT_END_TYPES = {
 COMPUTE_TYPES = {"microsoft.app/containerapps", "microsoft.app/jobs"}
 PROTECTED_TYPES = {"microsoft.fabric/capacities"}
 FRONT_END_ITEM_TYPES = ("UserDataFunction", "SQLDatabase")  # Rayfin companions named after the AppBackend
+KNOWN_RAYFIN_APPS = ("rayfin-health-command-center", "rayfin-clinical-triage-app", "rayfin-wardflow-persona-app")
 
 
 class TeardownRefused(Exception):
@@ -289,7 +290,7 @@ class DeploymentTeardown:
         ties.add(plan.workspace_id.lower())
         items = list(self.rest.pages(f"{FABRIC}/v1/workspaces/{plan.workspace_id}/items", FABRIC))
         plan.app_backends = [{"id": i["id"], "name": i["displayName"]} for i in items if i.get("type") == "AppBackend"]
-        names = {b["name"] for b in plan.app_backends}
+        names = {b["name"] for b in plan.app_backends} | set(KNOWN_RAYFIN_APPS)
         plan.companion_items = [{"id": i["id"], "name": i["displayName"], "type": i["type"]} for i in items
                                 if i.get("type") in FRONT_END_ITEM_TYPES and i.get("displayName") in names]
         unavailable: set[str] = set()
@@ -464,7 +465,7 @@ class DeploymentTeardown:
         raise RuntimeError(f"{label} '{item['name']}' still exists 2 minutes after delete")
 
     def _delete_front_end_apps(self, plan: TeardownPlan) -> None:
-        if not plan.app_backends:
+        if not plan.app_backends and not plan.companion_items:
             self.report.log("info", "No Rayfin apps in the workspace")
         for backend in plan.app_backends:
             self._delete_item(plan, backend, "AppBackend")

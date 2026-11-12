@@ -36,7 +36,7 @@ async function parseResponseBody(resp: Response): Promise<unknown> {
   }
 }
 
-function errorMessageFromBody(body: unknown, fallback: string) {
+export function errorMessageFromBody(body: unknown, fallback: string) {
   if (!body) return fallback;
   if (typeof body === "string") return body.slice(0, 500) || fallback;
   if (typeof body === "object") {

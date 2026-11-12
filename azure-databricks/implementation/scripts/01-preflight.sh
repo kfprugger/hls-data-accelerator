@@ -35,6 +35,15 @@ if command -v az >/dev/null 2>&1; then
   echo "== Resource providers =="
   for provider in Microsoft.Databricks Microsoft.Storage Microsoft.EventHub Microsoft.KeyVault Microsoft.EventGrid; do
     state="$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || echo missing)"
+    if [[ "$state" != "Registered" ]]; then
+      note "WARN" "$provider is $state; auto-registering and waiting for Registered state..."
+      az provider register --namespace "$provider" >/dev/null 2>&1 || true
+      for _ in $(seq 1 36); do
+        state="$(az provider show --namespace "$provider" --query registrationState -o tsv 2>/dev/null || echo missing)"
+        [[ "$state" == "Registered" ]] && break
+        sleep 5
+      done
+    fi
     [[ "$state" == "Registered" ]] && note "ok" "$provider" || { note "FAIL" "$provider is $state"; fail=1; }
   done
 
