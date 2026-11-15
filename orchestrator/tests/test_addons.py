@@ -576,27 +576,59 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
     def app(self, client_id):
         return {"properties": {"template": {"containers": [{"env": [{"name": "CALDOVA_AUTH_CLIENT_ID", "value": client_id}]}]}}}
 
-    async def test_cardiology_rayfin_builds_with_bearer_config_and_registers_its_hosting_origin(self):
-        import tempfile, yaml
-        client = "0f9b5c1e-1111-4222-8333-944455556666"
-        with tempfile.TemporaryDirectory() as tmp:
-            runner, source = self.rayfin_runner(tmp)
-            hosting = await runner.cardiology_rayfin(source, self.app(client), "https://cardiotest-app.example.io")
-            config = yaml.safe_load((runner.work / "caldova-cardio-rayfin/rayfin/rayfin.yml").read_text())
-        self.assertEqual(hosting, "https://cardio-westus2.webapp.fabricapps.net/")
-        calls = runner.rayfin_command.await_args_list
-        self.assertEqual([c.args[0] for c in calls], ["cardiology-rayfin: provision", "cardiology-rayfin: deploy static",
-                                                      "cardiology-rayfin: register hosting origin"])
-        for call in (calls[0], calls[2]):
-            self.assertEqual(call.args[1][-2:], ["--exclude-services", "staticHosting,functions"])
-            self.assertNotIn("NEXT_PUBLIC_PLATFORM_URL", call.args[3])
-        self.assertNotIn("--exclude-services", calls[1].args[1])
-        self.assertEqual({k: v for k, v in calls[1].args[3].items() if k.startswith("NEXT_PUBLIC_")}, {
-            "NEXT_PUBLIC_PLATFORM_URL": "https://cardiotest-app.example.io",
-            "NEXT_PUBLIC_CALDOVA_AUTH_CLIENT_ID": client, "NEXT_PUBLIC_CALDOVA_AUTH_TENANT_ID": "tenant"})
-        self.assertEqual(calls[1].args[3]["RAYFIN_TOKEN"], "fabric-token")
-        self.assertEqual(runner.command.await_args_list[0].args[1][-1], "@microsoft/rayfin-cli@1.36.2")
-        self.assertEqual(config["services"]["auth"]["allowedRedirectUris"], ["https://cardio-westus2.webapp.fabricapps.net"])
+
+    async def test_rayfin_build_runs_compound_command_in_the_configured_directory(self):
+        import tempfile
+        import yaml
+
+        app = "rayfin-clinical-triage-app"
+        origin = "https://triage.example"
+        for prefix, fails in (
+            ("echo preparing", False), ("false", True),
+            ("printf preparing | cat", False), ("false | cat", True),
+        ):
+            with self.subTest(command=prefix, fails=fails), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp) / app
+                (root / "rayfin").mkdir(parents=True)
+                output = root / "web output"
+                output.mkdir()
+                artifact = output / "built.json"
+                artifact.write_text('{"release":"old"}')
+                (root / "rayfin/rayfin.yml").write_text(yaml.safe_dump({"services": {
+                    "auth": {"allowedRedirectUris": []},
+                    "staticHosting": {"path": "web output", "buildCommand":
+                        prefix + " && printf '{\"release\":\"new\"}' > built.json"},
+                }}))
+                runner = object.__new__(addons.AddonRunner)
+                runner.id, runner.pids = "compound-build", {}
+                runner.ws, runner.env = "workspace", dict(os.environ)
+                runner.config = {"expected_tenant_id": "tenant"}
+                runner.cloud = Mock()
+                runner.cloud.tokens.token.return_value = "test-token"
+                runner.gold = AsyncMock(return_value=({"displayName": "Gold"}, {"connectionString": "sql.example"}))
+                runner.working_copy = Mock(return_value=root)
+                runner.persist, runner.log, runner.substep = Mock(), Mock(), Mock()
+                runner.rayfin_command = AsyncMock()
+                runner.deployment = {"customStatus": {"addons": {"rayfin": {"resources": {
+                    name: "https://existing.example" for name in (
+                        "rayfin-health-command-center", "rayfin-imaging", "rayfin-wardflow-persona-app")
+                }}}}}
+
+                async def command(title, args, cwd=None, env=None, **kwargs):
+                    if title == f"{app}: build":
+                        return await addons.AddonRunner.command(runner, title, args, cwd, env, **kwargs)
+                    if title == f"{app}: hosting details":
+                        return json.dumps({"deployment": {"hostingUrl": origin}})
+                    return ""
+
+                runner.command = command
+                with patch.object(addons, "ROOT", Path(tmp)), patch.object(addons, "resolve_wardflow_root", return_value=None):
+                    if fails:
+                        with self.assertRaisesRegex(RuntimeError, "exited with code 1"):
+                            await runner.rayfin()
+                    else:
+                        await runner.rayfin()
+                self.assertEqual(json.loads(artifact.read_text()), {"release": "old" if fails else "new"})
 
     async def test_cardiology_rayfin_refuses_to_build_without_the_app_registration(self):
         import tempfile

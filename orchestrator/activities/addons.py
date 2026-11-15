@@ -1233,8 +1233,18 @@ class AddonRunner:
             if app == "rayfin-imaging":
                 await self.prepare_rayfin_imaging(root)
                 await self.command(f"{app}: install function dependencies", ["npm", "ci", "--no-audit", "--no-fund"], root / "rayfin/functions")
-            await self.command(f"{app}: build", ["npm", "run", "build"], root, await rayfin_env("https://analysis.windows.net/powerbi/api"))
-            await self.rayfin_command(f"{app}: deploy", up, root, await rayfin_env())
+            # Build what `rayfin up` would have shipped (the configured static build),
+            # with the Power BI audience its semantic-model probe needs.
+            static = config["services"]["staticHosting"]
+            # Preserve shell operators and quoting; a failed pipeline must stop publishing.
+            await self.command(f"{app}: build", ["bash", "-o", "pipefail", "-c", static.get("buildCommand") or "npm run build"],
+                               root / static.get("path", "."), await rayfin_env("https://analysis.windows.net/powerbi/api"))
+            # The provision above already applied the data model and runtime settings.
+            # Publish only the assets: another full `up` re-applies the model, which the
+            # command center's publication boundary reports as schema drift.
+            await self.rayfin_command(f"{app}: deploy static app", cli + ["up", "staticapp", "deploy", "--skip-build"], root, await rayfin_env())
+            if (config["services"].get("functions") or {}).get("enabled"):
+                await self.rayfin_command(f"{app}: deploy functions", cli + ["up", "functions", "deploy"], root, await rayfin_env())
             status = parse_cli_json(
                 await self.command(f"{app}: hosting details", cli + ["up", "status", "--json"], root, await rayfin_env(), capture=True),
                 f"{app} hosting status",
@@ -1250,9 +1260,11 @@ class AddonRunner:
             if origin not in redirects:
                 redirects.append(origin)
             config_path.write_text(yaml.safe_dump(config, sort_keys=False))
-            # CLI's hosting callback registration is best-effort. Reapply settings as a
-            # required step, without rebuilding the two services a second time.
-            await self.rayfin_command(f"{app}: register hosting origin", up + ["--exclude-services", "staticHosting,functions"], root, await rayfin_env())
+            # The CLI's hosting callback registration is best-effort. Register the origin
+            # as a required step that keeps the recorded runtime settings and does not
+            # re-apply the data model.
+            await self.command(f"{app}: register hosting origin", ["node", ROOT / "scripts/register_rayfin_hosting_origin.mjs", origin],
+                               root, await rayfin_env())
             result[app] = hosting
             self.deployment.get("customStatus", {}).setdefault("addons", {}).setdefault("rayfin", {})["resources"] = dict(result)
             self.persist()
@@ -1675,6 +1687,8 @@ class AddonRunner:
             redirects.append(origin)
             config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
         # Same as the other Rayfin apps: the CLI's hosting callback registration is
-        # best-effort, so reapply settings without rebuilding the static export.
-        await self.rayfin_command("cardiology-rayfin: register hosting origin", up + ["--exclude-services", "staticHosting,functions"], root, await rayfin_env())
+        # best-effort, so register the origin as a required step that keeps the recorded
+        # runtime settings and does not re-apply the data model.
+        await self.command("cardiology-rayfin: register hosting origin", ["node", ROOT / "scripts/register_rayfin_hosting_origin.mjs", origin],
+                           root, await rayfin_env())
         return hosting
