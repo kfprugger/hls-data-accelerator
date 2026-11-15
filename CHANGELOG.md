@@ -2,6 +2,11 @@
 
 ## [Unreleased] — May 28, 2026
 
+### Data Agent native schema selection and recovery (2026-11-15)
+
+- **Fixed** Phase 7 Data Agent deployment stopping when Fabric reports that a requested datasource's cached path is unavailable. The existing one-time staging datasource detach and re-import now handles that exact service error as well as a missing native schema element. Recovery still requires a requested datasource ID, selects the full table/function contract again, and fails without publishing if the error persists or names another datasource.
+- **Fixed** shared native selection verification accepting an extra selected table when it had the same display name as a requested table in another schema. Selection and verification now use the exact service-issued native IDs with case-sensitive comparison. Requested targets must still resolve uniquely and be available before any writes. The regression checks published verification refusal without writes and correct selection when opaque IDs differ only by case.
+
 ### Live alert device lookup (2026-11-15)
 
 - **Fixed** the live alert trigger selecting a device that FHIR does not link to the requested patient. Before, `scripts/trigger_spo2_alert.py --live` took the first association whose subject contained the patient ID or whose display name was Marcus Vance, and used the local cohort mapping when FHIR was not configured or the lookup failed. Live mode now resolves the patient by exact FHIR resource ID or exact TCGA barcode identifier, and uses only `device-assoc` Basic associations whose subject is exactly that Patient. Each such association needs exactly one recognized status code and exactly one `Device/<id>` reference; a missing, duplicate or malformed field fails the lookup, and a well-formed inactive association is skipped. When several valid active associations exist, the lowest device ID is used. A FHIR search must return one complete searchset: a `next` link, a `total` that differs from the entry count, malformed entries, non-match (`include`) entries or other resource types fail, and no returned link is followed. FHIR failures report the status code and standard phrase or the transport error type, never the response body, server-supplied reason or token. Any lookup failure exits nonzero before Event Hub or Eventhouse is contacted. Dry runs keep the local cohort mapping.

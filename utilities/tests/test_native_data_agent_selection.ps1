@@ -9,20 +9,28 @@ function Assert-Throws([scriptblock]$action,[string]$pattern){try{&$action}catch
 $script:patient=[pscustomobject]@{id='native+patient/=';type='Table';displayName='Patient';state='Available';isSelected=$false;hasSubElements=$false}
 $script:condition=[pscustomobject]@{id='native-condition';type='Table';displayName='Condition';state='Available';isSelected=$true;hasSubElements=$false}
 $script:function=[pscustomobject]@{id='native-fn';type='Function';displayName='fn_Count';state='Available';isSelected=$false;hasSubElements=$false}
+$script:shadowPatient=[pscustomobject]@{id='native+PATIENT/=';type='Table';displayName='Patient';state='Available';isSelected=$false;hasSubElements=$false}
 $script:patches=0
 $script:duplicate=$false
 $script:functionHiddenReads=0
+$script:shadowSchemaVisible=$false
 $api={
  param($method,$endpoint,$body)
  $query=[Web.HttpUtility]::ParseQueryString(([uri]('https://local.invalid'+$endpoint)).Query)
  if($method -eq 'PATCH'){
   $script:patches++
-  $matches=@($script:patient,$script:condition,$script:function|Where-Object id -eq $query['id'])
+  $matches=@($script:patient,$script:condition,$script:function,$script:shadowPatient|Where-Object {$_.id -ceq $query['id']})
   if($matches.Count -ne 1){throw 'Unknown native element ID'}
   $matches[0].isSelected=$body.isSelected
   return $matches[0]
  }
- if($query['rootId'] -eq 'schemas'){return [pscustomobject]@{value=@([pscustomobject]@{id='dbo';type='Schema';displayName='dbo';hasSubElements=$true});continuationToken=$null}}
+ if($query['rootId'] -eq 'schemas'){
+  $schemas=@([pscustomobject]@{id='dbo';type='Schema';displayName='dbo';hasSubElements=$true})
+  if($script:shadowSchemaVisible){$schemas+=[pscustomobject]@{id='other-schema';type='Schema';displayName='other';hasSubElements=$true}}
+  return [pscustomobject]@{value=$schemas;continuationToken=$null}
+ }
+ if($query['rootId'] -eq 'other-schema'){return [pscustomobject]@{value=@([pscustomobject]@{id='other-tables';type='Tables';displayName='Tables';hasSubElements=$true});continuationToken=$null}}
+ if($query['rootId'] -eq 'other-tables'){return [pscustomobject]@{value=@($script:shadowPatient);continuationToken=$null}}
  if($query['rootId'] -eq 'dbo'){return [pscustomobject]@{value=@([pscustomobject]@{id='tables';type='Tables';displayName='Tables';hasSubElements=$true});continuationToken=$null}}
  if($query['rootId'] -eq 'tables'){
   $values=@($script:patient)
@@ -70,4 +78,11 @@ $script:sleeps=0
 $before=$script:patches
 Assert-Throws {Set-DataAgentNativeSchemaSelection @missingFn} 'Missing, ambiguous, or unavailable native Function'
 Assert-True ($script:sleeps -eq 2 -and $script:patches -eq $before) 'A target that never appears must fail after the bounded wait without any selection writes.'
+$script:shadowSchemaVisible=$true
+$script:shadowPatient.isSelected=$true
+$before=$script:patches
+Assert-Throws {Set-DataAgentNativeSchemaSelection @selectionArgs -VerifyOnly -Published} 'did not match'
+Assert-True ($script:shadowPatient.isSelected -and $script:patches -eq $before) 'Published verification must reject an extra same-name table in another schema without changing it.'
+Set-DataAgentNativeSchemaSelection @selectionArgs
+Assert-True ($patient.isSelected -and $function.isSelected -and -not $shadowPatient.isSelected) 'Selection must keep only the requested native identities, including opaque IDs that differ only by case.'
 Write-Host 'Native Data Agent selection boundary tests passed.'

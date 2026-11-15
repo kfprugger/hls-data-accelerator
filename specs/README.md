@@ -19,7 +19,7 @@ Contracts changed since round 2:
 
 ### Decisions requested
 1. **[AlertEngine](#alertengine)**: Keep both platform-specific alert definitions: Fabric Activator for the core path, and the Databricks SQL alert inside the opt-in add-on, with its SQL schedule left paused until an operator activates it for a registered workspace user? Recommended: yes.
-2. **[DataShare](#datashare)**: Accept the shared `/data-share` mount for the reference deployment (every sandbox can read the share; isolation is application code plus sealed credentials) while access stays limited to `microsoft.com` accounts? Recommended: yes, and revisit before admitting other tenants.
+2. **[DataShare](#datashare)**: Accept the shared `/data-share` mount for the reference deployment (every sandbox can read the share; isolation is application code plus sealed credentials) while access retains the current Microsoft home-tenant allowlist and named operator exceptions? Recommended: yes for this reference deployment, and revisit before admitting additional tenants.
 3. **[ESC-4](#esc-4)**: Keep teardown capacity-neutral (D5) and add no `-PauseCapacity` switch? Recommended: yes.
 
 ## Problem
@@ -258,8 +258,8 @@ Measurable verification criteria:
   3. **Relational SDOH Seeding**: Seeds SDOH demographic tables into Gold lakehouse with one row per county/measure and subcategory key in `category_id`.
   4. Direct Lake shortcuts expose raw DICOM `.dcm` files and FHIR NDJSON files directly into Bronze Lakehouse without copying.
 - **Verification Commands**: See [Verification §4, §5](#4-orchestrator-backend-add-on--quality-model-tests).
-- **Known Limits**: Fabric workspace must use Fabric Spark Runtime 1.3; Runtime 2.0 requires explicit downgrade.
-- **Status**: Implemented. Verified by [Verification §4, §5](#4-orchestrator-backend-add-on--quality-model-tests). Open: none.
+- **Known Limits**: Fabric workspace must use Fabric Spark Runtime 1.3; Runtime 2.0 requires explicit downgrade. The standalone Phase 3 imaging toolkit carries a separate native Data Agent selector whose name-only verification can accept an additional selected same-name table in another schema; the shared HLS native-ID verification does not repair that separate implementation.
+- **Status**: Implemented. Verified by [Verification §4, §5](#4-orchestrator-backend-add-on--quality-model-tests). Open: the companion toolkit's cross-schema selection-verification gap.
 
 ---
 
@@ -304,6 +304,7 @@ Measurable verification criteria:
   4. Surface Probes: Probes DAX expressions against Direct Lake models, checks Eventstream node status and event freshness in `TelemetryRaw` and `claims_events`, and verifies device association counts.
   5. Runtime preparation is mutating: the harness can start stopped producer containers, resume paused Eventstreams with `startType: Now`, and pause stale streams before resuming them from Now. That resume skips queued history. `--no-capacity-resume` disables capacity resumption only; it does not disable producer or Eventstream changes. Run these checks only on an estate authorized for those changes.
   6. Eventstream lifecycle convergence: HTTP 409 with `errorCode: ArtifactOperationConflict` means a resume or reset pause was not accepted. The harness re-reads runtime topology and tries again only if the operation is still needed, within the original deadline. It does not repeat an accepted lifecycle call. Failed nodes can settle while another node changes state, while a paused stream has not yet been resumed by this check, and for 180 seconds after its accepted resume. Other stable failures and deadline exhaustion fail the gate. Running nodes alone do not pass it; both destination tables must contain current events.
+  7. Native selection identity: the shared HLS selector resolves each requested table or function to its service-issued native ID before any selection update. Selection and staged/published verification use the exact case-sensitive ID set, not distinct display names. An extra selected same-name table in another schema therefore fails verification.
 - **Verification Commands**: See [Verification §4](#4-orchestrator-backend-add-on--quality-model-tests).
 - **Known Limits**: Capacity readiness is a state check, not a SKU compatibility check. The deployment harness is not a read-only health check; its Eventstream reset policy skips queued history.
 - **Status**: Implemented. Verified by [Verification §4](#4-orchestrator-backend-add-on--quality-model-tests). Open: none.
@@ -352,6 +353,7 @@ Measurable verification criteria:
   3. Ingests claims into Eventhouse KQL database, computing rolling utilization, readmission likelihood, and fraud flags.
   4. Backfills claim grounding summaries for Healthcare Operations Agent via `phase-7/agent-grounding-backfills.ps1`.
   5. **Healthcare Graph Agent**: Unless `-SkipGraphAgent` is set, `phase-7/deploy-payer-rti.ps1` creates or updates the `Healthcare Graph Agent` Data Agent for `DevicePayerOntology` traversal. Its sources are the Eventhouse KQL database plus, when `-SkipSnapshotMaterialization` is not set, the Reporting Gold lakehouse and `DevicePayerOntology` if each is found. With `-SkipSnapshotMaterialization` the agent gets definition-only instructions. The script writes the manual graph-attach steps to `.graph-agent-manual-steps-<workspace>.txt` in the state-tracking directory.
+  6. **Native schema recovery**: Before publication, the script selects and verifies the requested native tables and functions. If Fabric reports a missing native element or an unavailable cached path for one of the requested datasource IDs, it detaches and re-imports that staging datasource once, then repeats the complete selection contract. A persistent failure, an error naming another datasource, or any unrelated API error stops deployment without publishing the agent. Published selections are checked again after publication.
 - **Verification Commands**: See [Verification §1, §5](#1-powershell-syntax-parallel-execution--retry-classification).
 - **Known Limits**: Continuous claim streaming accrues Event Hub and Eventhouse capacity consumption; stop emulator when demo concludes.
 - **Status**: Implemented. Verified by [Verification §1, §5](#1-powershell-syntax-parallel-execution--retry-classification). Open: none.
@@ -595,7 +597,7 @@ Measurable verification criteria:
   4. Capacity preservation: Teardown cleans items but does not pause or delete the shared Fabric capacity.
 - **Verification Commands**: See [Verification §1, §4](#1-powershell-syntax-parallel-execution--retry-classification).
 - **Known Limits**: Lakehouse/Eventhouse endpoints must be reachable to discover TDS/Eventhouse-only front ends; provide explicit `-FrontEndResourceGroup` if capacity is paused during teardown.
-- **Status**: Implemented. Verified by [Verification §1, §4](#1-powershell-syntax-parallel-execution--retry-classification). Open: ESC-4 (opt-in capacity pause on teardown; see [ESC-4](#esc-4)).
+- **Status**: Implemented. Verified by [Verification §1, §4](#1-powershell-syntax-parallel-execution--retry-classification). Open: ESC-4 (retain capacity-neutral teardown; see [ESC-4](#esc-4)).
 
 ---
 
@@ -682,9 +684,9 @@ Keep both platform-specific alert definitions: Fabric Activator for the core pat
 - *Recommendation*: Yes. Keep the platform-specific definitions. The current bundle always leaves the SQL alert paused; setting `ALERT_EMAIL` alone does not activate it. Any activation must be deliberate and use a registered workspace recipient.
 
 ### DataShare
-Accept the shared `/data-share` mount for the reference deployment (every sandbox can read the share; isolation is application code plus sealed credentials) while access stays limited to `microsoft.com` accounts?
+Accept the shared `/data-share` mount for the reference deployment (every sandbox can read the share; isolation is application code plus sealed credentials) while access retains the current Microsoft home-tenant allowlist and named operator exceptions?
 - *Status*: Open architectural question (see [Component 10](#component-10-local-orchestrator-backend--process-engine-orchestratorlocal_serverpy-orchestratoractivities)).
-- *Recommendation*: Yes, and revisit before admitting other tenants. It carries three owner-requested features; per-sandbox shares would drop ETA pooling and peer-history import.
+- *Recommendation*: Yes for this reference deployment, and revisit before admitting additional tenants. It carries three owner-requested features; per-sandbox shares would drop ETA pooling and peer-history import. This is not a claim of per-sandbox storage isolation.
 - *Unimplemented alternative summary*: Read-only image layers or immutable blob snapshots. These are recorded options, not a reviewed replacement design. Any future cutover must preserve stage-ETA pooling, verified peer-history import and the hosted Rayfin seed cache.
 
 ### ESC-4

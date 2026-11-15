@@ -146,9 +146,11 @@ function Set-DataAgentNativeSchemaSelection {
     # selected until every target resolves.
     $targets = @($Tables | ForEach-Object { @{ Name = $_; Type = 'Table' } }) + @($Functions | ForEach-Object { @{ Name = $_; Type = 'Function' } })
     $attempts = [Math]::Max(1, [int][Math]::Ceiling($SyncWaitSeconds / 15) + 1)
+    $expectedIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     for ($attempt = 1; ; $attempt++) {
         $objects = @(Read-NativeObjects)
         $problem = ''
+        $expectedIds.Clear()
         foreach ($target in $targets) {
             $match = @($objects | Where-Object {
                 $_.Element.type -eq $target.Type -and $_.Element.displayName -eq $target.Name -and
@@ -158,6 +160,7 @@ function Set-DataAgentNativeSchemaSelection {
                 $problem = "Missing, ambiguous, or unavailable native $($target.Type) '$($target.Name)' in datasource '$DatasourceId'."
                 break
             }
+            $null = $expectedIds.Add([string]$match[0].Element.id)
         }
         if (-not $problem) { break }
         if ($attempt -ge $attempts) { throw "$problem No selection updates were made." }
@@ -166,18 +169,14 @@ function Set-DataAgentNativeSchemaSelection {
     if (-not $VerifyOnly) {
     foreach ($object in $objects) {
         $element = $object.Element
-        $selected = if ($element.type -eq 'Function') { $element.displayName -in $Functions } else {
-            $element.displayName -in $Tables -and (-not $object.Schema -or $object.Schema -eq $Schema)
-        }
+        $selected = $expectedIds.Contains([string]$element.id)
         if ([bool]$element.isSelected -eq $selected) { continue }
         $null = & $InvokeApi 'PATCH' "${endpoint}?id=$([uri]::EscapeDataString([string]$element.id))" @{ isSelected = $selected }
     }
     }
     $actual = if ($VerifyOnly) { $objects } else { @(Read-NativeObjects) }
-    $actualTables = @($actual | Where-Object { $_.Element.type -eq 'Table' -and $_.Element.isSelected } | ForEach-Object { $_.Element.displayName } | Sort-Object -Unique)
-    $actualFunctions = @($actual | Where-Object { $_.Element.type -eq 'Function' -and $_.Element.isSelected } | ForEach-Object { $_.Element.displayName } | Sort-Object -Unique)
-    if (($actualTables -join '|') -ne (($Tables | Sort-Object -Unique) -join '|') -or
-        ($actualFunctions -join '|') -ne (($Functions | Sort-Object -Unique) -join '|')) {
+    $actualIds = [string[]]@($actual | Where-Object { $_.Element.isSelected } | ForEach-Object { [string]$_.Element.id })
+    if (-not $expectedIds.SetEquals($actualIds)) {
         throw "Native datasource selections did not match the requested table/function contract: $DatasourceId"
     }
 }

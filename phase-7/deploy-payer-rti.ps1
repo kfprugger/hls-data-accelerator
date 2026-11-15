@@ -394,7 +394,9 @@ function Deploy-DataAgent {
         throw "DataAgent definition update failed for ${Name}: $(Get-ErrorMessage $_)"
     }
     # A datasource attached while its SQL endpoint still lacked tables keeps that stale element
-    # tree; updateDefinition does not refresh it. Detaching and re-importing the datasource does.
+    # tree, and Fabric can lose a just-imported datasource's cached path; updateDefinition
+    # refreshes neither. Detaching and re-importing one of the requested datasources does.
+    $staleSourcePattern = "Missing, ambiguous, or unavailable native \w+ '[^']+' in datasource '(?<id>[0-9a-fA-F-]{36})'|The cached path for data source (?<id>[0-9a-fA-F-]{36}) is unavailable\. Retry the request\."
     $reattached = $false
     while ($true) {
         try {
@@ -402,11 +404,11 @@ function Deploy-DataAgent {
             break
         } catch {
             $message = Get-ErrorMessage $_
-            if ($reattached -or $message -notmatch "Missing, ambiguous, or unavailable native \w+ '[^']+' in datasource '([0-9a-fA-F-]{36})'") {
+            if ($reattached -or $message -notmatch $staleSourcePattern -or @($selectionContracts.DatasourceId) -notcontains $Matches.id) {
                 throw "DataAgent native table selection failed for ${Name}: $message"
             }
-            $staleDatasourceId = $Matches[1]
-            Write-Host "  ! ${Name}: datasource $staleDatasourceId has a stale schema; re-attaching it" -ForegroundColor Yellow
+            $staleDatasourceId = $Matches.id
+            Write-Host "  ! ${Name}: datasource $staleDatasourceId has a stale or unavailable schema; re-attaching it" -ForegroundColor Yellow
             try {
                 $null = Invoke-FabricApi -Method DELETE -Endpoint "/workspaces/$WorkspaceId/dataAgents/$agentId/staging/datasources/$staleDatasourceId"
                 Update-DataAgentDefinition -WorkspaceId $WorkspaceId -DataAgentId $agentId -Definition @{ parts = @($parts) }
