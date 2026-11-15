@@ -7,7 +7,10 @@ deduplication window, and reports an end-to-end stopwatch breakdown.
 Environment Variables:
   EVENTHUB_NAMESPACE: Azure Event Hubs namespace (also accepts EVENT_HUB_NAMESPACE)
   EVENTHUB_NAME: Event Hub entity name (also accepts EVENT_HUB_NAME; default: telemetry-stream)
-  RESOURCE_GROUP: Azure resource group containing the Event Hub namespace
+  RESOURCE_GROUP: Azure resource group containing the Event Hub namespace (and, in --live, the FHIR service)
+  FHIR_SERVICE_URL: FHIR service URL holding the device associations (also accepts FHIR_URL; --live discovers the
+    single FHIR service in RESOURCE_GROUP when unset)
+  HLS_FHIR_TOKEN: Optional FHIR bearer token; otherwise --live uses `az account get-access-token`
   EVENTHOUSE_QUERY_URI: Eventhouse KQL cluster query URI (MasimoEventhouse)
   HLS_ALERT_EMAIL: Allowlisted recipient email address (single address)
   FABRIC_WORKSPACE_NAME: Target Microsoft Fabric workspace name
@@ -26,7 +29,8 @@ import subprocess
 import sys
 import time
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from http import HTTPStatus
+from typing import Any, Callable, Dict, List, NoReturn, Optional, Tuple
 
 import requests
 
@@ -88,6 +92,24 @@ GRAPH_PAGE_SIZE = 25
 GRAPH_MAX_PAGES = 4
 # High-risk condition codes that make the enriched fn_ClinicalAlerts (deploy-fabric-rti.ps1 Phase 2b) escalate a tier.
 HIGH_RISK_CONDITION_CODES = ("13645005", "84114007", "195967001", "233604007", "59621000")
+
+# Live device lookup reads the FHIR Basic device associations written by synthea/seed_tcga_cohort.py (TCGA cohort),
+# fhir-loader/load_fhir.py and create-device-associations.py. Their subject is always the canonical
+# `Patient/<FHIR id>`; a TCGA barcode is only a Patient.identifier in the GDC barcode system.
+FHIR_ID_RE = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
+COHORT_IDENTIFIER_SYSTEM = "https://gdc.cancer.gov/tcga/barcode"
+DEVICE_ASSOC_CODE_SYSTEM = "http://terminology.hl7.org/CodeSystem/basic-resource-type"
+DEVICE_ASSOC_CODE = "device-assoc"
+DEVICE_ASSOC_DEVICE_EXTENSIONS = frozenset({
+    "http://example.org/StructureDefinition/associated-device",
+    "http://hl7.org/fhir/StructureDefinition/device-association-device",
+})
+DEVICE_ASSOC_STATUS_EXTENSIONS = frozenset({
+    "http://example.org/StructureDefinition/association-status",
+    "http://hl7.org/fhir/StructureDefinition/device-association-status",
+})
+FHIR_HTTP_TIMEOUT_SECONDS = 15.0
+AZ_CLI_TIMEOUT_SECONDS = 30.0
 
 
 def kql_primary_rows(resp: Any) -> Tuple[Optional[List[Any]], Optional[str]]:
@@ -254,32 +276,233 @@ def classify_alert_outcome(
         return "UNCERTAIN_BOUNDARY", False, False
 
 
-def resolve_patient_device(patient_id: str, live: bool = False) -> Tuple[str, str]:
-    """Resolve patient name and associated pulse oximeter device ID."""
-    fhir_url = os.environ.get("FHIR_SERVICE_URL") or os.environ.get("FHIR_URL")
-    if live and fhir_url:
+def _live_lookup_failed(reason: str) -> NoReturn:
+    sys.stderr.write(f"Error: live_device_association_unverified: {reason}\n")
+    sys.exit(1)
+
+
+def _run_az(args: List[str], what: str) -> str:
+    """Run one bounded az CLI command and return stdout; stdout is never echoed in diagnostics (it may hold a token)."""
+    try:
+        proc = subprocess.run(["az", *args], capture_output=True, text=True, timeout=AZ_CLI_TIMEOUT_SECONDS)
+    except FileNotFoundError:
+        _live_lookup_failed(f"{what}: az CLI not found")
+    except subprocess.TimeoutExpired:
+        _live_lookup_failed(f"{what}: az CLI timed out after {AZ_CLI_TIMEOUT_SECONDS:.0f}s")
+    if proc.returncode != 0:
+        detail = " ".join(str(proc.stderr or "").split())[:300]
+        _live_lookup_failed(f"{what}: az CLI exited {proc.returncode}: {detail}")
+    return proc.stdout
+
+
+def _az_json(args: List[str], what: str) -> Any:
+    try:
+        return json.loads(_run_az(args, what))
+    except ValueError:
+        _live_lookup_failed(f"{what}: az CLI returned non-JSON output")
+
+
+def _live_fhir_base_url(resource_group: Optional[str]) -> str:
+    """FHIR_SERVICE_URL / FHIR_URL, else the only FHIR service in the resource group (as seed_tcga_cohort.py discovers it)."""
+    configured = (os.environ.get("FHIR_SERVICE_URL") or os.environ.get("FHIR_URL") or "").strip()
+    if configured:
+        return configured.rstrip("/")
+    if not resource_group:
+        sys.stderr.write(
+            "Error: fhir_service_unconfigured: live device lookup requires FHIR_SERVICE_URL or --resource-group / RESOURCE_GROUP\n"
+        )
+        sys.exit(2)
+    ids = _az_json(
+        ["resource", "list", "-g", resource_group, "--resource-type", "Microsoft.HealthcareApis/workspaces/fhirservices",
+         "--query", "[].id", "-o", "json"],
+        "FHIR service discovery",
+    )
+    if not isinstance(ids, list) or len(ids) != 1 or not isinstance(ids[0], str):
+        count = len(ids) if isinstance(ids, list) else "no"
+        _live_lookup_failed(
+            f"FHIR service discovery found {count} FHIR services in resource group {resource_group}; set FHIR_SERVICE_URL"
+        )
+    audience = _az_json(
+        ["resource", "show", "--ids", ids[0], "--api-version", "2022-06-01",
+         "--query", "properties.authenticationConfiguration.audience", "-o", "json"],
+        "FHIR service discovery",
+    )
+    if not isinstance(audience, str) or not audience.startswith("https://"):
+        _live_lookup_failed(f"FHIR service {ids[0]} has no https audience URL")
+    return audience.rstrip("/")
+
+
+def _fhir_access_token(fhir_url: str) -> str:
+    configured = os.environ.get("HLS_FHIR_TOKEN", "").strip()
+    if configured:
+        return configured
+    parsed = _az_json(["account", "get-access-token", "--resource", fhir_url, "-o", "json"], "FHIR token acquisition")
+    token = parsed.get("accessToken") if isinstance(parsed, dict) else None
+    if not isinstance(token, str) or not token:
+        _live_lookup_failed("FHIR token acquisition: az CLI returned no accessToken")
+    return token
+
+
+def _fhir_search(fhir_url: str, token: str, resource_type: str, params: Dict[str, str], what: str) -> List[Dict[str, Any]]:
+    """One bounded, single-page FHIR search returning the resource_type matches, or exit 1 with a fixed reason.
+
+    Only a complete searchset Bundle is accepted: a next link, a total above the entry count, or any malformed,
+    non-match or foreign-type entry fails closed. Next links are never followed. Diagnostics never include the
+    response body or the token.
+    """
+    try:
+        resp = requests.get(
+            f"{fhir_url}/{resource_type}",
+            params=params,
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/fhir+json"},
+            timeout=FHIR_HTTP_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        _live_lookup_failed(f"{what}: request failed ({type(exc).__name__})")
+    if resp.status_code != 200:
         try:
-            cmd = ["az", "account", "get-access-token", "--resource", fhir_url, "-o", "json"]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-            if proc.returncode == 0:
-                tok = json.loads(proc.stdout)["accessToken"]
-                url = f"{fhir_url.rstrip('/')}/Basic?code=device-assoc"
-                r = requests.get(url, headers={"Authorization": f"Bearer {tok}", "Accept": "application/fhir+json"}, timeout=15)
-                if r.status_code == 200:
-                    bundle = r.json()
-                    for entry in bundle.get("entry", []):
-                        res = entry.get("resource", {})
-                        subj = res.get("subject", {})
-                        subj_ref = subj.get("reference", "") or subj.get("idOrig", "")
-                        exts = res.get("extension", [])
-                        for ext in exts:
-                            val_ref = ext.get("valueReference", {}).get("reference", "")
-                            if (patient_id in subj_ref or subj.get("display") == "Marcus Vance") and val_ref:
-                                dev_id = val_ref.split("/")[-1]
-                                name = subj.get("display", "Marcus Vance")
-                                return name, dev_id
-        except Exception:
-            pass
+            reason = HTTPStatus(resp.status_code).phrase
+        except ValueError:
+            reason = "unexpected status"
+        _live_lookup_failed(f"{what}: HTTP {resp.status_code} {reason}")
+    try:
+        bundle = resp.json()
+    except ValueError:
+        _live_lookup_failed(f"{what}: response is not JSON")
+    if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle" or bundle.get("type") != "searchset":
+        _live_lookup_failed(f"{what}: response is not a FHIR searchset Bundle")
+    links = bundle.get("link", [])
+    if not isinstance(links, list) or not all(isinstance(link, dict) for link in links):
+        _live_lookup_failed(f"{what}: searchset Bundle has malformed links")
+    if any(link.get("relation") == "next" for link in links):
+        _live_lookup_failed(f"{what}: results span more than one page; refusing an incomplete search")
+    entries = bundle.get("entry", [])
+    if not isinstance(entries, list):
+        _live_lookup_failed(f"{what}: searchset Bundle has malformed entries")
+    total = bundle.get("total")
+    if total is not None and (isinstance(total, bool) or not isinstance(total, int) or total != len(entries)):
+        _live_lookup_failed(f"{what}: searchset total does not match the returned entries; refusing an incomplete search")
+    resources: List[Dict[str, Any]] = []
+    for entry in entries:
+        resource = entry.get("resource") if isinstance(entry, dict) else None
+        search = entry.get("search", {}) if isinstance(entry, dict) else None
+        if (
+            not isinstance(resource, dict)
+            or resource.get("resourceType") != resource_type
+            or not isinstance(search, dict)
+            or search.get("mode", "match") != "match"
+        ):
+            _live_lookup_failed(f"{what}: searchset Bundle has a malformed or non-{resource_type} match entry")
+        resources.append(resource)
+    return resources
+
+
+def _patient_display_name(patient: Dict[str, Any]) -> Optional[str]:
+    names = patient.get("name")
+    if not isinstance(names, list) or not names or not isinstance(names[0], dict):
+        return None
+    name = names[0]
+    if isinstance(name.get("text"), str) and name["text"].strip():
+        return name["text"].strip()
+    given = name.get("given") if isinstance(name.get("given"), list) else []
+    parts = [p for p in [*given, name.get("family")] if isinstance(p, str) and p.strip()]
+    return " ".join(p.strip() for p in parts) or None
+
+
+def _associated_device(resource: Dict[str, Any], subject_refs: frozenset) -> Optional[str]:
+    """Device ID of an active device association for the resolved Patient; None for other or inactive associations.
+
+    A device association for the resolved Patient must carry exactly one recognized status (a code) and exactly one
+    recognized Device reference; a missing, duplicate or malformed field fails closed instead of choosing a device.
+    """
+    code = resource.get("code") if isinstance(resource.get("code"), dict) else {}
+    codings = code.get("coding") if isinstance(code.get("coding"), list) else []
+    if not any(
+        isinstance(c, dict) and c.get("system") == DEVICE_ASSOC_CODE_SYSTEM and c.get("code") == DEVICE_ASSOC_CODE
+        for c in codings
+    ):
+        return None
+    subject = resource.get("subject") if isinstance(resource.get("subject"), dict) else {}
+    if subject.get("reference") not in subject_refs:
+        return None
+    assoc_id = resource.get("id") if isinstance(resource.get("id"), str) and FHIR_ID_RE.match(resource["id"]) else "?"
+    extensions = resource.get("extension")
+    if not isinstance(extensions, list) or not all(isinstance(ext, dict) for ext in extensions):
+        _live_lookup_failed(f"device association Basic/{assoc_id} has malformed extensions")
+    statuses = [ext.get("valueCode") for ext in extensions if ext.get("url") in DEVICE_ASSOC_STATUS_EXTENSIONS]
+    if len(statuses) != 1 or not isinstance(statuses[0], str) or not statuses[0].strip():
+        _live_lookup_failed(f"device association Basic/{assoc_id} needs exactly one status code, found {len(statuses)}")
+    device_refs = [
+        ext.get("valueReference", {}).get("reference") if isinstance(ext.get("valueReference"), dict) else None
+        for ext in extensions
+        if ext.get("url") in DEVICE_ASSOC_DEVICE_EXTENSIONS
+    ]
+    if len(device_refs) != 1:
+        _live_lookup_failed(f"device association Basic/{assoc_id} needs exactly one device reference, found {len(device_refs)}")
+    ref = device_refs[0]
+    if not (isinstance(ref, str) and ref.startswith("Device/") and FHIR_ID_RE.match(ref[len("Device/"):])):
+        _live_lookup_failed(f"device association Basic/{assoc_id} has a malformed device reference")
+    return ref[len("Device/"):] if statuses[0] == "active" else None
+
+
+def _resolve_live_patient_device(patient_id: str, resource_group: Optional[str]) -> Tuple[str, str]:
+    """Resolve the requested patient (canonical FHIR id or TCGA cohort barcode) to a FHIR-verified associated device."""
+    if not isinstance(patient_id, str) or not FHIR_ID_RE.match(patient_id):
+        _live_lookup_failed(f"patient id {patient_id!r} is not a FHIR id or cohort identifier")
+    fhir_url = _live_fhir_base_url(resource_group)
+    token = _fhir_access_token(fhir_url)
+
+    matches: Dict[str, Dict[str, Any]] = {}
+    for patient in _fhir_search(fhir_url, token, "Patient", {"_id": patient_id}, "Patient lookup by FHIR id"):
+        if patient.get("id") == patient_id:
+            matches[patient_id] = patient
+    cohort_params = {"identifier": f"{COHORT_IDENTIFIER_SYSTEM}|{patient_id}"}
+    for patient in _fhir_search(fhir_url, token, "Patient", cohort_params, "Patient lookup by cohort identifier"):
+        identifiers = patient.get("identifier") if isinstance(patient.get("identifier"), list) else []
+        fhir_id = patient.get("id")
+        if isinstance(fhir_id, str) and FHIR_ID_RE.match(fhir_id) and any(
+            isinstance(i, dict) and i.get("system") == COHORT_IDENTIFIER_SYSTEM and i.get("value") == patient_id
+            for i in identifiers
+        ):
+            matches[fhir_id] = patient
+    if not matches:
+        _device_not_found(patient_id, f"FHIR has no Patient with id or {COHORT_IDENTIFIER_SYSTEM} identifier {patient_id}")
+    if len(matches) > 1:
+        _live_lookup_failed(f"patient {patient_id} matches {len(matches)} FHIR Patients ({', '.join(sorted(matches))})")
+    fhir_id, patient = next(iter(matches.items()))
+
+    subject_ref = f"Patient/{fhir_id}"
+    subject_refs = frozenset({subject_ref, f"{fhir_url}/{subject_ref}"})
+    devices = set()
+    assoc_params = {"code": f"{DEVICE_ASSOC_CODE_SYSTEM}|{DEVICE_ASSOC_CODE}", "subject": subject_ref, "_count": "100"}
+    for association in _fhir_search(fhir_url, token, "Basic", assoc_params, "Device association lookup"):
+        device_id = _associated_device(association, subject_refs)
+        if device_id:
+            devices.add(device_id)
+    if not devices:
+        _device_not_found(patient_id, f"FHIR has no active device association for {subject_ref}")
+    return _patient_display_name(patient) or patient_id, sorted(devices)[0]
+
+
+def _device_not_found(patient_id: str, detail: str) -> NoReturn:
+    if patient_id == "TCGA-G6-A8L6":
+        sys.stderr.write(
+            f"Marcus Vance (TCGA-G6-A8L6) has no paired Masimo device. Ensure ticket 002 synthetic ingest has run. ({detail})\n"
+        )
+    else:
+        sys.stderr.write(f"Error: patient_device_not_found: No paired Masimo device found for patient {patient_id} ({detail})\n")
+    sys.exit(1)
+
+
+def resolve_patient_device(patient_id: str, live: bool = False, resource_group: Optional[str] = None) -> Tuple[str, str]:
+    """Resolve patient name and associated pulse oximeter device ID.
+
+    Live: only an active FHIR device association whose subject is the requested Patient (by canonical FHIR id or
+    TCGA cohort barcode identifier) counts; any token, HTTP, JSON or association failure exits nonzero.
+    Non-live (dry run / mock): the deterministic local cohort mapping, with no network access.
+    """
+    if live:
+        return _resolve_live_patient_device(patient_id, resource_group)
 
     cohort_file = ROOT / "rayfin-imaging" / "pipeline" / "cohort.json"
     tcga_patients = []
@@ -451,7 +674,21 @@ def run_trigger(
     recipient = validate_recipient_allowlist(email)
     # Only a live (non-dry-run) execution may reach external services; dry-run resolves from the local cohort.
     observed = not dry_run and live
-    patient_name, device_id = resolve_patient_device(patient_id, live=observed)
+    rg = resource_group or os.environ.get("RESOURCE_GROUP")
+    eh_name = eventhub_name or os.environ.get("EVENTHUB_NAME") or os.environ.get("EVENT_HUB_NAME") or "telemetry-stream"
+    ns = eventhub_namespace or os.environ.get("EVENTHUB_NAMESPACE") or os.environ.get("EVENT_HUB_NAMESPACE")
+    query_uri = (eventhouse_query_uri or os.environ.get("EVENTHOUSE_QUERY_URI", "")).rstrip("/")
+    if observed and not (rg and ns and query_uri):
+        missing = []
+        if not ns:
+            missing.append("--eventhub-namespace / EVENTHUB_NAMESPACE or EVENT_HUB_NAMESPACE")
+        if not rg:
+            missing.append("--resource-group / RESOURCE_GROUP")
+        if not query_uri:
+            missing.append("--eventhouse-query-uri / EVENTHOUSE_QUERY_URI")
+        sys.stderr.write(f"ERROR: Live execution requires: {', '.join(missing)}\n")
+        sys.exit(2)
+    patient_name, device_id = resolve_patient_device(patient_id, live=observed, resource_group=rg)
 
     sleeper = sleep_fn if sleep_fn is not None else time.sleep
     clock = time_fn if time_fn is not None else time.time
@@ -502,22 +739,6 @@ def run_trigger(
     t3_source: Optional[str] = None
 
     if observed:
-        rg = resource_group or os.environ.get("RESOURCE_GROUP")
-        eh_name = eventhub_name or os.environ.get("EVENTHUB_NAME") or os.environ.get("EVENT_HUB_NAME") or "telemetry-stream"
-        ns = eventhub_namespace or os.environ.get("EVENTHUB_NAMESPACE") or os.environ.get("EVENT_HUB_NAMESPACE")
-        query_uri = (eventhouse_query_uri or os.environ.get("EVENTHOUSE_QUERY_URI", "")).rstrip("/")
-
-        if not (rg and ns and query_uri):
-            missing = []
-            if not ns:
-                missing.append("--eventhub-namespace / EVENTHUB_NAMESPACE or EVENT_HUB_NAMESPACE")
-            if not rg:
-                missing.append("--resource-group / RESOURCE_GROUP")
-            if not query_uri:
-                missing.append("--eventhouse-query-uri / EVENTHOUSE_QUERY_URI")
-            sys.stderr.write(f"ERROR: Live execution requires: {', '.join(missing)}\n")
-            sys.exit(2)
-
         eh_token = get_msal_token("https://eventhubs.azure.net/.default")
         if not eh_token:
             cmd_tok = ["az", "account", "get-access-token", "--resource", "https://eventhubs.azure.net", "-o", "json"]

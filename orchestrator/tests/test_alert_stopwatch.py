@@ -24,6 +24,12 @@ class TestAlertStopwatch(unittest.TestCase):
     def setUp(self):
         self.orig_env = dict(os.environ)
         os.environ["HLS_ALERT_EMAIL"] = "alerts@example.com"
+        # Stopwatch tests stand in for the FHIR device lookup; TestLiveDeviceResolution exercises the real one.
+        live_device = patch.object(
+            trigger_mod, "_resolve_live_patient_device", return_value=("Marcus Vance", "MASIMO-RADIUS7-0101")
+        )
+        live_device.start()
+        self.addCleanup(live_device.stop)
 
     def tearDown(self):
         os.environ.clear()
@@ -1652,6 +1658,384 @@ class TestAlertStopwatch(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             trigger_mod.run_trigger(min_tier="INVALID_TIER")
         self.assertEqual(2, cm.exception.code)
+
+
+FHIR_BASE = "https://fhir-test.fhir.azurehealthcareapis.com"
+GDC_SYSTEM = "https://gdc.cancer.gov/tcga/barcode"
+
+
+def _fhir_patient(fhir_id, name, barcode=None):
+    patient = {"resourceType": "Patient", "id": fhir_id, "name": [{"text": name}]}
+    if barcode:
+        patient["identifier"] = [{"system": GDC_SYSTEM, "value": barcode}]
+    return patient
+
+
+def _fhir_association(device_id, subject_ref, display, status="active", ext_base="http://example.org/StructureDefinition/"):
+    """Device association in the seed_tcga_cohort.py / load_fhir.py shape (ext_base example.org) or create-device-associations.py shape."""
+    device_url = ext_base + ("associated-device" if "example.org" in ext_base else "device-association-device")
+    status_url = ext_base + ("association-status" if "example.org" in ext_base else "device-association-status")
+    return {
+        "resourceType": "Basic",
+        "id": f"device-assoc-{device_id}",
+        "code": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/basic-resource-type", "code": "device-assoc"}]},
+        "subject": {"reference": subject_ref, "display": display},
+        "extension": [
+            {"url": device_url, "valueReference": {"reference": f"Device/{device_id}"}},
+            {"url": status_url, "valueCode": status},
+        ],
+    }
+
+
+class TestLiveDeviceResolution(unittest.TestCase):
+    """FR-1: a live trigger only uses a FHIR-verified device association for the requested patient."""
+
+    def setUp(self):
+        self.orig_env = dict(os.environ)
+        os.environ["HLS_ALERT_EMAIL"] = "alerts@example.com"
+        os.environ["FHIR_SERVICE_URL"] = FHIR_BASE
+        os.environ["HLS_FHIR_TOKEN"] = "fhir-secret-token"
+        self.fhir_requests: List[tuple] = []
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self.orig_env)
+
+    def _lenient_fhir(self, resources, shape=None):
+        """A FHIR server that ignores every search parameter (lenient handling) and returns all resources of the type.
+
+        shape(resource_type, bundle) may rewrite the searchset Bundle to model malformed or partial pages.
+        """
+        def fake_get(url, params=None, headers=None, timeout=None):
+            self.fhir_requests.append((url, dict(params or {}), timeout))
+            self.assertEqual("Bearer fhir-secret-token", headers["Authorization"])
+            resource_type = url.rsplit("/", 1)[-1]
+            bundle = {
+                "resourceType": "Bundle",
+                "type": "searchset",
+                "link": [{"relation": "self", "url": url}],
+                "entry": [
+                    {"resource": r, "search": {"mode": "match"}} for r in resources if r["resourceType"] == resource_type
+                ],
+            }
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.json.return_value = shape(resource_type, bundle) if shape else bundle
+            return resp
+        return fake_get
+
+    def _resolve_live(self, get_side_effect, patient_id="TCGA-G6-A8L6"):
+        """Run the real live resolver; return (result or None, exit code or None, stderr)."""
+        stderr = io.StringIO()
+        with patch("scripts.trigger_spo2_alert.requests.get", side_effect=get_side_effect), \
+             patch("scripts.trigger_spo2_alert.subprocess.run", side_effect=AssertionError("unexpected subprocess")), \
+             patch("sys.stderr", stderr):
+            try:
+                return trigger_mod.resolve_patient_device(patient_id, live=True, resource_group="rg-test"), None, stderr.getvalue()
+            except SystemExit as exc:
+                return None, exc.code, stderr.getvalue()
+
+    def test_unrelated_marcus_vance_association_cannot_select_device(self):
+        """Another patient's association displayed as Marcus Vance is not Marcus's device."""
+        resources = [
+            _fhir_patient("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "Marcus Vance", barcode="TCGA-G6-A8L6"),
+            _fhir_patient("synthea-0042", "Marcus Vance"),
+            _fhir_association("MASIMO-RADIUS7-0042", "Patient/synthea-0042", "Marcus Vance"),
+        ]
+        result, code, stderr = self._resolve_live(self._lenient_fhir(resources))
+        self.assertIsNone(result)
+        self.assertEqual(1, code)
+        self.assertIn("has no paired Masimo device", stderr)
+        self.assertNotIn("MASIMO-RADIUS7-0042", stderr)
+
+    def test_patient_id_prefix_collision_cannot_match(self):
+        """abc-12 never resolves through abc-123's Patient or association."""
+        resources = [
+            _fhir_patient("abc-123", "Someone Else"),
+            _fhir_association("MASIMO-RADIUS7-0077", "Patient/abc-123", "Someone Else"),
+        ]
+        for present in (False, True):
+            with self.subTest(requested_patient_exists=present):
+                pool = resources + ([_fhir_patient("abc-12", "Another Person")] if present else [])
+                result, code, stderr = self._resolve_live(self._lenient_fhir(pool), patient_id="abc-12")
+                self.assertIsNone(result)
+                self.assertEqual(1, code)
+                self.assertIn("patient_device_not_found", stderr)
+                self.assertNotIn("MASIMO-RADIUS7-0077", stderr)
+
+    def test_fhir_failure_or_absence_cannot_fabricate_live_device(self):
+        """HTTP, transport, JSON, bundle, absent and inactive associations all exit 1 with token-free diagnostics."""
+        def status(code, body="upstream unavailable"):
+            resp = MagicMock()
+            resp.status_code = code
+            resp.text = body
+            return lambda *a, **kw: resp
+
+        def not_json(*args, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.json.side_effect = ValueError("Expecting value")
+            return resp
+
+        def not_bundle(*args, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.json.return_value = {"resourceType": "OperationOutcome"}
+            return resp
+
+        def transport_error(*args, **kwargs):
+            raise trigger_mod.requests.ConnectionError("connection refused")
+
+        marcus = _fhir_patient("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "Marcus Vance", barcode="TCGA-G6-A8L6")
+        cases = {
+            "http 500": status(500),
+            "http 401": status(401, "token expired"),
+            "transport": transport_error,
+            "non-json": not_json,
+            "non-bundle": not_bundle,
+            "empty FHIR": self._lenient_fhir([]),
+            "no association": self._lenient_fhir([marcus]),
+            "inactive association": self._lenient_fhir([
+                marcus,
+                _fhir_association("MASIMO-RADIUS7-0101", f"Patient/{marcus['id']}", "Marcus Vance", status="inactive"),
+            ]),
+        }
+        for label, side_effect in cases.items():
+            with self.subTest(case=label):
+                result, code, stderr = self._resolve_live(side_effect)
+                self.assertIsNone(result)
+                self.assertEqual(1, code)
+                self.assertTrue(stderr.strip())
+                self.assertNotIn("fhir-secret-token", stderr)
+                self.assertNotIn("MASIMO-RADIUS7", stderr)
+
+    def test_malformed_matching_association_fails_closed(self):
+        """A matching association needs exactly one status code and one valid Device reference; anything else exits 1."""
+        marcus = _fhir_patient("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "Marcus Vance", barcode="TCGA-G6-A8L6")
+        subject = f"Patient/{marcus['id']}"
+        device_url = "http://example.org/StructureDefinition/associated-device"
+        status_url = "http://example.org/StructureDefinition/association-status"
+
+        def assoc(extensions, device_id="MASIMO-RADIUS7-0101"):
+            resource = _fhir_association(device_id, subject, "Marcus Vance")
+            resource["extension"] = extensions
+            return resource
+
+        def device(ref):
+            return {"url": device_url, "valueReference": {"reference": ref}}
+
+        active = {"url": status_url, "valueCode": "active"}
+        cases = {
+            "missing status": [assoc([device("Device/MASIMO-RADIUS7-0101")])],
+            "duplicate status": [assoc([device("Device/MASIMO-RADIUS7-0101"), active, dict(active)])],
+            "status without code": [assoc([device("Device/MASIMO-RADIUS7-0101"), {"url": status_url}])],
+            "duplicate device": [assoc([device("Device/MASIMO-RADIUS7-0101"), device("Device/MASIMO-RADIUS7-0042"), active])],
+            "missing device": [assoc([active])],
+            "non-device reference": [assoc([device("Patient/MASIMO-RADIUS7-0101"), active])],
+            "empty device id": [assoc([device("Device/"), active])],
+            "malformed extension list": [assoc({"url": device_url})],
+            "valid plus malformed": [
+                _fhir_association("MASIMO-RADIUS7-0101", subject, "Marcus Vance"),
+                assoc([device("Device/MASIMO-RADIUS7-0042")], device_id="MASIMO-RADIUS7-0042"),
+            ],
+        }
+        for label, associations in cases.items():
+            with self.subTest(case=label):
+                result, code, stderr = self._resolve_live(self._lenient_fhir([marcus, *associations]))
+                self.assertIsNone(result)
+                self.assertEqual(1, code)
+                self.assertIn("live_device_association_unverified", stderr)
+                self.assertIn("device association Basic/", stderr)
+
+    def test_malformed_or_partial_search_results_fail_closed(self):
+        """Non-searchset, malformed-entry, next-page and short-total results exit 1 and no next link is followed."""
+        marcus_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        resources = [
+            _fhir_patient(marcus_id, "Marcus Vance", barcode="TCGA-G6-A8L6"),
+            _fhir_association("MASIMO-RADIUS7-0101", f"Patient/{marcus_id}", "Marcus Vance"),
+        ]
+        outcome = {"resourceType": "OperationOutcome", "issue": [{"severity": "warning", "code": "not-supported"}]}
+
+        def on(target, change):
+            def shape(resource_type, bundle):
+                if resource_type == target:
+                    change(bundle)
+                return bundle
+            return shape
+
+        def next_page(bundle):
+            bundle["link"].append({"relation": "next", "url": "https://attacker.example/Patient?page=2"})
+
+        cases = {
+            "collection bundle": on("Patient", lambda b: b.update(type="collection")),
+            "missing bundle type": on("Basic", lambda b: b.pop("type")),
+            "entry without resource": on("Patient", lambda b: b["entry"].append({"search": {"mode": "match"}})),
+            "non-object entry": on("Basic", lambda b: b["entry"].append("Basic/device-assoc-x")),
+            "foreign resource entry": on("Patient", lambda b: b["entry"].append({"resource": outcome, "search": {"mode": "outcome"}})),
+            "include-mode entry": on("Basic", lambda b: b["entry"][0]["search"].update(mode="include")),
+            "malformed links": on("Patient", lambda b: b.update(link={"relation": "self"})),
+            "patient next page": on("Patient", next_page),
+            "basic next page": on("Basic", next_page),
+            "patient total above entries": on("Patient", lambda b: b.update(total=len(b["entry"]) + 1)),
+            "basic total above entries": on("Basic", lambda b: b.update(total=len(b["entry"]) + 1)),
+            "non-integer total": on("Basic", lambda b: b.update(total="1")),
+        }
+        for label, shape in cases.items():
+            with self.subTest(case=label):
+                self.fhir_requests.clear()
+                result, code, stderr = self._resolve_live(self._lenient_fhir(resources, shape=shape))
+                self.assertIsNone(result)
+                self.assertEqual(1, code)
+                self.assertIn("live_device_association_unverified", stderr)
+                self.assertNotIn("MASIMO-RADIUS7", stderr)
+                self.assertTrue(all(url.startswith(FHIR_BASE + "/") for url, _, _ in self.fhir_requests))
+
+        # A complete page with a matching total still resolves.
+        complete = on("Basic", lambda b: b.update(total=len(b["entry"])))
+        result, code, stderr = self._resolve_live(self._lenient_fhir(resources, shape=complete))
+        self.assertIsNone(code, stderr)
+        self.assertEqual(("Marcus Vance", "MASIMO-RADIUS7-0101"), result)
+
+    def test_partial_fhir_pages_prevent_telemetry_writes(self):
+        """A paginated Patient or Basic search stops run_trigger --live before any Event Hub or Eventhouse call."""
+        marcus_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        resources = [
+            _fhir_patient(marcus_id, "Marcus Vance", barcode="TCGA-G6-A8L6"),
+            _fhir_association("MASIMO-RADIUS7-0101", f"Patient/{marcus_id}", "Marcus Vance"),
+        ]
+        for partial_type in ("Patient", "Basic"):
+            def shape(resource_type, bundle, partial_type=partial_type):
+                if resource_type == partial_type:
+                    bundle["link"].append({"relation": "next", "url": f"{FHIR_BASE}/{resource_type}?ct=page2"})
+                return bundle
+            with self.subTest(partial=partial_type), \
+                 patch("scripts.trigger_spo2_alert.requests.get", side_effect=self._lenient_fhir(resources, shape=shape)), \
+                 patch("scripts.trigger_spo2_alert.requests.post") as post, \
+                 patch("scripts.trigger_spo2_alert.get_msal_token") as msal, \
+                 patch("scripts.trigger_spo2_alert.subprocess.run") as run, \
+                 patch("sys.stderr", io.StringIO()):
+                with self.assertRaises(SystemExit) as cm:
+                    trigger_mod.run_trigger(
+                        patient_id="TCGA-G6-A8L6",
+                        email="alerts@example.com",
+                        dry_run=False,
+                        live=True,
+                        eventhub_namespace="ns-test",
+                        resource_group="rg-test",
+                        eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
+                        sleep_fn=lambda _s: None,
+                    )
+                self.assertEqual(1, cm.exception.code)
+                post.assert_not_called()
+                msal.assert_not_called()
+                run.assert_not_called()
+
+    def test_fhir_error_body_and_reflected_token_never_reach_stderr(self):
+        """FHIR HTTP and transport failures report a fixed status/reason, never the response body or a reflected token."""
+        reflected = "Bearer fhir-secret-token rejected; OperationOutcome for TCGA-G6-A8L6 Marcus Vance SENSITIVE-DETAIL"
+
+        def http_401(*args, **kwargs):
+            resp = MagicMock()
+            resp.status_code = 401
+            resp.reason = reflected
+            resp.text = reflected
+            return resp
+
+        def transport(*args, **kwargs):
+            raise trigger_mod.requests.ConnectionError(f"failed for {FHIR_BASE}/Patient: {reflected}")
+
+        for label, side_effect, expected in (("http 401", http_401, "HTTP 401 Unauthorized"), ("transport", transport, "ConnectionError")):
+            with self.subTest(case=label):
+                result, code, stderr = self._resolve_live(side_effect)
+                self.assertIsNone(result)
+                self.assertEqual(1, code)
+                self.assertIn(expected, stderr)
+                for leaked in ("fhir-secret-token", "SENSITIVE-DETAIL", "Marcus Vance", "OperationOutcome", "rejected"):
+                    self.assertNotIn(leaked, stderr)
+
+    def test_fhir_token_failure_exits_without_device(self):
+        """Without HLS_FHIR_TOKEN, an az CLI token failure stops the live trigger before any FHIR or telemetry call."""
+        os.environ.pop("HLS_FHIR_TOKEN")
+        failed = subprocess.CompletedProcess(["az"], 1, stdout="", stderr="ERROR: Please run 'az login'.")
+        stderr = io.StringIO()
+        with patch("scripts.trigger_spo2_alert.subprocess.run", return_value=failed) as az_run, \
+             patch("scripts.trigger_spo2_alert.requests.get") as fhir_get, \
+             patch("sys.stderr", stderr):
+            with self.assertRaises(SystemExit) as cm:
+                trigger_mod.resolve_patient_device("TCGA-G6-A8L6", live=True, resource_group="rg-test")
+        self.assertEqual(1, cm.exception.code)
+        self.assertIn("FHIR token acquisition", stderr.getvalue())
+        self.assertEqual(["az", "account", "get-access-token", "--resource", FHIR_BASE, "-o", "json"], az_run.call_args.args[0])
+        self.assertIsNotNone(az_run.call_args.kwargs.get("timeout"))
+        fhir_get.assert_not_called()
+
+    def test_live_trigger_sends_no_telemetry_when_fhir_lookup_fails(self):
+        """run_trigger --live stops on a failed FHIR lookup before Event Hub or Eventhouse is contacted."""
+        resp = MagicMock()
+        resp.status_code = 503
+        resp.text = "unavailable"
+        with patch("scripts.trigger_spo2_alert.requests.get", return_value=resp), \
+             patch("scripts.trigger_spo2_alert.requests.post") as post, \
+             patch("scripts.trigger_spo2_alert.get_msal_token") as msal, \
+             patch("sys.stderr", io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                trigger_mod.run_trigger(
+                    patient_id="TCGA-G6-A8L6",
+                    email="alerts@example.com",
+                    dry_run=False,
+                    live=True,
+                    eventhub_namespace="ns-test",
+                    resource_group="rg-test",
+                    eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
+                    sleep_fn=lambda _s: None,
+                )
+        self.assertEqual(1, cm.exception.code)
+        post.assert_not_called()
+        msal.assert_not_called()
+
+    def test_cohort_identifier_resolves_seeded_association(self):
+        """A TCGA barcode resolves through Patient.identifier to the seed's canonical Patient/<uuid> association."""
+        marcus_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        resources = [
+            _fhir_patient(marcus_id, "Marcus Vance", barcode="TCGA-G6-A8L6"),
+            _fhir_patient("synthea-0042", "Marcus Vance"),
+            _fhir_association("MASIMO-RADIUS7-0042", "Patient/synthea-0042", "Marcus Vance"),
+            _fhir_association("MASIMO-RADIUS7-0101", f"Patient/{marcus_id}", "Marcus Vance"),
+        ]
+        result, code, stderr = self._resolve_live(self._lenient_fhir(resources))
+        self.assertIsNone(code, stderr)
+        self.assertEqual(("Marcus Vance", "MASIMO-RADIUS7-0101"), result)
+        searched = {(url.rsplit("/", 1)[-1], tuple(sorted(params))) for url, params, _ in self.fhir_requests}
+        self.assertIn(("Patient", ("identifier",)), searched)
+        basic_params = next(params for url, params, _ in self.fhir_requests if url.endswith("/Basic"))
+        self.assertEqual(f"Patient/{marcus_id}", basic_params["subject"])
+        self.assertTrue(all(timeout for _, _, timeout in self.fhir_requests))
+
+    def test_canonical_fhir_id_resolves_generator_association(self):
+        """A canonical Patient id resolves create-device-associations.py associations, picking the lowest active device."""
+        hl7 = "http://hl7.org/fhir/StructureDefinition/"
+        resources = [
+            {"resourceType": "Patient", "id": "p-1001", "name": [{"given": ["Ada"], "family": "Lovelace"}]},
+            _fhir_patient("p-10011", "Prefix Neighbor"),
+            _fhir_association("MASIMO-RADIUS7-0003", "Patient/p-1001", "Ada Lovelace", ext_base=hl7),
+            _fhir_association("MASIMO-RADIUS7-0001", "Patient/p-1001", "Ada Lovelace", ext_base=hl7),
+            _fhir_association("MASIMO-RADIUS7-0002", "Patient/p-10011", "Prefix Neighbor", ext_base=hl7),
+        ]
+        result, code, stderr = self._resolve_live(self._lenient_fhir(resources), patient_id="p-1001")
+        self.assertIsNone(code, stderr)
+        self.assertEqual(("Ada Lovelace", "MASIMO-RADIUS7-0001"), result)
+
+    def test_offline_mock_path_stays_deterministic_without_network(self):
+        """Dry runs keep the local cohort mapping and never call FHIR, az or telemetry."""
+        with patch("scripts.trigger_spo2_alert.requests.get") as get, \
+             patch("scripts.trigger_spo2_alert.requests.post") as post, \
+             patch("scripts.trigger_spo2_alert.subprocess.run") as run:
+            res = trigger_mod.run_trigger(patient_id="TCGA-G6-A8L6", email="alerts@example.com", dry_run=True, live=True)
+        self.assertEqual("Marcus Vance", res["patient_name"])
+        self.assertEqual("MASIMO-RADIUS7-0101", res["device_id"])
+        get.assert_not_called()
+        post.assert_not_called()
+        run.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

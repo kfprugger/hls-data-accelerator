@@ -141,6 +141,24 @@ The actual SQLite reproduction failed before the repair: a foreign ledger became
 - Restored the recorded shared-storage alternative summary as an unimplemented option. The reference deployment's Yes recommendation is unchanged. No replacement design or product decision was approved.
 - A separate provider-pinned documentation review found no counterexamples in the bounded corrections. It checked the shared-storage recommendation, its alternatives, dated estate observations and retained open decisions. It did not reverify source behavior or live systems.
 
+## Final source-to-spec reconciliation (2026-11-15)
+
+Documentation-only corrections from source reading. No tests, builds, browser checks or live calls were run for these entries.
+
+| # | Finding | Action | Source |
+|---|---|---|---|
+| R1 | The glossary called WardFlow a private cardiology-engine repository | FIX: WardFlow is a synthetic hospital-operations simulator; `caldova-cardio/` is a separate Caldova snapshot that the hosted bundle and cardiology add-on use. Glossary, Component 12 Behavior 5 and Component 13 Known Limits updated | WardFlow `AGENTS.md:7-9`, `README.md:25`; `hosted/Deploy-HostedOrchestrator.ps1:361-370` |
+| R2 | Component 12 omitted Azure target and WardFlow inputs | FIX: listed `-SubscriptionId`/`-TenantId` (required), `-ResourceGroup`/`-Location` defaults, `-WardflowPath`, `-CustomDomain`, `-ClientId`, and profile fallback; Behavior 5 documents `WardflowPath` validation, `HEAD` commit selection and the `none` default | `hosted/Deploy-HostedOrchestrator.ps1:4-17,39-62,343-371,640-662` |
+| R3 | Bundle publishing omitted the `WARDFLOW_REF` behavior | FIX: Behavior 5 states that `-PublishWardflowBundle` sets the variable only with `gh` admin access, and that an empty bundle keeps an existing 40-character `WARDFLOW_REF` | `hosted/Deploy-HostedOrchestrator.ps1:380-403,712-722` |
+| R4 | The UI's Mock Deploy and teardown demo data were undocumented | FIX: Component 11 Behaviors 7-8 describe browser-only simulations that create no resources, send no deploy or teardown request, and are not deployment or teardown evidence | `orchestrator-ui/src/pages/DeployWizard.tsx:1589-1598,2649-2653`; `orchestrator-ui/src/mockDeployment.ts:1-4`; `orchestrator-ui/src/pages/TeardownView.tsx:385-395,507-512,791-795` |
+| R5 | Live alert device lookup falls through to the local cohort file without reporting the lookup failure | FIX separately: the live resolver now requires an exact FHIR Patient and a well-formed active device association; Component 9 documents the strict live path and unchanged dry-run behavior | `scripts/trigger_spo2_alert.py:305-505`; live boundary checks below |
+
+## Live alert device boundary (2026-11-15)
+
+- The actual CLI reproduction on the previous committed source exited successfully and made five downstream requests without a FHIR request. The same loopback HTTP scenario now refuses the unrelated subject before any downstream request.
+- The repaired CLI passed the exact-patient case and refused unrelated-subject, prefix-subject, empty-association, HTTP-error and incomplete Patient/association pages. No reflected synthetic FHIR credential appeared in output. These were local HTTP checks, not cloud telemetry or email-delivery checks.
+- The integrated orchestrator suite passed 410 tests. Per-association extension cardinality is strict; several otherwise valid active associations retain sorted-first device selection. A separate provider-pinned source review found no counterexample in exact patient/device matching, incomplete-search refusal or FHIR diagnostics.
+
 ## Escalations
 1. AlertEngine: Keep both platform-specific alert definitions: Fabric Activator for the core path, and the Databricks SQL alert inside the opt-in Databricks add-on, with its SQL schedule left paused until an operator activates it for a registered workspace user? · Recommended: yes; setting `ALERT_EMAIL` alone does not activate it. · Why: each platform needs its own engine, and activation must be deliberate. Source reconciliation: `sql.yml:32` always pauses the SQL alert; `05-deploy-bundle.sh` supplies the recipient and does not unpause the alert; `06-run-and-gate.sh:68` unpauses only the streaming job. The round-3 ledger above retains the original reviewer text.
 2. DataShare: Accept the shared `/data-share` mount for the reference deployment (every sandbox can read the share; isolation is application code plus sealed credentials) while access stays limited to Microsoft accounts? · Recommended: yes, and revisit before admitting other tenants · Why: it carries three owner-requested features; per-sandbox shares would drop ETA pooling and peer-history import.
