@@ -129,6 +129,154 @@ class TelemetryReadinessTests(unittest.TestCase):
         self.assertIn("EventhouseDestination", result["results"][-1]["reason"])
 
 
+OPERATION_CONFLICT = {
+    "errorCode": "ArtifactOperationConflict",
+    "message": "Please wait until the previous operation is completed before initiating the new call.",
+    "isRetriable": False,
+}
+
+
+class FakeTelemetryEstate:
+    """Producers, Eventstreams and Eventhouse whose state follows only accepted lifecycle calls.
+
+    `rejections` maps (stream id, "resume" | "pause") to responses returned instead of accepting
+    the call; once exhausted, calls are accepted. A stream resumed from Now delivers current
+    events; a running stream not resumed from Now replays only queued history.
+    """
+    TABLES = {"masimo": "TelemetryRaw", "claims": "claims_events"}
+
+    def __init__(self, states, rejections=(), delivers_events=True):
+        self.states = dict(states)
+        self.current = {stream: False for stream in states}
+        self.rejections = {key: list(responses) for key, responses in dict(rejections).items()}
+        self.delivers_events = delivers_events
+        self.clock = 0.0
+
+    def run(self, timeout_sec=600):
+        items = [
+            {"id": "masimo", "type": "Eventstream", "displayName": "MasimoTelemetryStream"},
+            {"id": "claims", "type": "Eventstream", "displayName": "ClaimsRTIStream"},
+            {"id": "eventhouse", "type": "Eventhouse", "displayName": "MasimoEventhouse"},
+        ]
+        az = Mock()
+        az.run.return_value = subprocess.CompletedProcess(
+            [], 0, json.dumps({"state": "Running", "containers": ["Running"]}), "")
+        az.token.return_value = "test-token"
+        with patch.object(harness, "http", side_effect=self.http), \
+             patch.object(harness, "_kql", side_effect=self.kql), \
+             patch.object(harness.time, "monotonic", side_effect=lambda: self.clock), \
+             patch.object(harness.time, "sleep", side_effect=self.sleep):
+            return harness.ensure_telemetry_ready(
+                az, "workspace", items, "rg-test", None, timeout_sec, lambda _: None)
+
+    def sleep(self, seconds):
+        self.clock += seconds
+
+    def http(self, method, url, token, body=None, timeout=90):
+        if "/eventhouses/" in url:
+            return 200, {"properties": {"queryServiceUri": "https://test.kusto.invalid",
+                                        "databasesItemIds": ["database"]}}
+        stream = url.split("/eventstreams/")[1].split("/")[0]
+        operation = url.rsplit("/", 1)[1]
+        if operation in ("resume", "pause"):
+            pending = self.rejections.get((stream, operation))
+            if pending:
+                return pending.pop(0)
+            self.states[stream] = "Running" if operation == "resume" else "Paused"
+            self.current[stream] = operation == "resume" and body == {"startType": "Now"}
+            return 202, {}
+        status = self.states[stream]
+        return 200, {
+            "sources": [{"name": "source", "status": status}],
+            "streams": [{"name": "stream", "status": "Running"}],
+            "destinations": [{
+                "name": "destination", "status": status, "type": "Eventhouse",
+                "properties": {"workspaceId": "workspace", "itemId": "database",
+                               "databaseName": "MasimoEventhouse", "tableName": self.TABLES[stream]},
+            }],
+        }
+
+    def kql(self, az, query_uri, database, query, tries=4, timeout=60):
+        stream = next(stream for stream, table in self.TABLES.items() if query.startswith(table + " "))
+        if self.states[stream] != "Running" or not self.delivers_events:
+            return [[None, None, 0, 0]], None
+        if self.current[stream]:
+            return [["now", "now", 10, 0]], None
+        return [["old", "now", 0, 50]], None
+
+
+class TelemetryOperationConflictTests(unittest.TestCase):
+    RESUME_BOTH = [
+        {"eventstream": "MasimoTelemetryStream", "action": "resume", "startType": "Now"},
+        {"eventstream": "ClaimsRTIStream", "action": "resume", "startType": "Now"},
+    ]
+
+    def test_resume_conflict_from_earlier_operation_converges(self):
+        """med-1103a: Masimo resume is accepted, Claims resume is refused while it finishes."""
+        estate = FakeTelemetryEstate({"masimo": "Paused", "claims": "Paused"},
+                                     {("claims", "resume"): [(409, OPERATION_CONFLICT)]})
+
+        result = estate.run()
+
+        self.assertTrue(result["passed"], result)
+        self.assertEqual(result["actions"], self.RESUME_BOTH)
+        fresh = {row["check"]: row["recentEvents"] for row in result["results"]
+                 if row["check"].startswith("fresh_data_")}
+        self.assertEqual(fresh, {"fresh_data_TelemetryRaw": 10, "fresh_data_claims_events": 10})
+
+    def test_conflict_that_outlasts_the_deadline_fails(self):
+        estate = FakeTelemetryEstate({"masimo": "Paused", "claims": "Paused"},
+                                     {("claims", "resume"): [(409, OPERATION_CONFLICT)] * 100})
+
+        result = estate.run(timeout_sec=60)
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["actions"], self.RESUME_BOTH[:1])
+        self.assertIn("deadline exceeded", result["results"][-1]["reason"])
+        claims = next(row for row in result["results"] if row["check"] == "ClaimsRTIStream")
+        self.assertEqual(claims["status"], "WAIT")
+        self.assertEqual(claims["deferred"]["action"], "resume")
+
+    def test_other_conflict_is_terminal(self):
+        estate = FakeTelemetryEstate({"masimo": "Paused", "claims": "Paused"}, {
+            ("claims", "resume"): [(409, {"errorCode": "EventstreamInvalidState",
+                                          "message": "Eventstream cannot be resumed.",
+                                          "isRetriable": False})],
+        })
+
+        result = estate.run()
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["actions"], self.RESUME_BOTH[:1])
+        self.assertIn("ClaimsRTIStream resume failed: HTTP 409", result["results"][-1]["reason"])
+        self.assertEqual(estate.clock, 0.0, "a terminal error must not wait for the deadline")
+
+    def test_converged_streams_without_current_events_fail_at_deadline(self):
+        estate = FakeTelemetryEstate({"masimo": "Paused", "claims": "Paused"},
+                                     {("claims", "resume"): [(409, OPERATION_CONFLICT)]},
+                                     delivers_events=False)
+
+        result = estate.run(timeout_sec=60)
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["actions"], self.RESUME_BOTH)
+        self.assertIn("deadline exceeded", result["results"][-1]["reason"])
+
+    def test_pause_conflict_still_resets_stale_stream_from_now(self):
+        """A refused reset pause is retried; the stream still ends up resumed from Now."""
+        estate = FakeTelemetryEstate({"masimo": "Running", "claims": "Running"},
+                                     {("claims", "pause"): [(409, OPERATION_CONFLICT)]})
+        estate.current["masimo"] = True
+
+        result = estate.run()
+
+        self.assertTrue(result["passed"], result)
+        self.assertEqual(result["actions"], [
+            {"eventstream": "ClaimsRTIStream", "action": "pause_for_resume_now"},
+            {"eventstream": "ClaimsRTIStream", "action": "resume", "startType": "Now"},
+        ])
+
+
 class ReportCoverageTests(unittest.TestCase):
     def test_populated_dimension_does_not_pass_empty_report_facts(self):
         items = [{"id": "model", "type": "SemanticModel", "displayName": "Outreach"}]

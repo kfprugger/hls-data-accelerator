@@ -497,6 +497,15 @@ SETTLING_NODE_STATES = {"Creating", "Updating", "Pausing", "Resuming"}
 RESUME_SETTLE_SECONDS = 180
 
 
+def _operation_in_progress(status: int, body) -> bool:
+    """Fabric refused a lifecycle call because an earlier operation on the item has not finished.
+
+    The call was not accepted, so nothing changed; the caller re-reads topology before trying again.
+    Every other 409 or error stays terminal.
+    """
+    return status == 409 and isinstance(body, dict) and body.get("errorCode") == "ArtifactOperationConflict"
+
+
 def ensure_telemetry_ready(az: Az, ws_id: str, items: list[dict], rg: str, sub: str | None, timeout_sec: int, log) -> dict:
     """Start both producers and require running streams with current destination events."""
     result = {"category": "telemetry_readiness", "passed": False, "results": [], "actions": []}
@@ -589,11 +598,16 @@ def ensure_telemetry_ready(az: Az, ws_id: str, items: list[dict], rg: str, sub: 
                 if paused and not settling and stream_id not in resumed:
                     status, body = http("POST", url + "/resume", az.token(FABRIC_RESOURCE),
                                         {"startType": "Now"}, timeout=min(90, remaining()))
-                    if status not in (200, 202):
+                    if _operation_in_progress(status, body):
+                        # Not accepted: the next poll re-reads topology and resumes only if still paused.
+                        observations[-1]["deferred"] = {"action": "resume", "reason": body.get("message")}
+                        log(f"  {name} resume deferred: an earlier operation on the item is still running")
+                    elif status not in (200, 202):
                         raise RuntimeError(f"{name} resume failed: HTTP {status}: {body}")
-                    resumed[stream_id] = time.monotonic()
-                    result["actions"].append({"eventstream": name, "action": "resume", "startType": "Now"})
-                    log(f"  resuming {name} from Now (test policy: skip queued history)")
+                    else:
+                        resumed[stream_id] = time.monotonic()
+                        result["actions"].append({"eventstream": name, "action": "resume", "startType": "Now"})
+                        log(f"  resuming {name} from Now (test policy: skip queued history)")
                 if name in required:
                     _, table, column = required[name]
                     matches = [node.get("properties") or {} for node in groups[2]
@@ -633,11 +647,17 @@ def ensure_telemetry_ready(az: Az, ws_id: str, items: list[dict], rg: str, sub: 
                         status, body = http("POST",
                                             f"{FABRIC_API}/workspaces/{ws_id}/eventstreams/{stream_id}/pause",
                                             az.token(FABRIC_RESOURCE), timeout=min(90, remaining()))
-                        if status not in (200, 202):
+                        if _operation_in_progress(status, body):
+                            # Not accepted: the next poll re-checks freshness before pausing again.
+                            observations[-1]["deferred"] = {"action": "pause_for_resume_now",
+                                                            "reason": body.get("message")}
+                            log(f"  {name} pause deferred: an earlier operation on the item is still running")
+                        elif status not in (200, 202):
                             raise RuntimeError(f"{name} pause for Resume from Now failed: HTTP {status}: {body}")
-                        resetting.add(stream_id)
-                        result["actions"].append({"eventstream": name, "action": "pause_for_resume_now"})
-                        log(f"  resetting stale {name} so the next resume starts from Now")
+                        else:
+                            resetting.add(stream_id)
+                            result["actions"].append({"eventstream": name, "action": "pause_for_resume_now"})
+                            log(f"  resetting stale {name} so the next resume starts from Now")
                 remaining()
                 if all(row["status"] == "PASS" for row in observations):
                     result["passed"] = True
