@@ -4382,13 +4382,13 @@ def _merge_imported_deployments(records: list[dict]) -> int:
 
 
 def _sync_authenticated_target_history(tenant_id: str, subscription_id: str) -> dict[str, int]:
-    """Import prior runs, ledgers, and form_history for a verified authenticated target.
+    """Import prior runs and their form_history for a verified authenticated target.
 
     Runs on a worker thread (blocking SQLite and share I/O); the registry mutation is scheduled onto the
     event loop so it never races coroutines that hold the live deployment objects.
     """
     outcome = import_target_history_from_shared_storage(tenant_id, subscription_id)
-    if outcome.get("importedDeployments") or outcome.get("reconstructedLedgers"):
+    if outcome.get("importedDeployments"):
         records = db_list_deployments()
         loop = _MAIN_LOOP
         try:

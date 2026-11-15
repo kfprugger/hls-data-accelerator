@@ -91,7 +91,7 @@ class LocalServerHealthTests(unittest.TestCase):
         module.backfill_form_history_from_deployments = lambda *args, **kwargs: 0
         module.reconcile_from_state_tracking_dir = lambda *args, **kwargs: []
         module.import_target_history_from_shared_storage = lambda *args, **kwargs: {
-            "importedDeployments": 0, "importedFormHistory": 0, "reconstructedLedgers": 0
+            "importedDeployments": 0, "importedFormHistory": 0
         }
         return module
 
@@ -727,6 +727,13 @@ class LocalServerHealthTests(unittest.TestCase):
         ]}))
         return repo
 
+    @contextlib.contextmanager
+    def _local_repo_layout(self, repo: Path):
+        """Resolve ledgers from `repo` as a local install does: no hosted `HLS_STATE_DIR` override."""
+        with patch.dict(os.environ), patch.object(self.local_server, "__file__", str(repo / "orchestrator" / "local_server.py")):
+            os.environ.pop("HLS_STATE_DIR", None)
+            yield
+
     def test_deploy_ledger_is_not_backfilled_into_teardown_records(self) -> None:
         repo = self._repo_with_ledger("ws-a")
 
@@ -735,7 +742,7 @@ class LocalServerHealthTests(unittest.TestCase):
                     "output": {"phases": [{"phase": "Preflight", "status": "running"}]}}
 
         teardown, deploy = record("teardown"), record("deploy")
-        with patch.object(self.local_server, "__file__", str(repo / "orchestrator" / "local_server.py")):
+        with self._local_repo_layout(repo):
             self.local_server._backfill_successful_steps_from_state_tracking("t", teardown)
             self.local_server._backfill_successful_steps_from_state_tracking("d", deploy)
 
@@ -747,7 +754,7 @@ class LocalServerHealthTests(unittest.TestCase):
         other = repo / "state-tracking" / ".deployment-state-ws-b.json"
         other.write_text("{}")
 
-        with patch.object(self.local_server, "__file__", str(repo / "orchestrator" / "local_server.py")):
+        with self._local_repo_layout(repo):
             self.local_server._remove_deployment_state("../state-tracking/x", lambda *args: None)
             self.local_server._remove_deployment_state("ws-a", lambda *args: None)
 

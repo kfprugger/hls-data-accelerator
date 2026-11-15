@@ -327,15 +327,232 @@ class PersistentDatabaseTests(unittest.TestCase):
                 self.assertEqual(unrelated["importedDeployments"], 0)
                 self.assertEqual(len(active_db.list_deployments()), 0)
 
-                # 3. Now authenticate to the matching (target_tid, target_sub) and verify runs + ledgers + form_history import
+                # 3. Authenticate to the matching target: the matching run and the form history it recorded import.
+                # Ledgers record no tenant or subscription, so the med-1009 ledger stays in the peer directory.
                 imported = active_db.import_target_history_from_shared_storage(target_tid, target_sub)
                 self.assertEqual(imported["importedDeployments"], 1)
-                self.assertEqual(imported["reconstructedLedgers"], 1)
                 workspaces = {d["customStatus"]["workspaceName"] for d in active_db.list_deployments()}
-                self.assertEqual(workspaces, {"med-1024", "med-1009"})
+                self.assertEqual(workspaces, {"med-1024"})
+                self.assertFalse((active_dir / "state-tracking" / ".deployment-state-med-1009.json").exists())
+                self.assertTrue((peer_tracking / ".deployment-state-med-1009.json").is_file())
                 self.assertIn("med-1024", active_db.get_form_history("naming-prefix"))
                 self.assertEqual(active_db.get_form_history("admin-security-group"), ["sg-azure-admins"])
                 self.assertEqual(active_db.get_form_history("cardiology-prefix"), ["cardio1024"])
+                active_db.shutdown_database()
+
+    def test_peer_target_import_requires_matching_tenant_and_subscription(self):
+        target_tid = "33333333-3333-4333-8333-333333333333"
+        target_sub = "44444444-4444-4444-8444-444444444444"
+        other_tid = "55555555-5555-4555-8555-555555555555"
+        other_sub = "66666666-6666-4666-8666-666666666666"
+
+        def deploy(workspace, tenant, subscription):
+            config = {"fabric_workspace_name": workspace}
+            if tenant:
+                config["expected_tenant_id"] = tenant
+            if subscription:
+                config["expected_subscription_id"] = subscription
+            return {"name": "deploy_all_orchestrator", "runtimeStatus": "Completed",
+                    "createdTime": "2026-10-25T16:39:43+00:00", "lastUpdatedTime": "2026-10-25T18:10:00+00:00",
+                    "customStatus": {"workspaceName": workspace, "deployConfig": config}}
+
+        def write_ledger(tracking, workspace):
+            tracking.mkdir(exist_ok=True)
+            (tracking / f".deployment-state-{workspace}.json").write_text(json.dumps({"phases": [{
+                "phase": "Phase1", "timestamp": "2026-10-10T00:00:10Z",
+                "resources": {"FabricWorkspaceName": workspace},
+                "steps": [{"name": "Phase 1: Fabric Workspace", "success": True}],
+            }]}))
+
+        with tempfile.TemporaryDirectory() as shared_root_str:
+            shared_root = Path(shared_root_str)
+            mixed_peer, sub_only_peer, active_dir = (shared_root / name for name in ("peer-a", "peer-b", "active"))
+            for directory in (mixed_peer, sub_only_peer, active_dir):
+                directory.mkdir()
+            peer_tracking = mixed_peer / "state-tracking"
+
+            with patch.dict(os.environ, {"HLS_DATA_DIR": str(mixed_peer), "HLS_SHARED_DATA_DIR": str(shared_root)}):
+                peer_db = self.load_database()
+                peer_db.save_deployment("same-target", deploy("med-same", target_tid.upper(), f" {target_sub} "))
+                peer_db.save_deployment("tenant-absent", deploy("med-no-tenant", "", target_sub))
+                peer_db.save_deployment("subscription-absent", deploy("med-no-sub", target_tid, ""))
+                peer_db.save_deployment("tenant-mismatch", deploy("med-other-tenant", other_tid, target_sub))
+                peer_db.save_deployment("subscription-mismatch", deploy("med-other-sub", target_tid, other_sub))
+                peer_db.save_deployment("teardown-same-target", {
+                    "name": "teardown_orchestrator", "runtimeStatus": "Completed",
+                    "customStatus": {"runType": "teardown", "workspaceName": "med-same",
+                                     "expectedTenantId": target_tid, "subscriptionId": target_sub}})
+                peer_db.save_deployment("teardown-tenant-absent", {
+                    "name": "teardown_orchestrator", "runtimeStatus": "Completed",
+                    "customStatus": {"runType": "teardown", "workspaceName": "med-no-tenant",
+                                     "expectedTenantId": "", "subscriptionId": target_sub}})
+                peer_db.save_deployment("batch-without-target", {
+                    "name": "teardown_batch", "runtimeStatus": "Completed",
+                    "customStatus": {"runType": "teardownBatch", "childInstanceIds": ["teardown-same-target"]}})
+                # One workspace name used by a matching run and a foreign run: its single ledger mixes both.
+                peer_db.save_deployment("shared-match", deploy("med-shared", target_tid, target_sub))
+                peer_db.save_deployment("shared-foreign", deploy("med-shared", other_tid, target_sub))
+                for workspace in ("med-same", "med-shared", "med-other-tenant", "med-no-tenant", "med-inferred"):
+                    write_ledger(peer_tracking, workspace)
+                # The peer rebuilds med-inferred from its ledger and stamps it with IDs inferred from its sign-in.
+                rebuilt = peer_db.reconcile_from_state_tracking_dir(peer_tracking, target_tid, target_sub)
+                self.assertEqual([d["customStatus"]["workspaceName"] for d in rebuilt], ["med-inferred"])
+                # A ledger with no run record at all.
+                write_ledger(peer_tracking, "med-legacy")
+                # The server records form history for every run it starts, foreign runs included.
+                for record in peer_db.list_deployments():
+                    peer_db.record_deployment_form_history(record)
+                peer_db.add_form_history("alert-email", "peer-only@example.com")
+                for run_id in ("same-target", "tenant-mismatch"):
+                    (mixed_peer / "logs").mkdir(exist_ok=True)
+                    (mixed_peer / "logs" / f"{run_id}.jsonl").write_text(json.dumps({"run": run_id}) + "\n")
+                peer_db.backup_database()
+                peer_db.shutdown_database()
+
+            # This peer names the target subscription but never the target tenant: none of its history may leak.
+            with patch.dict(os.environ, {"HLS_DATA_DIR": str(sub_only_peer), "HLS_SHARED_DATA_DIR": str(shared_root)}):
+                peer_db = self.load_database()
+                peer_db.add_form_history("deployment-auth-target", json.dumps({"subscription_id": target_sub, "tenant_id": ""}))
+                peer_db.add_form_history("naming-prefix", "med-sub-only")
+                peer_db.save_deployment("sub-only-peer-run", deploy("med-sub-only", "", target_sub))
+                tracking = sub_only_peer / "state-tracking"
+                tracking.mkdir()
+                (tracking / ".deployment-state-med-sub-only-ledger.json").write_text(json.dumps({"phases": [{
+                    "phase": "Phase1", "timestamp": "2026-10-10T00:00:10Z",
+                    "resources": {"FabricWorkspaceName": "med-sub-only-ledger"},
+                    "steps": [{"name": "Phase 1: Fabric Workspace", "success": True}],
+                }]}))
+                peer_db.backup_database()
+                peer_db.shutdown_database()
+
+            with patch.dict(os.environ, {"HLS_DATA_DIR": str(active_dir), "HLS_SHARED_DATA_DIR": str(shared_root)}):
+                active_db = self.load_database()
+                for tenant, subscription in (("", target_sub), (target_tid, ""), (" ", " ")):
+                    outcome = active_db.import_target_history_from_shared_storage(tenant, subscription)
+                    self.assertEqual((outcome["importedDeployments"], outcome["importedFormHistory"]), (0, 0))
+                self.assertEqual(active_db.list_deployments(), [])
+
+                outcome = active_db.import_target_history_from_shared_storage(target_tid, target_sub)
+                self.assertEqual(outcome["importedDeployments"], 3)
+                imported = {d["instanceId"]: d["customStatus"]["importedFrom"] for d in active_db.list_deployments()}
+                self.assertEqual(imported, {"same-target": "peer-a", "teardown-same-target": "peer-a", "shared-match": "peer-a"})
+                self.assertEqual(set(active_db.get_form_history("naming-prefix")), {"med-same", "med-shared"})
+                target_json = json.dumps({"subscription_id": target_sub, "tenant_id": target_tid}, sort_keys=True)
+                self.assertEqual(active_db.get_form_history("deployment-auth-target"), [target_json])
+                self.assertNotIn("peer-only@example.com", active_db.get_form_history("alert-email"))
+                # No peer ledger is copied, not even one whose workspace matches an imported run; sources stay in place.
+                self.assertEqual(list((active_dir / "state-tracking").glob(".deployment-state-*.json")), [])
+                self.assertEqual(len(list(peer_tracking.glob(".deployment-state-*.json"))), 6)
+                self.assertEqual(sorted(p.name for p in (active_dir / "logs").glob("*.jsonl")), ["same-target.jsonl"])
+                self.assertNotIn("med-sub-only", active_db.get_form_history("naming-prefix"))
+                self.assertFalse((active_dir / "state-tracking" / ".deployment-state-med-sub-only-ledger.json").exists())
+                active_db.shutdown_database()
+
+    def test_peer_target_import_rejects_conflicting_or_split_recorded_identities(self):
+        target_tid = "33333333-3333-4333-8333-333333333333"
+        target_sub = "44444444-4444-4444-8444-444444444444"
+        other_tid = "66666666-6666-4666-8666-666666666666"
+        other_sub = "77777777-7777-4777-8777-777777777777"
+
+        def record(workspace, deploy_config=None, root_config=None, **status):
+            custom_status = {"workspaceName": workspace, **status}
+            if deploy_config is not None:
+                custom_status["deployConfig"] = {"fabric_workspace_name": workspace, **deploy_config}
+            dep = {"name": "deploy_all_orchestrator", "runtimeStatus": "Completed",
+                   "createdTime": "2026-10-25T16:39:43+00:00", "lastUpdatedTime": "2026-10-25T18:10:00+00:00",
+                   "customStatus": custom_status}
+            if root_config is not None:
+                dep["config"] = {"fabric_workspace_name": workspace, **root_config}
+            return dep
+
+        target_pair = {"expected_tenant_id": target_tid, "expected_subscription_id": target_sub}
+        rows = {
+            # Every recorded source agrees after trim/lowercase, or the duplicate field is simply absent.
+            "agreeing-sources": record("med-agree", {"expected_tenant_id": target_tid.upper(),
+                                                     "expected_subscription_id": f" {target_sub} "},
+                                       expectedTenantId=f" {target_tid}", subscriptionId=target_sub.upper()),
+            "root-config-pair": record("med-root", root_config=target_pair),
+            "duplicate-subscription-only": record("med-partial", target_pair, subscriptionId=target_sub),
+            # A complete target pair in one source, contradicted by another supported source.
+            "status-foreign-tenant": record("med-status-tenant", target_pair,
+                                            expectedTenantId=other_tid, subscriptionId=target_sub),
+            "status-foreign-subscription": record("med-status-sub", target_pair, subscriptionId=other_sub),
+            "root-foreign-tenant": record("med-root-tenant", target_pair, {"expected_tenant_id": other_tid}),
+            "deploy-config-foreign-subscription": record(
+                "med-config-sub", {"expected_subscription_id": other_sub},
+                expectedTenantId=target_tid, subscriptionId=target_sub),
+            # Each source is incomplete; only their union would name the target.
+            "split-config-and-status": record("med-split-status", {"expected_tenant_id": target_tid},
+                                              subscriptionId=target_sub),
+            "split-config-and-root": record("med-split-root", {"expected_tenant_id": target_tid},
+                                            {"expected_subscription_id": target_sub}),
+            # IDs inferred from a sign-in, not recorded by a run.
+            "reconstructed-target": record("med-rebuilt", target_pair, reconciledFrom="state-tracking"),
+            # Present-but-empty optional fields and mappings: allowed, and they hold no pair.
+            "null-and-blank-ids": record("med-null-ids", target_pair, expectedTenantId=None, subscriptionId="  "),
+            "empty-deploy-config": record("med-empty-config", {}, target_pair),
+            "empty-root-config": record("med-empty-root", target_pair, {}),
+            "root-sql-null": record("med-root-null", target_pair),
+        }
+        rows["empty-deploy-config"]["customStatus"]["deployConfig"] = {}
+        rows["empty-root-config"]["config"] = {}
+        # Every malformed value, wherever it is present, rejects the record even when another source holds the pair.
+        bad_values = {"null": None, "list": [], "string": "", "zero": 0, "false": False}
+        for label, bad in bad_values.items():
+            rows[f"bad-status-{label}"] = {
+                "name": "deploy_all_orchestrator", "runtimeStatus": "Completed",
+                "createdTime": "2026-10-25T16:39:43+00:00", "lastUpdatedTime": "2026-10-25T18:10:00+00:00",
+                "customStatus": bad, "config": dict(target_pair)}
+            bad_config = record(f"med-bad-config-{label}", root_config=target_pair)
+            bad_config["customStatus"]["deployConfig"] = bad
+            rows[f"bad-deploy-config-{label}"] = bad_config
+            bad_root = record(f"med-bad-root-{label}", target_pair)
+            bad_root["config"] = bad  # Stored as the JSON text of the value, never SQL NULL.
+            rows[f"bad-root-{label}"] = bad_root
+        for label, bad in {"zero": 0, "false": False, "list": []}.items():
+            rows[f"bad-status-tenant-{label}"] = record(f"med-bad-tenant-{label}", target_pair,
+                                                        expectedTenantId=bad, subscriptionId=target_sub)
+            rows[f"bad-config-subscription-{label}"] = record(
+                f"med-bad-sub-{label}", {"expected_tenant_id": target_tid, "expected_subscription_id": bad},
+                target_pair)
+        # Raw root config column values written directly: SQL NULL is absent; "" and unreadable text are present.
+        raw_root_config = {"root-sql-null": None, "bad-root-raw-empty": "", "bad-root-raw-text": "not-json"}
+        rows["bad-root-raw-empty"] = record("med-bad-root-raw-empty", target_pair)
+        rows["bad-root-raw-text"] = record("med-bad-root-raw-text", target_pair)
+        expected_imports = {"agreeing-sources", "root-config-pair", "duplicate-subscription-only", "null-and-blank-ids",
+                            "empty-deploy-config", "empty-root-config", "root-sql-null"}
+
+        with tempfile.TemporaryDirectory() as shared_root_str:
+            shared_root = Path(shared_root_str)
+            peer_dir, active_dir = shared_root / "peer-a", shared_root / "active"
+            peer_dir.mkdir()
+            active_dir.mkdir()
+            with patch.dict(os.environ, {"HLS_DATA_DIR": str(peer_dir), "HLS_SHARED_DATA_DIR": str(shared_root)}):
+                peer_db = self.load_database()
+                (peer_dir / "logs").mkdir()
+                for run_id, dep in rows.items():
+                    peer_db.save_deployment(run_id, dep)
+                    (peer_dir / "logs" / f"{run_id}.jsonl").write_text(json.dumps({"run": run_id}) + "\n")
+                db = peer_db.get_db()
+                for run_id, raw in raw_root_config.items():
+                    db.execute("UPDATE deployments SET config = ? WHERE instance_id = ?", (raw, run_id))
+                db.commit()
+                self.assertIsNone(db.execute("SELECT config FROM deployments WHERE instance_id = 'root-sql-null'")
+                                  .fetchone()[0])
+                peer_db.backup_database()
+                peer_db.shutdown_database()
+
+            with patch.dict(os.environ, {"HLS_DATA_DIR": str(active_dir), "HLS_SHARED_DATA_DIR": str(shared_root)}):
+                active_db = self.load_database()
+                outcome = active_db.import_target_history_from_shared_storage(target_tid, target_sub)
+                self.assertEqual(outcome["importedDeployments"], len(expected_imports))
+                self.assertEqual({d["instanceId"] for d in active_db.list_deployments()}, expected_imports)
+                self.assertEqual(sorted(p.name for p in (active_dir / "logs").glob("*.jsonl")),
+                                 sorted(f"{run_id}.jsonl" for run_id in expected_imports))
+                self.assertEqual(set(active_db.get_form_history("naming-prefix")),
+                                 {rows[run_id]["customStatus"]["workspaceName"] for run_id in expected_imports})
+                target_json = json.dumps({"subscription_id": target_sub, "tenant_id": target_tid}, sort_keys=True)
+                self.assertEqual(active_db.get_form_history("deployment-auth-target"), [target_json])
                 active_db.shutdown_database()
 
     def test_encrypted_azure_auth_seal_roundtrip_and_tamper_rejection(self):
@@ -859,7 +1076,7 @@ class PersistentDatabaseTests(unittest.TestCase):
                     fn(*args)
 
             local_server._MAIN_LOOP = FakeLoop()
-            with patch.object(local_server, "import_target_history_from_shared_storage", return_value={"importedDeployments": 2, "reconstructedLedgers": 0}), \
+            with patch.object(local_server, "import_target_history_from_shared_storage", return_value={"importedDeployments": 2, "importedFormHistory": 0}), \
                  patch.object(local_server, "db_list_deployments", return_value=imported_records):
                 local_server._sync_authenticated_target_history("tid", "sub")
 

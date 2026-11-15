@@ -631,30 +631,46 @@ def reconcile_from_state_tracking_dir(
     return reconstructed
 
 
-def _deployment_matches_target(
-    dep: dict[str, Any],
-    tenant_id: str,
-    subscription_id: str,
-    peer_has_matching_target: bool = False,
-) -> bool:
-    cs = dep.get("customStatus") or {}
-    cfg = cs.get("deployConfig") or dep.get("config") or {}
-    dep_tid = str(cfg.get("expected_tenant_id") or "").strip().lower()
-    dep_sub = str(
-        cfg.get("expected_subscription_id")
-        or cs.get("subscriptionId")
-        or cs.get("capacitySubscriptionId")
-        or ""
-    ).strip().lower()
-    tid_norm = tenant_id.strip().lower()
-    sub_norm = subscription_id.strip().lower()
-    if dep_sub and sub_norm and dep_sub == sub_norm:
-        return not (dep_tid and tid_norm and dep_tid != tid_norm)
-    if dep_tid and tid_norm and dep_tid == tid_norm and not dep_sub:
-        return True
-    if not dep_tid and not dep_sub and peer_has_matching_target:
-        return True
-    return False
+def _recorded_target_id(source: dict[str, Any], key: str) -> str | None:
+    """Normalized recorded ID; "" when the field is missing, null or blank; None when it is not a string."""
+    value = source.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        return None
+    return value.strip().lower()
+
+
+def _deployment_matches_target(dep: dict[str, Any], tenant_id: str, subscription_id: str) -> bool:
+    """Match a deployment or teardown record on its own recorded tenant and subscription.
+
+    A record names its target in up to three sources: ``customStatus`` itself, ``customStatus.deployConfig`` and the
+    root ``config``. ``customStatus`` must be a mapping; the other two are absent only when their key is missing, and
+    when present they must be mappings (an empty mapping is valid but holds no pair). Each ID field must be missing,
+    null or a string. At least one source must hold both IDs, and every non-empty recorded tenant or subscription in
+    any source must equal the normalized target; a pair is never assembled from different sources, and a matching
+    pair never excuses a malformed source. A record rebuilt from a state-tracking ledger (its IDs were inferred from a
+    sign-in, not recorded by a run) never matches.
+    """
+    cs = dep.get("customStatus")
+    if not isinstance(cs, dict) or cs.get("reconciledFrom") == "state-tracking":
+        return False
+    sources: list[tuple[Any, str, str]] = [(cs, "expectedTenantId", "subscriptionId")]
+    for owner, key in ((cs, "deployConfig"), (dep, "config")):
+        if key in owner:
+            sources.append((owner[key], "expected_tenant_id", "expected_subscription_id"))
+    complete_pair = False
+    for source, tenant_key, subscription_key in sources:
+        if not isinstance(source, dict):
+            return False
+        recorded_tid = _recorded_target_id(source, tenant_key)
+        recorded_sub = _recorded_target_id(source, subscription_key)
+        if recorded_tid is None or recorded_sub is None:
+            return False
+        if (recorded_tid and recorded_tid != tenant_id) or (recorded_sub and recorded_sub != subscription_id):
+            return False
+        complete_pair = complete_pair or bool(recorded_tid and recorded_sub)
+    return complete_pair
 
 
 def import_target_history_from_shared_storage(
@@ -663,20 +679,24 @@ def import_target_history_from_shared_storage(
     shared_root: Path | None = None,
     active_data_dir: Path | None = None,
 ) -> dict[str, int]:
-    """Import prior runs, state-tracking ledgers, and form_history for a verified (tenant_id, subscription_id) from peer sandbox directories."""
+    """Import prior runs, their logs, and the form_history they imply for a verified (tenant_id, subscription_id) from peer sandbox directories.
+
+    Both target IDs are required. A peer deployment or teardown record is imported only when ``_deployment_matches_target``
+    accepts it: one recorded source names the same tenant and subscription and no recorded source disagrees. Form history is derived from the imported
+    records only. Peer state-tracking ledgers record no tenant or subscription, so they are never copied or rebuilt here.
+    """
     tid = (tenant_id or "").strip().lower()
     sub = (subscription_id or "").strip().lower()
-    if not tid and not sub:
-        return {"importedDeployments": 0, "importedFormHistory": 0, "reconstructedLedgers": 0}
+    if not tid or not sub:
+        return {"importedDeployments": 0, "importedFormHistory": 0}
 
     root = shared_root or (Path(os.environ["HLS_SHARED_DATA_DIR"]) if os.environ.get("HLS_SHARED_DATA_DIR") else None)
     current_dir = active_data_dir or (Path(_persistent_dir) if _persistent_dir else None)
     if root is None or not root.is_dir():
-        return {"importedDeployments": 0, "importedFormHistory": 0, "reconstructedLedgers": 0}
+        return {"importedDeployments": 0, "importedFormHistory": 0}
 
     imported_deployments = 0
     imported_history = 0
-    reconstructed_ledgers = 0
     existing_by_id = {d["instanceId"]: d for d in list_deployments()}
 
     for peer_dir in sorted(root.iterdir()):
@@ -690,9 +710,7 @@ def import_target_history_from_shared_storage(
                 continue
 
         peer_db_path = peer_dir / "orchestrator.db"
-        peer_matches_target = False
         peer_deps: list[dict[str, Any]] = []
-        peer_fh: list[tuple[str, str, str]] = []
 
         if peer_db_path.is_file():
             # Open the peer's committed snapshot in place, read-only: nothing is ever written into a peer dir.
@@ -700,41 +718,28 @@ def import_target_history_from_shared_storage(
             try:
                 with closing(sqlite3.connect(peer_uri, uri=True, timeout=10)) as peer_conn:
                     peer_conn.row_factory = sqlite3.Row
-                    fh_rows = peer_conn.execute(
-                        "SELECT field, value, used_at FROM form_history ORDER BY used_at ASC"
-                    ).fetchall()
-                    for r in fh_rows:
-                        field_name = str(r["field"] or "")
-                        val_str = str(r["value"] or "")
-                        used_at = str(r["used_at"] or "")
-                        peer_fh.append((field_name, val_str, used_at))
-                        if field_name == "deployment-auth-target":
-                            try:
-                                parsed = json.loads(val_str)
-                                p_tid = str(parsed.get("tenant_id") or "").strip().lower()
-                                p_sub = str(parsed.get("subscription_id") or "").strip().lower()
-                                if (sub and p_sub == sub) and (not tid or not p_tid or p_tid == tid):
-                                    peer_matches_target = True
-                            except Exception:
-                                pass
-
                     dep_rows = peer_conn.execute(
                         "SELECT * FROM deployments ORDER BY created_time ASC"
                     ).fetchall()
+                    loaded: list[dict[str, Any]] = []
                     for r in dep_rows:
                         dep = _row_to_deployment(r)
-                        peer_deps.append(dep)
-                        if _deployment_matches_target(dep, tid, sub, False):
-                            peer_matches_target = True
+                        # The root config is a target source too; _row_to_deployment does not load it. SQL NULL (or
+                        # no column) means absent; any stored value, even "" or JSON null, is present.
+                        raw_config = r["config"] if "config" in r.keys() else None
+                        if raw_config is not None:
+                            try:
+                                dep["config"] = json.loads(raw_config)
+                            except (TypeError, ValueError):
+                                dep["config"] = raw_config  # Unreadable: a non-mapping source never matches.
+                        loaded.append(dep)
+                    peer_deps = loaded
             except Exception as exc:
                 logger.warning("Failed to inspect peer database %s: %s", peer_db_path, exc)
 
-        if not peer_matches_target:
-            continue
-
-        # 1. Import matching deployments from peer SQLite DB
+        # Import matching deployments from peer SQLite DB
         for dep in peer_deps:
-            if not _deployment_matches_target(dep, tid, sub, peer_matches_target):
+            if not _deployment_matches_target(dep, tid, sub):
                 continue
             inst_id = dep["instanceId"]
             local_dep = existing_by_id.get(inst_id)
@@ -752,11 +757,11 @@ def import_target_history_from_shared_storage(
             # counts and from restart recovery, which belongs to the peer sandbox.
             dep["customStatus"]["importedFrom"] = peer_dir.name
             save_deployment(inst_id, dep)
-            record_deployment_form_history(dep)
+            imported_history += record_deployment_form_history(dep)
             existing_by_id[inst_id] = dep
             imported_deployments += 1
 
-            # Copy per-deployment log file and state-tracking ledger if present
+            # Copy the per-deployment log file if present
             if current_dir:
                 peer_log = peer_dir / "logs" / f"{inst_id}.jsonl"
                 local_log = current_dir / "logs" / f"{inst_id}.jsonl"
@@ -764,43 +769,7 @@ def import_target_history_from_shared_storage(
                     local_log.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(peer_log, local_log)
 
-        # 2. Copy and reconcile peer state-tracking ledgers
-        peer_tracking = peer_dir / "state-tracking"
-        if peer_tracking.is_dir():
-            if current_dir:
-                local_tracking = current_dir / "state-tracking"
-                local_tracking.mkdir(parents=True, exist_ok=True)
-                for ledger_file in peer_tracking.glob(".deployment-state-*.json"):
-                    target_ledger = local_tracking / ledger_file.name
-                    if not target_ledger.exists():
-                        shutil.copyfile(ledger_file, target_ledger)
-                rec = reconcile_from_state_tracking_dir(local_tracking, tid, sub)
-            else:
-                rec = reconcile_from_state_tracking_dir(peer_tracking, tid, sub)
-            reconstructed_ledgers += len(rec)
-
-        # 3. Import form_history entries from matching peer sandbox
-        db = get_db()
-        with _write_lock:
-            for field_name, val_str, used_at in peer_fh:
-                if not val_str.strip():
-                    continue
-                existing_fh = db.execute(
-                    "SELECT used_at FROM form_history WHERE field = ? AND value = ?",
-                    (field_name, val_str),
-                ).fetchone()
-                if existing_fh and str(existing_fh["used_at"] or "") >= used_at:
-                    continue
-                db.execute(
-                    "INSERT OR REPLACE INTO form_history (field, value, used_at) VALUES (?, ?, ?)",
-                    (field_name, val_str, used_at or datetime.now(timezone.utc).isoformat()),
-                )
-                imported_history += 1
-            if imported_history:
-                db.commit()
-
     return {
         "importedDeployments": imported_deployments,
         "importedFormHistory": imported_history,
-        "reconstructedLedgers": reconstructed_ledgers,
     }
