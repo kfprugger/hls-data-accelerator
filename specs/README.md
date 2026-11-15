@@ -673,6 +673,7 @@ Keep both platform-specific alert definitions: Fabric Activator for the core pat
 Accept the shared `/data-share` mount for the reference deployment (every sandbox can read the share; isolation is application code plus sealed credentials) while access stays limited to `microsoft.com` accounts?
 - *Status*: Open architectural question (see [Component 10](#component-10-local-orchestrator-backend--process-engine-orchestratorlocal_serverpy-orchestratoractivities)).
 - *Recommendation*: Yes, and revisit before admitting other tenants. It carries three owner-requested features; per-sandbox shares would drop ETA pooling and peer-history import.
+- *Unimplemented alternative summary*: Read-only image layers or immutable blob snapshots. These are recorded options, not a reviewed replacement design. Any future cutover must preserve stage-ETA pooling, verified peer-history import and the hosted Rayfin seed cache.
 
 ### ESC-4
 Keep teardown capacity-neutral (D5) and add no `-PauseCapacity` switch?
