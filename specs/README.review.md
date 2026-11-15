@@ -2,7 +2,7 @@
 
 Document: `specs/README.md`
 Status: Needs decision
-Decisions pending: 3
+Public decisions pending: 3. Private-estate decisions join these in one final operator checkpoint; this is not the combined decision count.
 
 ## Summary
 - Rounds: 3
