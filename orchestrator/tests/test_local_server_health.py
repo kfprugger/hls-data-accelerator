@@ -11,10 +11,12 @@ import json
 import logging
 import sys
 import shutil
+import subprocess
 import threading
 import types
 import tempfile
 import unittest
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -431,11 +433,556 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertTrue(reused.skip_dicom)
 
     def test_failed_resource_group_probe_is_unknown_not_deleted(self) -> None:
-        failed = types.SimpleNamespace(returncode=1, stdout="", stderr="connection reset")
-        with patch.object(self.local_server, "_az_run", return_value=failed):
-            state = self.local_server._cloud_state_sync("", "rg-med-test")
-        self.assertIsNone(state["resourceGroup"]["exists"])
-        self.assertEqual(state["resourceGroup"]["status"], "unreachable")
+        for returncode, stdout, stderr in ((1, "", "connection reset"), (0, "", ""), (0, "unexpected", "")):
+            with self.subTest(returncode=returncode, stdout=stdout):
+                probe = types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+                with patch.object(self.local_server, "_az_run", return_value=probe):
+                    state = self.local_server._cloud_state_sync("22222222-2222-2222-2222-222222222222", "", "rg-med-test")
+                self.assertIsNone(state["resourceGroup"]["exists"])
+                self.assertEqual(state["resourceGroup"]["status"], "unreachable")
+
+    # Two estates share one name: the Azure CLI default (ambient) subscription A and the run's recorded subscription B.
+    _AMBIENT_SUB = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    _RECORDED_SUB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+    def _two_subscription_cloud(self) -> contextlib.ExitStack:
+        """Fake ``az``, Azure CLI/default credentials, Fabric, Kusto, Graph and FHIR REST for two subscriptions.
+
+        A (ambient: the CLI default and ``DefaultAzureCredential``) has no ``rg-med`` but its own ``ws-med`` and
+        ``ws-med`` Entra app. B (recorded) holds ``rg-med`` with a FHIR service, a running Masimo emulator,
+        ``ws-med`` with a completed HDS pipeline, ``ws-rti`` whose Eventhouse has ``fn_ClinicalAlerts``, and its
+        own ``ws-med`` Entra app.
+        """
+        ambient, recorded = self._AMBIENT_SUB, self._RECORDED_SUB
+        groups = {recorded: {"rg-med": [{"name": "hdsstorage", "type": "Microsoft.Storage/storageAccounts",
+                                          "location": "eastus", "id": "/subscriptions/b/resourceGroups/rg-med/x"}]},
+                  ambient: {}}
+        fhir_services = {recorded: {"rg-med": "hdwsb/fhirb"}, ambient: {}}
+        emulators = {recorded: {"rg-med": {"state": "Running", "deviceCount": "250"}}, ambient: {}}
+        fhir_totals = {f"token-{recorded}": 100, f"token-{ambient}": 7}
+        workspaces = {
+            f"token-{recorded}": [{"id": "recorded-ws", "displayName": "ws-med", "items": [
+                {"id": "lh", "displayName": "Lakehouse_B", "type": "Lakehouse"},
+                {"id": "pl", "displayName": "clinical_data_foundation_ingestion", "type": "DataPipeline"}]},
+                                      {"id": "recorded-rti", "displayName": "ws-rti", "items": [
+                {"id": "eh", "displayName": "MasimoEventhouse", "type": "Eventhouse"},
+                {"id": "kdb", "displayName": "MasimoKQLDB", "type": "KQLDatabase"}]}],
+            f"token-{ambient}": [{"id": "ambient-ws", "displayName": "ws-med", "items": [
+                {"id": "rp", "displayName": "AmbientReport", "type": "Report"}]}],
+        }
+        entra_apps = {f"token-{recorded}": [{"appId": "app-b", "displayName": "ws-med", "id": "app-b-object"}],
+                      f"token-{ambient}": [{"appId": "app-a", "displayName": "ws-med", "id": "app-a-object"}]}
+
+        def done(returncode=0, stdout=""):
+            return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr="" if returncode == 0 else "not found")
+
+        def fake_az(args, **kwargs):
+            subscription = args[args.index("--subscription") + 1] if "--subscription" in args else ambient
+            if args[1:3] == ["account", "get-access-token"]:
+                if "--query" in args:
+                    return done(stdout=f"token-{subscription}")
+                return done(stdout=json.dumps({"accessToken": f"token-{subscription}", "tenant": f"tenant-{subscription}", "expires_on": 4102444800}))
+            if args[1:4] == ["storage", "account", "list"]:
+                return done(stdout="")
+            if args[1:3] == ["container", "show"]:
+                emulator = emulators[subscription].get(args[args.index("--resource-group") + 1])
+                return done(stdout=json.dumps(emulator)) if emulator else done(3)
+            if args[1:3] == ["graph", "query"]:
+                scoped = [args[args.index("--subscriptions") + 1]] if "--subscriptions" in args else [ambient, recorded]
+                return done(stdout=json.dumps({"data": [
+                    {"resourceGroup": rg, "subscriptionId": sub, "resourceCount": len(resources),
+                     "artifacts": [{"name": r["name"], "type": r["type"]} for r in resources]}
+                    for sub in scoped for rg, resources in groups[sub].items()]}))
+            if args[1:4] == ["ad", "app", "list"]:
+                name = args[args.index("--display-name") + 1]
+                return done(stdout=json.dumps([a for a in entra_apps[f"token-{ambient}"] if a["displayName"].startswith(name)]))
+            if args[1:4] == ["ad", "sp", "list"]:
+                return done(stdout="[]")
+            name = args[args.index("--name") + 1] if "--name" in args else args[args.index("-g") + 1]
+            group = groups[subscription].get(name)
+            if args[1:3] == ["group", "exists"]:
+                return done(stdout="true" if group is not None else "false")
+            if group is None:
+                return done(3)
+            if args[1:3] == ["group", "show"]:
+                return done(stdout="Succeeded" if "properties.provisioningState" in args else f"/subscriptions/{subscription}/resourceGroups/{name}")
+            if args[1:3] == ["resource", "list"] and "--resource-type" in args:
+                return done(stdout=fhir_services[subscription].get(name, ""))
+            if args[1:3] == ["resource", "list"]:
+                return done(stdout=json.dumps(group))
+            raise AssertionError(f"unexpected az call: {args}")
+
+        class Credential:
+            def __init__(self, *, subscription=None, **_):
+                self.subscription = subscription or ambient
+
+            def get_token(self, *scopes, **_):
+                return types.SimpleNamespace(token=f"token-{self.subscription}", expires_on=4102444800)
+
+        def response(status, payload=None):
+            def raise_for_status():
+                if status >= 400:
+                    raise RuntimeError(f"HTTP {status}")
+            return types.SimpleNamespace(status_code=status, ok=status < 400, content=b"{}", text="", headers={},
+                                         json=lambda: payload, raise_for_status=raise_for_status)
+
+        def fake_fabric(method, url, headers=None, **_):
+            visible = workspaces[headers["Authorization"].removeprefix("Bearer ")]
+            parts = url.split("/v1/", 1)[1].split("?")[0].split("/")
+            if parts == ["workspaces"]:
+                return response(200, {"value": [{k: v for k, v in ws.items() if k != "items"} for ws in visible]})
+            workspace = next((ws for ws in visible if ws["id"] == parts[1]), None)
+            if workspace is None:
+                return response(404)
+            if parts[2:] == ["items"]:
+                return response(200, {"value": workspace["items"]})
+            if parts[2] == "items" and parts[4:] == ["jobs", "instances"]:
+                return response(200, {"value": [{"status": "Completed"}]})
+            if parts[2] == "kqlDatabases":
+                return response(200, {"properties": {"queryServiceUri": "https://kusto-rti.kusto.fabric.microsoft.com"}})
+            raise AssertionError(f"unexpected Fabric call: {method} {url}")
+
+        def fake_fhir(url, headers=None, **_):
+            assert url.startswith("https://hdwsb-fhirb.fhir.azurehealthcareapis.com/"), url
+            return response(200, {"total": fhir_totals[headers["Authorization"].removeprefix("Bearer ")]})
+
+        def fake_kusto(url, headers=None, **_):
+            assert url == "https://kusto-rti.kusto.fabric.microsoft.com/v1/rest/query", url
+            # Only B's Eventhouse holds the function; any other identity sees none.
+            rows = [["fn_ClinicalAlerts"]] if headers["Authorization"] == f"Bearer token-{recorded}" else []
+            return response(200, {"Tables": [{"Columns": [{"ColumnName": "Name"}], "Rows": rows}]})
+
+        class GraphResponse:
+            def __init__(self, payload):
+                self.status, self._body = 200, json.dumps(payload).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self):
+                return self._body
+
+        def fake_graph(request, timeout):
+            token = request.get_header("Authorization").removeprefix("Bearer ")
+            path, query = request.full_url.split("/v1.0/", 1)[1].split("?", 1)
+            prefix = urllib.parse.unquote(query).split("startswith(displayName,'", 1)[1].split("')", 1)[0]
+            apps = [a for a in entra_apps[token] if a["displayName"].startswith(prefix)] if path == "applications" else []
+            return GraphResponse({"value": apps})
+
+        stack = contextlib.ExitStack()
+        self.az = stack.enter_context(patch.object(self.local_server, "_az_run", side_effect=fake_az))
+        stack.enter_context(patch("azure.identity.AzureCliCredential", Credential))
+        stack.enter_context(patch("shared.fabric_client.DefaultAzureCredential", Credential))
+        stack.enter_context(patch("shared.kusto_client.DefaultAzureCredential", Credential))
+        self.fabric_http = stack.enter_context(patch("shared.fabric_client.requests.request", side_effect=fake_fabric))
+        stack.enter_context(patch("requests.get", side_effect=fake_fhir))
+        stack.enter_context(patch("shared.kusto_client.requests.post", side_effect=fake_kusto))
+        stack.enter_context(patch("urllib.request.urlopen", side_effect=fake_graph))
+        return stack
+
+    def _recorded_records(self) -> dict[str, dict]:
+        self.addCleanup(self.local_server.deployments.clear)
+        return {
+            "teardown": {"workspaceName": "ws-med", "resourceGroupName": "rg-med", "subscriptionId": self._RECORDED_SUB, "runType": "teardown"},
+            "deploy": {"workspaceName": "ws-med", "resourceGroupName": "rg-med", "deployConfig": {
+                "expected_subscription_id": self._RECORDED_SUB, "scaffolding_only": True, "skip_imaging": True, "skip_quality_measures": True}},
+        }
+
+    def test_record_cloud_reads_use_recorded_subscription_not_ambient_default(self) -> None:
+        with self._two_subscription_cloud():
+            for kind, custom in self._recorded_records().items():
+                with self.subTest(kind):
+                    self.local_server.deployments[kind] = {"instanceId": kind, "runtimeStatus": "Completed", "customStatus": custom, "output": None}
+                    state = asyncio.run(self.local_server.get_teardown_cloud_state(kind))
+                    self.assertEqual(state["resourceGroup"]["exists"], True)
+                    self.assertEqual(state["resourceGroup"]["status"], "succeeded")
+                    self.assertEqual(state["workspace"]["id"], "recorded-ws")
+
+                    validation = asyncio.run(self.local_server.validate_teardown(kind))
+                    self.assertFalse(validation["passed"])
+                    self.assertEqual([r["name"] for r in validation["resources"]["azure"]], ["hdsstorage"])
+                    self.assertEqual([i["name"] for i in validation["resources"]["fabric"]], ["Lakehouse_B", "clinical_data_foundation_ingestion"])
+                    self.assertEqual(validation["resources"]["workspace"]["id"], "recorded-ws")
+
+    def test_deploy_validation_runtime_checks_read_recorded_subscription_fabric(self) -> None:
+        custom = self._recorded_records()["deploy"]
+        self.local_server.deployments["deploy"] = {"instanceId": "deploy", "runtimeStatus": "Completed", "customStatus": custom, "output": None}
+        with self._two_subscription_cloud(), patch.object(self.local_server, "save_state"):
+            validation = asyncio.run(self.local_server.validate_deployment("deploy"))
+        pipeline = next(c for c in validation["checks"] if c["name"] == "Pipeline completed: clinical_data_foundation_ingestion")
+        self.assertEqual((pipeline["status"], pipeline["detail"]), ("pass", "Completed"))
+
+    def test_resume_fhir_evidence_reads_recorded_subscription(self) -> None:
+        request = self.local_server.DeployRequest(expected_tenant_id=self._TENANT, expected_subscription_id=self._RECORDED_SUB,
+                                                  fabric_workspace_name="ws-med", resource_group_name="rg-med")
+        with self._two_subscription_cloud():
+            cloud_state = self.local_server._cloud_state_sync(request.expected_subscription_id, "ws-med", "rg-med")
+            evidence = self.local_server._live_resume_prerequisites(request, cloud_state)
+        self.assertTrue(cloud_state["resourceGroup"]["exists"])
+        self.assertEqual((evidence["fhirCounts"]["patients"], evidence["fhirCounts"]["devices"]), (100, 100))
+        self.assertTrue(evidence["fhirCounts"]["countsVerified"])
+        self.assertIn("lh", {i["id"] for i in evidence["fabricItems"]})
+
+    def test_record_without_subscription_is_refused_instead_of_reading_ambient_default(self) -> None:
+        self.addCleanup(self.local_server.deployments.clear)
+        self.local_server.deployments["legacy"] = {"instanceId": "legacy", "runtimeStatus": "Completed", "output": None,
+                                                   "customStatus": {"workspaceName": "ws-med", "resourceGroupName": "rg-med"}}
+        with self._two_subscription_cloud():
+            for read in (self.local_server.get_teardown_cloud_state, self.local_server.validate_teardown, self.local_server.validate_deployment):
+                with self.subTest(read.__name__):
+                    with self.assertRaises(self.local_server.HTTPException) as refused:
+                        asyncio.run(read("legacy"))
+                    self.assertEqual(refused.exception.status_code, 409)
+        self.az.assert_not_called()
+        self.fabric_http.assert_not_called()
+
+    def _deep_check_existing(self, subscription_id: str = "", resource_group: str = "rg-med") -> dict:
+        """Deep check-existing for ``ws-med`` whose matching run recorded the given Azure target."""
+        config = {"patient_count": 100}
+        if subscription_id:
+            config["expected_subscription_id"] = subscription_id
+        self.local_server.deployments.clear()
+        self.local_server.deployments["deploy"] = {
+            "instanceId": "deploy", "name": "deploy_all_orchestrator", "runtimeStatus": "Completed",
+            "createdTime": "2026-11-15T10:00:00Z", "customStatus": {
+                "status": "succeeded", "workspaceName": "ws-med", "resourceGroupName": resource_group, "deployConfig": config}}
+        return asyncio.run(self.local_server.check_existing_deployment(workspace_name="ws-med", deep=True))
+
+    def _isolated_scan_cache(self) -> contextlib.ExitStack:
+        self.addCleanup(self.local_server.deployments.clear)
+        stack = contextlib.ExitStack()
+        stack.enter_context(patch.object(self.local_server, "_save_persistent_cache"))
+        stack.enter_context(patch.dict(self.local_server._scan_cache, clear=True))
+        stack.enter_context(patch.dict(self.local_server._timed_cache, clear=True))
+        return stack
+
+    def test_deep_check_existing_reads_matched_run_subscription_not_ambient_default(self) -> None:
+        with self._isolated_scan_cache(), self._two_subscription_cloud():
+            result = self._deep_check_existing(self._RECORDED_SUB)
+        self.assertTrue(result["liveValidated"])
+        self.assertTrue(result["azureRgExists"])
+        self.assertEqual((result["emulatorRunning"], result["emulatorDeviceCount"]), (True, 250))
+        self.assertEqual((result["fhirPatientCount"], result["fhirDeviceCount"]), (100, 100))
+
+    def test_deep_check_existing_cache_is_scoped_by_subscription(self) -> None:
+        ambient, recorded = self._AMBIENT_SUB, self._RECORDED_SUB
+        with self._isolated_scan_cache(), self._two_subscription_cloud():
+            recorded_first = self._deep_check_existing(recorded)
+            # Same names in A: B's cached RG/emulator answers must not leak into A's run.
+            ambient_run = self._deep_check_existing(ambient)
+            ambient_emulator = self.local_server._check_emulator_status(ambient, "rg-med")
+            recorded_again = self._deep_check_existing(recorded)
+        self.assertTrue(recorded_first["azureRgExists"])
+        self.assertTrue(ambient_run["liveValidated"])
+        self.assertFalse(ambient_run["azureRgExists"])
+        self.assertFalse(ambient_run["emulatorRunning"])
+        self.assertEqual((ambient_run["fhirPatientCount"], ambient_run["fhirDeviceCount"]), (0, 0))
+        self.assertEqual(ambient_emulator, {"running": False, "deviceCount": 0})
+        self.assertEqual((recorded_again["azureRgExists"], recorded_again["emulatorRunning"], recorded_again["emulatorDeviceCount"]), (True, True, 250))
+
+    def test_deep_check_existing_without_recorded_subscription_reads_no_cloud(self) -> None:
+        with self._isolated_scan_cache(), self._two_subscription_cloud():
+            result = self._deep_check_existing()
+            self.assertTrue(result["found"])
+            self.assertFalse(result["liveValidated"])
+            self.az.assert_not_called()
+            self.fabric_http.assert_not_called()
+
+    def test_deep_check_existing_without_resource_group_never_claims_live_validation(self) -> None:
+        with self._isolated_scan_cache(), self._two_subscription_cloud():
+            result = self._deep_check_existing(self._RECORDED_SUB, resource_group="")
+            self.assertTrue(result["found"])
+            self.assertFalse(result["liveValidated"])
+            self.az.assert_not_called()
+            self.fabric_http.assert_not_called()
+
+    def test_deep_check_existing_failed_group_probe_is_unverified_and_uncached(self) -> None:
+        for returncode, stdout, stderr in ((1, "", "AuthorizationFailed"), (0, "", ""), (0, "unexpected", "")):
+            with self.subTest(returncode=returncode, stdout=stdout):
+                probe = types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+                with self._isolated_scan_cache(), patch.object(self.local_server, "_az_run", return_value=probe):
+                    result = self._deep_check_existing(self._RECORDED_SUB)
+                    self.assertEqual(dict(self.local_server._scan_cache), {})
+                self.assertFalse(result["liveValidated"])
+                self.assertFalse(result["azureRgExists"])
+
+    def test_scan_with_explicit_subscription_reads_that_subscriptions_fabric_estate(self) -> None:
+        with self._isolated_scan_cache(), self._two_subscription_cloud():
+            self.local_server.deployments["deploy"] = {"instanceId": "deploy", "customStatus": {
+                "workspaceName": "ws-med", "deployConfig": {"expected_subscription_id": self._RECORDED_SUB.upper()}}}
+            self.local_server.deployments["rti"] = {"instanceId": "rti", "customStatus": {
+                "workspaceName": "ws-rti", "subscriptionId": self._RECORDED_SUB}}
+            scoped = asyncio.run(self.local_server.scan_resources(subscription_id=self._RECORDED_SUB))
+            unscoped = asyncio.run(self.local_server.scan_resources(subscription_id=""))
+        scoped_fabric = [c for c in scoped if c["type"] == "fabric"]
+        self.assertEqual([c["id"] for c in scoped_fabric], ["recorded-ws", "recorded-rti"])
+        self.assertEqual(scoped_fabric[0]["matchedArtifacts"], ["DataPipeline: clinical_data_foundation_ingestion", "Lakehouse: Lakehouse_B"])
+        # B's Eventhouse function is visible only to B's identity, and the Entra app is B's, not the CLI default tenant's.
+        self.assertTrue(scoped_fabric[1]["detectedArtifacts"]["hasFnClinicalAlerts"])
+        self.assertNotIn("fn_ClinicalAlerts", scoped_fabric[1]["detail"])
+        self.assertEqual([(c["id"], c["status"]) for c in scoped if c["type"] == "spn"], [("app-b-object", "active")])
+        self.assertEqual([(c["name"], c["subscription"]) for c in scoped if c["type"] == "azure"], [("rg-med", self._RECORDED_SUB)])
+        # With no subscription the scan stays an ambient discovery of the CLI default tenant.
+        self.assertEqual([c["id"] for c in unscoped if c["type"] == "fabric"], ["ambient-ws"])
+        self.assertEqual([c["id"] for c in unscoped if c["type"] == "spn"], ["app-a-object"])
+        self.assertTrue(any(call.args[0][1:4] == ["ad", "app", "list"] for call in self.az.call_args_list))
+
+    def test_scan_with_explicit_subscription_without_graph_token_reads_no_ambient_entra(self) -> None:
+        statuses = []
+        with self._isolated_scan_cache(), self._two_subscription_cloud():
+            fake_az = self.az.side_effect
+
+            def no_graph_token(args, **kwargs):
+                if args[1:3] == ["account", "get-access-token"] and "https://graph.microsoft.com" in args:
+                    return types.SimpleNamespace(returncode=1, stdout="", stderr="AADSTS50076")
+                return fake_az(args, **kwargs)
+
+            self.az.side_effect = no_graph_token
+            self.local_server.deployments["deploy"] = {"instanceId": "deploy", "customStatus": {
+                "workspaceName": "ws-med", "deployConfig": {"expected_subscription_id": self._RECORDED_SUB}}}
+            scoped = self.local_server._scan_resources_sync(self._RECORDED_SUB, status_callback=lambda phase, message: statuses.append((phase, message)))
+        self.assertEqual([c["id"] for c in scoped if c["type"] == "fabric"], ["recorded-ws"])
+        self.assertEqual([c for c in scoped if c["type"] == "spn"], [])
+        self.assertTrue(any(phase == "spn" and "AADSTS50076" in message for phase, message in statuses))
+        self.assertFalse(any(call.args[0][1] == "ad" for call in self.az.call_args_list))
+
+    def test_explicit_scan_never_qualifies_a_workspace_from_another_subscriptions_history(self) -> None:
+        # Only A (or no recorded subscription) deployed "ws-med"/"ws-rti". B's same-named workspaces lack the HDS
+        # contract, so a scan of B must offer neither them nor B's same-named Entra app for teardown.
+        with self._isolated_scan_cache(), self._two_subscription_cloud():
+            for name in ("ws-med", "ws-rti"):
+                self.local_server.deployments[f"ambient-{name}"] = {"instanceId": f"ambient-{name}", "customStatus": {
+                    "workspaceName": name, "deployConfig": {"expected_subscription_id": self._AMBIENT_SUB}}}
+            self.local_server.deployments["legacy"] = {"instanceId": "legacy", "customStatus": {"workspaceName": "ws-med"}}
+            # Recorded sources that disagree name no single subscription.
+            self.local_server.deployments["conflicting"] = {"instanceId": "conflicting", "customStatus": {
+                "workspaceName": "ws-rti", "subscriptionId": self._RECORDED_SUB,
+                "deployConfig": {"expected_subscription_id": self._AMBIENT_SUB}}}
+            scoped = asyncio.run(self.local_server.scan_resources(subscription_id=self._RECORDED_SUB))
+            unscoped = asyncio.run(self.local_server.scan_resources(subscription_id=""))
+        self.assertEqual([c for c in scoped if c["type"] in ("fabric", "spn")], [])
+        self.assertEqual([(c["name"], c["subscription"]) for c in scoped if c["type"] == "azure"], [("rg-med", self._RECORDED_SUB)])
+        # An unscoped discovery keeps qualifying any history-named live workspace.
+        self.assertEqual([(c["id"], c["previouslyDeployed"]) for c in unscoped if c["type"] == "fabric"], [("ambient-ws", True)])
+
+    _FOREIGN_WS_ID = "aaaaaaaa-0000-4000-8000-00000000000a"
+    _LEGACY_WS_ID = "cccccccc-0000-4000-8000-00000000000c"
+    _CONFLICTING_WS_ID = "dddddddd-0000-4000-8000-00000000000d"
+    _FOREIGN_LOG_WS_ID = "eeeeeeee-0000-4000-8000-00000000000e"
+    _RECORDED_WS_ID = "bbbbbbbb-0000-4000-8000-00000000000b"
+
+    def _blocked_fabric_reads_of_recorded_teardown(self, extra: dict[str, tuple[str, dict]] | None = None) -> tuple[dict, dict | None]:
+        """Cloud state and deployed resources for a teardown of ``ws-med`` in B while every live Fabric read fails.
+
+        Same-named ``ws-med`` runs with persisted Fabric links or logs exist in A, with no recorded subscription and
+        with disagreeing recorded subscriptions; each is newer than anything recorded in B.
+        """
+        def link(workspace_id: str) -> str:
+            return f"https://app.fabric.microsoft.com/groups/{workspace_id}"
+
+        records = {
+            "teardown": ("2026-11-15T09:00:00Z", {"runType": "teardown", "workspaceName": "ws-med", "subscriptionId": self._RECORDED_SUB}),
+            "foreign": ("2026-11-15T12:00:00Z", {"workspaceName": "ws-med", "links": {"workspace": link(self._FOREIGN_WS_ID)},
+                                                  "deployConfig": {"expected_subscription_id": self._AMBIENT_SUB}}),
+            "foreign-log": ("2026-11-15T11:45:00Z", {"workspaceName": "ws-med", "deployConfig": {"expected_subscription_id": self._AMBIENT_SUB}}),
+            "conflicting": ("2026-11-15T11:30:00Z", {"workspaceName": "ws-med", "subscriptionId": self._RECORDED_SUB,
+                                                      "resources": {"workspace": link(self._CONFLICTING_WS_ID)},
+                                                      "deployConfig": {"expected_subscription_id": self._AMBIENT_SUB}}),
+            "legacy": ("2026-11-15T11:00:00Z", {"workspaceName": "ws-med", "links": {"workspace": link(self._LEGACY_WS_ID)}}),
+            **(extra or {}),
+        }
+        self.addCleanup(self.local_server.deployments.clear)
+        self.local_server.deployments.clear()
+        for instance_id, (updated, custom) in records.items():
+            self.local_server.deployments[instance_id] = {"instanceId": instance_id, "runtimeStatus": "Completed",
+                                                          "lastUpdatedTime": updated, "customStatus": custom, "output": None}
+        data_dir = Path(tempfile.mkdtemp(prefix="hls-persisted-ws-"))
+        self.addCleanup(shutil.rmtree, data_dir, True)
+        (data_dir / "logs").mkdir()
+        (data_dir / "logs" / "foreign-log.jsonl").write_text(
+            json.dumps({"message": f"Workspace ws-med ready: {self._FOREIGN_LOG_WS_ID}"}) + "\n", encoding="utf-8")
+        with (
+            patch.object(self.local_server, "DATA_DIR", data_dir),
+            patch.object(self.local_server, "_pinned_fabric_client", side_effect=RuntimeError("Fabric API blocked by policy")),
+            patch.object(self.local_server, "_az_run", side_effect=AssertionError("no Azure read expected")),
+        ):
+            state = asyncio.run(self.local_server.get_teardown_cloud_state("teardown"))
+            resources = asyncio.run(self.local_server.get_deployed_resources("teardown"))
+        return state["workspace"], resources["workspace"]
+
+    def test_blocked_fabric_read_never_reports_another_subscriptions_persisted_workspace(self) -> None:
+        workspace, deployed = self._blocked_fabric_reads_of_recorded_teardown()
+        self.assertIsNone(workspace["exists"])
+        self.assertEqual((workspace["status"], workspace["id"]), ("unreachable", ""))
+        self.assertIsNone(deployed)
+
+    def test_blocked_fabric_read_uses_only_the_recorded_subscriptions_persisted_workspace(self) -> None:
+        recorded = ("2026-11-15T08:00:00Z", {"workspaceName": "ws-med", "deployConfig": {"expected_subscription_id": self._RECORDED_SUB.upper()},
+                                             "links": {"workspace": f"https://app.fabric.microsoft.com/groups/{self._RECORDED_WS_ID}"}})
+        workspace, deployed = self._blocked_fabric_reads_of_recorded_teardown({"recorded": recorded})
+        self.assertEqual((workspace["exists"], workspace["status"], workspace["id"]), (True, "exists_cached", self._RECORDED_WS_ID))
+        self.assertEqual((deployed["id"], deployed["status"]), (self._RECORDED_WS_ID, "exists_cached"))
+
+    def _teardown_validation(self, *, fabric_blocked: bool, group_probe) -> dict:
+        """Validate a teardown of ``ws-med``/``rg-med`` recorded in B with the given Fabric and resource-group answers."""
+        self.addCleanup(self.local_server.deployments.clear)
+        self.local_server.deployments.clear()
+        self.local_server.deployments["teardown"] = {"instanceId": "teardown", "runtimeStatus": "Completed", "output": None, "customStatus": {
+            "runType": "teardown", "workspaceName": "ws-med", "resourceGroupName": "rg-med", "subscriptionId": self._RECORDED_SUB}}
+        from shared.fabric_client import FabricClient
+
+        fabric = FabricClient(credential=object())
+        fabric.call = lambda *args, **kwargs: {"value": [{"id": "other-ws", "displayName": "ws-other"}]}
+        data_dir = Path(tempfile.mkdtemp(prefix="hls-teardown-validation-"))
+        self.addCleanup(shutil.rmtree, data_dir, True)
+
+        def az(args, **kwargs):
+            self.assertEqual(args[args.index("--subscription") + 1], self._RECORDED_SUB)
+            proc = group_probe(args)
+            if kwargs.get("check") and proc.returncode:
+                raise subprocess.CalledProcessError(proc.returncode, args, proc.stdout, proc.stderr)
+            return proc
+
+        fabric_patch = ({"side_effect": RuntimeError("Fabric API blocked by policy")} if fabric_blocked else {"return_value": fabric})
+        with (
+            patch.object(self.local_server, "DATA_DIR", data_dir),
+            patch.object(self.local_server, "_pinned_fabric_client", **fabric_patch),
+            patch.object(self.local_server, "_az_run", side_effect=az),
+        ):
+            return asyncio.run(self.local_server.validate_teardown("teardown"))
+
+    def test_teardown_validation_never_passes_deletion_on_unverified_inventory(self) -> None:
+        def answer(returncode: int, stdout: str = "", stderr: str = ""):
+            return types.SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+
+        def absent(args):
+            # The group is verifiably gone, whichever read the inventory uses.
+            if args[1:3] == ["group", "exists"]:
+                return answer(0, "false\n")
+            return answer(3, stderr="(ResourceGroupNotFound) Resource group 'rg-med' could not be found.")
+
+        def denied(args):
+            return answer(1, stderr="(AuthorizationFailed) The client does not have authorization.")
+
+        def listing_fails(args):
+            # The group still exists but its resources cannot be listed.
+            if args[1:3] == ["group", "exists"]:
+                return answer(0, "true\n")
+            if args[1:3] == ["group", "show"]:
+                return answer(0, "/subscriptions/x/resourceGroups/rg-med\n")
+            return answer(1, stderr="(AuthorizationFailed) The client does not have authorization to list resources.")
+
+        for label, fabric_blocked, probe, check in (
+            ("fabric-blocked", True, absent, "Fabric workspace deleted"),
+            ("group-probe-denied", False, denied, "Azure resource group empty/deleted"),
+            ("resource-listing-failed", False, listing_fails, "Azure resource group empty/deleted"),
+        ):
+            with self.subTest(label):
+                validation = self._teardown_validation(fabric_blocked=fabric_blocked, group_probe=probe)
+                self.assertFalse(validation["passed"])
+                self.assertNotEqual(next(c for c in validation["checks"] if c["name"] == check)["status"], "pass")
+        # Verified absence of both still proves deletion.
+        verified = self._teardown_validation(fabric_blocked=False, group_probe=absent)
+        self.assertTrue(verified["passed"])
+        self.assertEqual({c["status"] for c in verified["checks"]}, {"pass"})
+
+    def test_auto_resume_never_follows_a_run_recorded_for_another_target(self) -> None:
+        tenant, subscription = "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666"
+        other_tenant, other_subscription = "33333333-4444-4555-8666-777777777777", "44444444-5555-4666-8777-888888888888"
+        succeeded = {"phases": [{"phase": "Phase 2: Fabric RTI", "status": "succeeded"},
+                                {"phase": "Phase 3: HDS Source Deployment", "status": "succeeded"},
+                                {"phase": "Phase 2: Fabric RTI Enrichment (auto)", "status": "succeeded"}]}
+
+        def run(instance_id: str, status: str, created: str, **custom) -> dict:
+            return {"instanceId": instance_id, "runtimeStatus": status, "createdTime": created, "output": succeeded,
+                    "customStatus": {"workspaceName": "med-1115", "resourceGroupName": "rg-med-1115", "logs": [], **custom}}
+
+        self.addCleanup(self.local_server.deployments.clear)
+        self.local_server.deployments.clear()
+        # Every same-named failed run is newer than the target's own completed run, but none records this target.
+        for record in (
+            run("foreign-subscription", "Failed", "2026-11-15T12:00:00Z",
+                deployConfig={"expected_tenant_id": tenant, "expected_subscription_id": other_subscription}),
+            run("foreign-tenant", "Failed", "2026-11-15T11:00:00Z",
+                deployConfig={"expected_tenant_id": other_tenant, "expected_subscription_id": subscription}),
+            # Each source is incomplete; only their union would name the target.
+            run("split-pair", "Failed", "2026-11-15T10:00:00Z", subscriptionId=subscription, deployConfig={"expected_tenant_id": tenant}),
+            run("legacy", "Failed", "2026-11-15T09:00:00Z"),
+            run("own-completed", "Completed", "2026-11-15T08:00:00Z",
+                deployConfig={"expected_tenant_id": tenant.upper(), "expected_subscription_id": f" {subscription} "}),
+        ):
+            self.local_server.deployments[record["instanceId"]] = record
+        request = self.local_server.DeployRequest(expected_tenant_id=tenant, expected_subscription_id=subscription,
+                                                  fabric_workspace_name="med-1115", resource_group_name="rg-med-1115")
+        data_dir = Path(tempfile.mkdtemp(prefix="hls-auto-resume-"))
+        self.addCleanup(shutil.rmtree, data_dir, True)
+        with (
+            patch.object(self.local_server, "DATA_DIR", data_dir),
+            patch.object(self.local_server, "_cloud_state_sync", return_value={"workspace": {"exists": True}, "resourceGroup": {"exists": True}}),
+            patch.object(self.local_server, "_live_resume_prerequisites", return_value={}),
+            patch.object(self.local_server, "_phase_live_prerequisites_ok", return_value=(True, "ok")),
+        ):
+            self.local_server._apply_prior_success_skips(request)
+        self.assertEqual((request.reuse_fabric_rti, request.skip_rti_phase2, request.skip_hds_source), (False, False, False))
+
+    def test_continuation_never_uses_a_source_recorded_for_another_target(self) -> None:
+        from fastapi import HTTPException
+
+        started = self._record_started_tasks()
+        succeeded = {"phases": [{"phase": "Phase 2: Fabric RTI", "status": "succeeded"}]}
+        foreign = {"expected_tenant_id": self._TENANT, "expected_subscription_id": "00000000-0000-0000-0000-000000000003"}
+        self.local_server.deployments["foreign-failed"] = {
+            "instanceId": "foreign-failed", "runtimeStatus": "Failed", "createdTime": "2026-11-14T00:00:00+00:00", "output": succeeded,
+            "customStatus": {"workspaceName": "ws-a", "resourceGroupName": "rg-a", "logs": [], "deployConfig": foreign}}
+        for phase7_only in (False, True):
+            with self.subTest(phase7_only=phase7_only):
+                request = self._deploy_request("ws-a", "rg-a")
+                request.continue_from_instance_id = "foreign-failed"
+                request.deploy_cardiology = True
+                request.phase7_only = phase7_only
+                with (
+                    patch.object(self.local_server, "_cloud_state_sync", side_effect=AssertionError("a foreign source must be refused before any cloud read")),
+                    self.assertRaises(HTTPException) as raised,
+                ):
+                    self._start_deploy(request, preflight=self._slow_preflight)
+                self.assertEqual(raised.exception.status_code, 409)
+                self.assertFalse(request.reuse_fabric_rti)
+        self.assertEqual(list(self.local_server.deployments), ["foreign-failed"])
+        self.assertEqual(started, [])
+
+    def test_continuation_chain_never_inherits_phases_from_another_targets_ancestor(self) -> None:
+        target = {"expected_tenant_id": self._TENANT, "expected_subscription_id": self._SUBSCRIPTION}
+        foreign = {"expected_tenant_id": self._TENANT, "expected_subscription_id": "00000000-0000-0000-0000-000000000003"}
+        self.addCleanup(self.local_server.deployments.clear)
+        self.local_server.deployments.clear()
+        # The target's own run names a same-named run of another subscription as its parent.
+        self.local_server.deployments["foreign-parent"] = {
+            "instanceId": "foreign-parent", "runtimeStatus": "Failed", "createdTime": "2026-11-14T00:00:00+00:00",
+            "output": {"phases": [{"phase": "Phase 2: Fabric RTI", "status": "succeeded"},
+                                  {"phase": "Phase 3: HDS Source Deployment", "status": "succeeded"}]},
+            "customStatus": {"workspaceName": "ws-a", "resourceGroupName": "rg-a", "logs": [], "deployConfig": foreign}}
+        own = {
+            "instanceId": "own-failed", "runtimeStatus": "Failed", "createdTime": "2026-11-14T01:00:00+00:00",
+            "output": {"phases": [{"phase": "Phase 3: DICOM Shortcut + HDS Pipelines (auto)", "status": "succeeded"}]},
+            "customStatus": {"workspaceName": "ws-a", "resourceGroupName": "rg-a", "logs": [], "continuedFrom": "foreign-parent",
+                             "deployConfig": target}}
+        self.local_server.deployments["own-failed"] = own
+        request = self._deploy_request("ws-a", "rg-a")
+        data_dir = Path(tempfile.mkdtemp(prefix="hls-continuation-chain-"))
+        self.addCleanup(shutil.rmtree, data_dir, True)
+        with (
+            patch.object(self.local_server, "DATA_DIR", data_dir),
+            patch.object(self.local_server, "_cloud_state_sync", return_value={"workspace": {"exists": True}, "resourceGroup": {"exists": True}}),
+            patch.object(self.local_server, "_live_resume_prerequisites", return_value={}),
+            patch.object(self.local_server, "_phase_live_prerequisites_ok", return_value=(True, "ok")),
+        ):
+            self.local_server._apply_success_skips_from_deployment(request, own, "Continue-from-failure")
+        self.assertTrue(request.skip_hds_pipelines)
+        self.assertFalse(request.reuse_fabric_rti)
+        self.assertTrue(request.skip_hds_source)  # Its own successful HDS pipeline remains reusable.
 
     def _ontology_resume(self, phases: list[dict]):
         request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test",
@@ -469,7 +1016,9 @@ class LocalServerHealthTests(unittest.TestCase):
     def test_auto_resume_uses_only_the_newest_deployment_for_the_target(self) -> None:
         def record(instance_id: str, status: str, created: str) -> dict:
             return {"instanceId": instance_id, "runtimeStatus": status, "createdTime": created,
-                    "customStatus": {"workspaceName": "med-test", "resourceGroupName": "rg-med-test"}}
+                    "customStatus": {"workspaceName": "med-test", "resourceGroupName": "rg-med-test", "deployConfig": {
+                        "expected_tenant_id": "11111111-1111-1111-1111-111111111111",
+                        "expected_subscription_id": "22222222-2222-2222-2222-222222222222"}}}
 
         request = self.local_server.DeployRequest(expected_tenant_id="11111111-1111-1111-1111-111111111111", expected_subscription_id="22222222-2222-2222-2222-222222222222", fabric_workspace_name="med-test", resource_group_name="rg-med-test")
         self.local_server.deployments.clear()
@@ -675,7 +1224,7 @@ class LocalServerHealthTests(unittest.TestCase):
             def __init__(self, tokens):
                 pass
 
-            def pages(self, url, resource, key="value"):
+            def pages(self, url, resource, key="value", fields=()):
                 return iter([])
 
         started = self._record_started_tasks()
@@ -774,10 +1323,12 @@ class LocalServerHealthTests(unittest.TestCase):
             self.local_server.DeployRequest(**base, cardiology_prefix="cardiomed1027")
 
     def test_chained_continuation_inherits_successful_phases_from_ancestor_runs(self) -> None:
+        target = {"expected_tenant_id": "11111111-2222-4333-8444-555555555555",
+                  "expected_subscription_id": "22222222-3333-4444-8555-666666666666"}
         run_a = {
             "instanceId": "run-a",
             "runtimeStatus": "Failed",
-            "customStatus": {"workspaceName": "med-1102", "resourceGroupName": "rg-med-1102", "logs": []},
+            "customStatus": {"workspaceName": "med-1102", "resourceGroupName": "rg-med-1102", "logs": [], "deployConfig": target},
             "output": {
                 "phases": [
                     {"phase": "Phase 2: Fabric RTI", "status": "succeeded"},
@@ -794,6 +1345,7 @@ class LocalServerHealthTests(unittest.TestCase):
                 "resourceGroupName": "rg-med-1102",
                 "continuedFrom": "run-a",
                 "logs": [],
+                "deployConfig": target,
             },
             "output": {
                 "phases": [

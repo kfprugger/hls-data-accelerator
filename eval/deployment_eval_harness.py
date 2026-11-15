@@ -123,12 +123,52 @@ def http(method: str, url: str, token: str, body=None, timeout: int = 60, skill:
                 time.sleep(sleep_sec)
     return 0, {"_raw": f"transport error: {last_exc}"}
 
+def fabric_collection(az: Az, url: str, required: tuple[str, ...] = ()) -> list[dict]:
+    """Every entry of a paged Fabric collection; raises rather than returning a partial list.
+
+    Each entry needs a non-empty string for every ``required`` field.
+    Continuations must stay under FABRIC_API and never repeat, so the bearer
+    token is not sent elsewhere and a looping service cannot hang the harness.
+    """
+    values: list[dict] = []
+    page_url, requested = url, {url}
+    for _ in range(1000):
+        status, page = http("GET", page_url, az.token(FABRIC_RESOURCE))
+        entries = page.get("value") if status == 200 and isinstance(page, dict) else None
+        if not isinstance(entries, list) or not all(
+                isinstance(entry, dict)
+                and all(isinstance(entry.get(field), str) and entry[field] for field in required)
+                for entry in entries):
+            raise RuntimeError(f"unreadable Fabric collection page (HTTP {status}) for {page_url}: {str(page)[:200]}")
+        values.extend(entries)
+        token, uri = page.get("continuationToken"), page.get("continuationUri")
+        if token in (None, "") and uri in (None, ""):
+            return values
+        if not isinstance(token, (str, type(None))) or not isinstance(uri, (str, type(None))):
+            raise RuntimeError(f"unreadable Fabric continuation for {page_url}")
+        next_url = ""
+        if uri:
+            next_url = urllib.parse.urljoin(page_url, uri)
+            segments = urllib.parse.unquote(urllib.parse.urlsplit(next_url).path).split("/")
+            if (not next_url.startswith(FABRIC_API) or next_url[len(FABRIC_API):][:1] not in {"/", "?"}
+                    or {".", ".."} & set(segments) or "#" in next_url):
+                raise RuntimeError(f"Fabric continuation outside {FABRIC_API} refused")
+        if token:
+            # Rebuilding from the original URL keeps its filters.
+            next_url = f"{url}{'&' if '?' in url else '?'}continuationToken={urllib.parse.quote(token, safe='')}"
+        if next_url in requested:
+            raise RuntimeError(f"Fabric collection repeated a continuation for {url}")
+        requested.add(next_url)
+        page_url = next_url
+    raise RuntimeError(f"Fabric collection exceeded 1000 pages for {url}")
+
+
 def resolve_capacity_id(az: Az, ws_id: str) -> str | None:
     """ARM ID of the Fabric capacity backing the workspace, in whichever subscription holds it."""
-    token = az.token(FABRIC_RESOURCE)
-    _, workspace = http("GET", f"{FABRIC_API}/workspaces/{ws_id}", token)
-    _, capacities = http("GET", f"{FABRIC_API}/capacities", token)
-    name = next((c.get("displayName") for c in capacities.get("value", [])
+    status, workspace = http("GET", f"{FABRIC_API}/workspaces/{ws_id}", az.token(FABRIC_RESOURCE))
+    if status != 200 or not isinstance(workspace, dict):
+        raise RuntimeError(f"workspace read failed (HTTP {status}): {str(workspace)[:200]}")
+    name = next((c.get("displayName") for c in fabric_collection(az, f"{FABRIC_API}/capacities")
                  if c.get("id") == workspace.get("capacityId")), None)
     if not name or not re.fullmatch(r"[a-z0-9]{3,63}", name):
         return None
@@ -171,16 +211,15 @@ def ensure_capacity_active(az: Az, log, capacity_id: str, *, resume: bool = True
 
 
 def find_workspace(az: Az, name: str) -> str | None:
-    _, data = http("GET", f"{FABRIC_API}/workspaces", az.token(FABRIC_RESOURCE))
-    for w in data.get("value", []):
+    """Workspace ID by display name; None only after a complete listing."""
+    for w in fabric_collection(az, f"{FABRIC_API}/workspaces", ("id", "displayName")):
         if w.get("displayName") == name:
             return w["id"]
     return None
 
 
 def list_items(az: Az, ws_id: str) -> list[dict]:
-    _, data = http("GET", f"{FABRIC_API}/workspaces/{ws_id}/items", az.token(FABRIC_RESOURCE))
-    return data.get("value", [])
+    return fabric_collection(az, f"{FABRIC_API}/workspaces/{ws_id}/items", ("id", "displayName", "type"))
 
 
 def _dax(az: Az, model_id: str, query: str, timeout: int = 60, deadline: float | None = None):

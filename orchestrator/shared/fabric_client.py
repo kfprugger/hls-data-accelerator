@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+import urllib.parse
 from typing import Any, Callable
 
 import requests
@@ -19,6 +20,8 @@ FABRIC_RESOURCE = "https://api.fabric.microsoft.com"
 FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
 
 _READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+# A collection that keeps issuing new continuations is unreadable, not endless.
+_MAX_COLLECTION_PAGES = 1000
 _TRANSIENT_NETWORK_ERRORS = (
     requests.exceptions.ConnectionError,
     requests.exceptions.ChunkedEncodingError,
@@ -60,9 +63,9 @@ def _retry_network_error(
 class FabricClient:
     """Wrapper for Fabric REST API calls with retry and LRO support."""
 
-    def __init__(self, api_base: str = FABRIC_API_BASE) -> None:
+    def __init__(self, api_base: str = FABRIC_API_BASE, credential=None) -> None:
         self.api_base = api_base
-        self.credential = DefaultAzureCredential(exclude_managed_identity_credential=True)
+        self.credential = credential or DefaultAzureCredential(exclude_managed_identity_credential=True)
         self._token: str | None = None
         self._token_expires: float = 0
 
@@ -375,15 +378,77 @@ class FabricClient:
             time.sleep(min(delay, max(0, deadline - time.monotonic())))
         raise TimeoutError(f"Fabric item job timed out after {timeout_seconds}s: {job_url}")
 
+    # ── Collections ────────────────────────────────────────────────────
+
+    def _continuation_endpoint(self, page_endpoint: str, uri: str) -> str:
+        """Map a continuationUri back to an endpoint under the configured API base."""
+        absolute = urllib.parse.urljoin(f"{self.api_base}{page_endpoint}", uri)
+        boundary = absolute[len(self.api_base):len(self.api_base) + 1]
+        segments = urllib.parse.unquote(urllib.parse.urlsplit(absolute).path).split("/")
+        if (
+            not absolute.startswith(self.api_base)
+            or boundary not in {"/", "?"}
+            or {".", ".."} & set(segments)
+            or "#" in absolute
+        ):
+            raise RuntimeError("Fabric continuation outside the configured API base refused")
+        return absolute[len(self.api_base):]
+
+    def _list_collection(
+        self, endpoint: str, max_retries: int, required: tuple[str, ...] = ()
+    ) -> list[dict[str, Any]]:
+        """Return every entry of a paged Fabric collection.
+
+        Failed, empty, or malformed pages, entries lacking a non-empty string
+        for any ``required`` field, and continuations that leave the API base
+        or repeat raise, so a returned list is always complete and readable.
+        """
+        values: list[dict[str, Any]] = []
+        page_endpoint = endpoint
+        requested = {endpoint}
+        for _ in range(_MAX_COLLECTION_PAGES):
+            page = self.call("GET", page_endpoint, max_retries=max_retries)
+            entries = page.get("value") if isinstance(page, dict) else None
+            if not isinstance(entries, list) or not all(
+                isinstance(entry, dict)
+                and all(isinstance(entry.get(field), str) and entry[field] for field in required)
+                for entry in entries
+            ):
+                raise RuntimeError(f"Unreadable Fabric collection page: GET {page_endpoint}")
+            values.extend(entries)
+            token = page.get("continuationToken")
+            uri = page.get("continuationUri")
+            if token in (None, "") and uri in (None, ""):
+                return values
+            if not isinstance(token, (str, type(None))) or not isinstance(uri, (str, type(None))):
+                raise RuntimeError(f"Unreadable Fabric continuation: GET {page_endpoint}")
+            # Validate any URI even when the token is used instead.
+            next_endpoint = self._continuation_endpoint(page_endpoint, uri) if uri else ""
+            if token:
+                # Rebuilding from the original endpoint keeps its filters.
+                separator = "&" if "?" in endpoint else "?"
+                next_endpoint = (
+                    f"{endpoint}{separator}continuationToken={urllib.parse.quote(token, safe='')}"
+                )
+            if next_endpoint in requested:
+                raise RuntimeError(f"Fabric collection repeated a continuation: GET {endpoint}")
+            requested.add(next_endpoint)
+            page_endpoint = next_endpoint
+        raise RuntimeError(
+            f"Fabric collection exceeded {_MAX_COLLECTION_PAGES} pages: GET {endpoint}"
+        )
+
     # ── Workspace Operations ───────────────────────────────────────────
 
+    def list_workspaces(self, max_retries: int = 3) -> list[dict[str, Any]]:
+        """Return every workspace visible to the caller, or raise."""
+        return self._list_collection("/workspaces", max_retries, ("id", "displayName"))
+
     def find_workspace(self, name: str, max_retries: int = 3) -> dict[str, Any] | None:
-        """Find a workspace by display name."""
-        result = self.call("GET", "/workspaces", max_retries=max_retries)
-        if result and "value" in result:
-            for ws in result["value"]:
-                if ws.get("displayName") == name:
-                    return ws
+        """Find a workspace by display name; None only after a complete listing."""
+        for ws in self.list_workspaces(max_retries):
+            if ws.get("displayName") == name:
+                return ws
         return None
 
     def provision_workspace_identity(self, workspace_id: str) -> dict[str, Any] | None:
@@ -405,8 +470,7 @@ class FabricClient:
         endpoint = f"/workspaces/{workspace_id}/items"
         if item_type:
             endpoint += f"?type={item_type}"
-        result = self.call("GET", endpoint, max_retries=max_retries)
-        return result.get("value", []) if result else []
+        return self._list_collection(endpoint, max_retries, ("id", "displayName", "type"))
 
     def find_item(
         self, workspace_id: str, display_name: str, item_type: str | None = None
@@ -554,9 +618,8 @@ class FabricClient:
     # ── Connections ────────────────────────────────────────────────────
 
     def list_connections(self) -> list[dict[str, Any]]:
-        """List all connections."""
-        result = self.call("GET", "/connections")
-        return result.get("value", []) if result else []
+        """List all connections; raises rather than returning a partial list."""
+        return self._list_collection("/connections", max_retries=3)
 
     def delete_connection(self, connection_id: str) -> None:
         """Delete a connection."""

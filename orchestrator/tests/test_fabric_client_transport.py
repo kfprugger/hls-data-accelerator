@@ -209,5 +209,148 @@ class FabricTransportTests(unittest.TestCase):
                 self.client.wait_for_item_job("https://api.fabric.test/v1/jobs/one", timeout_seconds=3)
 
 
+API = "https://api.fabric.test/v1"
+
+
+class FabricCollectionTests(unittest.TestCase):
+    def setUp(self):
+        self.client = FabricClient.__new__(FabricClient)
+        self.client.api_base = API
+        self.requested = []
+        self.enterContext(patch.object(self.client, "_headers", return_value={}))
+        self.enterContext(patch("shared.fabric_client.time.sleep"))
+
+    def serve(self, pages):
+        """Answer each GET from a URL-keyed page table; unknown URLs fail the test."""
+
+        def send(method, url, **kwargs):
+            self.requested.append(url)
+            page = pages[url]
+            return page if isinstance(page, requests.Response) else response(payload=page)
+
+        return patch("shared.fabric_client.requests.request", side_effect=send)
+
+    def test_lookups_read_every_page_before_reporting_absence(self):
+        pages = {
+            f"{API}/workspaces": {
+                "value": [{"id": "other", "displayName": "other"}],
+                "continuationUri": f"{API}/workspaces?continuationToken=two",
+            },
+            f"{API}/workspaces?continuationToken=two": {
+                "value": [{"id": "target-id", "displayName": "target"}],
+                "continuationUri": "/v1/workspaces?continuationToken=three",
+            },
+            f"{API}/workspaces?continuationToken=three": {"value": []},
+        }
+        with self.serve(pages):
+            self.assertEqual(self.client.find_workspace("target")["id"], "target-id")
+            self.assertIsNone(self.client.find_workspace("missing"))
+            self.assertEqual(
+                [ws["id"] for ws in self.client.list_workspaces()], ["other", "target-id"]
+            )
+
+    def test_token_only_continuation_keeps_item_type_filter(self):
+        base = f"{API}/workspaces/ws/items?type=Lakehouse"
+        pages = {
+            base: {
+                "value": [{"id": "a", "displayName": "bronze", "type": "Lakehouse"}],
+                "continuationToken": "n/+=",
+            },
+            f"{base}&continuationToken=n%2F%2B%3D": {
+                "value": [{"id": "b", "displayName": "gold", "type": "Lakehouse"}],
+            },
+        }
+        with self.serve(pages):
+            self.assertEqual([item["id"] for item in self.client.list_items("ws", "Lakehouse")], ["a", "b"])
+            self.assertEqual(self.client.find_item("ws", "gold", "Lakehouse")["id"], "b")
+            self.assertEqual(self.client.find_lakehouse("ws", "GOLD")["id"], "b")
+
+    def test_failed_or_unreadable_page_never_becomes_absence(self):
+        empty = response()
+        empty._content = b""
+        for label, page in (
+            ("http 404", response(404, {"error": {"code": "NotFound"}})),
+            ("empty body", empty),
+            ("null value", {"value": None}),
+            ("missing value", {}),
+            ("non-list value", {"value": {"id": "target-id"}}),
+            ("non-mapping entry", {"value": ["target"]}),
+            ("empty mapping entry", {"value": [{}]}),
+            ("null name", {"value": [{"id": "w", "displayName": None}]}),
+            ("blank id", {"value": [{"id": "", "displayName": "target"}]}),
+            ("non-object page", [{"id": "target-id", "displayName": "target"}]),
+            ("non-string continuation", {"value": [], "continuationToken": 7}),
+        ):
+            for first_page in (True, False):
+                with self.subTest(page=label, first_page=first_page):
+                    if first_page:
+                        pages = {f"{API}/workspaces": page}
+                    else:
+                        pages = {
+                            f"{API}/workspaces": {
+                                "value": [{"id": "other", "displayName": "other"}],
+                                "continuationToken": "two",
+                            },
+                            f"{API}/workspaces?continuationToken=two": page,
+                        }
+                    with self.serve(pages):
+                        with self.assertRaises((RuntimeError, requests.HTTPError)):
+                            self.client.find_workspace("target")
+                        with self.assertRaises((RuntimeError, requests.HTTPError)):
+                            self.client.list_workspaces()
+        for label, entry in (
+            ("empty mapping", {}),
+            ("missing type", {"id": "i", "displayName": "gold"}),
+            ("null name", {"id": "i", "displayName": None, "type": "Lakehouse"}),
+            ("numeric id", {"id": 7, "displayName": "gold", "type": "Lakehouse"}),
+        ):
+            with self.subTest(item=label):
+                pages = {
+                    f"{API}/workspaces/ws/items": {
+                        "value": [{"id": "a", "displayName": "bronze", "type": "Lakehouse"}],
+                        "continuationToken": "two",
+                    },
+                    f"{API}/workspaces/ws/items?continuationToken=two": {"value": [entry]},
+                }
+                with self.serve(pages):
+                    with self.assertRaises(RuntimeError):
+                        self.client.find_item("ws", "gold")
+
+    def test_continuation_cannot_leave_api_base(self):
+        for uri in (
+            "https://evil.test/v1/workspaces?continuationToken=two",
+            "https://api.fabric.test.evil.test/v1/workspaces",
+            "https://api.fabric.test/v1@evil.test/workspaces",
+            "https://api.fabric.test/v10/workspaces",
+            "https://api.fabric.test/admin/workspaces",
+            "http://api.fabric.test/v1/workspaces?continuationToken=two",
+            "https://api.fabric.test/v1/%2E%2E/admin/workspaces",
+        ):
+            with self.subTest(uri=uri):
+                self.requested.clear()
+                pages = {f"{API}/workspaces": {"value": [], "continuationUri": uri}}
+                with self.serve(pages):
+                    with self.assertRaises(RuntimeError):
+                        self.client.find_workspace("target")
+                self.assertEqual(self.requested, [f"{API}/workspaces"])
+
+    def test_repeated_continuation_is_refused_instead_of_looping(self):
+        for label, first, second in (
+            ("uri to self", {"value": [], "continuationUri": f"{API}/workspaces"}, None),
+            (
+                "token repeats",
+                {"value": [], "continuationToken": "two"},
+                {"value": [{"id": "x", "displayName": "x"}], "continuationToken": "two"},
+            ),
+        ):
+            with self.subTest(case=label):
+                pages = {f"{API}/workspaces": first}
+                if second is not None:
+                    pages[f"{API}/workspaces?continuationToken=two"] = second
+                with self.serve(pages):
+                    with self.assertRaises(RuntimeError):
+                        self.client.find_workspace("target")
+
+
 if __name__ == "__main__":
     unittest.main()

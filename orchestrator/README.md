@@ -8,6 +8,14 @@ The former Azure Functions host and its name-based front-end ownership exception
 
 Records preserve `customStatus.subscriptionId`, `customStatus.expectedTenantId` and `customStatus.frontEndResourceGroups`; final results are in `output.teardown` (`plan`, `deleted`, `failures`, `skipped`, `status`). Interrupted-teardown reconciliation uses only the record's pinned `subscriptionId` and skips legacy unpinned records.
 
+Teardown validation (`POST /api/teardown/{instanceId}/validate`) passes deletion only when both sides were read successfully and found nothing: `az group exists` answered `false` (or the group listed no resources), and the live Fabric workspace list in the record's subscription omitted the workspace. A failed or unreadable group probe, a failed resource listing, or a blocked Fabric read is reported in `resources.unverified` (`azure`/`fabric` → error) and fails the matching check. Unreadable inventory shows an `Unverified: …` detail unless a workspace was already found. A persisted workspace link still fails the deletion check and comes only from runs recorded for that subscription.
+
+Workspace, item and connection lookups read every page. A failed or malformed page makes the inventory unavailable. A failed collection request, including HTTP 404, is not proof of an empty collection. Authenticated Fabric pagination cannot change the API origin or escape its base path.
+
+Resume and continuation use only runs recorded for the request's own `expected_tenant_id` and `expected_subscription_id` (one record source must hold both; every recorded ID must match). Auto-resume ignores same-named runs of another or no recorded target, a `continue_from_instance_id` source recorded for another target is refused with HTTP 409 before any cloud read, and a continuation chain stops at the first ancestor recorded for another target. An explicit-subscription teardown scan qualifies or seeds identity lookups only from runs recorded for that subscription; an unscoped scan keeps every run's names.
+
+An explicit continuation source is checked before add-on preflight, including on Phase 7-only requests. A deep existing-estate check without an Azure resource-group target remains `liveValidated: false`; finding workspace history alone is not a live check.
+
 For read-only discovery from `orchestrator/`, run `python -m shared.full_teardown --subscription <subscription> --workspace <workspace> --resource-group <rg> --expected-tenant <tenant> --delete-workspace --delete-resource-group --plan`. The root wrapper exposes the same preview as `Teardown-All.ps1 -SubscriptionId <subscription> -FabricWorkspaceName <workspace> -ResourceGroupName <rg> -ExpectedTenantId <tenant> -Plan`. Plans delete nothing. See [teardown parameters and confirmation behavior](../README.md#teardown).
 
 ## 💻 Developer Quick Start

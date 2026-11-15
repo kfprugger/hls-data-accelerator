@@ -25,10 +25,10 @@ KQL_DIR = Path(__file__).resolve().parent.parent.parent / "fabric-rti" / "kql"
 class KustoClient:
     """Execute KQL management commands against an Eventhouse."""
 
-    def __init__(self, kusto_uri: str, database_name: str) -> None:
+    def __init__(self, kusto_uri: str, database_name: str, credential=None) -> None:
         self.kusto_uri = kusto_uri.rstrip("/")
         self.database_name = database_name
-        self.credential = DefaultAzureCredential(exclude_managed_identity_credential=True)
+        self.credential = credential or DefaultAzureCredential(exclude_managed_identity_credential=True)
         self._token: str | None = None
         self._token_expires: float = 0
 

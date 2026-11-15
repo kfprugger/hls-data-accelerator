@@ -165,6 +165,40 @@ class HttpError(Exception):
         self.status = status
 
 
+class IncompleteListing(RuntimeError):
+    """A collection was not listed completely, so neither its contents nor an absence can be trusted."""
+
+
+MAX_LIST_PAGES = 1000
+_NEXT_PAGE_KEYS = ("nextLink", "@odata.nextLink", "continuationUri")  # ARM, Microsoft Graph, Fabric
+
+
+def _next_page(first: urllib.parse.SplitResult, body: dict, where: str) -> str:
+    """The next page URL of a list response, or "" on the terminal page; never leaves the first URL's collection."""
+    link = next((body[k] for k in _NEXT_PAGE_KEYS if body.get(k) not in (None, "")), None)
+    token = body.get("continuationToken")
+    if link is None and token not in (None, ""):
+        if not isinstance(token, str):
+            raise IncompleteListing(f"GET {where}: malformed continuationToken")
+        params = [(k, v) for k, v in urllib.parse.parse_qsl(first.query, keep_blank_values=True) if k != "continuationToken"]
+        params.append(("continuationToken", token))
+        link = urllib.parse.urlunsplit(first._replace(query=urllib.parse.urlencode(params, quote_via=urllib.parse.quote)))
+    if link is None:
+        return ""
+    if not isinstance(link, str):
+        raise IncompleteListing(f"GET {where}: malformed continuation link")
+    nxt = urllib.parse.urlsplit(link)
+    try:
+        port = nxt.port
+    except ValueError:
+        port = -1
+    if (nxt.scheme != "https" or first.scheme != "https" or nxt.username is not None or nxt.password is not None
+            or nxt.hostname != first.hostname or port != first.port
+            or nxt.path.rstrip("/").lower() != first.path.rstrip("/").lower()):
+        raise IncompleteListing(f"GET {where}: refusing a continuation outside {where}")
+    return link
+
+
 Opener = Callable[[urllib.request.Request, float], Any]
 
 
@@ -195,13 +229,38 @@ class Rest:
                 raise HttpError(error.code, method, url, text) from None
         raise HttpError(429, method, url, "throttled")
 
-    def pages(self, url: str, resource: str, key: str = "value") -> Iterator[dict]:
-        while url:
+    def pages(self, url: str, resource: str, key: str = "value", fields: tuple[str, ...] = ()) -> Iterator[dict]:
+        """Yield every row of a paged collection, or raise :class:`IncompleteListing`.
+
+        No rows means a successful terminal page listed an empty collection. A 404 (Fabric also answers
+        CapacityNotActive that way), a body that is not a JSON object, a missing or non-list ``key``, a row that
+        is not an object or lacks a non-empty string for one of ``fields``, and an unsafe, repeating or endless
+        continuation all raise. ARM ``nextLink``, Graph ``@odata.nextLink`` and Fabric ``continuationUri`` are
+        followed; a bare Fabric ``continuationToken`` is added to the first URL's own parameters. Every
+        continuation is checked against the first URL's https origin and path before a token is sent to it.
+        """
+        first = urllib.parse.urlsplit(url)
+        where = f"{first.scheme}://{first.netloc}{first.path}"
+        seen = {url}
+        while True:
             status, body = self.call("GET", url, resource)
-            if status == 404 or not body:
+            if not 200 <= status < 300:
+                raise IncompleteListing(f"GET {where} -> HTTP {status}: the collection could not be listed")
+            rows = body.get(key) if isinstance(body, dict) else None
+            if not isinstance(rows, list):
+                raise IncompleteListing(f"GET {where}: the response has no '{key}' list")
+            for row in rows:
+                if not isinstance(row, dict) or any(not isinstance(row.get(f), str) or not row[f] for f in fields):
+                    raise IncompleteListing(f"GET {where}: malformed '{key}' row")
+            url = _next_page(first, body, where)
+            if url in seen:
+                raise IncompleteListing(f"GET {where}: the continuation repeats an earlier page")
+            if url and len(seen) >= MAX_LIST_PAGES:
+                raise IncompleteListing(f"GET {where}: more than {MAX_LIST_PAGES} pages")
+            yield from rows
+            if not url:
                 return
-            yield from body.get(key) or []
-            url = body.get("nextLink") or body.get("continuationUri") or body.get("@odata.nextLink") or ""
+            seen.add(url)
 
 
 # --------------------------------------------------------------------------- teardown
@@ -245,7 +304,8 @@ class DeploymentTeardown:
         status, _ = self.rest.call("GET", self._arm(f"/resourcegroups/{group}?api-version=2021-04-01"), ARM)
         if status == 404:
             return None
-        return list(self.rest.pages(self._arm(f"/resourceGroups/{group}/resources?api-version=2021-04-01"), ARM))
+        return list(self.rest.pages(self._arm(f"/resourceGroups/{group}/resources?api-version=2021-04-01"), ARM,
+                                    fields=("id", "name", "type")))
 
     def _graph_query(self, query: str) -> list[dict]:
         rows: list[dict] = []
@@ -287,13 +347,14 @@ class DeploymentTeardown:
         return plan
 
     def _plan_workspace(self, plan: TeardownPlan, ties: set[str]) -> None:
-        match = [w for w in self.rest.pages(f"{FABRIC}/v1/workspaces", FABRIC) if w.get("displayName") == self.spec.workspace_name]
+        workspaces = self.rest.pages(f"{FABRIC}/v1/workspaces", FABRIC, fields=("id", "displayName"))
+        match = [w for w in workspaces if w["displayName"] == self.spec.workspace_name]
         if not match:
             self.report.log("warn", f"Fabric workspace '{self.spec.workspace_name}' not found")
             return
         plan.workspace_id = match[0]["id"]
         ties.add(plan.workspace_id.lower())
-        items = list(self.rest.pages(f"{FABRIC}/v1/workspaces/{plan.workspace_id}/items", FABRIC))
+        items = list(self.rest.pages(f"{FABRIC}/v1/workspaces/{plan.workspace_id}/items", FABRIC, fields=("id", "displayName", "type")))
         plan.app_backends = [{"id": i["id"], "name": i["displayName"]} for i in items if i.get("type") == "AppBackend"]
         names = {b["name"] for b in plan.app_backends} | set(KNOWN_RAYFIN_APPS)
         plan.companion_items = [{"id": i["id"], "name": i["displayName"], "type": i["type"]} for i in items
@@ -418,8 +479,8 @@ class DeploymentTeardown:
         self.report.phase(PHASE_PREFLIGHT, "running")
         try:
             plan = self.preflight()
-        except TeardownRefused as refused:
-            self.report.log("error", f"Refused: {refused}")
+        except Exception as error:  # a refusal or an unreadable listing: nothing was deleted
+            self.report.log("error", f"Refused: {error}" if isinstance(error, TeardownRefused) else f"Preflight failed: {error}")
             self.report.phase(PHASE_PREFLIGHT, "failed")
             raise
         self.report.phase(PHASE_PREFLIGHT, "succeeded")
@@ -512,7 +573,7 @@ class DeploymentTeardown:
     def _delete_connections(self, plan: TeardownPlan) -> None:
         hosts = [t for t in plan.tie_values if "." in t]
         count = 0
-        for connection in self.rest.pages(f"{FABRIC}/v1/connections", FABRIC):
+        for connection in self.rest.pages(f"{FABRIC}/v1/connections", FABRIC, fields=("id",)):
             path = str(((connection.get("connectionDetails") or {}).get("path")) or "").lower()
             if path and any(h in path for h in hosts):
                 self.rest.call("DELETE", f"{FABRIC}/v1/connections/{connection['id']}", FABRIC)
@@ -524,18 +585,20 @@ class DeploymentTeardown:
 
     def _graph_delete_apps(self, display_name: str, owner_prefix: str | None) -> None:
         query = urllib.parse.quote(f"displayName eq '{display_name.replace(chr(39), chr(39) * 2)}'")
-        for app in self.rest.pages(f"{GRAPH}/v1.0/applications?$filter={query}&$select=id,appId,displayName,tags", GRAPH):
+        for app in self.rest.pages(f"{GRAPH}/v1.0/applications?$filter={query}&$select=id,appId,displayName,tags", GRAPH,
+                                   fields=("id", "appId")):
             if owner_prefix is not None and not any(str(t).lower().startswith(owner_prefix) for t in app.get("tags") or []):
                 self.report.log("warn", f"Kept Entra app '{display_name}' ({app['appId']}): owner tag does not match this deployment")
                 continue
             by_app = urllib.parse.quote(f"appId eq '{app['appId']}'")
-            for sp in self.rest.pages(f"{GRAPH}/v1.0/servicePrincipals?$filter={by_app}&$select=id", GRAPH):
+            for sp in self.rest.pages(f"{GRAPH}/v1.0/servicePrincipals?$filter={by_app}&$select=id", GRAPH, fields=("id",)):
                 self.rest.call("DELETE", f"{GRAPH}/v1.0/servicePrincipals/{sp['id']}", GRAPH)
             self.rest.call("DELETE", f"{GRAPH}/v1.0/applications/{app['id']}", GRAPH)
             self._record("Entra app", f"{display_name} ({app['appId']})")
             self.report.log("success", f"Deleted Entra app '{display_name}' and its service principal")
         if owner_prefix is None:  # the workspace identity's own service principal, if it outlived deprovisioning
-            for sp in self.rest.pages(f"{GRAPH}/v1.0/servicePrincipals?$filter={query}&$select=id,appId,servicePrincipalType", GRAPH):
+            for sp in self.rest.pages(f"{GRAPH}/v1.0/servicePrincipals?$filter={query}&$select=id,appId,servicePrincipalType",
+                                      GRAPH, fields=("id", "appId")):
                 if sp.get("servicePrincipalType") in ("ManagedIdentity", "Application"):
                     self.rest.call("DELETE", f"{GRAPH}/v1.0/servicePrincipals/{sp['id']}", GRAPH)
                     self._record("Entra service principal", f"{display_name} ({sp['appId']})")
@@ -636,6 +699,9 @@ def main(argv: list[str] | None = None) -> int:
     except TeardownRefused as refused:
         print(f"RESULT: {json.dumps({'status': 'refused', 'reason': str(refused)})}", flush=True)
         return 2
+    except IncompleteListing as unreadable:  # discovery could not be completed: nothing was deleted
+        print(f"RESULT: {json.dumps({'status': 'failed', 'reason': str(unreadable)})}", flush=True)
+        return 1
     print(f"RESULT: {json.dumps(result)}", flush=True)
     return 0 if args.plan or result.get("status") == "succeeded" else 1
 

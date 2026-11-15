@@ -420,6 +420,131 @@ class GraphAgentCheckTests(unittest.TestCase):
         self.assertFalse(result["passed"])
 
 
+class FabricCollectionTests(unittest.TestCase):
+    API = harness.FABRIC_API
+
+    def _serve(self, pages):
+        """Answer GETs from a URL-keyed page table; unknown URLs fail the test."""
+        self.requested = []
+
+        def http(method, url, token, body=None, timeout=60):
+            self.requested.append(url)
+            page = pages[url]
+            return page if isinstance(page, tuple) else (200, page)
+
+        az = Mock()
+        az.token.return_value = "token"
+        return az, patch.object(harness, "http", side_effect=http)
+
+    def test_lookups_read_every_page_before_reporting_absence(self):
+        az, served = self._serve({
+            f"{self.API}/workspaces": {
+                "value": [{"id": "other", "displayName": "other"}],
+                "continuationUri": f"{self.API}/workspaces?continuationToken=two",
+            },
+            f"{self.API}/workspaces?continuationToken=two": {
+                "value": [{"id": "target-id", "displayName": "target"}],
+                "continuationToken": "three",
+            },
+            f"{self.API}/workspaces?continuationToken=three": {"value": []},
+            f"{self.API}/workspaces/ws/items": {
+                "value": [{"id": "a", "type": "Report", "displayName": "a"}],
+                "continuationToken": "n/+=",
+            },
+            f"{self.API}/workspaces/ws/items?continuationToken=n%2F%2B%3D": {
+                "value": [{"id": "b", "type": "SemanticModel", "displayName": "b"}],
+            },
+            f"{self.API}/workspaces/ws": {"id": "ws", "capacityId": "cap-2"},
+            f"{self.API}/capacities": {
+                "value": [{"id": "cap-1", "displayName": "fabricone"}],
+                "continuationToken": "two",
+            },
+            f"{self.API}/capacities?continuationToken=two": {
+                "value": [{"id": "cap-2", "displayName": "fabrictwo"}],
+            },
+        })
+        az.run.return_value = subprocess.CompletedProcess([], 0, "/subscriptions/s/capacity/fabrictwo\n", "")
+        with served:
+            self.assertEqual(harness.find_workspace(az, "target"), "target-id")
+            self.assertIsNone(harness.find_workspace(az, "missing"))
+            self.assertEqual([item["id"] for item in harness.list_items(az, "ws")], ["a", "b"])
+            self.assertEqual(harness.resolve_capacity_id(az, "ws"), "/subscriptions/s/capacity/fabrictwo")
+        self.assertIn("fabrictwo", " ".join(az.run.call_args.args[0]))
+
+    def test_failed_or_unreadable_later_page_never_becomes_absence(self):
+        for label, page in (
+            ("http 404", (404, {"error": {"code": "NotFound"}})),
+            ("transport error", (0, {"_raw": "transport error: offline"})),
+            ("null value", {"value": None}),
+            ("missing value", {}),
+            ("non-mapping entry", {"value": ["target"]}),
+            ("empty mapping entry", {"value": [{}]}),
+            ("null name", {"value": [{"id": "w", "displayName": None}]}),
+            ("blank id", {"value": [{"id": "", "displayName": "target"}]}),
+            ("non-string continuation", {"value": [], "continuationToken": 7}),
+        ):
+            with self.subTest(page=label):
+                az, served = self._serve({
+                    f"{self.API}/workspaces": {
+                        "value": [{"id": "other", "displayName": "other"}],
+                        "continuationToken": "two",
+                    },
+                    f"{self.API}/workspaces?continuationToken=two": page,
+                })
+                with served, self.assertRaises(RuntimeError):
+                    harness.find_workspace(az, "target")
+        for label, entry in (
+            ("missing type", {"id": "i", "displayName": "gold"}),
+            ("null name", {"id": "i", "displayName": None, "type": "Lakehouse"}),
+        ):
+            with self.subTest(item=label):
+                az, served = self._serve({
+                    f"{self.API}/workspaces/ws/items": {
+                        "value": [{"id": "a", "displayName": "bronze", "type": "Lakehouse"}],
+                        "continuationToken": "two",
+                    },
+                    f"{self.API}/workspaces/ws/items?continuationToken=two": {"value": [entry]},
+                })
+                with served, self.assertRaises(RuntimeError):
+                    harness.list_items(az, "ws")
+
+    def test_main_reports_unreadable_workspace_listing_as_setup_failure(self):
+        import tempfile
+        az, served = self._serve({f"{self.API}/workspaces": (403, {"error": {"code": "Unauthorized"}})})
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "result.json")
+            argv = ["deployment_eval_harness.py", "--workspace", "target", "--json-out", out]
+            with patch("sys.argv", argv), patch.object(harness, "Az", return_value=az), served:
+                self.assertEqual(harness.main(), 2)
+            with open(out) as f:
+                saved = json.load(f)
+        self.assertIn("HTTP 403", saved["setupError"])
+        self.assertNotIn("not found", saved["setupError"])
+
+    def test_continuation_cannot_leave_fabric_api_or_loop(self):
+        for uri in (
+            "https://evil.test/v1/workspaces?continuationToken=two",
+            "https://api.fabric.microsoft.com.evil.test/v1/workspaces",
+            "https://api.fabric.microsoft.com/v10/workspaces",
+            "https://api.fabric.microsoft.com/v1/%2E%2E/admin",
+            f"{harness.FABRIC_API}/workspaces",
+        ):
+            with self.subTest(uri=uri):
+                az, served = self._serve({
+                    f"{self.API}/workspaces": {"value": [], "continuationUri": uri},
+                })
+                with served, self.assertRaises(RuntimeError):
+                    harness.find_workspace(az, "target")
+                self.assertEqual(self.requested, [f"{self.API}/workspaces"])
+
+        az, served = self._serve({
+            f"{self.API}/workspaces": {"value": [], "continuationToken": "two"},
+            f"{self.API}/workspaces?continuationToken=two": {"value": [], "continuationToken": "two"},
+        })
+        with served, self.assertRaises(RuntimeError):
+            harness.find_workspace(az, "target")
+
+
 
 if __name__ == "__main__":
     unittest.main()

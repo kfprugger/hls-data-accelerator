@@ -388,7 +388,7 @@ def _reconcile_teardown(dep: dict) -> bool:
 
     if ws_name:
         try:
-            if not any(w.get("displayName") == ws_name for w in rest.pages(f"{FABRIC}/v1/workspaces", FABRIC)):
+            if not any(w["displayName"] == ws_name for w in rest.pages(f"{FABRIC}/v1/workspaces", FABRIC, fields=("id", "displayName"))):
                 _mark_teardown_phase(phases, PHASE_IDENTITY, "succeeded")
                 _mark_teardown_phase(phases, PHASE_WORKSPACE, "succeeded")
                 changed = True
@@ -971,9 +971,69 @@ def _workspace_id_from_url(value: str) -> str:
     return match.group(1) if match else ""
 
 
-def _persisted_workspace_id(ws_name: str) -> str:
-    """Recover a Fabric workspace id from persisted run links/logs when live Fabric API is blocked."""
-    if not ws_name:
+def _record_names_subscription(dep: dict, subscription_id: str) -> bool:
+    """Whether a run record names exactly ``subscription_id``.
+
+    At least one recorded subscription (``customStatus.subscriptionId``, ``customStatus.deployConfig`` or the root
+    ``config``) must be present and every recorded one must equal it after trim/lowercase. A record rebuilt from a
+    state-tracking ledger inferred its IDs from a sign-in, so it never names a subscription.
+    """
+    target = str(subscription_id or "").strip().lower()
+    cs = dep.get("customStatus")
+    if not target or not isinstance(cs, dict) or cs.get("reconciledFrom") == "state-tracking":
+        return False
+    recorded = set()
+    for source, key in ((cs, "subscriptionId"), (cs.get("deployConfig"), "expected_subscription_id"),
+                        (dep.get("config"), "expected_subscription_id")):
+        if isinstance(source, dict):
+            value = str(source.get(key) or "").strip().lower()
+            if value:
+                recorded.add(value)
+    return recorded == {target}
+
+
+def _record_names_target(dep: dict, tenant_id: str, subscription_id: str) -> bool:
+    """Whether a run record was recorded for exactly this tenant and subscription.
+
+    The strict pair contract of ``shared.database._deployment_matches_target``: ``customStatus`` (``expectedTenantId``/
+    ``subscriptionId``), ``customStatus.deployConfig`` and the root ``config`` (``expected_tenant_id``/
+    ``expected_subscription_id``) must each be a mapping when present, with string or missing IDs; every recorded ID must
+    equal the target after trim/lowercase, and one source must hold both. A pair is never assembled from two sources, and a
+    record rebuilt from a state-tracking ledger never matches.
+    """
+    tenant = str(tenant_id or "").strip().lower()
+    subscription = str(subscription_id or "").strip().lower()
+    cs = dep.get("customStatus")
+    if not tenant or not subscription or not isinstance(cs, dict) or cs.get("reconciledFrom") == "state-tracking":
+        return False
+    sources = [(cs, "expectedTenantId", "subscriptionId")]
+    for owner, key in ((cs, "deployConfig"), (dep, "config")):
+        if key in owner:
+            sources.append((owner[key], "expected_tenant_id", "expected_subscription_id"))
+    complete_pair = False
+    for source, tenant_key, subscription_key in sources:
+        if not isinstance(source, dict):
+            return False
+        recorded = []
+        for key in (tenant_key, subscription_key):
+            value = source.get(key)
+            if value is not None and not isinstance(value, str):
+                return False
+            recorded.append((value or "").strip().lower())
+        recorded_tenant, recorded_subscription = recorded
+        if (recorded_tenant and recorded_tenant != tenant) or (recorded_subscription and recorded_subscription != subscription):
+            return False
+        complete_pair = complete_pair or bool(recorded_tenant and recorded_subscription)
+    return complete_pair
+
+
+def _persisted_workspace_id(subscription_id: str, ws_name: str) -> str:
+    """Recover a Fabric workspace id from persisted run links/logs when live Fabric API is blocked.
+
+    Only runs that recorded ``subscription_id`` are read: a same-named workspace of another subscription, or of a
+    run with no or disagreeing recorded subscriptions, is never reported for this one.
+    """
+    if not ws_name or not subscription_id:
         return ""
 
     workspace_id_pattern = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
@@ -991,7 +1051,7 @@ def _persisted_workspace_id(ws_name: str) -> str:
     matching = []
     for dep in deployments.values():
         cs = dep.get("customStatus") or {}
-        if cs.get("workspaceName") == ws_name:
+        if cs.get("workspaceName") == ws_name and _record_names_subscription(dep, subscription_id):
             matching.append(dep)
     matching.sort(key=lambda dep: dep.get("lastUpdatedTime") or dep.get("createdTime") or "", reverse=True)
 
@@ -1030,8 +1090,8 @@ def _persisted_workspace_id(ws_name: str) -> str:
     return ""
 
 
-def _workspace_state_from_persisted_link(ws_name: str) -> dict | None:
-    workspace_id = _persisted_workspace_id(ws_name)
+def _workspace_state_from_persisted_link(subscription_id: str, ws_name: str) -> dict | None:
+    workspace_id = _persisted_workspace_id(subscription_id, ws_name)
     if not workspace_id:
         return None
     return {
@@ -1043,7 +1103,42 @@ def _workspace_state_from_persisted_link(ws_name: str) -> dict | None:
         "warning": "Live Fabric workspace query blocked; using persisted deployment link.",
     }
 
-def _cloud_state_sync(ws_name: str = "", rg_name: str = "") -> dict:
+def _record_subscription(cs: dict) -> str:
+    """The subscription a run record's cloud reads are pinned to: the teardown's ``subscriptionId`` or the
+    deployment's validated ``expected_subscription_id``. Empty for legacy records that recorded neither."""
+    return str(cs.get("subscriptionId") or (cs.get("deployConfig") or {}).get("expected_subscription_id") or "").strip()
+
+
+def _record_read_target(cs: dict) -> tuple[str, str, str]:
+    """Return (subscription, workspace, resource group) a run record's cloud reads are pinned to.
+
+    A record that names a target but has no subscription is refused (409): reading it through the
+    Azure CLI default could report another subscription's estate or a false deletion.
+    """
+    workspace = cs.get("workspaceName") or ""
+    group = cs.get("resourceGroupName") or ""
+    subscription_id = _record_subscription(cs)
+    if (workspace or group) and not subscription_id:
+        raise HTTPException(409, "This legacy run has no pinned subscription; its cloud state is never read from the Azure CLI default subscription")
+    return subscription_id, workspace, group
+
+
+def _pinned_fabric_client(subscription_id: str):
+    """Fabric client whose tokens come from ``az account get-access-token --subscription``, never the ambient account."""
+    from azure.identity import AzureCliCredential
+    from shared.fabric_client import FabricClient
+    if not subscription_id:
+        raise ValueError("a subscription is required: Fabric is never read with the ambient credential")
+    return FabricClient(credential=AzureCliCredential(subscription=subscription_id))
+
+
+def _require_read_subscription(subscription_id: str, ws_name: str, rg_name: str) -> None:
+    if (ws_name or rg_name) and not subscription_id:
+        raise ValueError("a subscription is required: cloud state is never read from the Azure CLI default subscription")
+
+
+def _cloud_state_sync(subscription_id: str, ws_name: str = "", rg_name: str = "") -> dict:
+    _require_read_subscription(subscription_id, ws_name, rg_name)
     state = {
         "workspace": {"name": ws_name, "exists": None, "id": "", "status": "unknown"},
         "resourceGroup": {"name": rg_name, "exists": None, "provisioningState": "unknown", "status": "unknown"},
@@ -1051,12 +1146,10 @@ def _cloud_state_sync(ws_name: str = "", rg_name: str = "") -> dict:
     }
     if ws_name:
         try:
-            from shared.fabric_client import FabricClient
-            fabric = FabricClient()
-            ws = fabric.find_workspace(ws_name, max_retries=1)
+            ws = _pinned_fabric_client(subscription_id).find_workspace(ws_name, max_retries=1)
             state["workspace"].update({"exists": ws is not None, "id": ws.get("id", "") if ws else "", "status": "exists" if ws else "deleted"})
         except Exception as ex:
-            persisted = _workspace_state_from_persisted_link(ws_name)
+            persisted = _workspace_state_from_persisted_link(subscription_id, ws_name)
             if persisted:
                 state["workspace"].update(persisted)
                 logger.info("Fabric workspace '%s' live query blocked; using persisted workspace id %s", ws_name, persisted["id"])
@@ -1064,14 +1157,16 @@ def _cloud_state_sync(ws_name: str = "", rg_name: str = "") -> dict:
                 state["workspace"].update({"status": "unreachable", "error": str(ex)[:300]})
     if rg_name:
         try:
-            exists_proc = _az_run(["az", "group", "exists", "--name", rg_name])
-            if exists_proc.returncode != 0:
-                # A failed probe is unknown, not "deleted": reading it as absent re-seeds a live estate.
+            exists_proc = _az_run(["az", "group", "exists", "--name", rg_name, "--subscription", subscription_id])
+            answer = (exists_proc.stdout or "").strip().lower()
+            if exists_proc.returncode != 0 or answer not in {"true", "false"}:
+                # Only a successful boolean probe proves presence or absence.
                 raise RuntimeError((exists_proc.stderr or exists_proc.stdout or "az group exists failed").strip())
-            exists = exists_proc.stdout.strip().lower() == "true"
+            exists = answer == "true"
             state["resourceGroup"]["exists"] = exists
             if exists:
-                show = _az_run(["az", "group", "show", "--name", rg_name, "--query", "properties.provisioningState", "-o", "tsv"])
+                show = _az_run(["az", "group", "show", "--name", rg_name, "--subscription", subscription_id,
+                                "--query", "properties.provisioningState", "-o", "tsv"])
                 provisioning = (show.stdout or "").strip() or "Unknown"
                 state["resourceGroup"].update({"provisioningState": provisioning, "status": provisioning.lower()})
             else:
@@ -1090,16 +1185,30 @@ def _validation_from_resources(
     azure_count = len(resources.get("azure") or [])
     fabric_count = len(resources.get("fabric") or [])
     workspace_exists = bool(resources.get("workspace"))
+    unverified = resources.get("unverified") or {}
     if is_teardown:
+        # Deletion is proven only by a successful read that found nothing; an unreadable inventory is never "deleted".
+        if workspace_exists:
+            workspace_check = ("fail", "Workspace still exists")
+        elif "fabric" in unverified:
+            workspace_check = ("fail", f"Unverified: Fabric inventory could not be read ({unverified['fabric']})")
+        else:
+            workspace_check = ("pass", "Workspace absent")
+        if "azure" in unverified:
+            group_check = ("fail", f"Unverified: Azure resource group could not be read ({unverified['azure']})")
+        else:
+            group_check = ("pass" if azure_count == 0 else "fail", f"{azure_count} Azure resource(s) found")
         checks = [
-            {"name": "Fabric workspace deleted", "status": "pass" if not workspace_exists else "fail", "detail": "Workspace absent" if not workspace_exists else "Workspace still exists"},
-            {"name": "Azure resource group empty/deleted", "status": "pass" if azure_count == 0 else "fail", "detail": f"{azure_count} Azure resource(s) found"},
+            {"name": "Fabric workspace deleted", "status": workspace_check[0], "detail": workspace_check[1]},
+            {"name": "Azure resource group empty/deleted", "status": group_check[0], "detail": group_check[1]},
         ]
     else:
         checks = [
-            {"name": "Fabric workspace exists", "status": "pass" if workspace_exists else "fail", "detail": "Workspace found" if workspace_exists else "Workspace missing"},
+            {"name": "Fabric workspace exists", "status": "pass" if workspace_exists else "fail", "detail": "Workspace found" if workspace_exists else (
+                f"Unverified: Fabric inventory could not be read ({unverified['fabric']})" if "fabric" in unverified else "Workspace missing")},
             {"name": "Fabric items discovered", "status": "pass" if fabric_count > 0 else "warning", "detail": f"{fabric_count} Fabric item(s)"},
-            {"name": "Azure resources discovered", "status": "pass" if azure_count > 0 else "warning", "detail": f"{azure_count} Azure resource(s)"},
+            {"name": "Azure resources discovered", "status": "pass" if azure_count > 0 else "warning", "detail": (
+                f"Unverified: Azure resource group could not be read ({unverified['azure']})" if "azure" in unverified else f"{azure_count} Azure resource(s)")},
         ]
         if deploy_config:
             checks.extend(feature_presence_checks(resources, deploy_config))
@@ -1784,14 +1893,14 @@ def _live_resume_prerequisites(req: DeployRequest, cloud_state: dict) -> dict:
         "fhirCounts": {"patients": 0, "devices": 0, "exportedFiles": 0, "dicomStudies": 0},
     }
     try:
-        resources = _get_deployed_resources_sync(req.fabric_workspace_name, req.resource_group_name)
+        resources = _get_deployed_resources_sync(req.expected_subscription_id, req.fabric_workspace_name, req.resource_group_name)
         evidence["azureTypes"] = {str(r.get("fullType") or r.get("type") or "").lower() for r in resources.get("azure") or []}
         evidence["azureNames"] = {str(r.get("name") or "").lower() for r in resources.get("azure") or []}
         evidence["fabricItems"] = resources.get("fabric") or []
     except Exception as ex:
         logger.warning("Resume prerequisite resource query failed: %s", ex)
     if req.resource_group_name and bool((cloud_state.get("resourceGroup") or {}).get("exists")):
-        evidence["fhirCounts"] = _query_fhir_counts(req.resource_group_name)
+        evidence["fhirCounts"] = _query_fhir_counts(req.expected_subscription_id, req.resource_group_name)
     return evidence
 
 
@@ -1876,7 +1985,7 @@ def _phase_live_prerequisites_ok(req: DeployRequest, phase_name: str, evidence: 
 
 def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict, mode: str = "Auto-resume") -> bool:
     """Skip only phases that safely succeeded in a specific failed deployment."""
-    cloud_state = _cloud_state_sync(req.fabric_workspace_name, req.resource_group_name)
+    cloud_state = _cloud_state_sync(req.expected_subscription_id, req.fabric_workspace_name, req.resource_group_name)
     workspace_exists = bool((cloud_state.get("workspace") or {}).get("exists"))
     rg_exists = bool((cloud_state.get("resourceGroup") or {}).get("exists"))
     if not workspace_exists and not rg_exists:
@@ -1903,6 +2012,10 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
             or (((cursor.get("customStatus") or {}).get("deployConfig") or {}).get("continue_from_instance_id") or "")
         ).strip()
         cursor = deployments.get(parent_id) if parent_id else None
+        # The caller vouches for ``prior_deploy``; an ancestor recorded for another (or no) target ends the chain.
+        if cursor is not None and not _record_names_target(cursor, req.expected_tenant_id, req.expected_subscription_id):
+            logger.info("%s not inheriting phases from %s: it was not recorded for this tenant and subscription", mode, parent_id)
+            cursor = None
 
     # Keep only the latest entry per phase name across the continuation chain: an earlier attempt's
     # failure does not block a phase that a newer attempt completed, and an earlier attempt's success
@@ -2030,7 +2143,7 @@ def _apply_success_skips_from_deployment(req: DeployRequest, prior_deploy: dict,
 
 def _apply_live_continuation_skips(req: DeployRequest, prior_deploy: dict, mode: str = "Continue-from-failure") -> bool:
     """Derive safe continuation skips from live cloud state when old run output is missing."""
-    cloud_state = _cloud_state_sync(req.fabric_workspace_name, req.resource_group_name)
+    cloud_state = _cloud_state_sync(req.expected_subscription_id, req.fabric_workspace_name, req.resource_group_name)
     for label, name, state in (
         ("Fabric workspace", req.fabric_workspace_name, cloud_state.get("workspace") or {}),
         ("resource group", req.resource_group_name, cloud_state.get("resourceGroup") or {}),
@@ -2105,12 +2218,14 @@ def _apply_live_continuation_skips(req: DeployRequest, prior_deploy: dict, mode:
 
 
 def _apply_prior_success_skips(req: DeployRequest):
-    """Resume the most recent deployment with the same workspace or RG when it failed,
-    skipping the phases that completed successfully in it. A newer completed run means
-    the estate is whole, so an older failure must not shape a new start.
+    """Resume the most recent deployment of this tenant and subscription with the same workspace or RG when it
+    failed, skipping the phases that completed successfully in it. A newer completed run means the estate is whole,
+    so an older failure must not shape a new start. A same-named run recorded for another (or no) target is ignored.
     """
     for dep in sorted(deployments.values(), key=lambda d: d.get("createdTime", ""), reverse=True):
-        cs = dep.get("customStatus", {})
+        cs = dep.get("customStatus") or {}
+        if not _record_names_target(dep, req.expected_tenant_id, req.expected_subscription_id):
+            continue
         if cs.get("workspaceName") == req.fabric_workspace_name or cs.get("resourceGroupName") == req.resource_group_name:
             if dep.get("runtimeStatus") in ["Failed", "Terminated"]:
                 _apply_success_skips_from_deployment(req, dep)
@@ -2121,6 +2236,15 @@ def _apply_prior_success_skips(req: DeployRequest):
 async def start_deploy(req: DeployRequest):
     from activities.addons import preflight as addon_preflight
     _require_estate_idle(req.fabric_workspace_name, req.resource_group_name)  # fail fast before slow preflight
+    source_deploy = None
+    if req.continue_from_instance_id:
+        source_deploy = deployments.get(req.continue_from_instance_id)
+        if not source_deploy:
+            raise HTTPException(404, "Continuation source deployment not found")
+        if not _record_names_target(source_deploy, req.expected_tenant_id, req.expected_subscription_id):
+            raise HTTPException(409, "Continuation source deployment was not recorded for this tenant and subscription")
+        if source_deploy.get("runtimeStatus") not in ["Failed", "Terminated"]:
+            raise HTTPException(409, "Continuation source deployment is not failed or terminated")
     checks = await asyncio.to_thread(addon_preflight, req.model_dump())
     failures = [c["message"] for c in checks if c["status"] == "fail"]
     if failures:
@@ -2131,12 +2255,7 @@ async def start_deploy(req: DeployRequest):
     # the older auto-resume behavior: skip safe successes from the latest failed
     # deployment with the same workspace or resource group.
     if not req.phase7_only:
-        if req.continue_from_instance_id:
-            source_deploy = deployments.get(req.continue_from_instance_id)
-            if not source_deploy:
-                raise HTTPException(404, "Continuation source deployment not found")
-            if source_deploy.get("runtimeStatus") not in ["Failed", "Terminated"]:
-                raise HTTPException(409, "Continuation source deployment is not failed or terminated")
+        if source_deploy is not None:
             _apply_success_skips_from_deployment(req, source_deploy, "Continue-from-failure")
             _apply_live_continuation_skips(req, source_deploy, "Continue-from-failure")
         else:
@@ -2623,17 +2742,17 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
             resources = await loop.run_in_executor(
                 None,
                 _get_deployed_resources_sync,
+                req.expected_subscription_id,
                 req.fabric_workspace_name,
                 req.resource_group_name,
             )
 
             def collect_completion_checks() -> list[dict]:
-                from shared.fabric_client import FabricClient
                 return runtime_feature_checks(
                     resources,
                     effective_validation_config(config),
                     _az_run,
-                    FabricClient,
+                    lambda: _pinned_fabric_client(req.expected_subscription_id),
                 )
 
             runtime_checks = await loop.run_in_executor(None, collect_completion_checks)
@@ -2827,9 +2946,9 @@ from fastapi.responses import StreamingResponse
 async def get_deploy_cloud_state(instance_id: str):
     if instance_id not in deployments:
         raise HTTPException(404, "Instance not found")
-    cs = deployments[instance_id].get("customStatus", {})
+    target = _record_read_target(deployments[instance_id].get("customStatus") or {})
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _cloud_state_sync, cs.get("workspaceName", ""), cs.get("resourceGroupName", ""))
+    return await loop.run_in_executor(None, _cloud_state_sync, *target)
 
 
 @app.get("/api/teardown/{instance_id}/cloud-state")
@@ -2842,13 +2961,13 @@ async def validate_deployment(instance_id: str):
     if instance_id not in deployments:
         raise HTTPException(404, "Instance not found")
     cs = deployments[instance_id].get("customStatus", {})
+    target = _record_read_target(cs)
     deploy_config = effective_validation_config(cs.get("deployConfig") or {})
     loop = asyncio.get_event_loop()
-    resources = await loop.run_in_executor(None, _get_deployed_resources_sync, cs.get("workspaceName", ""), cs.get("resourceGroupName", ""))
+    resources = await loop.run_in_executor(None, _get_deployed_resources_sync, *target)
 
     def collect_runtime_checks() -> list[dict]:
-        from shared.fabric_client import FabricClient
-        return runtime_feature_checks(resources, deploy_config, _az_run, FabricClient)
+        return runtime_feature_checks(resources, deploy_config, _az_run, lambda: _pinned_fabric_client(target[0]))
 
     runtime_checks = await loop.run_in_executor(None, collect_runtime_checks)
     validation = _validation_from_resources(resources, is_teardown=False, deploy_config=deploy_config, runtime_checks=runtime_checks)
@@ -2861,9 +2980,9 @@ async def validate_deployment(instance_id: str):
 async def validate_teardown(instance_id: str):
     if instance_id not in deployments:
         raise HTTPException(404, "Instance not found")
-    cs = deployments[instance_id].get("customStatus", {})
+    target = _record_read_target(deployments[instance_id].get("customStatus") or {})
     loop = asyncio.get_event_loop()
-    resources = await loop.run_in_executor(None, _get_deployed_resources_sync, cs.get("workspaceName", ""), cs.get("resourceGroupName", ""))
+    resources = await loop.run_in_executor(None, _get_deployed_resources_sync, *target)
     return _validation_from_resources(resources, is_teardown=True)
 
 
@@ -3135,12 +3254,9 @@ async def get_deployed_resources(instance_id: str):
     if instance_id not in deployments:
         raise HTTPException(404, "Instance not found")
 
-    dep = deployments[instance_id]
-    ws_name = dep.get("customStatus", {}).get("workspaceName", "")
-    rg_name = dep.get("customStatus", {}).get("resourceGroupName", "")
-
+    target = _record_read_target(deployments[instance_id].get("customStatus") or {})
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _get_deployed_resources_sync, ws_name, rg_name)
+    result = await loop.run_in_executor(None, _get_deployed_resources_sync, *target)
     return result
 
 
@@ -3152,14 +3268,13 @@ async def get_after_action_report(instance_id: str):
 
     dep = deployments[instance_id]
     custom_status = dep.get("customStatus", {})
-    ws_name = custom_status.get("workspaceName", "")
-    rg_name = custom_status.get("resourceGroupName", "")
+    subscription_id, ws_name, rg_name = _record_read_target(custom_status)
     cfg = custom_status.get("deployConfig", {})
     admin_group = cfg.get("admin_security_group", "") or "sg-msft-hds-dicom-project"
 
     # Call the existing sync function to get actual resources
     loop = asyncio.get_event_loop()
-    resources = await loop.run_in_executor(None, _get_deployed_resources_sync, ws_name, rg_name)
+    resources = await loop.run_in_executor(None, _get_deployed_resources_sync, subscription_id, ws_name, rg_name)
 
     # Derive appNamePrefix
     app_name_prefix = "masimo"
@@ -3249,20 +3364,26 @@ async def get_after_action_report(instance_id: str):
     return security_report
 
 
-def _get_deployed_resources_sync(ws_name: str, rg_name: str) -> dict:
-    """Check Azure + Fabric for resources that actually exist."""
-    result: dict = {"azure": [], "fabric": [], "workspace": None}
+def _get_deployed_resources_sync(subscription_id: str, ws_name: str, rg_name: str) -> dict:
+    """Check Azure + Fabric in ``subscription_id`` (and its tenant) for resources that actually exist.
+
+    ``unverified`` maps ``"azure"``/``"fabric"`` to the error of an inventory that could not be read. Empty ``azure``,
+    empty ``fabric`` or a null ``workspace`` prove absence only when that side is not listed there.
+    """
+    _require_read_subscription(subscription_id, ws_name, rg_name)
+    result: dict = {"azure": [], "fabric": [], "workspace": None, "unverified": {}}
 
     # ── Azure resources in the resource group ──
     if rg_name:
         try:
-            proc = _az_run(
-                ["az", "group", "show", "--name", rg_name, "--query", "id", "-o", "tsv"],
-            )
-            if proc.returncode == 0 and proc.stdout.strip():
-                # RG exists — list resources
+            exists_proc = _az_run(["az", "group", "exists", "--name", rg_name, "--subscription", subscription_id])
+            answer = (exists_proc.stdout or "").strip().lower()
+            if exists_proc.returncode != 0 or answer not in {"true", "false"}:
+                # A failed or unreadable probe is unknown, not "deleted".
+                raise RuntimeError((exists_proc.stderr or exists_proc.stdout or "az group exists failed").strip())
+            if answer == "true":
                 res_proc = _az_run(
-                    ["az", "resource", "list", "-g", rg_name,
+                    ["az", "resource", "list", "-g", rg_name, "--subscription", subscription_id,
                      "--query", "[].{name:name, type:type, location:location, id:id}",
                      "-o", "json"], check=True,
                 )
@@ -3278,17 +3399,16 @@ def _get_deployed_resources_sync(ws_name: str, rg_name: str) -> dict:
                     })
                 logger.info("Found %d Azure resources in RG '%s'", len(resources), rg_name)
         except Exception as e:
+            result["azure"] = []
+            result["unverified"]["azure"] = (str(getattr(e, "stderr", "") or "").strip() or str(e))[:300]
             logger.warning("Failed to query Azure RG '%s': %s", rg_name, e)
 
     # ── Fabric workspace + items ──
     if ws_name:
         try:
-            from shared.fabric_client import FabricClient
-            fabric = FabricClient()
+            fabric = _pinned_fabric_client(subscription_id)
 
-            ws_result = fabric.call("GET", "/workspaces", max_retries=1)
-            workspaces = ws_result.get("value", []) if ws_result else []
-            ws_match = next((w for w in workspaces if w.get("displayName") == ws_name), None)
+            ws_match = fabric.find_workspace(ws_name, max_retries=1)
 
             if ws_match:
                 ws_id = ws_match["id"]
@@ -3306,7 +3426,8 @@ def _get_deployed_resources_sync(ws_name: str, rg_name: str) -> dict:
                     })
                 logger.info("Found %d Fabric items in workspace '%s'", len(items), ws_name)
         except Exception as e:
-            persisted = _workspace_state_from_persisted_link(ws_name)
+            result["unverified"]["fabric"] = str(e)[:300]
+            persisted = _workspace_state_from_persisted_link(subscription_id, ws_name)
             if persisted:
                 result["workspace"] = {
                     "name": ws_name,
@@ -3564,11 +3685,14 @@ def _scan_resources_sync(subscription_id: str, progress_callback=None, status_ca
             progress_callback(candidates, phase, message)
 
     # ── Collect previously deployed workspace names from DB ────────
+    # An explicit scan qualifies a workspace (and seeds its Entra identity lookup) only from runs recorded in that
+    # subscription; an unscoped discovery of the ambient tenant keeps every run's names.
     previously_deployed_ws_names: set[str] = set()
     for dep in deployments.values():
         cs = dep.get("customStatus", {})
         ws_name = cs.get("workspaceName", "")
-        if ws_name and cs.get("runType") != "teardown":
+        if ws_name and cs.get("runType") != "teardown" and (
+                not subscription_id or _record_names_subscription(dep, subscription_id)):
             previously_deployed_ws_names.add(ws_name)
     if previously_deployed_ws_names:
         logger.info("Previously deployed workspaces from DB: %s", previously_deployed_ws_names)
@@ -3581,12 +3705,14 @@ def _scan_resources_sync(subscription_id: str, progress_callback=None, status_ca
         try:
             emit_status("fabric", "Scanning Fabric workspaces...")
             from shared.fabric_client import FabricClient
-            fabric = FabricClient()
+            # An explicit subscription scopes Fabric to that subscription's tenant like the ARG query below;
+            # only an unscoped discovery scan uses the ambient credential.
+            fabric = _pinned_fabric_client(subscription_id) if subscription_id else FabricClient()
 
             live_workspace_query_blocked = False
             stale_workspace_cache_used = False
             try:
-                ws_result = fabric.call("GET", "/workspaces", max_retries=1)
+                ws_result = {"value": fabric.list_workspaces(max_retries=1)}
                 _set_timed_cached("fabric:workspaces", ws_result)
             except Exception as ex:
                 live_workspace_query_blocked = True
@@ -3642,10 +3768,10 @@ def _scan_resources_sync(subscription_id: str, progress_callback=None, status_ca
                         "healthcare1_msft_omop_analytics",
                     }
                     live_names = {str(item.get("displayName", "")) for item in items}
-                    has_hds_source = source_contract_names.issubset(live_names)
+                    has_hds = source_contract_names.issubset(live_names)
                     is_previously_deployed = name in previously_deployed_ws_names
 
-                    if not has_hds_source and not is_previously_deployed:
+                    if not has_hds and not is_previously_deployed:
                         return None
 
                     eventhouse_item = next(
@@ -3703,7 +3829,7 @@ def _scan_resources_sync(subscription_id: str, progress_callback=None, status_ca
                                         kusto_uri = props.get("queryServiceUri", "") or props.get("kustoUri", "")
                                     if kusto_uri:
                                         from shared.kusto_client import KustoClient
-                                        kusto = KustoClient(kusto_uri, kql_db_item.get("displayName", "MasimoKQLDB"))
+                                        kusto = KustoClient(kusto_uri, kql_db_item.get("displayName", "MasimoKQLDB"), credential=fabric.credential)
                                         rows = kusto.execute_query(".show functions | where Name == 'fn_ClinicalAlerts'")
                                         has_fn_clinical_alerts = len(rows) > 0
                                         _set_timed_cached(kql_cache_key, has_fn_clinical_alerts)
@@ -3827,13 +3953,21 @@ def _scan_resources_sync(subscription_id: str, progress_callback=None, status_ca
     spn_workspace_names = fabric_names | previously_deployed_ws_names
     seen_spn_ids = set()
 
-    def check_spn(ws_name):
-        spn_cache_key = f"spn:{ws_name.lower()}"
-        cached = _get_timed_cached(spn_cache_key, 600)
-        if cached is not None:
-            return cached
-
+    # `az ad` has no --subscription, so an explicitly scoped scan reads Entra through Graph with a token pinned to
+    # that subscription's tenant. The token is fetched once here, before the worker threads share it.
+    graph = graph_error = None
+    if subscription_id and spn_workspace_names:
+        import urllib.parse
+        from shared.full_teardown import GRAPH, AzureCliTokens, Rest
+        graph = Rest(AzureCliTokens(subscription_id, runner=_az_run))
         try:
+            graph.tokens.token(GRAPH)
+        except Exception as ex:
+            graph_error = ex
+            emit_status("spn", f"Entra identities unavailable for subscription {subscription_id}; not read from the Azure CLI default tenant: {str(ex)[:300]}")
+
+    def list_identities(ws_name: str) -> list[dict]:
+        if graph is None:
             identities = []
             app_result = _az_run(
                 ["az", "ad", "app", "list", "--display-name", ws_name,
@@ -3852,7 +3986,26 @@ def _scan_resources_sync(subscription_id: str, progress_callback=None, status_ca
             for sp in json.loads(sp_result.stdout or "[]"):
                 sp["objectType"] = "servicePrincipal"
                 identities.append(sp)
+            return identities
+        if graph_error is not None:
+            raise RuntimeError(f"no Graph token for subscription {subscription_id}: {graph_error}")
+        # Same match as `az ad app/sp list --display-name`: a displayName prefix filter.
+        name_filter = urllib.parse.quote(f"startswith(displayName,'{ws_name.replace(chr(39), chr(39) * 2)}')")
+        return [
+            {"appId": entry.get("appId"), "displayName": entry.get("displayName"), "id": entry.get("id"), "objectType": object_type}
+            for object_type, collection in (("appRegistration", "applications"), ("servicePrincipal", "servicePrincipals"))
+            for entry in graph.pages(f"{GRAPH}/v1.0/{collection}?$filter={name_filter}&$select=appId,displayName,id", GRAPH,
+                                     fields=("id", "appId", "displayName"))
+        ]
 
+    def check_spn(ws_name):
+        spn_cache_key = f"spn:{subscription_id.lower()}:{ws_name.lower()}" if subscription_id else f"spn:{ws_name.lower()}"
+        cached = _get_timed_cached(spn_cache_key, 600)
+        if cached is not None:
+            return cached
+
+        try:
+            identities = list_identities(ws_name)
             _set_timed_cached(spn_cache_key, identities)
             return identities
         except Exception as ex:
@@ -4176,50 +4329,71 @@ async def check_existing_deployment(workspace_name: str = "", resource_group: st
         "emulatorRunning": False,
         "azureRgExists": False,
         "priorConfig": prior_config,
+        "liveValidated": False,
     }
 
     if not deep:
         result["liveValidated"] = False
         return result
 
-    # Check Azure RG existence and live resource counts only when explicitly requested.
+    # Check Azure RG existence and live resource counts only when explicitly requested. Every live read is
+    # pinned to the matched run's recorded subscription, so its estate is never mixed with a same-named one
+    # in the Azure CLI default subscription.
     rg_name = prior_cs.get("resourceGroupName", "")
     if rg_name:
+        subscription_id = _record_subscription(prior_cs)
+        if not subscription_id:
+            logger.warning("Live check of prior run '%s' skipped: it recorded no subscription", result["instanceId"])
+            result["liveValidated"] = False
+            return result
         loop = asyncio.get_event_loop()
-        rg_exists = await loop.run_in_executor(None, _check_rg_exists, rg_name)
+        rg_exists = await loop.run_in_executor(None, _check_rg_exists, subscription_id, rg_name)
+        if rg_exists is None:
+            result["liveValidated"] = False
+            return result
         result["azureRgExists"] = rg_exists
 
         if rg_exists:
             # Check emulator status
-            emu_state = await loop.run_in_executor(None, _check_emulator_status, rg_name)
+            emu_state = await loop.run_in_executor(None, _check_emulator_status, subscription_id, rg_name)
             result["emulatorRunning"] = emu_state.get("running", False)
             result["emulatorDeviceCount"] = emu_state.get("deviceCount", 0)
 
             # Query FHIR for actual patient + device counts, and storage stats
-            fhir_counts = await loop.run_in_executor(None, _query_fhir_counts, rg_name)
+            fhir_counts = await loop.run_in_executor(None, _query_fhir_counts, subscription_id, rg_name)
             result["fhirPatientCount"] = fhir_counts.get("patients", 0)
             result["fhirDeviceCount"] = fhir_counts.get("devices", 0)
             result["exportedFiles"] = fhir_counts.get("exportedFiles", 0)
             result["dicomStudies"] = fhir_counts.get("dicomStudies", 0)
-    result["liveValidated"] = True
+        result["liveValidated"] = True
     return result
 
 
-def _check_rg_exists(rg_name: str) -> bool:
-    cached = _get_cached(f"rg_exists:{rg_name}")
+def _check_rg_exists(subscription_id: str, rg_name: str) -> bool | None:
+    """Whether ``rg_name`` exists in ``subscription_id``; ``None`` when the probe fails (unknown, not absent)."""
+    _require_read_subscription(subscription_id, "", rg_name)
+    cache_key = f"rg_exists:{subscription_id.lower()}:{rg_name}"
+    cached = _get_cached(cache_key)
     if cached is not None:
         return cached
     try:
-        proc = _az_run(["az", "group", "exists", "--name", rg_name])
-        result = proc.stdout.strip().lower() == "true"
-        _set_cached(f"rg_exists:{rg_name}", result)
-        return result
-    except Exception:
-        return False
+        proc = _az_run(["az", "group", "exists", "--name", rg_name, "--subscription", subscription_id])
+    except Exception as e:
+        logger.warning("Resource group probe for '%s' failed: %s", rg_name, e)
+        return None
+    answer = (proc.stdout or "").strip().lower()
+    if proc.returncode != 0 or answer not in {"true", "false"}:
+        logger.warning("Resource group probe for '%s' was unreadable (exit=%d): %s", rg_name, proc.returncode, (proc.stderr or proc.stdout or "").strip()[:200])
+        return None
+    result = answer == "true"
+    _set_cached(cache_key, result)
+    return result
 
 
-def _check_emulator_status(rg_name: str) -> dict:
-    cached = _get_cached(f"emulator:{rg_name}")
+def _check_emulator_status(subscription_id: str, rg_name: str) -> dict:
+    _require_read_subscription(subscription_id, "", rg_name)
+    cache_key = f"emulator:{subscription_id.lower()}:{rg_name}"
+    cached = _get_cached(cache_key)
     if cached is not None:
         return cached
     try:
@@ -4227,6 +4401,7 @@ def _check_emulator_status(rg_name: str) -> dict:
             "az", "container", "show",
             "--resource-group", rg_name,
             "--name", "masimo-emulator-grp",
+            "--subscription", subscription_id,
             "--query", "{state:instanceView.state, deviceCount:containers[0].environmentVariables[?name=='DEVICE_COUNT'].value | [0]}",
             "-o", "json",
         ])
@@ -4236,21 +4411,29 @@ def _check_emulator_status(rg_name: str) -> dict:
                 "running": data.get("state") == "Running",
                 "deviceCount": int(data.get("deviceCount", 100)),
             }
-            _set_cached(f"emulator:{rg_name}", result)
+            _set_cached(cache_key, result)
             return result
     except Exception as e:
         logger.warning("Emulator status check failed: %s", e)
     return {"running": False, "deviceCount": 0}
 
 
-def _query_fhir_counts(rg_name: str) -> dict:
-    """Query FHIR service for actual patient and device counts, plus storage stats."""
+def _query_fhir_counts(subscription_id: str, rg_name: str) -> dict:
+    """Query FHIR service in ``subscription_id`` for actual patient and device counts, plus storage stats.
+
+    Without a subscription nothing is queried and the counts stay unverified: they are never read from the
+    Azure CLI default subscription.
+    """
     result = {"patients": 0, "devices": 0, "exportedFiles": 0, "dicomStudies": 0, "countsVerified": False}
     patients_ok = devices_ok = False
+    if not subscription_id:
+        logger.warning("FHIR counts for RG '%s' skipped: no pinned subscription", rg_name)
+        return result
+    sub_arg = ["--subscription", subscription_id]
     try:
         # Find FHIR service from the RG using resource list (more reliable)
         proc = _az_run([
-            "az", "resource", "list", "-g", rg_name,
+            "az", "resource", "list", "-g", rg_name, *sub_arg,
             "--resource-type", "Microsoft.HealthcareApis/workspaces/fhirservices",
             "--query", "[0].name", "-o", "tsv",
         ])
@@ -4273,7 +4456,7 @@ def _query_fhir_counts(rg_name: str) -> dict:
         # Get FHIR token using the service URL as the resource
         token_proc = _az_run([
             "az", "account", "get-access-token",
-            "--resource", fhir_url,
+            "--resource", fhir_url, *sub_arg,
             "--query", "accessToken", "-o", "tsv",
         ])
         if token_proc.returncode != 0 or not token_proc.stdout.strip():
@@ -4312,7 +4495,7 @@ def _query_fhir_counts(rg_name: str) -> dict:
         # Count FHIR export files and DICOM studies in storage
         try:
             st_proc = _az_run([
-                "az", "storage", "account", "list", "-g", rg_name,
+                "az", "storage", "account", "list", "-g", rg_name, *sub_arg,
                 "--query", "[?kind=='StorageV2'].name | [0]", "-o", "tsv",
             ])
             if st_proc.returncode == 0 and st_proc.stdout.strip():
@@ -4323,7 +4506,7 @@ def _query_fhir_counts(rg_name: str) -> dict:
                 export_proc = _az_run([
                     "az", "storage", "blob", "list",
                     "--container-name", "fhir-export",
-                    "--account-name", st_name,
+                    "--account-name", st_name, *sub_arg,
                     "--auth-mode", "login",
                     "--query", "length(@)", "-o", "tsv",
                 ])
@@ -4334,7 +4517,7 @@ def _query_fhir_counts(rg_name: str) -> dict:
                 dicom_proc = _az_run([
                     "az", "storage", "blob", "list",
                     "--container-name", "dicom-output",
-                    "--account-name", st_name,
+                    "--account-name", st_name, *sub_arg,
                     "--auth-mode", "login",
                     "--query", "length(@)", "-o", "tsv",
                 ])

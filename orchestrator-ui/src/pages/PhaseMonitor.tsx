@@ -570,7 +570,10 @@ export function PhaseMonitor() {
         instanceId: string;
     }>();
     const navigate = useNavigate();
-    const [status, setStatus] = useState<DeploymentStatus | null>(null);
+    const displayedInstanceId = useRef(instanceId);
+    displayedInstanceId.current = instanceId;
+    const [polledStatus, setStatus] = useState<DeploymentStatus | null>(null);
+    const status = polledStatus?.instanceId === instanceId ? polledStatus : null;
     const [mockPhaseLogs, setMockPhaseLogs] = useState<Map<string, PhaseLog[]>>(new Map());
     const [error, setError] = useState("");
     const [autoScroll, setAutoScroll] = useState(false);
@@ -606,9 +609,13 @@ export function PhaseMonitor() {
     const [compressCompleted, setCompressCompleted] = useState(false);
     const [afterActionReport, setAfterActionReport] = useState<AfterActionReportResult | null>(null);
     const [afterActionLoading, setAfterActionLoading] = useState(false);
-    const [cloudState, setCloudState] = useState<CloudStateResult | null>(null);
-    const [validation, setValidation] = useState<ValidationResult | null>(null);
-    const [validating, setValidating] = useState(false);
+    // Cloud-state and validation evidence carry the run (and endpoint) that produced them; see runEvidenceKey.
+    const [cloudRead, setCloudRead] = useState<{ run: string; state: CloudStateResult | null; error: string } | null>(null);
+    // Reuse a pending read when a status transition restarts the polling effect for the same run.
+    const cloudRequest = useRef<{ run: string; promise: Promise<CloudStateResult> } | null>(null);
+    const [validationRun, setValidationRun] = useState<{ run: string; result: ValidationResult | null; error: string; pending: boolean } | null>(null);
+    // Bumped per validation request and per run change; only the latest request may publish its result.
+    const validationRequest = useRef(0);
     const [continuingPhase7, setContinuingPhase7] = useState(false);
     const [hasAutoExported, setHasAutoExported] = useState(false);
     const afterActionCardRef = useRef<HTMLDivElement>(null);
@@ -688,6 +695,9 @@ export function PhaseMonitor() {
         setDrilldownSearch("");
         setCopiedLogId(null);
         setCopiedAll(false);
+        setCloudRead(null);
+        validationRequest.current += 1;
+        setValidationRun(null);
     }, [instanceId]);
     const statusIsTerminalForPolling = status?.runtimeStatus === "Completed" ||
         status?.runtimeStatus === "Terminated" ||
@@ -710,11 +720,13 @@ export function PhaseMonitor() {
             }
             else {
                 const s = await getDeploymentStatus(instanceId);
-                setStatus(s);
+                if (displayedInstanceId.current === instanceId)
+                    setStatus(s);
             }
         }
         catch (e) {
-            setError(e instanceof Error ? e.message : "Failed to fetch status");
+            if (displayedInstanceId.current === instanceId)
+                setError(e instanceof Error ? e.message : "Failed to fetch status");
         }
     }, [instanceId, isMock]);
     useEffect(() => {
@@ -737,17 +749,44 @@ export function PhaseMonitor() {
     // Detect if this is a teardown run
     const isTeardown = (status?.customStatus as Record<string, unknown>)?.runType === "teardown"
         || (instanceId ?? "").toLowerCase().startsWith("teardown");
+    // Evidence renders only for the run and endpoint that produced it, so nothing from another run shows even for one frame.
+    const runEvidenceKey = `${isTeardown ? "teardown" : "deploy"}:${instanceId ?? ""}`;
+    const currentCloudRead = cloudRead?.run === runEvidenceKey ? cloudRead : null;
+    const cloudState = currentCloudRead?.state ?? null;
+    const cloudStateError = currentCloudRead?.error ?? "";
+    const currentValidation = validationRun?.run === runEvidenceKey ? validationRun : null;
+    const validation = currentValidation?.result ?? null;
+    const validationError = currentValidation?.error ?? "";
+    const validating = currentValidation?.pending ?? false;
     useEffect(() => {
         if (!instanceId || isMock)
             return;
+        const run = runEvidenceKey;
         let cancelled = false;
+        // One read at a time: an older response can never land after a newer one and restore stale state.
+        let inFlight = false;
         const refreshCloudState = () => {
-            getCloudState(instanceId, isTeardown)
+            if (inFlight)
+                return;
+            inFlight = true;
+            if (!cloudRequest.current || cloudRequest.current.run !== run)
+                cloudRequest.current = { run, promise: getCloudState(instanceId, isTeardown) };
+            const request = cloudRequest.current.promise;
+            request
                 .then((state) => {
                 if (!cancelled)
-                    setCloudState(state);
+                    setCloudRead({ run, state, error: "" });
             })
-                .catch(() => { });
+                .catch((e) => {
+                // A refused or failed read must not leave an earlier state on screen.
+                if (!cancelled)
+                    setCloudRead({ run, state: null, error: e instanceof Error ? e.message : "Unable to read cloud resource state" });
+            })
+                .finally(() => {
+                inFlight = false;
+                if (cloudRequest.current?.promise === request)
+                    cloudRequest.current = null;
+            });
         };
         refreshCloudState();
         const interval = window.setInterval(refreshCloudState, isTeardown && isRunning ? 10000 : 30000);
@@ -755,20 +794,22 @@ export function PhaseMonitor() {
             cancelled = true;
             window.clearInterval(interval);
         };
-    }, [instanceId, isMock, isTeardown, isRunning]);
+    }, [instanceId, runEvidenceKey, isMock, isTeardown, isRunning]);
     const runValidation = async () => {
         if (!instanceId)
             return;
-        setValidating(true);
-        setError("");
+        const run = runEvidenceKey;
+        const request = ++validationRequest.current;
+        // A new validation replaces the previous result and error at once; neither can outlive it.
+        setValidationRun({ run, result: null, error: "", pending: true });
         try {
-            setValidation(await validateRun(instanceId, isTeardown));
+            const result = await validateRun(instanceId, isTeardown);
+            if (validationRequest.current === request)
+                setValidationRun({ run, result, error: "", pending: false });
         }
         catch (e) {
-            setError(e instanceof Error ? e.message : "Validation failed");
-        }
-        finally {
-            setValidating(false);
+            if (validationRequest.current === request)
+                setValidationRun({ run, result: null, error: e instanceof Error ? e.message : "Validation failed", pending: false });
         }
     };
     const runPhase7Continuation = async () => {
@@ -2082,14 +2123,28 @@ export function PhaseMonitor() {
           <CardHeader title={<Typography component="div" variant="subtitle1">{isTeardown ? "Teardown Resource State" : "Cloud Resource State"}</Typography>} subheader={status.customStatus.detail || status.runtimeStatus}/>
           <div style={{ display: "grid", gap: "12px", padding: `0 ${"24px"} ${"16px"}` }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
-              {status.customStatus.workspaceName && (<Chip component="span" size="small" variant="filled" color={cloudState?.workspace.status === "deleted" ? "default" : "primary" as any} label={<>Fabric: {status.customStatus.workspaceName} · {cloudState?.workspace.status ?? "checking"}</>}/>)}
-              {status.customStatus.resourceGroupName && (<Chip component="span" size="small" variant="filled" color={cloudState?.resourceGroup.status === "deleted" || status.runtimeStatus === "Completed" ? "success" : cloudState?.resourceGroup.status === "deleting" ? "warning" : "info" as any} label={<>Azure RG: {status.customStatus.resourceGroupName} · {cloudState?.resourceGroup.provisioningState ?? "checking"}</>}/>)}
-              <Chip component="span" size="small" variant="filled" color={status.runtimeStatus === "Completed" ? "success" : status.runtimeStatus === "Running" ? "info" : "warning" as any} label={<>Local: {status.runtimeStatus}</>}/>
+              {status.customStatus.workspaceName && (<Chip component="span" size="small" variant="filled" color={cloudStateError || cloudState?.workspace.exists == null || cloudState.workspace.status === "deleted" ? "default" : "primary"} label={<>Fabric: {status.customStatus.workspaceName} · {cloudState?.workspace.status ?? (cloudStateError ? "unavailable" : "checking")}</>}/>)}
+              {status.customStatus.resourceGroupName && (<Chip component="span" size="small" variant="filled" color={cloudStateError || cloudState?.resourceGroup.exists == null ? "default" : cloudState.resourceGroup.status === "deleted" ? "success" : cloudState.resourceGroup.status === "deleting" ? "warning" : "info"} label={<>Azure RG: {status.customStatus.resourceGroupName} · {cloudState?.resourceGroup.provisioningState ?? (cloudStateError ? "unavailable" : "checking")}</>}/>)}
+              <Chip component="span" size="small" variant="filled" color={status.runtimeStatus === "Completed" ? "success" : status.runtimeStatus === "Running" ? "info" : "warning"} label={<>Local: {status.runtimeStatus}</>}/>
             </div>
+            {cloudStateError && (<Alert severity={"error"}>
+                <Box>
+                  <Typography component="span" variant="body2" sx={{
+                    fontWeight: 600
+                }}>Cloud state unavailable:</Typography> {cloudStateError}
+                </Box>
+              </Alert>)}
             <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
               <Button onClick={runValidation} disabled={validating} variant="outlined" size="small">{validating ? "Validating…" : isTeardown ? "Validate teardown" : "Validate deployment"}</Button>
               {!isTeardown && status.runtimeStatus === "Completed" && !(status.output?.phases ?? []).some((p) => /PHASE 7|PAYER RTI/i.test(p.phase)) && (<Button onClick={runPhase7Continuation} disabled={continuingPhase7} variant="contained" size="small">{continuingPhase7 ? "Starting Phase 7…" : "Run missing Phase 7"}</Button>)}
             </div>
+            {validationError && (<Alert severity={"error"}>
+                <Box>
+                  <Typography component="span" variant="body2" sx={{
+                    fontWeight: 600
+                }}>Validation failed:</Typography> {validationError}
+                </Box>
+              </Alert>)}
             {validation && (<div style={{ display: "grid", gap: 4 }}>
 
                 {validation.checks.map((check) => (<Typography key={check.name} component="span" variant="caption"><Chip component="span" size="small" variant="filled" color={check.status === "pass" ? "success" : check.status === "warning" ? "warning" : "error" as any} label={<>{check.status}</>}/> {check.name}: {check.detail}</Typography>))}
