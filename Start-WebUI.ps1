@@ -368,10 +368,35 @@ $env:ORCHESTRATOR_LOG_SESSION = $SessionId
 Write-Host ""
 Write-Host "  Starting backend (port $BackendPort)..." -ForegroundColor White
 
+$backendFilePath = $VenvPython
+$backendArguments = @($BackendScript)
+if ($IsMacOS) {
+    $nativeLibraryPath = $env:DYLD_LIBRARY_PATH
+    if (-not $nativeLibraryPath) {
+        $homebrewPrefix = if ($venvRuntime.platform -match '-x86_64$') {
+            '/usr/local'
+        } elseif ($venvRuntime.platform -match '-arm64$' -or [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) {
+            '/opt/homebrew'
+        } else {
+            '/usr/local'
+        }
+        $openssl3Lib = Join-Path $homebrewPrefix 'opt/openssl@3/lib'
+        if ((Test-Path -LiteralPath (Join-Path $openssl3Lib 'libssl.3.dylib') -PathType Leaf) -and (Test-Path -LiteralPath (Join-Path $openssl3Lib 'libcrypto.3.dylib') -PathType Leaf)) {
+            $nativeLibraryPath = $openssl3Lib
+        }
+    }
+    if ($nativeLibraryPath) {
+        # macOS nohup strips DYLD variables; assign them after that wrapper.
+        $backendFilePath = '/usr/bin/env'
+        $backendArguments = @("DYLD_LIBRARY_PATH=$nativeLibraryPath", $VenvPython, $BackendScript) |
+            ForEach-Object { '"{0}"' -f $_.Replace('"', '\"') }
+    }
+}
+
 $backendProc = Start-DetachedProcess `
-    -FilePath $VenvPython `
+    -FilePath $backendFilePath `
     -WorkingDirectory $BackendDir `
-    -ArgumentList @($BackendScript) `
+    -ArgumentList $backendArguments `
     -StandardOutputPath (Join-Path $LogDir "backend-stdout.log") `
     -StandardErrorPath (Join-Path $LogDir "backend-stderr.log")
 

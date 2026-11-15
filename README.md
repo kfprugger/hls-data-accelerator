@@ -71,6 +71,15 @@ The bootstrap installs or verifies the local toolchain and creates the orchestra
 
 On Windows 11 ARM64, bootstrap selects **Python 3.13 x64 under x64 emulation**. PowerShell can remain native ARM64. Native Windows ARM64 Python is rejected because the pinned `cryptography` release has no Windows ARM64 wheel. Bootstrap recreates an incompatible orchestrator `.venv`; `-CheckOnly` never installs Python or changes the environment.
 
+Native macOS SQL access also requires [Microsoft ODBC Driver 18 for SQL Server](https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/install-microsoft-odbc-driver-sql-server-macos) and Homebrew `openssl@3`. The bootstrap does not install the ODBC driver. Install it with Microsoft's instructions, then run `brew install openssl@3`. An unversioned `openssl` installation can use a newer major that the ODBC driver cannot load.
+
+`Start-WebUI.ps1` passes the compatible OpenSSL library directory to the backend child on macOS. It preserves an explicit `DYLD_LIBRARY_PATH`; otherwise it checks the interpreter's Homebrew prefix for `openssl@3`. It does not change global library links or SQL certificate settings. To start the Python backend directly from the repository root:
+
+```bash
+DYLD_LIBRARY_PATH="$(brew --prefix openssl@3)/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
+  orchestrator/.venv/bin/python orchestrator/local_server.py
+```
+
 The repository contains source, configuration, and empty HDS table schemas, not bundled Synthea or Microsoft sample datasets. `-UseCachedSynthea` generates and validates the deterministic 100-patient cohort locally under ignored `synthea/.generated/` before upload. Microsoft sample-driven tools require separately supplied local data; see the [HDS setup guide](fabric-rti/HDS-SETUP-GUIDE.md).
 
 Bootstrap installs the development-only Parquet inspector and enables `.githooks/pre-push` when no custom hook directory is configured. The hook checks every outgoing commit before Git sends it, including intermediate commits later deleting a dataset. Existing custom hooks are preserved with an integration warning. CI also checks the committed source tree. Run `orchestrator/.venv/bin/python utilities/check_repository_data.py` before committing, or `& .\orchestrator\.venv\Scripts\python.exe .\utilities\check_repository_data.py` on Windows. The check reads Git's index, so cleaning only an unstaged working file cannot hide staged data.

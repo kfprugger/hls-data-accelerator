@@ -211,8 +211,9 @@ Measurable verification criteria:
      - is a `JSON_FORMATS` file (`.json`, `.avsc`, `.bim`, `.pbir`, `.pbism`) that holds a clinical FHIR resource (a `resourceType` other than `Bundle` and the conformance types in `FHIR_REFERENCE_TYPES`);
      - is a symlink with an inspected suffix, or an inspected file that the script cannot parse.
      If the check cannot complete (for example, an unmerged index or a nested Git repository), the script exits with code 2 and the push also fails.
+  5. Native macOS SQL access requires Microsoft ODBC Driver 18 and Homebrew `openssl@3` in addition to the Python toolchain; bootstrap does not install the ODBC driver. `Start-WebUI.ps1` passes `DYLD_LIBRARY_PATH` to the backend after `nohup`, which strips that variable on macOS. An explicit caller value stays authoritative; otherwise the launcher checks the interpreter's standard Apple Silicon (`/opt/homebrew`) or Intel (`/usr/local`) prefix and selects `opt/openssl@3/lib` only when both `libssl.3.dylib` and `libcrypto.3.dylib` exist. The caller's `DYLD_LIBRARY_PATH`, global library links and SQL encryption/certificate options remain unchanged. Direct Python startup must supply the compatible library directory as shown in the root [README](../README.md#2-clone-and-bootstrap).
 - **Verification Commands**: See [Verification §1](#1-powershell-syntax-parallel-execution--retry-classification).
-- **Known Limits**: Windows on ARM64 requires Python 3.13 x64 under emulation due to pre-compiled `cryptography` wheel constraints.
+- **Known Limits**: Windows on ARM64 requires Python 3.13 x64 under emulation due to pre-compiled `cryptography` wheel constraints. Native macOS SQL access needs the separately installed ODBC driver and compatible OpenSSL major; an explicit incompatible library override can still fail.
 - **Status**: Implemented. Verified by [Verification §1](#1-powershell-syntax-parallel-execution--retry-classification). Open: none.
 
 ---
