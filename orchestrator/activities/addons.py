@@ -27,6 +27,10 @@ from shared.hotfix import apply_hotfixes, default_targets
 from shared.runtime_paths import DATA_DIR
 
 ROOT = Path(__file__).resolve().parents[2]
+REFLEX_SETTLE_SECONDS = 70.0  # Reflex execution interval (60s) + ingestion latency allowance (10s)
+# One Reflex cooldown (minutes) for the deployed rule and the stopwatch trigger. Both commands get it explicitly,
+# so the trigger predicts dedupe with the same window that the Reflex uses.
+ALERT_COOLDOWN_MINUTES = 10
 ADDON_FLAGS = {"cardiology": "deploy_cardiology", "rayfin": "deploy_rayfin_apps", "databricks": "deploy_databricks"}
 MODEL_CANDIDATES = [("gpt-5.6-luna", "2026-07-09"), ("gpt-5.5", "2026-04-24")]
 CARDIOLOGY_FALLBACK_REGIONS = ("eastus2", "eastus", "westus", "westus3", "northcentralus", "southcentralus", "centralus", "swedencentral")
@@ -46,6 +50,52 @@ def now() -> str:
 def selected(config: dict) -> list[str]:
     return [name for name, flag in ADDON_FLAGS.items() if config.get(flag)]
 
+
+def resolve_wardflow_root(
+    env: dict[str, str] | None = None,
+    repo_root: Path | None = None,
+    home: Path | None = None,
+) -> Path | None:
+    """Resolve the WardFlow repository root.
+
+    Order:
+    (a) WARDFLOW_ROOT env var when set (if set but empty or missing on disk, raises
+        RuntimeError naming the variable and path);
+    (b) a sibling checkout ``../wardflow`` next to the HLS repo root;
+    (c) when the HLS repo root sits in a ``.worktrees`` directory, a ``wardflow``
+        checkout beside that ``.worktrees`` directory;
+    (d) the legacy developer path ``~/git/.worktrees/wardflow-jb-dev``.
+    Returns None when nothing exists.
+    """
+    environ = os.environ if env is None else env
+    root = ROOT if repo_root is None else repo_root
+    home_dir = Path.home() if home is None else home
+
+    if "WARDFLOW_ROOT" in environ:
+        raw = environ["WARDFLOW_ROOT"]
+        raw_str = "" if raw is None else str(raw).strip()
+        if not raw_str:
+            raise RuntimeError("WARDFLOW_ROOT environment variable is set to an empty path")
+        target = Path(raw_str).expanduser()
+        if not target.exists():
+            raise RuntimeError(
+                f"WARDFLOW_ROOT environment variable is set to '{raw_str}', but that path does not exist on disk"
+            )
+        return target
+
+    sibling = root.parent / "wardflow"
+    if sibling.is_dir():
+        return sibling
+    if root.parent.name == ".worktrees":
+        parent_sibling = root.parent.parent / "wardflow"
+        if parent_sibling.is_dir():
+            return parent_sibling
+
+    legacy = home_dir / "git/.worktrees/wardflow-jb-dev"
+    if legacy.is_dir():
+        return legacy
+
+    return None
 
 def rayfin_log_dir(env: dict) -> Path:
     """Return the Rayfin CLI diagnostic log directory that ``env`` selects."""
@@ -682,14 +732,22 @@ class AddonRunner:
             self.deployment["output"].setdefault("phases", []).append(self.phase)
             cs["currentPhase"] = self.phase["phase"]
             state = cs.setdefault("addons", {}).setdefault(name, {})
+            state.pop("warnings", None)
             state.update(status="running", detail="Starting", startedAt=now())
             self.persist()
             start = time.monotonic()
             try:
                 result = await getattr(self, name)(fresh_export=fresh_export)
+                duration_sec = time.monotonic() - start
                 state.update(status="succeeded", detail="Deployment completed", resources=result, finishedAt=now())
-                self.phase.update(status="succeeded", duration=f"{(time.monotonic()-start)/60:.1f} min")
+                self.phase.update(status="succeeded", duration=f"{duration_sec/60:.1f} min")
                 cs["completedPhases"] = sum(p.get("status") == "succeeded" for p in self.deployment["output"]["phases"])
+                if duration_sec > 0:
+                    try:
+                        from shared.stage_eta import record_stage_sample
+                        record_stage_sample(f"addon_{name}", duration_sec)
+                    except Exception as ex:
+                        logger.warning("Could not record addon stage sample for %s: %s", name, ex)
             except BaseException as exc:
                 state.update(status="failed", detail=str(exc), finishedAt=now())
                 self.phase.update(status="failed", detail=str(exc))
@@ -868,11 +926,13 @@ class AddonRunner:
                     root,
                     env,
                 )
+        dbx_warnings = ((self.deployment.get("customStatus") or {}).get("addons") or {}).get("databricks", {}).get("warnings") or []
         return {
             "workspaceUrl": variables["DATABRICKS_HOST"],
             "fhirExportUrl": variables["FHIR_EXPORT_URL"],
             **({"onelakeExternalLocationUrl": onelake_url} if onelake_url else {}),
             **({"orphanWorkspaces": list(dict.fromkeys(orphan_workspaces))} if orphan_workspaces else {}),
+            **({"warnings": list(dbx_warnings)} if dbx_warnings else {}),
         }
 
     async def ensure_onelake_databricks_storage(self, cfg, access_connector_id):
@@ -935,8 +995,31 @@ class AddonRunner:
                                               ["databricks", "users", "list", "--filter", f'userName eq "{escaped}"', "-o", "json"],
                                               root, env, capture=True) or "[]")
         if found:
+            if getattr(self, "phase", None) is not None and hasattr(self, "substep") and callable(self.substep):
+                self.substep("Check Databricks alert recipient", "succeeded")
             return email
-        self.log(f"{email} is not a Databricks workspace user, so the Databricks clinical alert is deployed paused with no recipient.", "warning")
+        msg = (
+            f"{email} is not a Databricks workspace user (address must be a workspace user); "
+            "Databricks clinical alert stays PAUSED without email."
+        )
+        if hasattr(self, "log") and callable(self.log):
+            self.log(msg, "warn")
+        if getattr(self, "phase", None) is not None:
+            self.phase.setdefault("warnings", []).append(msg)
+            if hasattr(self, "substep") and callable(self.substep):
+                self.substep("Check Databricks alert recipient", "warning", msg)
+        elif hasattr(self, "substep") and callable(self.substep):
+            try:
+                self.substep("Check Databricks alert recipient", "warning", msg)
+            except Exception:
+                pass
+        if hasattr(self, "deployment") and isinstance(self.deployment, dict):
+            self.deployment.setdefault("customStatus", {}).setdefault("addons", {}).setdefault("databricks", {}).setdefault("warnings", []).append(msg)
+            if hasattr(self, "persist") and callable(self.persist):
+                try:
+                    self.persist()
+                except Exception:
+                    pass
         return ""
 
     async def ensure_admin_group(self, env, root, object_id, name):
@@ -1080,17 +1163,27 @@ class AddonRunner:
         existing_res = dict(((self.deployment.get("customStatus") or {}).get("addons") or {}).get("rayfin", {}).get("resources") or {})
         rayfin_apps = ("rayfin-health-command-center", "rayfin-clinical-triage-app", "rayfin-imaging", "rayfin-wardflow-persona-app")
         result.update({k: v for k, v in existing_res.items() if k in rayfin_apps and v})
-        wardflow_root = Path(os.environ.get("WARDFLOW_ROOT", str(Path.home() / "git/.worktrees/wardflow-jb-dev")))
+        wardflow_root = None
+        try:
+            wardflow_root = resolve_wardflow_root()
+        except RuntimeError as exc:
+            self.log(f"WardFlow root resolution warning: {exc}; skipping optional WardFlow persona app", "warn")
+            wardflow_root = None
         for app in rayfin_apps:
             if result.get(app):
                 self.log(f"{app}: reusing existing deployment {result[app]}", "info")
                 continue
-            app_source = ROOT / app if (ROOT / app).is_dir() else (wardflow_root / app)
-            if not app_source.is_dir():
+            if (ROOT / app).is_dir():
+                app_source = ROOT / app
+            elif wardflow_root is not None and (wardflow_root / app).is_dir():
+                app_source = wardflow_root / app
+            else:
                 if app == "rayfin-wardflow-persona-app":
-                    self.log(f"{app}: source not present at {app_source}; skipping optional WardFlow persona app", "info")
+                    missing = f"source not present at {wardflow_root / app}" if wardflow_root is not None else "WardFlow repository not found"
+                    self.log(f"{app}: {missing}; skipping optional WardFlow persona app", "warn")
                     continue
-                raise RuntimeError(f"{app}: source directory not found at {app_source}")
+                missing_source = (wardflow_root / app) if wardflow_root is not None else (ROOT / app)
+                raise RuntimeError(f"{app}: source directory not found at {missing_source}")
             root = self.working_copy(app_source, app)
             if app == "rayfin-imaging" and (ROOT / app / "pipeline").is_dir():
                 shutil.copytree(ROOT / app / "pipeline", root / "pipeline", dirs_exist_ok=True)
@@ -1369,51 +1462,67 @@ class AddonRunner:
             if alert_enabled:
                 if alert_email:
                     alert_env = {**self.env, "HLS_ALERT_EMAIL": alert_email}
+                    alert_tier = cfg.get("alert_min_tier") or cfg.get("min_tier")
+                    deploy_cmd = [
+                        sys.executable,
+                        str(ROOT / "scripts/deploy_clinical_activator.py"),
+                        "--live",
+                        "--workspace", cfg.get("fabric_workspace_name", ""),
+                        "--cooldown-minutes", str(ALERT_COOLDOWN_MINUTES),
+                    ]
+                    if alert_tier:
+                        deploy_cmd.extend(["--min-tier", str(alert_tier)])
                     await self.command(
                         "rayfin-imaging: deploy clinical activator reflex",
-                        [sys.executable, str(ROOT / "scripts/deploy_clinical_activator.py"), "--live", "--workspace", cfg.get("fabric_workspace_name", "")],
+                        deploy_cmd,
                         root,
                         env=alert_env,
                     )
-                    # The stopwatch is a live demo probe; an uncooperative Eventstream or Activator is logged
-                    # and recorded on the add-on rather than aborting the Rayfin deployment.
-                    try:
-                        eh_ns = self.resource("Microsoft.EventHub/namespaces")["name"]
-                        kql = self.item("KQLDatabase", "MasimoEventhouse")
-                        kql_detail = await asyncio.to_thread(
-                            self.cloud.call, "GET", f"{FABRIC}/v1/workspaces/{self.ws}/kqlDatabases/{kql['id']}", FABRIC, None, "eventhouse-cli",
-                        )
-                        eh_query_uri = ((kql_detail.get("properties") or {}).get("queryServiceUri") or "").strip()
-                        if not eh_query_uri:
-                            raise RuntimeError("MasimoEventhouse has no queryServiceUri")
-                        await self.command(
-                            "rayfin-imaging: trigger SpO2 alert stopwatch",
-                            [
-                                sys.executable,
-                                str(ROOT / "scripts/trigger_spo2_alert.py"),
-                                "--live",
-                                "--workspace", cfg.get("fabric_workspace_name", ""),
-                                "--eventhub-namespace", eh_ns,
-                                "--resource-group", cfg.get("resource_group_name", ""),
-                                "--eventhouse-query-uri", eh_query_uri,
-                            ],
-                            root,
-                            env=alert_env,
-                        )
-                    except Exception as probe_exc:
-                        warning = f"SpO2 alert stopwatch probe warning (non-fatal): {probe_exc}"
-                        self.log(warning, "warn")
-                        self.deployment.setdefault("customStatus", {}).setdefault("addons", {}).setdefault("rayfin", {}).setdefault("warnings", []).append(str(probe_exc))
-                        self.persist()
+                    # The stopwatch is a requested activity: lookup or trigger failures fail the add-on (ticket 012 FR-4).
+                    eh_ns = self.resource("Microsoft.EventHub/namespaces")["name"]
+                    kql = self.item("KQLDatabase", "MasimoEventhouse")
+                    kql_detail = await asyncio.to_thread(
+                        self.cloud.call, "GET", f"{FABRIC}/v1/workspaces/{self.ws}/kqlDatabases/{kql['id']}", FABRIC, None, "eventhouse-cli",
+                    )
+                    eh_query_uri = ((kql_detail.get("properties") or {}).get("queryServiceUri") or "").strip()
+                    if not eh_query_uri:
+                        raise RuntimeError("MasimoEventhouse has no queryServiceUri")
+                    trigger_cmd = [
+                        sys.executable,
+                        str(ROOT / "scripts/trigger_spo2_alert.py"),
+                        "--live",
+                        "--workspace", cfg.get("fabric_workspace_name", ""),
+                        "--eventhub-namespace", eh_ns,
+                        "--resource-group", cfg.get("resource_group_name", ""),
+                        "--eventhouse-query-uri", eh_query_uri,
+                        "--settle-seconds", str(int(REFLEX_SETTLE_SECONDS)),
+                        "--cooldown-minutes", str(ALERT_COOLDOWN_MINUTES),
+                    ]
+                    if alert_tier:
+                        trigger_cmd.extend(["--min-tier", str(alert_tier)])
+                    await self.command(
+                        "rayfin-imaging: trigger SpO2 alert stopwatch",
+                        trigger_cmd,
+                        root,
+                        env=alert_env,
+                    )
                 else:
                     self.substep("rayfin-imaging: deploy clinical activator reflex", "skipped", "skipped: no alert_email configured")
                     self.log("rayfin-imaging: alert stopwatch skipped: no alert_email configured", "info")
     async def cardiology(self, fresh_export=False):
         cfg = self.config
-        wardflow = Path(os.environ.get("WARDFLOW_ROOT", str(Path.home() / "git/.worktrees/wardflow-jb-dev")))
+        wardflow = resolve_wardflow_root()
+        if wardflow is None:
+            raise RuntimeError(
+                "WARDFLOW_ROOT is not set and no WardFlow checkout was found (checked sibling '../wardflow' and "
+                "'~/git/.worktrees/wardflow-jb-dev'); cardiology add-on requires WARDFLOW_ROOT containing "
+                "caldova-cardio/hds-backend"
+            )
         backend = wardflow / "caldova-cardio/hds-backend"
         if not backend.is_dir():
-            raise RuntimeError("WARDFLOW_ROOT must contain the pinned jb-dev caldova-cardio/hds-backend")
+            raise RuntimeError(
+                f"WARDFLOW_ROOT ({wardflow}) must contain the pinned jb-dev caldova-cardio/hds-backend"
+            )
         await asyncio.to_thread(ensure_providers_registered, cfg, CARDIOLOGY_PROVIDERS, True, 300)
         await self.ensure_eventstream_running("MasimoTelemetryStream")
         gold, sql = await self.gold()

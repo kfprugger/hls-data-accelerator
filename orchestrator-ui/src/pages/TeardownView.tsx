@@ -37,7 +37,9 @@ const useStyles = makeStyles({
     scanControls: {
         display: "flex",
         alignItems: "flex-end",
+        flexWrap: "wrap" as const,
         gap: "24px",
+        rowGap: "12px",
         marginBottom: "24px",
     },
     candidateList: {
@@ -64,11 +66,14 @@ const useStyles = makeStyles({
     candidateRow: {
         display: "flex",
         alignItems: "center",
+        flexWrap: "wrap" as const,
         gap: "16px",
+        rowGap: "8px",
         width: "100%",
     },
     candidateInfo: {
-        flex: 1,
+        flex: "1 1 200px",
+        minWidth: 0,
         display: "flex",
         flexDirection: "column",
         gap: "4px",
@@ -76,7 +81,20 @@ const useStyles = makeStyles({
     candidateName: {
         display: "flex",
         alignItems: "center",
+        flexWrap: "wrap" as const,
         gap: "12px",
+        rowGap: "4px",
+    },
+    candidateControls: {
+        display: "flex",
+        alignItems: "center",
+        flexWrap: "wrap" as const,
+        justifyContent: "flex-end",
+        gap: "16px",
+        rowGap: "4px",
+        minWidth: 0,
+        maxWidth: "100%",
+        marginLeft: "auto",
     },
     artifactList: {
         padding: `${"12px"} ${"24px"}`,
@@ -90,6 +108,7 @@ const useStyles = makeStyles({
     },
     actions: {
         display: "flex",
+        flexWrap: "wrap" as const,
         gap: "16px",
         marginTop: "28px",
     },
@@ -550,16 +569,12 @@ export function TeardownView() {
                 setLoading(false);
                 navigate(`/teardown/batch/${encodeURIComponent(result.batchId)}`);
             }
-            return;
         }
-        catch {
-            setError("Backend teardown API unavailable. Running mock teardown monitor.");
-            for (const candidate of selected) {
-                startMockTeardown(candidate);
-            }
+        catch (e) {
+            // Show the backend refusal (for example a 409 for an active run on the same estate).
+            setError(e instanceof Error ? e.message : "Unable to start teardown");
+            setLoading(false);
         }
-        setLoading(false);
-        navigate("/teardown/monitor");
     };
     const renderCandidate = (c: TeardownCandidate) => {
         const isSelected = selectedIds.has(c.id);
@@ -624,7 +639,7 @@ export function TeardownView() {
               <div className={styles.candidateInfo}>
                 <div className={styles.candidateName}>
                   {typeBadge(c.type)}
-                  <Button onClick={openHistoryForCandidate} style={{ padding: 0, minWidth: 0 }} variant="text" size="small">
+                  <Button onClick={openHistoryForCandidate} style={{ padding: 0, minWidth: 0, maxWidth: "100%", textAlign: "left" }} variant="text" size="small">
                     <Typography component="span" variant="body2" sx={{
                     fontWeight: 600,
                     textDecoration: "underline"
@@ -639,7 +654,7 @@ export function TeardownView() {
                 </Typography>
                 {c.type === "fabric" && isPaired && pairedRgName && capacityMappings.has(pairedRgName) && (() => {
                     const m = capacityMappings.get(pairedRgName)!;
-                    return (<div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: 2 }}>
+                    return (<div style={{ display: "flex", flexWrap: "wrap", gap: "12px", rowGap: "4px", alignItems: "center", marginTop: 2 }}>
                       <Chip component="span" size="small" variant="filled" color="primary" label={<>Fabric Capacity</>}/>
                       <Typography component="span" variant="caption">{m.capacityName}</Typography>
                     </div>);
@@ -651,6 +666,7 @@ export function TeardownView() {
                     Resources: {c.resourceCount}/{c.expectedCount}
                   </Typography>)}
               </div>
+              <div className={styles.candidateControls}>
               {isPaired && (<Tooltip title={pairedWorkspaceName
                         ? `Linked with Fabric workspace: ${pairedWorkspaceName}`
                         : pairedRgName
@@ -667,10 +683,11 @@ export function TeardownView() {
                         fontSize: "11px",
                         fontWeight: 600,
                         cursor: "default",
-                        whiteSpace: "nowrap" as const,
+                        minWidth: 0,
+                        maxWidth: "100%",
                     }}>
-                    <Link style={{ fontSize: "11px" }}/>
-                    <span>{pairedWorkspaceName ?? pairedRgName ?? "Linked"}</span>
+                    <Link style={{ fontSize: "11px", flexShrink: 0 }}/>
+                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{pairedWorkspaceName ?? pairedRgName ?? "Linked"}</span>
                   </div>
                 </Tooltip>)}
               <Tooltip title={isLocked ? "Unlock to allow teardown" : "Lock to prevent accidental deletion"} describeChild>
@@ -683,6 +700,7 @@ export function TeardownView() {
                     e.stopPropagation();
                     toggleExpanded(c.id);
                 }} variant="text" size="small" startIcon={isExpanded ? <ExpandLess /> : <ExpandMore />}/>
+              </div>
             </div>}/>
         {isExpanded && c.matchedArtifacts && (<div className={styles.artifactList}>
             {c.matchedArtifacts.map((a, i) => (<div key={i}>• {a}</div>))}
@@ -756,7 +774,7 @@ export function TeardownView() {
 
       {/* Subscription selector + scan */}
       <div className={styles.scanControls}>
-        <FormControl style={{ minWidth: 300 }}><FormLabel id="field-teardownview-1-label" htmlFor="field-teardownview-1">{"Azure Subscription"}</FormLabel>
+        <FormControl style={{ minWidth: "min(300px, 100%)" }}><FormLabel id="field-teardownview-1-label" htmlFor="field-teardownview-1">{"Azure Subscription"}</FormLabel>
           <Select value={[selectedSubscription][0] ?? ""} displayEmpty onChange={(event) => {
             const data = { optionValue: event.target.value };
             return setSelectedSubscription(data.optionValue as string);
@@ -822,7 +840,7 @@ export function TeardownView() {
       {scanned && candidates.length === 0 && (<div className={styles.emptyState}>No matching deployment resources found.</div>)}
 
       {(fabricCandidates.length > 0 || partialHdsCandidates.length > 0) && (<>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "28px", marginBottom: "4px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", columnGap: "16px", marginTop: "28px", marginBottom: "4px" }}>
             <Typography className={styles.sectionTitle} style={{ marginTop: 0, marginBottom: 0 }} component="div" variant="subtitle1">
               Fabric Workspaces ({fabricCandidates.length})
             </Typography>

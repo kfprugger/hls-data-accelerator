@@ -13,6 +13,11 @@ HOP_HEADERS = frozenset({
     "te", "trailer", "transfer-encoding", "upgrade", "proxy-connection",
 })
 
+CONSUMER_TENANTS = frozenset({
+    "9188040d-6c67-4c5b-b112-36a304b66dad",  # Personal Microsoft Accounts
+    "f8cdef31-a31e-4b4a-93e4-5f571e91255a",  # Consumers / MSA
+})
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -52,13 +57,19 @@ class Settings:
             if "@" not in identity:
                 identity = str(UUID(identity))
             users.add((str(UUID(tid)), identity))
+        tenants = set()
+        for tid in allowlist("HLS_ALLOWED_TENANTS"):
+            normalized_tid = str(UUID(tid))
+            if normalized_tid in CONSUMER_TENANTS:
+                raise ValueError(f"HLS_ALLOWED_TENANTS entry '{normalized_tid}' is a consumer Microsoft-account tenant, which is refused")
+            tenants.add(normalized_tid)
 
         settings = cls(
             client_id=required("HLS_CLIENT_ID"), client_secret=required("HLS_CLIENT_SECRET"),
             session_key=required("HLS_SESSION_KEY"),
             public_base_url=required("HLS_PUBLIC_BASE_URL").rstrip("/"),
             allowed_users=frozenset(users),
-            allowed_tenants=frozenset(str(UUID(tid)) for tid in allowlist("HLS_ALLOWED_TENANTS")),
+            allowed_tenants=frozenset(tenants),
             subscription_id=required("HLS_SUBSCRIPTION_ID"),
             resource_group=required("HLS_RESOURCE_GROUP"),
             environment_id=required("HLS_ENVIRONMENT_ID"),
@@ -147,7 +158,7 @@ def proxy_headers(headers: list[tuple[bytes, bytes]], user: User, gateway_key: s
 
 def reaper_decision(*, now: datetime, last_seen: datetime, idle_minutes: int,
                     activity: dict | None, unreachable_since: datetime | None) -> tuple[bool, str]:
-    """Only stale traffic AND stale work permit eviction; unknown work fails closed."""
+    """Only stale traffic and stale work permit eviction. Unknown activity retains the sandbox until unreachable longer than idle_minutes."""
     cutoff = now - timedelta(minutes=idle_minutes)
     if last_seen >= cutoff:
         return False, "recent gateway activity"

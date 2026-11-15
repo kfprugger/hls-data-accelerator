@@ -28,6 +28,14 @@ class ActiveRunsError(Exception):
 class ActivityUnavailableError(Exception):
     pass
 
+def registry_server_for(image: str) -> str:
+    if "/" not in image:
+        raise ValueError(f"sandbox_image has no registry server: {image}")
+    host = image.split("/", 1)[0]
+    if not host:
+        raise ValueError(f"sandbox_image has no registry server: {image}")
+    return host
+
 
 class AzureRegistry:
     def __init__(self, settings, credential):
@@ -91,7 +99,7 @@ class AzureApps:
                 "configuration": {
                     "activeRevisionsMode": "Single",
                     "ingress": {"external": False, "targetPort": 7071, "transport": "auto", "allowInsecure": False},
-                    "registries": [{"server": "acrhlsdeployer.azurecr.io", "identity": settings.sandbox_identity_id}],
+                    "registries": [{"server": registry_server_for(settings.sandbox_image), "identity": settings.sandbox_identity_id}],
                     "secrets": [{"name": "gateway-key", "value": row["gateway_key"]}],
                 },
                 "template": {

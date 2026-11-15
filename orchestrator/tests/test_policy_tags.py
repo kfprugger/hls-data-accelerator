@@ -9,8 +9,10 @@ from pathlib import Path
 class PolicyTagTests(unittest.TestCase):
     def setUp(self) -> None:
         self._orchestrator_dir = str(Path(__file__).resolve().parents[1])
+        self._inserted_path = False
         if self._orchestrator_dir not in sys.path:
             sys.path.insert(0, self._orchestrator_dir)
+            self._inserted_path = True
         self.addCleanup(self._cleanup_imports)
 
         self.policy_tags = importlib.import_module("shared.policy_tags")
@@ -22,7 +24,7 @@ class PolicyTagTests(unittest.TestCase):
             "shared.policy_tags",
         ):
             sys.modules.pop(module_name, None)
-        if self._orchestrator_dir in sys.path:
+        if self._inserted_path and self._orchestrator_dir in sys.path:
             sys.path.remove(self._orchestrator_dir)
 
     def base_deploy_config(self, **overrides: object) -> dict[str, object]:

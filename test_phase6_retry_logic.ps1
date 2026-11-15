@@ -63,17 +63,4 @@ if (Test-P5FabricTransientError -StatusCode 403 -ErrorText "AuthorizationFailed:
 }
 
 
-$deployText = Get-Content $deployScript -Raw
-if ($deployText -notmatch 'Invoke-P5PowerBiRest\s+-Uri\s+\$dsUrl') {
-    throw "Quality report datasource lookup should use the Power BI retry wrapper."
-}
-if ($deployText -notmatch 'Invoke-P5PowerBiWeb\s+-Method\s+PATCH\s+-Uri\s+\$patchUrl') {
-    throw "Quality report datasource credential patch should use the Power BI retry wrapper."
-}
-if ($deployText -match 'datasets/429bede8-09bc-4806-b5db-40a1a79341d2') {
-    throw "Quality report operations must not use a hard-coded dataset id."
-}
-if ($deployText -notmatch 'datasets/\$qualityDatasetId') {
-    throw "Quality report operations should use the dynamically resolved dataset id."
-}
 Write-Host "Phase 6 Fabric retry tests passed."

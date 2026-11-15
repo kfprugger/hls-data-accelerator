@@ -11,8 +11,31 @@ from unittest.mock import ANY, AsyncMock, Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from activities import addons
 
+_record_sample_patch = None
+_environ_patch = None
+_temp_data_dir = None
+
+def setUpModule():
+    global _record_sample_patch, _environ_patch, _temp_data_dir
+    import tempfile
+    _temp_data_dir = tempfile.TemporaryDirectory()
+    _environ_patch = patch.dict(os.environ, {"HLS_DATA_DIR": _temp_data_dir.name})
+    _environ_patch.start()
+    _record_sample_patch = patch("shared.stage_eta.record_stage_sample")
+    _record_sample_patch.start()
+
+def tearDownModule():
+    global _record_sample_patch, _environ_patch, _temp_data_dir
+    if _record_sample_patch:
+        _record_sample_patch.stop()
+    if _environ_patch:
+        _environ_patch.stop()
+    if _temp_data_dir:
+        _temp_data_dir.cleanup()
+
 
 class AddonContractTests(unittest.TestCase):
+
     def config(self, **options):
         return {"expected_tenant_id": "11111111-1111-1111-1111-111111111111",
                 "expected_subscription_id": "22222222-2222-2222-2222-222222222222",
@@ -231,17 +254,67 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_alert_recipient_that_is_not_a_workspace_user_is_dropped_not_passed_to_the_bundle(self):
         runner = object.__new__(addons.AddonRunner)
+        runner.deployment = {"customStatus": {}}
+        runner.phase = {"phase": "Add-on: Databricks", "subSteps": []}
         runner.log = Mock()
+        runner.substep = Mock()
+        runner.persist = Mock()
         runner.command = AsyncMock(return_value="[]")
-        self.assertEqual(await runner.databricks_alert_recipient({}, Path("unused"), "alerts@example.com"), "")
+        res = await runner.databricks_alert_recipient({}, Path("unused"), "alerts@example.com")
+        self.assertEqual(res, "")
         runner.log.assert_called_once()
         self.assertIn('userName eq "alerts@example.com"', runner.command.await_args.args[1])
+        msg = runner.log.call_args[0][0]
+        self.assertIn("stays PAUSED without email", msg)
+        self.assertIn("must be a workspace user", msg)
+        self.assertIn(msg, runner.phase["warnings"])
+        self.assertIn(msg, runner.deployment["customStatus"]["addons"]["databricks"]["warnings"])
+        runner.substep.assert_called_once_with("Check Databricks alert recipient", "warning", msg)
 
     async def test_alert_recipient_that_is_a_workspace_user_is_kept(self):
         runner = object.__new__(addons.AddonRunner)
+        runner.deployment = {"customStatus": {}}
+        runner.phase = {"phase": "Add-on: Databricks", "subSteps": []}
         runner.log = Mock()
-        runner.command = AsyncMock(return_value='[{"userName": "joey@example.com"}]')
-        self.assertEqual(await runner.databricks_alert_recipient({}, Path("unused"), "joey@example.com"), "joey@example.com")
+        runner.substep = Mock()
+        runner.persist = Mock()
+        runner.command = AsyncMock(return_value='[{"userName": "writer@example.com"}]')
+        res = await runner.databricks_alert_recipient({}, Path("unused"), "writer@example.com")
+        self.assertEqual(res, "writer@example.com")
+        runner.log.assert_not_called()
+        self.assertEqual(runner.phase.get("warnings", []), [])
+        self.assertEqual(runner.deployment["customStatus"].get("addons", {}).get("databricks", {}).get("warnings", []), [])
+        runner.substep.assert_called_once_with("Check Databricks alert recipient", "succeeded")
+
+    async def test_rayfin_skips_optional_wardflow_persona_app_on_error(self):
+        """R-2: rayfin catches WARDFLOW_ROOT RuntimeError, logs warning, and deploys 3 repo apps."""
+        runner = object.__new__(addons.AddonRunner)
+        runner.config = {"expected_tenant_id": "tid"}
+        runner.ws = "ws"
+        runner.env = {}
+        runner.deployment = {"customStatus": {"addons": {"rayfin": {"resources": {
+            "rayfin-health-command-center": "https://hcc.example",
+            "rayfin-clinical-triage-app": "https://triage.example",
+            "rayfin-imaging": "https://imaging.example",
+        }}}}}
+        runner.log = Mock()
+        runner.gold = AsyncMock(return_value=({"displayName": "Gold"}, {"connectionString": "conn", "id": "sql"}))
+
+        with patch.dict(os.environ, {"WARDFLOW_ROOT": "/nonexistent/wardflow"}):
+            res = await runner.rayfin()
+            self.assertIn("rayfin-health-command-center", res)
+            self.assertIn("rayfin-clinical-triage-app", res)
+            self.assertIn("rayfin-imaging", res)
+            self.assertNotIn("rayfin-wardflow-persona-app", res)
+            self.assertTrue(any("skipping optional WardFlow persona app" in str(call) for call in runner.log.call_args_list))
+
+    async def test_cardiology_raises_on_invalid_wardflow_root(self):
+        """R-2: cardiology raises RuntimeError when WARDFLOW_ROOT is invalid."""
+        runner = object.__new__(addons.AddonRunner)
+        runner.config = {"expected_tenant_id": "tid"}
+        with patch.dict(os.environ, {"WARDFLOW_ROOT": "/nonexistent/wardflow"}):
+            with self.assertRaisesRegex(RuntimeError, "does not exist on disk"):
+                await runner.cardiology()
 
     async def test_empty_alert_recipient_makes_no_lookup(self):
         runner = object.__new__(addons.AddonRunner)
@@ -550,7 +623,58 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         runner.rayfin.assert_not_awaited()
 
     async def test_rayfin_imaging_uses_internal_cache_only_when_hosted_and_falls_back_to_on_the_fly_pipeline(self):
+        import shutil
         import tempfile
+        for mode in ("unset", "0"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                root = tmp_path / "rayfin-imaging"
+                (root / "pipeline/volumes").mkdir(parents=True)
+                (root / "scripts").mkdir(parents=True)
+                (root / ".venv/bin").mkdir(parents=True)
+                (root / ".venv/bin/python").write_text("#!/bin/sh\n")
+                cache_root = tmp_path / "data-share/rayfin-imaging-cache"
+                (cache_root / "lakehouse").mkdir(parents=True)
+                (cache_root / "volumes").mkdir(parents=True)
+                (cache_root / "lakehouse/manifest.json").write_text('{"slides":[{"id":"brain-gbm"}]}')
+                (cache_root / "volumes/manifest.json").write_text('{"studies":[{"id":"fetal-face-atlas"}]}')
+                # Also populate the keyed cache directory
+                keyed_cache = cache_root / "8647d2e18a97"
+                (keyed_cache / "lakehouse").mkdir(parents=True)
+                (keyed_cache / "volumes").mkdir(parents=True)
+                (keyed_cache / "lakehouse/manifest.json").write_text('{"slides":[{"id":"brain-gbm"}]}')
+                (keyed_cache / "volumes/manifest.json").write_text('{"studies":[{"id":"fetal-face-atlas"}]}')
+                runner = object.__new__(addons.AddonRunner)
+                runner.config = {"fabric_workspace_name": "med-test"}
+                runner.log = Mock()
+                runner.resource = Mock(return_value={"name": "sttest"})
+                runner.command = AsyncMock()
+
+                env_patch = {
+                    "HLS_SHARED_DATA_DIR": str(tmp_path / "data-share"),
+                    "HLS_RAYFIN_IMAGING_SLIDES": "brain-gbm,breast-brca,kidney-kirc",
+                }
+                if mode == "0":
+                    env_patch["HLS_HOSTED"] = "0"
+                with patch.dict(addons.os.environ, env_patch, clear=False), \
+                     patch.object(addons.shutil, "copytree", wraps=shutil.copytree) as spy_copytree:
+                    if mode == "unset":
+                        addons.os.environ.pop("HLS_HOSTED", None)
+                    await runner.prepare_rayfin_imaging(root)
+
+                    # 1. Non-hosted mode (unset or "0"): must NEVER read/copy from the shared cache
+                    cache_copies = [c for c in spy_copytree.call_args_list if str(cache_root) in str(c.args[0])]
+                    self.assertEqual(len(cache_copies), 0, f"Expected 0 cache reads in mode={mode}, got {cache_copies}")
+                    self.assertFalse(any("Seeding rayfin-imaging from internal shared cache" in str(c.args[0]) for c in runner.log.call_args_list))
+
+                    # 2. Must run the on-the-fly download and conversion pipeline
+                    titles = [call.args[0] for call in runner.command.await_args_list]
+                    self.assertTrue(any("download slide" in t or "download slides" in t for t in titles))
+                    self.assertIn("rayfin-imaging: generate Deep Zoom tiles", titles)
+                    self.assertIn("rayfin-imaging: download petct", titles)
+                    self.assertIn("rayfin-imaging: convert cohort DICOM studies to NIfTI", titles)
+
+        # 3. Internal hosted mode with populated cache: copies cache into work/ and skips external downloads.
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             root = tmp_path / "rayfin-imaging"
@@ -568,31 +692,25 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
             runner.config = {"fabric_workspace_name": "med-test"}
             runner.log = Mock()
             runner.resource = Mock(return_value={"name": "sttest"})
-
-            # 1. Public / non-hosted mode: even if HLS_SHARED_DATA_DIR is set, must NOT use internal cache; must run on-the-fly download/build.
             runner.command = AsyncMock()
-            with patch.dict(addons.os.environ, {"HLS_HOSTED": "0", "HLS_SHARED_DATA_DIR": str(tmp_path / "data-share")}, clear=False):
-                await runner.prepare_rayfin_imaging(root)
-            titles_public = [call.args[0] for call in runner.command.await_args_list]
-            self.assertIn("rayfin-imaging: download slides", titles_public)
-            self.assertIn("rayfin-imaging: generate Deep Zoom tiles", titles_public)
-            self.assertIn("rayfin-imaging: download petct", titles_public)
-            self.assertIn("rayfin-imaging: convert cohort DICOM studies to NIfTI", titles_public)
 
-            # 2. Internal hosted mode with populated cache: copies cache into work/ and skips external downloads.
-            runner.command = AsyncMock()
-            with patch.dict(addons.os.environ, {"HLS_HOSTED": "1", "HLS_SHARED_DATA_DIR": str(tmp_path / "data-share")}, clear=False):
+            with patch.dict(addons.os.environ, {"HLS_HOSTED": "1", "HLS_SHARED_DATA_DIR": str(tmp_path / "data-share")}, clear=False), \
+                 patch.object(addons.shutil, "copytree", wraps=shutil.copytree) as spy_copytree:
                 await runner.prepare_rayfin_imaging(root)
-            titles_hosted = [call.args[0] for call in runner.command.await_args_list]
-            self.assertNotIn("rayfin-imaging: download slides", titles_hosted)
-            self.assertNotIn("rayfin-imaging: download petct", titles_hosted)
-            self.assertTrue((root / "work/lakehouse/manifest.json").is_file())
-            self.assertIn("rayfin-imaging: convert cohort DICOM studies to NIfTI", titles_hosted)
-            self.assertIn("rayfin-imaging: upload slides to OneLake", titles_hosted)
-            self.assertIn("rayfin-imaging: register slides Delta table", titles_hosted)
-            self.assertIn("rayfin-imaging: upload volumes to OneLake", titles_hosted)
-            self.assertIn("rayfin-imaging: register volumes Delta table", titles_hosted)
 
+                cache_copies = [c for c in spy_copytree.call_args_list if str(cache_root) in str(c.args[0])]
+                self.assertGreaterEqual(len(cache_copies), 2)
+                self.assertTrue(any("Seeding rayfin-imaging from internal shared cache" in str(c.args[0]) for c in runner.log.call_args_list))
+
+                titles_hosted = [call.args[0] for call in runner.command.await_args_list]
+                self.assertNotIn("rayfin-imaging: download slides", titles_hosted)
+                self.assertNotIn("rayfin-imaging: download petct", titles_hosted)
+                self.assertTrue((root / "work/lakehouse/manifest.json").is_file())
+                self.assertIn("rayfin-imaging: convert cohort DICOM studies to NIfTI", titles_hosted)
+                self.assertIn("rayfin-imaging: upload slides to OneLake", titles_hosted)
+                self.assertIn("rayfin-imaging: register slides Delta table", titles_hosted)
+                self.assertIn("rayfin-imaging: upload volumes to OneLake", titles_hosted)
+                self.assertIn("rayfin-imaging: register volumes Delta table", titles_hosted)
 
     async def test_ensure_onelake_databricks_storage_provisions_item_and_grants_readwrite_role(self):
         runner = object.__new__(addons.AddonRunner)
@@ -610,7 +728,7 @@ class FreshDatabricksExportTests(unittest.IsolatedAsyncioTestCase):
         ])
         with patch.object(addons, "az_json", return_value={"identity": {"principalId": "88888888-8888-4888-8888-888888888888"}}):
             url = await runner.ensure_onelake_databricks_storage(
-                {"expected_tenant_id": "c77e97fc-1859-4575-8c8b-53d74bc35a63"},
+                {"expected_tenant_id": "11111111-2222-4333-8444-555555555555"},
                 "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Databricks/accessConnectors/ac",
             )
         self.assertEqual(
@@ -863,11 +981,35 @@ class WowDemoAddonWiringTests(unittest.IsolatedAsyncioTestCase):
         trig_args, trig_env = executed_sequence[trig_idx][1], executed_sequence[trig_idx][2]
         self.assertTrue(any("trigger_spo2_alert.py" in str(a) for a in trig_args))
         self.assertIn("--live", trig_args)
+        self.assertIn("--settle-seconds", trig_args)
+        self.assertEqual(trig_args[trig_args.index("--settle-seconds") + 1], "70")
         self.assertEqual(trig_env.get("HLS_ALERT_EMAIL"), "nurse@hospital.example")
-
         substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
         self.assertEqual(substeps.get("rayfin-imaging: deploy clinical activator reflex"), "succeeded")
         self.assertEqual(substeps.get("rayfin-imaging: trigger SpO2 alert stopwatch"), "succeeded")
+
+    async def test_alert_stopwatch_trigger_failure_fails_addon(self):
+        runner = self.make_runner({
+            "alert_email": "nurse@hospital.example",
+            "seed_tcga_cohort": False,
+            "enable_researcher_persona": False,
+        })
+
+        async def failing_trigger(title, args, *_, **kwargs):
+            if title == "rayfin-imaging: trigger SpO2 alert stopwatch":
+                runner.substep(title, "failed", "exited with code 1")
+                raise RuntimeError(f"{title} (trigger_spo2_alert.py) exited with code 1")
+            runner.substep(title, "succeeded")
+            return ""
+
+        runner.command = AsyncMock(side_effect=failing_trigger)
+        root = Path(__file__).resolve().parents[2] / "rayfin-imaging"
+        with self.assertRaisesRegex(RuntimeError, "trigger SpO2 alert stopwatch"):
+            await runner.prepare_rayfin_imaging(root)
+
+        substeps = {s["name"]: s["status"] for s in runner.phase.get("subSteps", [])}
+        self.assertEqual(substeps.get("rayfin-imaging: trigger SpO2 alert stopwatch"), "failed")
+        self.assertNotIn("rayfin", runner.deployment["customStatus"].get("addons", {}))
 
     async def test_databricks_interop_invoked_in_sequence(self):
         runner = self.make_runner({"verify_databricks_interop": True})
@@ -1167,6 +1309,119 @@ class RayfinLogCollectionTests(unittest.IsolatedAsyncioTestCase):
             warnings = [e for e in self.jsonl(data_dir) if e["level"] == "warn" and "could not collect Rayfin CLI log" in e["message"]]
             self.assertEqual(len(warnings), 2)
 
+
+
+class WardFlowRootResolutionTests(unittest.IsolatedAsyncioTestCase):
+    def test_resolve_wardflow_root_env_set_valid(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            custom_path = Path(tmp) / "custom-wardflow"
+            custom_path.mkdir()
+            resolved = addons.resolve_wardflow_root(env={"WARDFLOW_ROOT": str(custom_path)})
+            self.assertEqual(resolved, custom_path)
+
+    def test_resolve_wardflow_root_env_set_missing_raises_actionable_error(self):
+        nonexistent = Path("/nonexistent/wardflow-root-dir-xyz")
+        with self.assertRaises(RuntimeError) as ctx:
+            addons.resolve_wardflow_root(env={"WARDFLOW_ROOT": str(nonexistent)})
+        self.assertIn("WARDFLOW_ROOT", str(ctx.exception))
+        self.assertIn(str(nonexistent), str(ctx.exception))
+
+    def test_resolve_wardflow_root_env_empty_raises(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            addons.resolve_wardflow_root(env={"WARDFLOW_ROOT": ""})
+        self.assertIn("WARDFLOW_ROOT", str(ctx.exception))
+
+    def test_resolve_wardflow_root_sibling_when_env_unset(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            fake_repo = tmp_dir / "repo"
+            fake_repo.mkdir()
+            sibling_wardflow = tmp_dir / "wardflow"
+            sibling_wardflow.mkdir()
+            fake_home = tmp_dir / "home"
+            fake_home.mkdir()
+
+            resolved = addons.resolve_wardflow_root(env={}, repo_root=fake_repo, home=fake_home)
+            self.assertEqual(resolved, sibling_wardflow)
+
+    def test_resolve_wardflow_root_legacy_when_sibling_absent(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            fake_repo = tmp_dir / "repo"
+            fake_repo.mkdir()
+            fake_home = tmp_dir / "home"
+            legacy_wardflow = fake_home / "git/.worktrees/wardflow-jb-dev"
+            legacy_wardflow.mkdir(parents=True)
+
+            resolved = addons.resolve_wardflow_root(env={}, repo_root=fake_repo, home=fake_home)
+            self.assertEqual(resolved, legacy_wardflow)
+
+    def test_resolve_wardflow_root_none_when_nothing_exists(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            fake_repo = tmp_dir / "repo"
+            fake_repo.mkdir()
+            fake_home = tmp_dir / "home"
+            fake_home.mkdir()
+
+            resolved = addons.resolve_wardflow_root(env={}, repo_root=fake_repo, home=fake_home)
+            self.assertIsNone(resolved)
+
+    async def test_rayfin_skips_persona_app_with_visible_warning_when_wardflow_absent(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.config = {"expected_tenant_id": "tid"}
+        runner.ws = "ws"
+        runner.env = {}
+        runner.deployment = {
+            "customStatus": {
+                "addons": {
+                    "rayfin": {
+                        "resources": {
+                            "rayfin-health-command-center": "https://hcc.example",
+                            "rayfin-clinical-triage-app": "https://triage.example",
+                            "rayfin-imaging": "https://imaging.example",
+                        }
+                    }
+                }
+            }
+        }
+        runner.log = Mock()
+        runner.gold = AsyncMock(return_value=({"displayName": "Gold"}, {"connectionString": "conn", "id": "sql"}))
+
+        with patch.object(addons, "resolve_wardflow_root", return_value=None):
+            result = await runner.rayfin()
+
+        self.assertNotIn("rayfin-wardflow-persona-app", result)
+        warn_calls = [c for c in runner.log.call_args_list if len(c.args) > 1 and c.args[1] == "warn"]
+        self.assertTrue(any("skipping optional WardFlow persona app" in c.args[0] for c in warn_calls))
+
+    async def test_cardiology_fails_fast_when_wardflow_absent_naming_wardflow_root(self):
+        runner = object.__new__(addons.AddonRunner)
+        runner.config = {}
+        with patch.object(addons, "resolve_wardflow_root", return_value=None):
+            with self.assertRaises(RuntimeError) as ctx:
+                await runner.cardiology()
+        msg = str(ctx.exception)
+        self.assertIn("WARDFLOW_ROOT", msg)
+        self.assertIn("caldova-cardio/hds-backend", msg)
+
+    async def test_cardiology_fails_fast_when_wardflow_missing_backend(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            empty_wardflow = Path(tmp) / "empty-wardflow"
+            empty_wardflow.mkdir()
+            runner = object.__new__(addons.AddonRunner)
+            runner.config = {}
+            with patch.object(addons, "resolve_wardflow_root", return_value=empty_wardflow):
+                with self.assertRaises(RuntimeError) as ctx:
+                    await runner.cardiology()
+            msg = str(ctx.exception)
+            self.assertIn("WARDFLOW_ROOT", msg)
+            self.assertIn("caldova-cardio/hds-backend", msg)
 
 if __name__ == "__main__":
     unittest.main()

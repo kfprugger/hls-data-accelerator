@@ -113,9 +113,47 @@ def claim_events():
     )
 
 
+def compute_clinical_alert_candidates(telemetry_rows, devices):
+    """Assign alert tiers and calculate 15-minute tumbling window cooldowns per device and tier."""
+    tiered = (
+        telemetry_rows.join(devices, on="device_id", how="left")
+        .withColumn(
+            "alert_tier",
+            F.when(F.col("spo2") < 85, F.lit("CRITICAL"))
+            .when(F.col("spo2") < 90, F.lit("URGENT"))
+            .when(F.col("spo2") < 92, F.lit("WARNING")),
+        )
+        .where(F.col("alert_tier").isNotNull())
+    )
+
+    # Cooldown is computed per device and per alert tier within each 15-minute tumbling window.
+    window = F.window("observed_at", "15 minutes")
+    first_per_window = (
+        tiered.groupBy("device_id", "alert_tier", window)
+        .agg(F.min("observed_at").alias("observed_at"))
+        .select("device_id", "alert_tier", "observed_at")
+        .withColumn("is_first_in_cooldown", F.lit(True))
+    )
+
+    return (
+        tiered.join(first_per_window, on=["device_id", "alert_tier", "observed_at"], how="left")
+        .withColumn("suppressed_by_cooldown", F.coalesce(~F.col("is_first_in_cooldown"), F.lit(True)))
+        .select(
+            "device_id",
+            "patient_reference",
+            "observed_at",
+            "spo2",
+            "pulse_rate",
+            "perfusion_index",
+            "alert_tier",
+            "suppressed_by_cooldown",
+        )
+    )
+
+
 @dp.materialized_view(
     name="clinical_alert_candidates",
-    comment="Tiered alert candidates with per-device cooldown state already applied.",
+    comment="Tiered alert candidates with per-device and per-tier cooldown state already applied.",
     table_properties={"quality": "ops"},
 )
 def clinical_alert_candidates():
@@ -134,38 +172,4 @@ def clinical_alert_candidates():
         .where(F.col("association_code") == "device-assoc")
         .select("device_id", "patient_reference")
     )
-
-    tiered = (
-        telemetry_rows.join(devices, on="device_id", how="left")
-        .withColumn(
-            "alert_tier",
-            F.when(F.col("spo2") < 85, F.lit("CRITICAL"))
-            .when(F.col("spo2") < 90, F.lit("URGENT"))
-            .when(F.col("spo2") < 92, F.lit("WARNING")),
-        )
-        .where(F.col("alert_tier").isNotNull())
-    )
-
-    # Cooldown is computed here so the SQL alert cannot page twice for one device.
-    window = F.window("observed_at", "15 minutes")
-    first_per_window = (
-        tiered.groupBy("device_id", window)
-        .agg(F.min("observed_at").alias("observed_at"))
-        .select("device_id", "observed_at")
-        .withColumn("is_first_in_cooldown", F.lit(True))
-    )
-
-    return (
-        tiered.join(first_per_window, on=["device_id", "observed_at"], how="left")
-        .withColumn("suppressed_by_cooldown", F.coalesce(~F.col("is_first_in_cooldown"), F.lit(True)))
-        .select(
-            "device_id",
-            "patient_reference",
-            "observed_at",
-            "spo2",
-            "pulse_rate",
-            "perfusion_index",
-            "alert_tier",
-            "suppressed_by_cooldown",
-        )
-    )
+    return compute_clinical_alert_candidates(telemetry_rows, devices)

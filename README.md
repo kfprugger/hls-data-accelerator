@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-2EA44F?style=flat-square"></a>
 </p>
 
-[Quickstart](#quickstart) · [How it works](#how-it-works) · [Deployment phases](#deployment-phases) · [Operations references](#operations-references) · [Teardown](#teardown)
+[Quickstart](#quickstart) · [How it works](#how-it-works) · [Deployment phases](#deployment-phases) · [Specifications](specs/README.md) · [Operations references](#operations-references) · [Teardown](#teardown)
 
 </div>
 
@@ -274,6 +274,7 @@ hls-data-accelerator/
 ├── eval/                           # API-first deployment evaluation harness
 ├── vendor/microsoft-hds/1.4.0/     # Microsoft HDS source and empty schemas; no bundled datasets
 ├── azure-databricks/               # Databricks deployment and validation assets
+├── specs/                          # Component specifications and milestone tickets
 └── docs/                           # Data Agent schema refresh runbook
 ```
 
@@ -323,6 +324,7 @@ If preflight warns that lakehouse or Eventhouse endpoints could not be read (for
 - [Azure Databricks destination](azure-databricks/README.md)
 - [Microsoft HDS v1.4.0 source deployment](fabric-rti/HDS-SETUP-GUIDE.md)
 - [Evaluation harness](eval/README.md)
+- [Component specifications](specs/README.md)
 - [Changelog](CHANGELOG.md)
 
 ## Safety and scope

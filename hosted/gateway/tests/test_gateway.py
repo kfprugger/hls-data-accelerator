@@ -18,9 +18,8 @@ from hosted.gateway.lifecycle import (
 from hosted.gateway.policy import Settings, User, allowed, clean_headers, proxy_headers, reaper_decision
 
 NOW = datetime(2026, 10, 8, 12, tzinfo=timezone.utc)
-USER = User("joey@example.com", "d8d9c8bb-c184-4407-9a08-e1cda58b3bc1", "8d038e6a-9b7d-4cb8-bbcf-e84dff156478")
-OTHER_TENANT = "c77e97fc-1859-4575-8c8b-53d74bc35a63"
-
+USER = User("operator@example.com", "11111111-1111-4111-8111-111111111111", "22222222-2222-2222-2222-222222222222")
+OTHER_TENANT = "33333333-3333-3333-3333-333333333333"
 
 @pytest.fixture
 def settings():
@@ -34,9 +33,8 @@ def settings():
         storage_account="sthlsdeployer", azure_client_id="gateway-identity",
     )
 
-
 @pytest.mark.parametrize("claims,expected", [
-    ({"preferred_username": "  JOEY@EXAMPLE.COM  ", "tid": USER.tid.upper(), "oid": USER.oid.upper()}, True),
+    ({"preferred_username": "  OPERATOR@EXAMPLE.COM  ", "tid": USER.tid.upper(), "oid": USER.oid.upper()}, True),
     ({"upn": USER.email, "tid": OTHER_TENANT, "oid": USER.oid}, False),
     ({"email": "different@example.com", "tid": USER.tid, "oid": USER.oid}, False),
     ({"tid": USER.tid, "oid": USER.oid}, False),
@@ -58,23 +56,36 @@ def test_tenant_opt_in(settings):
 
 
 def test_environment_parses_tenant_pairs(settings, monkeypatch):
+    for key in ("HLS_ALLOWED_TENANTS", "HLS_MAX_SANDBOXES", "HLS_IDLE_MINUTES"):
+        monkeypatch.delenv(key, raising=False)
     for key in ("HLS_CLIENT_ID", "HLS_CLIENT_SECRET", "HLS_SESSION_KEY", "HLS_SUBSCRIPTION_ID",
                 "HLS_RESOURCE_GROUP", "HLS_ENVIRONMENT_ID", "HLS_ENV_DEFAULT_DOMAIN", "HLS_SANDBOX_IMAGE",
                 "HLS_SANDBOX_IDENTITY_ID", "HLS_STORAGE_ACCOUNT", "AZURE_CLIENT_ID"):
         monkeypatch.setenv(key, "test-value")
     monkeypatch.setenv("HLS_PUBLIC_BASE_URL", settings.public_base_url)
-    monkeypatch.setenv("HLS_ALLOWED_USERS", f"{USER.tid.upper()}:JOEY@EXAMPLE.COM,{OTHER_TENANT}:{USER.oid.upper()}")
-    monkeypatch.delenv("HLS_ALLOWED_TENANTS", raising=False)
+    monkeypatch.setenv("HLS_ALLOWED_USERS", f"{USER.tid.upper()}:{USER.email.upper()},{OTHER_TENANT}:{USER.oid.upper()}")
     parsed = Settings.from_env()
     assert parsed.allowed_users == frozenset({(USER.tid, USER.email), (OTHER_TENANT, USER.oid)})
     assert not parsed.allowed_tenants
     monkeypatch.setenv("HLS_ALLOWED_TENANTS", OTHER_TENANT.upper())
     assert Settings.from_env().allowed_tenants == frozenset({OTHER_TENANT})
+    for consumer_tid in (
+        "9188040d-6c67-4c5b-b112-36a304b66dad",
+        "9188040D-6C67-4C5B-B112-36A304B66DAD",
+        "{9188040d-6c67-4c5b-b112-36a304b66dad}",
+        "9188040d6c674c5bb11236a304b66dad",
+        "f8cdef31-a31e-4b4a-93e4-5f571e91255a",
+        "{F8CDEF31-A31E-4B4A-93E4-5F571E91255A}",
+        "f8cdef31a31e4b4a93e45f571e91255a",
+    ):
+        monkeypatch.setenv("HLS_ALLOWED_TENANTS", consumer_tid)
+        with pytest.raises(ValueError, match="consumer"):
+            Settings.from_env()
+    monkeypatch.setenv("HLS_ALLOWED_TENANTS", OTHER_TENANT)
     for invalid in (USER.email, f"not-a-guid:{USER.email}", f"{USER.tid}:not-an-object-guid", f"{USER.tid}:"):
         monkeypatch.setenv("HLS_ALLOWED_USERS", invalid)
         with pytest.raises(ValueError):
             Settings.from_env()
-
 
 def test_empty_allowlists_deny_everyone(settings):
     assert not allowed(USER, replace(settings, allowed_users=frozenset(), allowed_tenants=frozenset()))
@@ -351,7 +362,7 @@ def test_denied_same_email_other_tenant_shows_identity_and_no_session(settings):
         response = sign_in(client)
         assert response.status_code == 403
         assert USER.email in response.text and OTHER_TENANT in response.text and USER.oid in response.text
-        assert "tenant ID and object ID" in response.text
+        assert "approve your organization or account" in response.text
         assert client.get("/gateway/status").status_code == 401
     asyncio.run(manager.http.aclose())
 

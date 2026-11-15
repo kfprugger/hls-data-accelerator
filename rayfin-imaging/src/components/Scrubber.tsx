@@ -64,8 +64,12 @@ export function Scrubber({
     };
     if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') step(-1);
     else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') step(1);
-    else if (e.key === 'Home') items[0] && onSelect(items[0].id);
-    else if (e.key === 'End') items[items.length - 1] && onSelect(items[items.length - 1].id);
+    else if (e.key === 'Home') {
+      if (items[0]) onSelect(items[0].id);
+    } else if (e.key === 'End') {
+      const last = items[items.length - 1];
+      if (last) onSelect(last.id);
+    }
     else return;
     e.preventDefault();
     e.stopPropagation();

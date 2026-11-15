@@ -32,7 +32,7 @@
 #   .\Deploy-All.ps1 -SkipFhir                                        # Skip FHIR + Synthea (already loaded)
 #   .\Deploy-All.ps1 -Phase2                                          # Run Phase 2 only after HDS source deployment
 #   .\Deploy-All.ps1 -Phase3                                          # Run Phase 3 only (imaging toolkit)
-#   .\Deploy-All.ps1 -Phase4 -AlertEmail "nurse@hospital.com"          # Run Phase 4 only (ontology + activator)
+#   .\Deploy-All.ps1 -Phase4 -AlertEmail "nurse@example.com"          # Run Phase 4 only (ontology + activator)
 #   .\Deploy-All.ps1 -RebuildContainers                                # Force ACR image rebuilds
 #   .\Deploy-All.ps1 -Teardown -FabricWorkspaceName "my-workspace" -ResourceGroupName "my-rg" -Location eastus -ExpectedSubscriptionId "<subscription-id>"
 #     Teardown previews then deletes without prompting, including owned front ends. Use
@@ -68,11 +68,11 @@ param (
     [switch]$SkipDicom,              # Skip TCIA DICOM download + ADLS/FHIR ImagingStudy load
     [switch]$SkipFabric,             # Skip deploy-fabric-rti.ps1 entirely
     [switch]$ReuseFabricRti,         # Reuse existing Eventhouse/Eventstream without disabling downstream Fabric phases
-    [switch]$Phase2,             # Run only Fabric Phase 2
-    [switch]$Phase3,             # Run only Phase 3 (Cohorting Agent + DICOM Viewer)
-    [switch]$Phase4,             # Run only Phase 4 (Ontology + Agent binding)
-    [switch]$Phase5,             # Run only Phase 5 (CMS Quality & Claims)
-    [switch]$Phase7,                 # Run only Phase 7 (Payer RTI & Ops)
+    [switch]$Phase2,             # Run only Fabric Phase 2 (RTI Phase 2 + HDS Pipelines + Data Agents; exits before Phase 3)
+    [switch]$Phase3,             # Run only Phase 3 (Cohorting Agent + DICOM Viewer; skips downstream phases)
+    [switch]$Phase4,             # Run Phase 4 (Ontology + clinical Data Agents) and Phase 5 (Bedside Activator); skips Phase 6 and 7
+    [switch]$Phase5,             # Run only CMS Quality & Claims (Phase 6); skips Phase 1-5 and 7
+    [switch]$Phase7,             # Run only Phase 7 (Payer RTI & Ops); skips Phase 1-6
     [switch]$SkipPhase7,             # Skip Payer RTI & Ops entirely
     [switch]$SkipPayerRti,           # Skip claim-stream, payer KQL, claim emulator, Eventstream extension
     [switch]$SkipPayerActivator,     # Skip PayerOpsActivator Reflex
@@ -109,9 +109,11 @@ param (
     [string]$DicomViewerResourceGroup = "rg-hds-dicom-viewer",
 
     # ── Phase 4 (Activator) ──
-    [string]$AlertEmail = "",               # Email for clinical alert notifications (e.g. joey@brakeat.com)
+    [string]$AlertEmail = "",               # Email for clinical alert notifications (e.g. nurse@example.com)
+    [ValidateSet("WARNING", "URGENT", "CRITICAL")]
     [string]$AlertTierThreshold = "URGENT", # Minimum tier to send email: WARNING, URGENT, or CRITICAL
-    [int]$AlertCooldownMinutes = 15,         # Suppress duplicate alerts per device within this window
+    [ValidateRange(1, 1440)]
+    [int]$AlertCooldownMinutes = 10,         # Suppress duplicate alerts per device within this window (minutes; default: 10 per Ticket 004 FR-4)
     [string]$PayerOpsEmail = "",    # Email for payer operations alerts; falls back to -AlertEmail only when empty
     [int]$ClaimEventRatePerMinute = 60,
 
@@ -149,7 +151,7 @@ $normalizedTags["SecurityControl"] = "Ignore"
 $Tags = $normalizedTags
 $requestedSummaryTitle = if ($Phase7) { "PHASE 7 DEPLOYMENT SUMMARY" } elseif ($Phase5) { "PHASE 5 DEPLOYMENT SUMMARY" } elseif ($Phase4) { "PHASE 4 DEPLOYMENT SUMMARY" } elseif ($Phase3) { "PHASE 3 DEPLOYMENT SUMMARY" } elseif ($Phase2) { "PHASE 2 DEPLOYMENT SUMMARY" } else { "FULL DEPLOYMENT SUMMARY" }
 $requestedSummaryPhase = if ($Phase7) { "Phase7" } elseif ($Phase5) { "Phase5" } elseif ($Phase4) { "Phase4" } elseif ($Phase3) { "Phase3" } elseif ($Phase2) { "Phase2" } else { "Phase1+2+3+4+5+6+7" }
-
+$expectedDeviceAssociations = if ($SeedTcgaCohort) { 115 } else { 100 }
 # Prevent interactive `az` extension-install prompts from hanging the orchestrator.
 # The orchestrator launches pwsh with -NonInteractive; any extension prompt would hang forever.
 # See #fix-2.
@@ -414,7 +416,7 @@ if ($ReseedData) {
     $SkipFhirExport = $false
     $SkipHdsPipelines = $false
 }
-if ($Phase4 -or $Phase5) { $SkipPhase7 = $true }
+if ($Phase3 -or $Phase4 -or $Phase5) { $SkipPhase7 = $true }
 if ($SkipFabric) {
     $SkipRtiPhase2 = $true
     $SkipActivator = $true
@@ -3272,38 +3274,40 @@ if (($Phase4 -or ($Phase2 -and -not $Phase3)) -and -not $SkipOntology) {
     # PHASE 5 — Bedside Alerting & Action
     # ============================================================================
 
-    Emit-PhaseTransition -Phase 5 -Label "Bedside Alerting & Action" -StepCount 1
+    if (-not $Phase3 -and -not $Phase5 -and -not $Phase7) {
+        Emit-PhaseTransition -Phase 5 -Label "Bedside Alerting & Action" -StepCount 1
 
-    # ── Step 9: Data Activator ──
-    Invoke-Step -StepName "Phase 5: Data Activator" `
-        -Description "Reflex item with KQL source and email alerting rule" -Action {
+        # ── Step 9: Data Activator ──
+        Invoke-Step -StepName "Phase 5: Data Activator" `
+            -Description "Reflex item with KQL source and email alerting rule" -Action {
 
-        if ($SkipActivator) {
-            Write-Host "  ⚠ Skipping Activator deployment (-SkipActivator is set)" -ForegroundColor Yellow
-            return
-        }
-
-        if ($ScaffoldingOnly) {
-            Write-Host "  ⚠ Skipping Activator deployment for scaffolding-only mode" -ForegroundColor Yellow
-            return
-        }
-
-        if (-not $AlertEmail) {
-            Write-Host "  ⚠ No -AlertEmail specified — skipping Activator deployment" -ForegroundColor Yellow
-            Write-Host "    Re-run with -AlertEmail 'nurse@hospital.com' to enable email alerts" -ForegroundColor DarkGray
-        } else {
-            Write-Host "  Alert email: $AlertEmail" -ForegroundColor White
-            $py = if ($script:deploymentPython) { $script:deploymentPython } else { "python3" }
-            $activatorScript = Join-Path $ScriptDir "scripts/deploy_clinical_activator.py"
-            $env:HLS_ALERT_EMAIL = $AlertEmail
-            & $py $activatorScript --workspace $FabricWorkspaceName --email $AlertEmail --live
-            if ($LASTEXITCODE -ne 0) {
-                throw "deploy_clinical_activator.py failed with exit code $LASTEXITCODE"
+            if ($SkipActivator) {
+                Write-Host "  ⚠ Skipping Activator deployment (-SkipActivator is set)" -ForegroundColor Yellow
+                return
             }
-            Write-Host "  ✓ Data Activator deployed successfully." -ForegroundColor Green
-        }
 
-        Write-Host ""
+            if ($ScaffoldingOnly) {
+                Write-Host "  ⚠ Skipping Activator deployment for scaffolding-only mode" -ForegroundColor Yellow
+                return
+            }
+
+            if (-not $AlertEmail) {
+                Write-Host "  ⚠ No -AlertEmail specified — skipping Activator deployment" -ForegroundColor Yellow
+                Write-Host "    Re-run with -AlertEmail 'nurse@example.com' to enable email alerts" -ForegroundColor DarkGray
+            } else {
+                Write-Host "  Alert email: $AlertEmail" -ForegroundColor White
+                $py = if ($script:deploymentPython) { $script:deploymentPython } else { "python3" }
+                $activatorScript = Join-Path $ScriptDir "scripts/deploy_clinical_activator.py"
+                $env:HLS_ALERT_EMAIL = $AlertEmail
+                & $py $activatorScript --workspace $FabricWorkspaceName --email $AlertEmail --cooldown-minutes $AlertCooldownMinutes --min-tier $AlertTierThreshold --live
+                if ($LASTEXITCODE -ne 0) {
+                    throw "deploy_clinical_activator.py failed with exit code $LASTEXITCODE"
+                }
+                Write-Host "  ✓ Data Activator deployed successfully." -ForegroundColor Green
+            }
+
+            Write-Host ""
+        }
     }
 
 # ============================================================================
@@ -4203,7 +4207,19 @@ if ($RunEval -and -not $Teardown) {
     if (Test-Path $evalScript) {
         $evalJson = Join-Path $ScriptDir "eval/$FabricWorkspaceName-eval.json"
         if ($script:deploymentPython) {
-            & $script:deploymentPython $evalScript --workspace $FabricWorkspaceName --json-out $evalJson
+            $evalArgs = @(
+                $evalScript,
+                "--workspace", $FabricWorkspaceName,
+                "--json-out", $evalJson,
+                "--expected-device-associations", [string]$expectedDeviceAssociations
+            )
+            if ($ResourceGroupName) {
+                $evalArgs += @("--resource-group", $ResourceGroupName)
+            }
+            if ($ExpectedSubscriptionId) {
+                $evalArgs += @("--subscription", [string]$ExpectedSubscriptionId)
+            }
+            & $script:deploymentPython @evalArgs
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Deployment evaluation passed" -ForegroundColor Green
             } else {

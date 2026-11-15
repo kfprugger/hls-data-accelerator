@@ -8,10 +8,11 @@ model Model
 
 annotation __PBI_TimeIntelligenceEnabled = 0
 
-annotation PBI_QueryOrder = ["agg_quality_measures","agg_quality_summary","fact_claim","dim_payer","dim_diagnosis","fact_diagnosis","agg_medication_adherence","care_gaps","star_rating_detail","star_rating_simulation","dim_hcc","fact_patient_hcc","agg_risk_scores","agg_risk_summary","revenue_opportunity","readmission_risk_scores","readmission_risk_summary","readmission_model_performance","agg_utilization_summary","agg_utilization_by_payer","agg_cost_by_category","agg_high_cost_claimants","agg_condition_pmpm","_Measures"]
+annotation PBI_QueryOrder = ["dim_patient","agg_quality_measures","agg_quality_summary","fact_claim","dim_payer","dim_diagnosis","fact_diagnosis","agg_medication_adherence","care_gaps","star_rating_detail","star_rating_simulation","dim_hcc","fact_patient_hcc","agg_risk_scores","agg_risk_summary","revenue_opportunity","readmission_risk_scores","readmission_risk_summary","readmission_model_performance","agg_utilization_summary","agg_utilization_by_payer","agg_cost_by_category","agg_high_cost_claimants","agg_condition_pmpm","_Measures"]
 
 annotation PBI_ProTooling = ["DevMode","TMDL-Extension"]
 
+ref table dim_patient
 ref table agg_quality_measures
 ref table agg_quality_summary
 ref table fact_claim

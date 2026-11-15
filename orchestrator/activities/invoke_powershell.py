@@ -256,21 +256,15 @@ def run_preflight(config: dict[str, Any]) -> dict[str, Any]:
         text=True, cwd=str(SCRIPT_DIR),
         shell=(sys.platform == "win32"),
         encoding="utf-8", errors="replace",
+        start_new_session=(sys.platform != "win32"),
     )
 
     output_lines = []
-    json_lines = []
-    in_json = False
-
     for line in process.stdout:
         line = line.rstrip()
         output_lines.append(line)
         if line:
             logger.info(line)
-        if line.strip().startswith("{"):
-            in_json = True
-        if in_json:
-            json_lines.append(line)
 
     process.wait()
 
@@ -282,17 +276,65 @@ def run_preflight(config: dict[str, Any]) -> dict[str, Any]:
         "output": "\n".join(output_lines),
     }
 
-    if json_lines:
-        try:
-            parsed = json.loads("\n".join(json_lines))
-            result["checks"] = parsed.get("checks", [])
-            result["failures"] = parsed.get("failures", [])
-            result["warnings"] = parsed.get("warnings", [])
-            result["passed"] = parsed.get("passed", process.returncode == 0)
-        except Exception:
-            pass
+    parsed = _parse_preflight_output(output_lines)
+    if parsed is not None:
+        result["checks"] = parsed.get("checks", [])
+        result["failures"] = parsed.get("failures", [])
+        result["warnings"] = parsed.get("warnings", [])
+        result["passed"] = parsed.get("passed", process.returncode == 0)
 
     return result
+
+
+def _parse_preflight_output(output_lines: list[str]) -> dict[str, Any] | None:
+    """Extract and parse the final complete JSON document from preflight stdout lines.
+
+    Robustly scans for candidate JSON object starts, decoding the final complete document
+    to handle leading diagnostic JSON, interspersed logging, and trailing non-JSON text.
+    Logs parse failures with a bounded excerpt instead of swallowing them.
+    """
+    output_text = "\n".join(output_lines)
+    decoder = json.JSONDecoder()
+
+    # Find candidate object starts (lines beginning with '{', allowing leading whitespace)
+    candidates = [
+        m.start() + (len(m.group()) - len(m.group().lstrip()))
+        for m in re.finditer(r"^[ \t]*\{", output_text, re.MULTILINE)
+    ]
+    # Fallback to any '{' in the text if no line-start '{' was found
+    if not candidates:
+        candidates = [m.start() for m in re.finditer(r"\{", output_text)]
+
+    best_obj: dict[str, Any] | None = None
+    best_end = -1
+    last_error: Exception | None = None
+
+    for start in reversed(candidates):
+        try:
+            obj, end = decoder.raw_decode(output_text, start)
+            if isinstance(obj, dict) and end > best_end:
+                best_end = end
+                best_obj = obj
+        except json.JSONDecodeError as exc:
+            last_error = exc
+            continue
+
+    if best_obj is not None:
+        return best_obj
+
+    excerpt = output_text[-500:] if len(output_text) > 500 else output_text
+    if candidates:
+        logger.warning(
+            "Failed to parse preflight JSON document: %s (excerpt: %r)",
+            last_error,
+            excerpt,
+        )
+    else:
+        logger.warning(
+            "No JSON document found in preflight output (excerpt: %r)",
+            excerpt,
+        )
+    return None
 
 
 def _seed_tcga_cohort_selected(config: dict[str, Any]) -> bool:
@@ -576,8 +618,8 @@ def _run_powershell(args: list[str], step_callback: Any = None, pid_callback: An
         encoding="utf-8",
         errors="replace",
         env=env_dict,
+        start_new_session=(sys.platform != "win32"),
     )
-
     if pid_callback:
         pid_callback(process.pid)
 

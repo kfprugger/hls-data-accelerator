@@ -491,6 +491,12 @@ def validate_rti(az: Az, ws_id: str, items: list[dict], log) -> dict:
             "dashboards": [d["displayName"] for d in dashboards]}
 
 
+# Eventstream NodeStatus values that mean a lifecycle change is still in progress.
+SETTLING_NODE_STATES = {"Creating", "Updating", "Pausing", "Resuming"}
+# How long node states stay unreliable after this run resumes a stream.
+RESUME_SETTLE_SECONDS = 180
+
+
 def ensure_telemetry_ready(az: Az, ws_id: str, items: list[dict], rg: str, sub: str | None, timeout_sec: int, log) -> dict:
     """Start both producers and require running streams with current destination events."""
     result = {"category": "telemetry_readiness", "passed": False, "results": [], "actions": []}
@@ -499,7 +505,8 @@ def ensure_telemetry_ready(az: Az, ws_id: str, items: list[dict], rg: str, sub: 
         "MasimoTelemetryStream": ("masimo-emulator-grp", "TelemetryRaw", "timestamp"),
         "ClaimsRTIStream": ("claim-emulator-grp", "claims_events", "event_timestamp"),
     }
-    started, resumed, resetting = set(), set(), set()
+    started, resetting = set(), set()
+    resumed = {}  # stream id -> time.monotonic() of this run's resume request
 
     def remaining():
         seconds = deadline - time.monotonic()
@@ -567,18 +574,24 @@ def ensure_telemetry_ready(az: Az, ws_id: str, items: list[dict], rg: str, sub: 
                     raise RuntimeError(f"{name}: topology must contain sources, streams, and destinations")
                 nodes = [node for group in groups for node in group]
                 states = [{"name": node.get("name"), "status": node.get("status")} for node in nodes]
-                if any(node.get("status") in ("Error", "Failed") for node in nodes):
+                statuses = {node.get("status") for node in nodes}
+                settling = bool(statuses & SETTLING_NODE_STATES)
+                paused = bool(statuses & {"Paused", "Stopped"})
+                settling_resume = time.monotonic() - resumed.get(stream_id, float("-inf")) < RESUME_SETTLE_SECONDS
+                # Nodes report Failed while a stream pauses or resumes (an Eventhouse destination
+                # does after a capacity resume). Only a failure that outlasts every transition,
+                # including this run's own resume, is terminal.
+                if (statuses & {"Error", "Failed"} and not settling and not settling_resume
+                        and not (paused and stream_id not in resumed)):
                     raise RuntimeError(f"{name}: failed topology nodes: {states}")
                 running = all(node.get("status") == "Running" for node in nodes)
                 observations.append({"check": name, "id": stream_id, "status": "PASS" if running else "WAIT", "nodes": states})
-                if (any(node.get("status") in ("Paused", "Stopped") for node in nodes)
-                        and not any(node.get("status") in ("Pausing", "Resuming") for node in nodes)
-                        and stream_id not in resumed):
+                if paused and not settling and stream_id not in resumed:
                     status, body = http("POST", url + "/resume", az.token(FABRIC_RESOURCE),
                                         {"startType": "Now"}, timeout=min(90, remaining()))
                     if status not in (200, 202):
                         raise RuntimeError(f"{name} resume failed: HTTP {status}: {body}")
-                    resumed.add(stream_id)
+                    resumed[stream_id] = time.monotonic()
                     result["actions"].append({"eventstream": name, "action": "resume", "startType": "Now"})
                     log(f"  resuming {name} from Now (test policy: skip queued history)")
                 if name in required:

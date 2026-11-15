@@ -61,6 +61,73 @@ class TelemetryReadinessTests(unittest.TestCase):
             "eventstream": "MasimoTelemetryStream", "action": "resume", "startType": "Now",
         }])
 
+    def _run_masimo_topologies(self, masimo_states):
+        """Run the gate with Masimo node states (source, stream, destination) per poll."""
+        items = [
+            {"id": "masimo", "type": "Eventstream", "displayName": "MasimoTelemetryStream"},
+            {"id": "claims", "type": "Eventstream", "displayName": "ClaimsRTIStream"},
+            {"id": "eventhouse", "type": "Eventhouse", "displayName": "MasimoEventhouse"},
+        ]
+        az = Mock()
+        az.run.return_value = subprocess.CompletedProcess(
+            [], 0, json.dumps({"state": "Running", "containers": ["Running"]}), "")
+        az.token.return_value = "test-token"
+        polls = 0
+
+        def http(method, url, token, body=None, timeout=90):
+            nonlocal polls
+            if "/eventhouses/" in url:
+                return 200, {"properties": {
+                    "queryServiceUri": "https://test.kusto.invalid",
+                    "databasesItemIds": ["database"],
+                }}
+            if url.endswith("/resume"):
+                return 202, {}
+            masimo = "/masimo/" in url
+            if masimo:
+                polls += 1
+            source, stream, destination = (
+                masimo_states[min(polls, len(masimo_states)) - 1] if masimo else ("Running",) * 3)
+            return 200, {
+                "sources": [{"name": "source", "status": source}],
+                "streams": [{"name": "stream", "status": stream}],
+                "destinations": [{
+                    "name": "EventhouseDestination", "status": destination, "type": "Eventhouse",
+                    "properties": {"workspaceId": "workspace", "itemId": "database",
+                                   "databaseName": "MasimoEventhouse",
+                                   "tableName": "TelemetryRaw" if masimo else "claims_events"},
+                }],
+            }
+
+        with patch.object(harness, "http", side_effect=http), \
+             patch.object(harness, "_kql", return_value=([["current", "current", 10, 0]], None)), \
+             patch.object(harness.time, "sleep"):
+            return harness.ensure_telemetry_ready(
+                az, "workspace", items, "rg-test", None, 30, lambda _: None)
+
+    def test_destination_failed_during_own_resume_is_not_terminal(self):
+        """After a capacity resume the destination reports Failed until its stream settles."""
+        result = self._run_masimo_topologies([
+            ("Paused", "Paused", "Paused"),
+            ("Resuming", "Created", "Failed"),
+            ("Running", "Created", "Failed"),
+            ("Running", "Running", "Running"),
+        ])
+
+        self.assertTrue(result["passed"], result)
+        self.assertEqual(result["actions"], [{
+            "eventstream": "MasimoTelemetryStream", "action": "resume", "startType": "Now",
+        }])
+
+    def test_destination_failed_on_settled_stream_is_terminal(self):
+        """A failure the run did not cause by resuming must stop the gate at once."""
+        result = self._run_masimo_topologies([("Running", "Running", "Failed")])
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["actions"], [])
+        self.assertIn("failed topology nodes", result["results"][-1]["reason"])
+        self.assertIn("EventhouseDestination", result["results"][-1]["reason"])
+
 
 class ReportCoverageTests(unittest.TestCase):
     def test_populated_dimension_does_not_pass_empty_report_facts(self):

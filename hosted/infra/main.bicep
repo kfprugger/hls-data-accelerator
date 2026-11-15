@@ -4,8 +4,11 @@ param location string = 'westus2'
 param gatewayImage string
 param sandboxImage string
 param clientId string
-param allowedUsers string = '8d038e6a-9b7d-4cb8-bbcf-e84dff156478:joey@brakekat.com,c77e97fc-1859-4575-8c8b-53d74bc35a63:joey@jbatl.dev,72f988bf-86f1-41af-91ab-2d7cd011db47:jbrakefield@microsoft.com'
+param allowedUsers string = ''
 param allowedTenants string = ''
+param registryName string
+param storageAccountName string
+param keyVaultName string
 param customDomain string = ''
 
 @description('Foundation-only bootstrap before images and Key Vault secrets exist.')
@@ -17,7 +20,7 @@ param enableManagedCertificate bool = false
 var acrPullRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 
 resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
-  name: 'acrhlsdeployer'
+  name: registryName
   location: location
   sku: { name: 'Basic' }
   properties: { adminUserEnabled: false }
@@ -33,14 +36,14 @@ resource sandboxIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
   location: location
 }
 
-// MCAPSGov "Deploy and Modify" policies in the jbatl.dev tenant disable public network access and
-// shared-key access unless a resource carries SecurityControl=Ignore (Joey's decision, 2026-10-08).
+// MCAPSGov "Deploy and Modify" policies in some enterprise tenants disable public network access and
+// shared-key access unless a resource carries SecurityControl=Ignore.
 // The Container Apps environment reaches Azure Files over SMB with the account key and the gateway
 // reaches Table storage and Key Vault without a VNet, so both resources opt out explicitly.
 var mcapsPolicyExemption = { SecurityControl: 'Ignore' }
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: 'sthlsdeployer'
+  name: storageAccountName
   location: location
   tags: mcapsPolicyExemption
   kind: 'StorageV2'
@@ -75,7 +78,7 @@ resource sandboxTable 'Microsoft.Storage/storageAccounts/tableServices/tables@20
 }
 
 resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: 'kv-hls-deployer'
+  name: keyVaultName
   location: location
   tags: mcapsPolicyExemption
   properties: {

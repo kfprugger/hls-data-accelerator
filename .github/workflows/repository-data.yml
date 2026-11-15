@@ -45,3 +45,5 @@ jobs:
       - name: Exercise backend regressions
         working-directory: orchestrator
         run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Check deployment-script syntax
+        run: pwsh -NoProfile -File ./test_deploy_logic.ps1

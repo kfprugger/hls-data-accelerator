@@ -2,8 +2,10 @@
 """Deploy or update Fabric Data Activator Reflex item for Clinical Alerts.
 
 Creates or updates ClinicalAlertActivator Reflex item in Fabric workspace using kqlSource-v1
-querying fn_ClinicalAlerts(10) with runSettings.executionIntervalInSeconds = 60 and an email
-action targeting HLS_ALERT_EMAIL.
+querying fn_ClinicalAlerts with Microsoft Learn Method 2 stateful alerting (Device object grouping,
+alert_active transition BecomesGreaterThan 0), runSettings.executionIntervalInSeconds = 60, and
+an email action targeting HLS_ALERT_EMAIL with a configurable cooldown window (default 10 minutes)
+and a configurable lowest alert tier (default URGENT, which emails CRITICAL and URGENT alerts).
 """
 from __future__ import annotations
 
@@ -21,26 +23,59 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 import requests
 
-# Interface binding for en0 on macOS under VPN
-if os.environ.get("HLS_BIND_INTERFACE") and sys.platform == "darwin":
-    try:
-        import urllib3.util.connection
-        _idx = socket.if_nametoindex(os.environ["HLS_BIND_INTERFACE"])
-        _orig_conn = urllib3.util.connection.create_connection
+def _bind_interface_if_configured() -> None:
+    """Interface binding for en0 on macOS under VPN."""
+    if os.environ.get("HLS_BIND_INTERFACE") and sys.platform == "darwin":
+        try:
+            import urllib3.util.connection
+            _idx = socket.if_nametoindex(os.environ["HLS_BIND_INTERFACE"])
+            _orig_conn = urllib3.util.connection.create_connection
 
-        def _bound_conn(address, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None, socket_options=None):
-            opts = list(socket_options or []) + [(socket.IPPROTO_IP, 25, _idx)]
-            return _orig_conn(address, timeout=timeout, source_address=source_address, socket_options=opts)
+            def _bound_conn(address, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None, socket_options=None):
+                opts = list(socket_options or []) + [(socket.IPPROTO_IP, 25, _idx)]
+                return _orig_conn(address, timeout=timeout, source_address=source_address, socket_options=opts)
 
-        urllib3.util.connection.create_connection = _bound_conn
-    except Exception:
-        pass
+            urllib3.util.connection.create_connection = _bound_conn
+        except Exception:
+            pass
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
-SKILL_HEADER = "fabric-activator-kqlsource-and-lro-gotchas"
+SKILL_HEADER = "activator-cli"
 LRO_TIMEOUT_SECONDS = 300
+ALERT_TIERS = ("CRITICAL", "URGENT", "WARNING")  # most severe first
+ACTIVATOR_POLL_INTERVAL_SECONDS = 60.0  # P: Reflex executionIntervalInSeconds
+INGEST_LATENCY_ALLOWANCE_SECONDS = 10.0  # L: Eventstream ingestion and indexing latency allowance
+REFLEX_SETTLE_SECONDS = ACTIVATOR_POLL_INTERVAL_SECONDS + INGEST_LATENCY_ALLOWANCE_SECONDS  # P + L = 70.0s
+DEFAULT_COOLDOWN_MINUTES = 10
+DEFAULT_MIN_TIER = "URGENT"
+ALERT_PROBE_FIELD = "alert_probe_id"  # TelemetryRaw.metadata key carrying a per-trigger correlation id
+ALERT_PROBE_SUBJECT_OPEN = "[probe "
+ALERT_PROBE_SUBJECT_CLOSE = "]"
+
+
+def alert_probe_subject_marker(probe_id: str) -> str:
+    """Exact subject fragment the Activator email renders for a probe id."""
+    return f"{ALERT_PROBE_SUBJECT_OPEN}{probe_id}{ALERT_PROBE_SUBJECT_CLOSE}"
+
+
+def tiers_at_or_above(min_tier: str) -> Tuple[str, ...]:
+    """Return the alert tiers at or above min_tier, most severe first."""
+    tier = (min_tier or "").strip().upper()
+    if tier not in ALERT_TIERS:
+        raise ValueError(f"min_tier must be one of {', '.join(ALERT_TIERS)}; got {min_tier!r}")
+    return ALERT_TIERS[: ALERT_TIERS.index(tier) + 1]
+
+def validate_cooldown(val: Any) -> int:
+    """Validate alert cooldown window in minutes (1..1440). Exits with 2 on CLI failure."""
+    try:
+        ival = int(val)
+    except (ValueError, TypeError):
+        raise argparse.ArgumentTypeError(f"Cooldown must be an integer between 1 and 1440, got '{val}'")
+    if not (1 <= ival <= 1440):
+        raise argparse.ArgumentTypeError(f"Cooldown must be between 1 and 1440 minutes, got {ival}")
+    return ival
 
 
 def validate_recipient_allowlist(email_arg: Optional[str] = None) -> str:
@@ -104,29 +139,71 @@ def build_reflex_entities(
     alert_email: str,
     kql_db_id: str,
     workspace_id: str,
-    execution_interval_seconds: int = 60,
+    execution_interval_seconds: int = int(ACTIVATOR_POLL_INTERVAL_SECONDS),
     include_rule: bool = True,
+    cooldown_minutes: int = DEFAULT_COOLDOWN_MINUTES,
+    min_tier: str = DEFAULT_MIN_TIER,
 ) -> Tuple[List[Dict[str, Any]], str]:
-    """Build Reflex entities adhering to kqlSource-v1 and EventTrigger v1.2.4 constraints.
+    """Build Reflex entities adhering to kqlSource-v1 and AttributeTrigger v1.2.4 constraints.
 
     Crucial: runSettings contains ONLY executionIntervalInSeconds, never isStopped!
+    Stateful alerting (Method 2):
+      - kqlSource returns one row per device with alert_active (1 = alert, 0 = normal/recovered)
+      - Activator groups by Device (device_id)
+      - AttributeTrigger fires when alert_active BecomesGreaterThan 0 (EachTime)
     """
     container_id = str(uuid.uuid4())
     kql_source_id = str(uuid.uuid4())
     event_view_id = str(uuid.uuid4())
+    split_event_id = str(uuid.uuid4())
     object_view_id = str(uuid.uuid4())
     attr_device_id = str(uuid.uuid4())
+    attr_device_id_val = str(uuid.uuid4())
+    attr_alert_active = str(uuid.uuid4())
     attr_alert_tier = str(uuid.uuid4())
     attr_spo2_id = str(uuid.uuid4())
     attr_pr_id = str(uuid.uuid4())
     attr_patient_id = str(uuid.uuid4())
     attr_message_id = str(uuid.uuid4())
+    attr_alert_time_id = str(uuid.uuid4())
+    attr_probe_id = str(uuid.uuid4())
 
-    kql_query = "fn_ClinicalAlerts(10) | where alert_tier in ('CRITICAL', 'URGENT') | project device_id, alert_tier, spo2, pr, patient_name, message, alert_time"
+    if not (1 <= cooldown_minutes <= 1440):
+        raise ValueError(f"cooldown_minutes must be between 1 and 1440; got {cooldown_minutes}")
+
+    roster_lookback = max(60, cooldown_minutes + 10)
+    tier_filter = ", ".join(f"'{tier}'" for tier in tiers_at_or_above(min_tier))
+    kql_query = (
+        f"let roster = TelemetryRaw\n"
+        f"    | where todatetime(timestamp) > ago({roster_lookback}m)\n"
+        f"    | distinct device_id;\n"
+        f"let alerts = fn_ClinicalAlerts({cooldown_minutes})\n"
+        f"    | where alert_tier in ({tier_filter})\n"
+        f"    | summarize arg_max(alert_time, *) by device_id;\n"
+        f"let probes = TelemetryRaw\n"
+        f"    | where todatetime(timestamp) > ago({cooldown_minutes}m)\n"
+        f"    | extend probe_id = tostring(metadata.{ALERT_PROBE_FIELD}), probe_time = todatetime(timestamp)\n"
+        f"    | where isnotempty(probe_id)\n"
+        f"    | summarize arg_max(probe_time, probe_id) by device_id;\n"
+        f"roster\n"
+        f"| join kind=leftouter alerts on device_id\n"
+        f"| join kind=leftouter probes on device_id\n"
+        f"| extend alert_active = iff(isnotempty(alert_tier), 1, 0)\n"
+        f"| project\n"
+        f"    device_id,\n"
+        f"    alert_active,\n"
+        f"    alert_tier = coalesce(alert_tier, 'NORMAL'),\n"
+        f"    spo2 = coalesce(spo2, 0.0),\n"
+        f"    pr = coalesce(pr, 0),\n"
+        f"    patient_name = coalesce(patient_name, ''),\n"
+        f"    message = coalesce(message, 'Normal'),\n"
+        f"    {ALERT_PROBE_FIELD} = coalesce(probe_id, 'none'),\n"
+        f"    alert_time = coalesce(alert_time, now())"
+    )
 
     src_evt_inst = {
         "templateId": "SourceEvent",
-        "templateVersion": "1.1",
+        "templateVersion": "1.2.4",
         "steps": [
             {
                 "name": "SourceEventStep",
@@ -141,10 +218,53 @@ def build_reflex_entities(
             }
         ],
     }
+    split_evt_inst = {
+        "templateId": "SplitEvent",
+        "templateVersion": "1.2.4",
+        "steps": [
+            {
+                "name": "SplitEventStep",
+                "id": str(uuid.uuid4()),
+                "rows": [
+                    {
+                        "name": "EventSelector",
+                        "kind": "Event",
+                        "arguments": [
+                            {
+                                "kind": "EventReference",
+                                "type": "complex",
+                                "arguments": [{"name": "entityId", "type": "string", "value": event_view_id}],
+                                "name": "event",
+                            }
+                        ],
+                    },
+                    {
+                        "name": "FieldIdMapping",
+                        "kind": "FieldIdMapping",
+                        "arguments": [
+                            {"name": "fieldName", "type": "string", "value": "device_id"},
+                            {
+                                "kind": "AttributeReference",
+                                "type": "complex",
+                                "arguments": [{"name": "entityId", "type": "string", "value": attr_device_id}],
+                                "name": "idPart",
+                            },
+                        ],
+                    },
+                    {
+                        "name": "SplitEventOptions",
+                        "kind": "EventOptions",
+                        "arguments": [{"name": "isAuthoritative", "type": "boolean", "value": True}],
+                    },
+                ],
+            }
+        ],
+    }
+
 
     id_part_inst = {
         "templateId": "IdentityPartAttribute",
-        "templateVersion": "1.1",
+        "templateVersion": "1.2.4",
         "steps": [
             {
                 "name": "IdPartStep",
@@ -163,7 +283,7 @@ def build_reflex_entities(
     def basic_attr_inst(ev_id: str, field_name: str, data_type: str) -> Dict[str, Any]:
         return {
             "templateId": "BasicEventAttribute",
-            "templateVersion": "1.1",
+            "templateVersion": "1.2.4",
             "steps": [
                 {
                     "name": "EventSelectStep",
@@ -213,68 +333,143 @@ def build_reflex_entities(
         },
         {"uniqueIdentifier": event_view_id, "payload": {"name": "Clinical alert events", "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Event", "instance": json.dumps(src_evt_inst)}}, "type": "timeSeriesView-v1"},
         {"uniqueIdentifier": object_view_id, "payload": {"name": "Device", "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Object"}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": split_event_id, "payload": {"name": "SplitEvent", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Event", "instance": json.dumps(split_evt_inst)}}, "type": "timeSeriesView-v1"},
         {"uniqueIdentifier": attr_device_id, "payload": {"name": "device_id", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(id_part_inst)}}, "type": "timeSeriesView-v1"},
-        {"uniqueIdentifier": attr_alert_tier, "payload": {"name": "alert_tier", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(event_view_id, "alert_tier", "Text"))}}, "type": "timeSeriesView-v1"},
-        {"uniqueIdentifier": attr_spo2_id, "payload": {"name": "spo2", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(event_view_id, "spo2", "Number"))}}, "type": "timeSeriesView-v1"},
-        {"uniqueIdentifier": attr_pr_id, "payload": {"name": "pr", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(event_view_id, "pr", "Number"))}}, "type": "timeSeriesView-v1"},
-        {"uniqueIdentifier": attr_patient_id, "payload": {"name": "patient_name", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(event_view_id, "patient_name", "Text"))}}, "type": "timeSeriesView-v1"},
-        {"uniqueIdentifier": attr_message_id, "payload": {"name": "message", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(event_view_id, "message", "Text"))}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": attr_device_id_val, "payload": {"name": "device_id_val", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(split_event_id, "device_id", "Text"))}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": attr_alert_active, "payload": {"name": "alert_active", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(split_event_id, "alert_active", "Number"))}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": attr_alert_tier, "payload": {"name": "alert_tier", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(split_event_id, "alert_tier", "Text"))}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": attr_spo2_id, "payload": {"name": "spo2", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(split_event_id, "spo2", "Number"))}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": attr_pr_id, "payload": {"name": "pr", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(split_event_id, "pr", "Number"))}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": attr_patient_id, "payload": {"name": "patient_name", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(split_event_id, "patient_name", "Text"))}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": attr_message_id, "payload": {"name": "message", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(split_event_id, "message", "Text"))}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": attr_alert_time_id, "payload": {"name": "alert_time", "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(split_event_id, "alert_time", "Text"))}}, "type": "timeSeriesView-v1"},
+        {"uniqueIdentifier": attr_probe_id, "payload": {"name": ALERT_PROBE_FIELD, "parentObject": {"targetUniqueIdentifier": object_view_id}, "parentContainer": {"targetUniqueIdentifier": container_id}, "definition": {"type": "Attribute", "instance": json.dumps(basic_attr_inst(split_event_id, ALERT_PROBE_FIELD, "Text"))}}, "type": "timeSeriesView-v1"},
     ]
 
     if include_rule:
-        def fr(f: str) -> Dict[str, Any]:
-            return {"arguments": [{"name": "fieldName", "type": "string", "value": f}], "kind": "EventFieldReference", "type": "complex"}
-
-        def nr(f: str) -> Dict[str, Any]:
+        def ar(entity_id: str) -> Dict[str, Any]:
             return {
-                "arguments": [
-                    {"name": "name", "type": "string", "value": f},
-                    {"arguments": [{"name": "fieldName", "type": "string", "value": f}], "kind": "EventFieldReference", "name": "reference", "type": "complexReference"},
-                ],
+                "kind": "AttributeReference",
+                "type": "complex",
+                "arguments": [{"name": "entityId", "type": "string", "value": entity_id}],
+            }
+
+        def anr(name: str, entity_id: str) -> Dict[str, Any]:
+            return {
                 "kind": "NameReferencePair",
                 "type": "complex",
+                "arguments": [
+                    {"name": "name", "type": "string", "value": name},
+                    {
+                        "kind": "AttributeReference",
+                        "name": "reference",
+                        "type": "complexReference",
+                        "arguments": [{"name": "entityId", "type": "string", "value": entity_id}],
+                    },
+                ],
             }
 
         rule_inst = {
-            "templateId": "EventTrigger",
+            "templateId": "AttributeTrigger",
             "templateVersion": "1.2.4",
             "steps": [
                 {
                     "id": str(uuid.uuid4()),
-                    "name": "FieldsDefaultsStep",
+                    "name": "ScalarSelectStep",
                     "rows": [
                         {
+                            "name": "AttributeSelector",
+                            "kind": "Attribute",
                             "arguments": [
                                 {
-                                    "arguments": [{"name": "entityId", "type": "string", "value": event_view_id}],
-                                    "kind": "EventReference",
-                                    "name": "event",
+                                    "kind": "AttributeReference",
+                                    "name": "attribute",
                                     "type": "complex",
+                                    "arguments": [{"name": "entityId", "type": "string", "value": attr_alert_active}],
                                 }
                             ],
-                            "kind": "Event",
-                            "name": "EventSelector",
                         }
                     ],
                 },
-                {"id": str(uuid.uuid4()), "name": "EventDetectStep", "rows": [{"arguments": [], "kind": "OnEveryValue", "name": "OnEveryValue"}]},
+                {
+                    "id": str(uuid.uuid4()),
+                    "name": "ScalarDetectStep",
+                    "rows": [
+                        {
+                            "name": "NumberBecomes",
+                            "kind": "NumberBecomes",
+                            "arguments": [
+                                {"name": "op", "type": "string", "value": "BecomesGreaterThan"},
+                                {"name": "value", "type": "number", "value": 0},
+                            ],
+                        },
+                        {
+                            "name": "OccurrenceOption",
+                            "kind": "EachTime",
+                            "arguments": [],
+                        },
+                    ],
+                },
                 {
                     "id": str(uuid.uuid4()),
                     "name": "ActStep",
                     "rows": [
                         {
+                            "name": "EmailBinding",
+                            "kind": "EmailMessage",
                             "arguments": [
                                 {"name": "messageLocale", "type": "string", "value": "en-us"},
                                 {"name": "sentTo", "type": "array", "values": [{"type": "string", "value": alert_email}]},
                                 {"name": "copyTo", "type": "array", "values": []},
                                 {"name": "bCCTo", "type": "array", "values": []},
-                                {"name": "subject", "type": "array", "values": [{"name": "string", "type": "string", "value": "CLINICAL ALERT - SpO2 low on "}, fr("device_id")]},
-                                {"name": "headline", "type": "array", "values": [fr("alert_tier"), {"name": "string", "type": "string", "value": " ALERT: "}, fr("patient_name"), {"name": "string", "type": "string", "value": " - SpO2 "}, fr("spo2")]},
-                                {"name": "optionalMessage", "type": "array", "values": [{"name": "string", "type": "string", "value": "SpO2: "}, fr("spo2"), {"name": "string", "type": "string", "value": "% | PR: "}, fr("pr"), {"name": "string", "type": "string", "value": " bpm | "}, fr("message")]},
-                                {"name": "additionalInformation", "type": "array", "values": [nr("device_id"), nr("alert_tier"), nr("spo2"), nr("pr"), nr("patient_name"), nr("message")]},
+                                {
+                                    "name": "subject",
+                                    "type": "array",
+                                    "values": [
+                                        {"name": "string", "type": "string", "value": "CLINICAL ALERT - SpO2 low on "},
+                                        ar(attr_device_id_val),
+                                        {"name": "string", "type": "string", "value": f" {ALERT_PROBE_SUBJECT_OPEN}"},
+                                        ar(attr_probe_id),
+                                        {"name": "string", "type": "string", "value": ALERT_PROBE_SUBJECT_CLOSE},
+                                    ],
+                                },
+                                {
+                                    "name": "headline",
+                                    "type": "array",
+                                    "values": [
+                                        ar(attr_alert_tier),
+                                        {"name": "string", "type": "string", "value": " ALERT: "},
+                                        ar(attr_patient_id),
+                                        {"name": "string", "type": "string", "value": " - SpO2 "},
+                                        ar(attr_spo2_id),
+                                    ],
+                                },
+                                {
+                                    "name": "optionalMessage",
+                                    "type": "array",
+                                    "values": [
+                                        {"name": "string", "type": "string", "value": "SpO2: "},
+                                        ar(attr_spo2_id),
+                                        {"name": "string", "type": "string", "value": "% | PR: "},
+                                        ar(attr_pr_id),
+                                        {"name": "string", "type": "string", "value": " bpm | "},
+                                        ar(attr_message_id),
+                                    ],
+                                },
+                                {
+                                    "name": "additionalInformation",
+                                    "type": "array",
+                                    "values": [
+                                        anr("device_id", attr_device_id_val),
+                                        anr("alert_tier", attr_alert_tier),
+                                        anr("spo2", attr_spo2_id),
+                                        anr("pr", attr_pr_id),
+                                        anr("patient_name", attr_patient_id),
+                                        anr("message", attr_message_id),
+                                        anr(ALERT_PROBE_FIELD, attr_probe_id),
+                                    ],
+                                },
                             ],
-                            "kind": "EmailMessage",
-                            "name": "EmailBinding",
                         }
                     ],
                 },
@@ -285,11 +480,13 @@ def build_reflex_entities(
             "uniqueIdentifier": str(uuid.uuid4()),
             "payload": {
                 "name": "Clinical alert events alert",
+                "description": "Created by: skills-for-fabric",
+                "parentObject": {"targetUniqueIdentifier": object_view_id},
                 "parentContainer": {"targetUniqueIdentifier": container_id},
                 "definition": {
                     "type": "Rule",
                     "instance": json.dumps(rule_inst),
-                    "settings": {"shouldRun": True, "shouldApplyRuleOnUpdate": True},
+                    "settings": {"shouldRun": True, "shouldApplyRuleOnUpdate": False},
                 },
             },
             "type": "timeSeriesView-v1",
@@ -299,6 +496,7 @@ def build_reflex_entities(
     json_str = json.dumps(entities)
     b64_str = base64.b64encode(json_str.encode("utf-8")).decode("ascii")
     return entities, b64_str
+
 
 
 RETRYABLE_STATUS = (429, 500, 502, 503, 504)
@@ -412,10 +610,17 @@ def deploy_activator(
     email: Optional[str] = None,
     dry_run: bool = True,
     cleanup: bool = False,
+    cooldown_minutes: int = 10,
+    min_tier: str = "URGENT",
 ) -> Dict[str, Any]:
     """Idempotently deploy or update ClinicalAlertActivator Reflex item."""
     # FR-2: Allowlist check before any network call
     recipient = validate_recipient_allowlist(email)
+    alert_tiers = tiers_at_or_above(min_tier)
+
+    if not (1 <= cooldown_minutes <= 1440):
+        sys.stderr.write(f"Error: cooldown_minutes must be between 1 and 1440, got {cooldown_minutes}\n")
+        sys.exit(2)
 
     reflex_name = "ClinicalAlertActivator"
 
@@ -423,18 +628,22 @@ def deploy_activator(
         # Build planned entities and verify schema
         dummy_ws = "00000000-0000-0000-0000-000000000002"
         dummy_kql = "00000000-0000-0000-0000-000000000001"
-        entities, b64_payload = build_reflex_entities(recipient, dummy_kql, dummy_ws, execution_interval_seconds=60, include_rule=True)
+        entities, b64_payload = build_reflex_entities(
+            recipient, dummy_kql, dummy_ws, execution_interval_seconds=int(ACTIVATOR_POLL_INTERVAL_SECONDS), include_rule=True,
+            cooldown_minutes=cooldown_minutes, min_tier=min_tier,
+        )
         return {
             "status": "PLAN_READY",
             "mode": "DRY RUN (no live network writes)",
             "reflex_name": reflex_name,
             "recipient": recipient,
-            "execution_interval_seconds": 60,
-            "source": "fn_ClinicalAlerts(10)",
+            "execution_interval_seconds": int(ACTIVATOR_POLL_INTERVAL_SECONDS),
+            "cooldown_minutes": cooldown_minutes,
+            "alert_tiers": list(alert_tiers),
+            "source": f"fn_ClinicalAlerts({cooldown_minutes})",
             "entity_count": len(entities),
             "payload_bytes": len(b64_payload),
         }
-
     # Live deployment
     token = get_fabric_token()
     headers = {
@@ -484,10 +693,13 @@ def deploy_activator(
 
     # Step 1: Create Reflex with data pipeline if not existing
     if not reflex_id:
-        _, no_rule_b64 = build_reflex_entities(recipient, kql_db_id, ws_id, execution_interval_seconds=60, include_rule=False)
+        _, no_rule_b64 = build_reflex_entities(
+            recipient, kql_db_id, ws_id, execution_interval_seconds=int(ACTIVATOR_POLL_INTERVAL_SECONDS), include_rule=False,
+            cooldown_minutes=cooldown_minutes, min_tier=min_tier,
+        )
         create_payload = {
             "displayName": reflex_name,
-            "description": f"Clinical alert activator: emails {recipient} on CRITICAL/URGENT alerts from fn_ClinicalAlerts(10).",
+            "description": f"Clinical alert activator: emails {recipient} on {'/'.join(alert_tiers)} alerts from fn_ClinicalAlerts({cooldown_minutes}) with {cooldown_minutes}-minute cooldown.",
             "type": "Reflex",
             "definition": {"parts": [{"path": "ReflexEntities.json", "payload": no_rule_b64, "payloadType": "InlineBase64"}]},
         }
@@ -530,7 +742,10 @@ def deploy_activator(
 
     # Step 2: Update definition to add EventTrigger rule
     time.sleep(2)
-    _, full_b64 = build_reflex_entities(recipient, kql_db_id, ws_id, execution_interval_seconds=60, include_rule=True)
+    _, full_b64 = build_reflex_entities(
+        recipient, kql_db_id, ws_id, execution_interval_seconds=int(ACTIVATOR_POLL_INTERVAL_SECONDS), include_rule=True,
+        cooldown_minutes=cooldown_minutes, min_tier=min_tier,
+    )
     update_payload = {"definition": {"parts": [{"path": "ReflexEntities.json", "payload": full_b64, "payloadType": "InlineBase64"}]}}
     upd_resp = fabric_request(
         "POST",
@@ -553,17 +768,33 @@ def deploy_activator(
         "workspace_id": ws_id,
         "kql_db_id": kql_db_id,
         "recipient": recipient,
-        "execution_interval_seconds": 60,
+        "execution_interval_seconds": int(ACTIVATOR_POLL_INTERVAL_SECONDS),
+        "cooldown_minutes": cooldown_minutes,
+        "alert_tiers": list(alert_tiers),
     }
 
 
 def main():
+    _bind_interface_if_configured()
     parser = argparse.ArgumentParser(description="Deploy or update ClinicalAlertActivator Reflex item.")
     parser.add_argument("--workspace-name", "--workspace", dest="workspace_name", default=os.environ.get("FABRIC_WORKSPACE_NAME", "med-1103a"), help="Fabric workspace name")
     parser.add_argument("--email", help="Notification recipient email (must match HLS_ALERT_EMAIL allowlist)")
     parser.add_argument("--dry-run", action="store_true", default=False, help="Dry run mode (validates without deployment)")
     parser.add_argument("--live", action="store_true", help="Live deployment against Fabric workspace")
     parser.add_argument("--cleanup", action="store_true", help="Delete ClinicalAlertActivator Reflex item")
+    parser.add_argument(
+        "--cooldown-minutes",
+        type=validate_cooldown,
+        default=10,
+        help="Alert suppression cooldown window in minutes (1..1440; default: 10)",
+    )
+    parser.add_argument(
+        "--min-tier",
+        type=str.upper,
+        choices=ALERT_TIERS,
+        default="URGENT",
+        help="Lowest alert tier that sends email: WARNING, URGENT or CRITICAL (default: URGENT)",
+    )
     parser.add_argument("--json", action="store_true", help="Output JSON only")
     args = parser.parse_args()
 
@@ -575,8 +806,9 @@ def main():
         email=args.email,
         dry_run=dry_run,
         cleanup=args.cleanup,
+        cooldown_minutes=args.cooldown_minutes,
+        min_tier=args.min_tier,
     )
-
     if args.json:
         print(json.dumps(res, indent=2))
         return
@@ -591,6 +823,8 @@ def main():
     print(f"Recipient: {res.get('recipient')}")
     print(f"Execution Interval: {res.get('execution_interval_seconds')}s")
     print(f"Mode: {res.get('mode', 'LIVE')}")
+    print(f"Cooldown Minutes: {res.get('cooldown_minutes')}m")
+    print(f"Alert Tiers: {', '.join(res.get('alert_tiers', []))}")
 
 
 if __name__ == "__main__":

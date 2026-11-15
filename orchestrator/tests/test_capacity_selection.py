@@ -15,8 +15,10 @@ class DeployCapacitySelectionTests(unittest.TestCase):
     def setUp(self) -> None:
         self._repo_root = Path(__file__).resolve().parents[2]
         self._orchestrator_dir = str(Path(__file__).resolve().parents[1])
+        self._inserted_path = False
         if self._orchestrator_dir not in sys.path:
             sys.path.insert(0, self._orchestrator_dir)
+            self._inserted_path = True
         self.addCleanup(self._cleanup_imports)
 
         self.invoke_powershell = importlib.import_module("activities.invoke_powershell")
@@ -24,7 +26,7 @@ class DeployCapacitySelectionTests(unittest.TestCase):
     def _cleanup_imports(self) -> None:
         sys.modules.pop("activities.invoke_powershell", None)
         sys.modules.pop("shared.policy_tags", None)
-        if self._orchestrator_dir in sys.path:
+        if self._inserted_path and self._orchestrator_dir in sys.path:
             sys.path.remove(self._orchestrator_dir)
 
     def base_deploy_config(self, **overrides: Any) -> dict[str, Any]:

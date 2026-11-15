@@ -250,7 +250,6 @@ export const VolumeViewer = forwardRef<VolumeViewerHandle, Props>(function Volum
         // Context already gone.
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // (Re)load data when the study or timeline frame changes. Loads are serialised.

@@ -1,6 +1,8 @@
 """Gateway-only sandbox access and ephemeral, in-container Azure device sign-in."""
 import asyncio
 import base64
+import contextlib
+import errno
 import hashlib
 import hmac
 import json
@@ -8,6 +10,7 @@ import logging
 import os
 import re
 import shutil
+import threading
 import time
 import uuid
 import zlib
@@ -87,6 +90,29 @@ def _saved_target() -> dict | None:
 
 
 _SEAL_FILENAME = ".encrypted-azure-auth.bin"
+# Seal writers, restorers and cross-sandbox sweepers serialize on an O_EXCL lock file beside the seal.
+# Azure Files is mounted with ``nobrl``, so fcntl/flock locks are not shared between sandboxes; exclusive
+# create is atomic on SMB and on local filesystems. The lock file holds its owner's random token.
+# Critical sections are a few KB of I/O, so a lock older than the stale limit belongs to a crashed holder.
+# A lock instance is only ever unlinked by the single winner of an exclusive-create election file named
+# after that instance (``<lock>.break.<instance>``), which the winner re-checks before unlinking. Breaking a
+# stale lock and releasing one's own lock both go through that election, so no check-then-delete can remove
+# a successor's lock. An election file abandoned by a crashed winner is itself broken the same way.
+_SEAL_LOCK_STALE_SECONDS = 60.0
+_SEAL_LOCK_TIMEOUT_SECONDS = 10.0
+_SWEEP_LOCK_TIMEOUT_SECONDS = 2.0
+_SEAL_LOCK_RELEASE_SECONDS = 2.0
+_SEAL_LOCK_POLL_SECONDS = 0.05
+_LOCK_TOKEN = re.compile(rb"[0-9a-f]{32}")
+# Sign-out vs. this sandbox's own sealers (auth-status worker threads, device sign-in). Each sign-out bumps
+# the generation and unlinks the seal, holding the guard when it can get it within the lock timeout. A sealer
+# reads the CLI files under the seal lock, writes only while holding the guard and only if no sign-out
+# happened since before it read them, and removes its own write if a sign-out ran while it was writing.
+# A sign-out that cannot get the guard still bumps and unlinks, then raises SealWriteInProgress: it is not
+# final until that write lands and removes itself, so the route reports failure and the user retries.
+_seal_write_guard = threading.Lock()
+_seal_generation_lock = threading.Lock()
+_seal_clear_generation = 0
 
 
 def _seal_path(data_dir: Path | None = None) -> Path | None:
@@ -94,17 +120,176 @@ def _seal_path(data_dir: Path | None = None) -> Path | None:
     return (root / _SEAL_FILENAME) if root else None
 
 
+class SealWriteInProgress(RuntimeError):
+    """Sign-out invalidated and unlinked the seal, but a seal write of this sandbox was still in flight after
+    the guard wait. That write deletes its own file when it lands; until then sign-out is not final.
+
+    Deliberately not an OSError, so it is never handled as a busy or missing seal lock.
+    """
+
+
+def _lock_instance(path: Path) -> tuple[str, float] | None:
+    """Return ``(instance id, age in seconds)`` of the lock-style file at ``path``, or None when it is absent.
+
+    Content is read before metadata: a stale age then always belongs to the instance whose content was read,
+    because any later instance is younger. A file with no valid token (holder crashed before writing it) is
+    identified by its inode and mtime.
+    """
+    try:
+        content = path.read_bytes()
+        st = path.stat()
+    except FileNotFoundError:
+        return None
+    if _LOCK_TOKEN.fullmatch(content):
+        instance = content.decode("ascii")
+    else:
+        instance = "x" + hashlib.sha256(content + f":{st.st_ino}:{st.st_mtime_ns}".encode()).hexdigest()[:31]
+    return instance, time.time() - st.st_mtime
+
+
+def _exclusive_create(path: Path, token: bytes) -> bool:
+    """Create ``path`` holding ``token``. Returns False when it exists or is still being deleted.
+
+    Linux cifs reports an SMB delete-pending name as ENOENT, so ENOENT with the directory present is "busy".
+    A missing directory raises FileNotFoundError. A failed token write removes the file before raising.
+    """
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except (FileExistsError, PermissionError):
+        return False  # PermissionError: SMB sharing/delete-pending denial; a truly unwritable directory times out.
+    except FileNotFoundError as exc:
+        if not path.parent.is_dir():
+            raise FileNotFoundError(errno.ENOENT, "Azure auth seal directory is missing", str(path.parent)) from exc
+        return False
+    try:
+        try:
+            os.write(fd, token)
+        finally:
+            os.close(fd)
+    except BaseException:
+        path.unlink(missing_ok=True)  # Never leave an ownerless lock that would wedge the directory.
+        raise
+    return True
+
+
+def _remove_lock_instance(path: Path, instance: str, token: bytes, deadline: float) -> bool:
+    """Unlink ``path`` only while it is still ``instance``. True once that instance is gone; False on timeout.
+
+    Only the winner of the exclusive-create election file for ``instance`` may unlink it. The instance's
+    owner (if alive) and every other remover lose that election, so the re-check below cannot go stale
+    before the unlink.
+    """
+    election = path.with_name(f"{path.name}.break.{instance}")
+    while not _exclusive_create(election, token):
+        try:
+            holder = _lock_instance(election)
+        except OSError:
+            holder = None
+        if holder is not None and holder[1] > _SEAL_LOCK_STALE_SECONDS:
+            _log.warning("Breaking abandoned Azure auth seal lock election at %s", election)
+            _remove_lock_instance(election, holder[0], token, deadline)
+        elif time.monotonic() < deadline:
+            time.sleep(_SEAL_LOCK_POLL_SECONDS)
+        if time.monotonic() >= deadline:
+            return False
+    try:
+        current = _lock_instance(path)
+        if current is not None and current[0] == instance:
+            path.unlink(missing_ok=True)
+        return True
+    finally:
+        election.unlink(missing_ok=True)
+
+
+@contextlib.contextmanager
+def _seal_lock(seal_file: Path, timeout: float | None = None):
+    """Hold the per-directory seal lock. Raises TimeoutError (an OSError) when it cannot be acquired.
+
+    Raises FileNotFoundError at once when the seal directory does not exist. Not re-entrant: callers take
+    it once and do all seal-file reads, replaces and unlinks inside. Blocking: never call on the event loop.
+    """
+    lock = seal_file.with_name(seal_file.name + ".lock")
+    token = uuid.uuid4().hex.encode("ascii")
+    deadline = time.monotonic() + (_SEAL_LOCK_TIMEOUT_SECONDS if timeout is None else timeout)
+    while not _exclusive_create(lock, token):
+        try:
+            current = _lock_instance(lock)
+        except OSError:
+            current = None  # Unreadable right now (SMB sharing violation): treat as busy.
+        if current is not None and current[1] > _SEAL_LOCK_STALE_SECONDS:
+            _log.warning("Breaking stale Azure auth seal lock at %s", lock)
+            _remove_lock_instance(lock, current[0], token, deadline)
+        elif time.monotonic() < deadline:
+            time.sleep(_SEAL_LOCK_POLL_SECONDS)
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"Azure auth seal lock busy at {lock}")
+    try:
+        yield
+    finally:
+        try:
+            # Only our own instance is removed: if we outlived the stale limit and were broken, a successor's
+            # lock carries a different token and stays.
+            if not _remove_lock_instance(lock, token.decode("ascii"), token, time.monotonic() + _SEAL_LOCK_RELEASE_SECONDS):
+                _log.warning("Azure auth seal lock at %s not released: its break election stayed busy", lock)
+        except OSError as exc:
+            _log.warning("Failed to release Azure auth seal lock at %s: %s", lock, type(exc).__name__)
+
+
+def _valid_auth_payload(prof, msal) -> bool:
+    """Return True when the profile and MSAL cache can actually restore an Azure CLI sign-in.
+
+    Requires the Azure CLI shapes: ``azureProfile.json`` with a ``subscriptions`` list and an MSAL cache
+    whose ``RefreshToken`` section is non-empty and holds only entries with a non-empty ``secret``.
+    """
+    if not isinstance(prof, dict) or not isinstance(prof.get("subscriptions"), list):
+        return False
+    if not all(isinstance(sub, dict) for sub in prof["subscriptions"]):
+        return False
+    if not isinstance(msal, dict) or not all(isinstance(msal.get(k, {}), dict) for k in ("Account", "AppMetadata")):
+        return False
+    tokens = msal.get("RefreshToken")
+    return isinstance(tokens, dict) and bool(tokens) and all(
+        isinstance(entry, dict) and isinstance(entry.get("secret"), str) and entry["secret"].strip()
+        for entry in tokens.values()
+    )
+
+
+def _stage_private(path: Path, data: bytes) -> Path:
+    """Write ``data`` to an owner-only temporary sibling of ``path``; the caller os.replace()s it."""
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return tmp
+
+
+def _replace_private(files: dict[Path, bytes]) -> None:
+    """Stage every file first, then replace, so a failed write never leaves a half-updated set."""
+    staged: list[tuple[Path, Path]] = []
+    try:
+        for path, data in files.items():
+            staged.append((_stage_private(path, data), path))
+        for tmp, path in staged:
+            os.replace(tmp, path)
+    finally:
+        for tmp, _ in staged:
+            tmp.unlink(missing_ok=True)
+
+
 def _hkdf(material: bytes, salt: bytes, info: bytes) -> bytes:
     return HKDF(algorithm=hashes.SHA256(), length=32, salt=salt, info=info).derive(material)
 
 
 def _derive_seal_keys() -> list[bytes]:
-    """Return ``[current, *legacy]`` AES keys for the auth seal.
+    """Return ``[current]`` AES key for the auth seal.
 
-    The current key is derived from the per-sandbox ``HLS_GATEWAY_KEY`` secret, which only lives in this
+    The key is derived from the per-sandbox ``HLS_GATEWAY_KEY`` secret, which only lives in this
     container's environment, with ``tid:oid`` bound in as HKDF info. Every sandbox can reach the shared
     Azure Files root, so a key derived from ``tid:oid`` alone lets one user decrypt another's refresh token.
-    The legacy keys exist only so ``restore_azure_auth_cache`` can migrate an older seal, then re-seal it.
     """
     tid = os.environ.get("HLS_SANDBOX_USER_TID", "").strip().lower()
     oid = os.environ.get("HLS_SANDBOX_USER_OID", "").strip().lower()
@@ -114,114 +299,287 @@ def _derive_seal_keys() -> list[bytes]:
     identity = f"{tid}:{oid}".encode("utf-8")
     salt = hashlib.sha256(identity).digest()
     current = _hkdf(gw_key.encode("utf-8"), salt, b"hls-sandbox-azure-auth-seal-v3:" + identity)
-    legacy_info = b"hls-sandbox-azure-auth-seal-v1"
-    legacy = [_hkdf(f"hls-seal-v2:{tid}:{oid}".encode("utf-8"), salt, legacy_info),
-              _hkdf(gw_key.encode("utf-8"), salt, legacy_info)]
-    return [current, *legacy]
+    return [current]
+
+
+def _sealed_blob(cfg_dir: Path, key: bytes) -> bytes | None:
+    """Read, validate and encrypt the active CLI sign-in. None when it is absent or incomplete."""
+    prof_path = cfg_dir / "azureProfile.json"
+    msal_path = cfg_dir / "msal_token_cache.json"
+    try:
+        prof_raw, msal_raw = prof_path.read_bytes(), msal_path.read_bytes()
+    except FileNotFoundError:
+        return None  # Signed out (or never signed in) since the caller looked.
+    prof = json.loads(prof_raw.decode("utf-8-sig"))
+    msal = json.loads(msal_raw.decode("utf-8-sig"))
+    if not _valid_auth_payload(prof, msal):
+        _log.warning("Not sealing Azure CLI credentials from %s: profile or refresh-token cache is incomplete", cfg_dir)
+        return None
+    # Strip short-lived access/ID tokens so only refresh tokens and account metadata are sealed
+    msal_compact = {
+        "AccessToken": {},
+        "IdToken": {},
+        "RefreshToken": msal["RefreshToken"],
+        "Account": msal.get("Account", {}),
+        "AppMetadata": msal.get("AppMetadata", {}),
+    }
+    payload_obj: dict = {
+        "version": 2,
+        "sealedAt": datetime.now(timezone.utc).isoformat(),
+        "azureProfile": prof,
+        "msalTokenCache": msal_compact,
+    }
+    azps_path = cfg_dir / "azps-context.json"
+    if azps_path.is_file():
+        try:
+            azps = json.loads(azps_path.read_bytes().decode("utf-8-sig"))
+            if isinstance(azps, dict):
+                payload_obj["azpsContext"] = azps
+        except Exception as exc:
+            _log.warning("Sealing without Az PowerShell context from %s: %s", azps_path, type(exc).__name__)
+    plaintext = zlib.compress(json.dumps(payload_obj, sort_keys=True).encode("utf-8"))
+    nonce = os.urandom(12)
+    return b"HLS2" + nonce + AESGCM(key).encrypt(nonce, plaintext, b"hls-azure-auth-v2")
+
+
+def _seal_generation() -> int:
+    with _seal_generation_lock:
+        return _seal_clear_generation
 
 
 def seal_azure_auth_cache(cli_dir: Path | None = None, data_dir: Path | None = None) -> bool:
-    """Encrypt and persist the Azure CLI MSAL refresh token cache and profile to HLS_DATA_DIR."""
+    """Encrypt and persist the Azure CLI MSAL refresh token cache and profile to HLS_DATA_DIR.
+
+    Incomplete CLI state (no usable refresh token, malformed profile) never replaces an existing seal.
+    The CLI files are read under the seal lock, and the seal is written only if no sign-out has cleared the
+    seal since this call started, so a sign-out can never be undone by credentials read before it.
+    Blocking: async callers must use ``asyncio.to_thread``.
+    """
     keys = _derive_seal_keys()
     seal_file = _seal_path(data_dir)
     if not keys or not seal_file:
         return False
-    key = keys[0]
     cfg_dir = cli_dir or Path(os.environ.get("AZURE_CONFIG_DIR") or (Path.home() / ".azure"))
-    prof_path = cfg_dir / "azureProfile.json"
-    msal_path = cfg_dir / "msal_token_cache.json"
-    if not prof_path.is_file() or not msal_path.is_file():
-        return False
+    if not (cfg_dir / "azureProfile.json").is_file() or not (cfg_dir / "msal_token_cache.json").is_file():
+        return False  # Cheap pre-check only; the sealing decision is re-made under the lock.
+    generation = _seal_generation()
     try:
-        prof = json.loads(prof_path.read_bytes().decode("utf-8-sig"))
-        msal = json.loads(msal_path.read_bytes().decode("utf-8-sig"))
-        # Strip short-lived access/ID tokens so only refresh tokens and account metadata are sealed
-        msal_compact = {
-            "AccessToken": {},
-            "IdToken": {},
-            "RefreshToken": msal.get("RefreshToken", {}),
-            "Account": msal.get("Account", {}),
-            "AppMetadata": msal.get("AppMetadata", {}),
-        }
-        payload_obj: dict = {
-            "version": 1,
-            "sealedAt": datetime.now(timezone.utc).isoformat(),
-            "azureProfile": prof,
-            "msalTokenCache": msal_compact,
-        }
-        azps_path = cfg_dir / "azps-context.json"
-        if azps_path.is_file():
-            try:
-                payload_obj["azpsContext"] = json.loads(azps_path.read_bytes().decode("utf-8-sig"))
-            except Exception:
-                pass
-        plaintext = zlib.compress(json.dumps(payload_obj, sort_keys=True).encode("utf-8"))
-        nonce = os.urandom(12)
-        ciphertext = AESGCM(key).encrypt(nonce, plaintext, b"hls-azure-auth-v1")
         seal_file.parent.mkdir(parents=True, exist_ok=True)
-        tmp_file = seal_file.with_suffix(".bin.tmp")
-        tmp_file.write_bytes(b"HLS1" + nonce + ciphertext)
-        tmp_file.chmod(0o600)
-        os.replace(tmp_file, seal_file)
+        with _seal_lock(seal_file):
+            blob = _sealed_blob(cfg_dir, keys[0])
+            if blob is None:
+                return False
+            if not _seal_write_guard.acquire(timeout=_SEAL_LOCK_TIMEOUT_SECONDS):
+                raise TimeoutError("Azure auth seal write guard busy")
+            try:
+                if _seal_generation() != generation:
+                    _log.info("Not sealing Azure CLI credentials to %s: signed out after they were read", seal_file)
+                    return False
+                try:
+                    _replace_private({seal_file: blob})
+                finally:
+                    # A sign-out that could not wait for this write unlinked first; remove whatever the write left,
+                    # including a write that landed and then raised.
+                    signed_out = _seal_generation() != generation
+                    if signed_out:
+                        seal_file.unlink(missing_ok=True)
+                        _log.info("Removed Azure auth seal at %s: signed out while it was being written", seal_file)
+                if signed_out:
+                    return False
+            finally:
+                _seal_write_guard.release()
         return True
-    except Exception:
+    except Exception as exc:
+        _log.warning("Failed to seal Azure CLI credentials to %s: %s", seal_file, type(exc).__name__)
         return False
 
 
 def restore_azure_auth_cache(cli_dir: Path | None = None, data_dir: Path | None = None) -> bool:
-    """Restore encrypted Azure CLI MSAL refresh token cache from HLS_DATA_DIR into ephemeral HOME."""
-    keys = _derive_seal_keys()
+    """Restore encrypted Azure CLI MSAL refresh token cache from HLS_DATA_DIR into ephemeral HOME.
+
+    Verified-bad seals (wrong envelope, foreign key, incomplete payload) are deleted under the seal lock.
+    Read or lock failures preserve the seal. Active CLI files are only replaced by a complete payload.
+    """
     seal_file = _seal_path(data_dir)
-    if not keys or not seal_file or not seal_file.is_file():
+    if not seal_file or not seal_file.is_file():
+        return False
+    keys = _derive_seal_keys()
+    if not keys:
+        # Do not delete when keys are unavailable (missing env) - that is a configuration problem, not a stale seal.
+        _log.warning("Azure auth seal exists at %s but seal derivation keys are unavailable in environment", seal_file)
         return False
     cfg_dir = cli_dir or Path(os.environ.get("AZURE_CONFIG_DIR") or (Path.home() / ".azure"))
     if (cfg_dir / "msal_token_cache.json").is_file() and (cfg_dir / "azureProfile.json").is_file():
         return True
-    try:
-        blob = seal_file.read_bytes()
-        if len(blob) < 32 or blob[:4] != b"HLS1":
-            return False
-        nonce, ciphertext = blob[4:16], blob[16:]
-        plaintext = None
-        used = -1
-        for index, key in enumerate(keys):
-            try:
-                plaintext = zlib.decompress(AESGCM(key).decrypt(nonce, ciphertext, b"hls-azure-auth-v1"))
-                used = index
-                break
-            except Exception:
-                continue
-        if plaintext is None:
-            return False
-        payload_obj = json.loads(plaintext.decode("utf-8"))
-        prof = payload_obj.get("azureProfile")
-        msal = payload_obj.get("msalTokenCache")
-        if not isinstance(prof, dict) or not isinstance(msal, dict):
-            return False
-        cfg_dir.mkdir(parents=True, exist_ok=True)
-        prof_file = cfg_dir / "azureProfile.json"
-        msal_file = cfg_dir / "msal_token_cache.json"
-        prof_file.write_text(json.dumps(prof), encoding="utf-8")
-        msal_file.write_text(json.dumps(msal), encoding="utf-8")
-        prof_file.chmod(0o600)
-        msal_file.chmod(0o600)
-        azps = payload_obj.get("azpsContext")
-        if isinstance(azps, dict):
-            azps_file = cfg_dir / "azps-context.json"
-            azps_file.write_text(json.dumps(azps), encoding="utf-8")
-            azps_file.chmod(0o600)
-        if used > 0 and not seal_azure_auth_cache(cfg_dir, data_dir):
-            # A seal under a legacy key must not outlive the migration: the shared root exposes it.
+
+    def _delete_and_fail(reason: str) -> bool:
+        # Caller holds the seal lock, so no writer can have replaced the seal that was just verified bad.
+        _log.warning("Removing invalid Azure auth seal at %s: %s", seal_file, reason)
+        try:
             seal_file.unlink(missing_ok=True)
-        return True
-    except Exception:
+        except Exception as exc:
+            _log.warning("Failed to unlink invalid Azure auth seal at %s: %s", seal_file, exc)
         return False
+
+    try:
+        with _seal_lock(seal_file):
+            try:
+                blob = seal_file.read_bytes()
+            except FileNotFoundError:
+                return False
+            except Exception as exc:
+                _log.warning("Failed to read Azure auth seal at %s: %s", seal_file, exc)
+                return False
+
+            if len(blob) < 32 or blob[:4] != b"HLS2":
+                return _delete_and_fail("unsupported seal version or corrupt envelope")
+
+            nonce, ciphertext = blob[4:16], blob[16:]
+            plaintext = None
+            for key in keys:
+                try:
+                    plaintext = zlib.decompress(AESGCM(key).decrypt(nonce, ciphertext, b"hls-azure-auth-v2"))
+                    break
+                except Exception:
+                    continue
+            if plaintext is None:
+                return _delete_and_fail("decryption failed under available keys")
+
+            try:
+                payload_obj = json.loads(plaintext.decode("utf-8"))
+            except Exception as exc:
+                return _delete_and_fail(f"payload JSON decode failed: {type(exc).__name__}")
+
+            if not isinstance(payload_obj, dict) or payload_obj.get("version") != 2:
+                return _delete_and_fail(f"unsupported payload version ({payload_obj.get('version') if isinstance(payload_obj, dict) else 'non-dict'})")
+
+            prof = payload_obj.get("azureProfile")
+            msal = payload_obj.get("msalTokenCache")
+            if not _valid_auth_payload(prof, msal):
+                return _delete_and_fail("payload profile or refresh-token cache is incomplete")
+
+            files = {
+                cfg_dir / "azureProfile.json": json.dumps(prof).encode("utf-8"),
+                cfg_dir / "msal_token_cache.json": json.dumps(msal).encode("utf-8"),
+            }
+            azps = payload_obj.get("azpsContext")
+            if isinstance(azps, dict):
+                files[cfg_dir / "azps-context.json"] = json.dumps(azps).encode("utf-8")
+            try:
+                cfg_dir.mkdir(parents=True, exist_ok=True)
+                _replace_private(files)
+            except Exception as exc:
+                _log.warning("Failed to write restored credentials to %s: %s", cfg_dir, exc)
+                return False
+            return True
+    except OSError as exc:
+        _log.warning("Azure auth seal at %s left in place; lock unavailable: %s", seal_file, exc)
+        return False
+
+def _unlink_seal_for_sign_out(seal_file: Path) -> None:
+    """Invalidate in-flight sealers of this sandbox, then delete the seal, serialized with their writes.
+
+    Raises SealWriteInProgress after invalidating and unlinking when a write still held the guard at timeout.
+    """
+    global _seal_clear_generation
+    guarded = _seal_write_guard.acquire(timeout=_SEAL_LOCK_TIMEOUT_SECONDS)
+    try:
+        with _seal_generation_lock:
+            _seal_clear_generation += 1
+        seal_file.unlink(missing_ok=True)
+    finally:
+        if guarded:
+            _seal_write_guard.release()
+    if not guarded:
+        # The writer re-checks the generation after its write lands and removes its seal; this sign-out cannot
+        # report success before that.
+        _log.warning("Azure auth seal at %s cleared while a seal write is still in progress", seal_file)
+        raise SealWriteInProgress(f"Azure auth seal write at {seal_file} is still in progress")
 
 
 def clear_azure_auth_seal(data_dir: Path | None = None) -> None:
+    """Sign-out: delete this sandbox's seal so no sealer can re-create it from earlier credentials.
+
+    Callers remove the active CLI files first. At most two bounded waits run in sequence: the seal lock, then
+    the write guard. Raises SealWriteInProgress when a seal write is still in flight after the guard wait; the
+    caller must not report sign-out as done. Blocking: async callers must use ``asyncio.to_thread``.
+    """
     seal_file = _seal_path(data_dir)
-    if seal_file:
+    if not seal_file:
+        return
+    with contextlib.ExitStack() as held:
+        try:
+            held.enter_context(_seal_lock(seal_file))
+        except FileNotFoundError:
+            pass  # data directory itself is gone: nothing on disk to clear, but in-flight sealers still must stop
+        except OSError as exc:
+            # Sign-out must still remove the user's own seal even when the lock is wedged.
+            _log.warning("Clearing Azure auth seal at %s without its lock: %s", seal_file, type(exc).__name__)
+        # Outside the lock-acquisition handlers: a guard timeout or unlink failure here is never retried.
+        _unlink_seal_for_sign_out(seal_file)
+
+def _sweep_seal_locked(seal_file: Path) -> str:
+    """Classify and maybe delete one seal; caller holds its lock. Returns the stats key to count."""
+    try:
+        with seal_file.open("rb") as f:
+            header = f.read(4)
+    except Exception as read_exc:
+        _log.warning("Cannot read seal header at %s: %s", seal_file, read_exc)
+        return "errors"
+    if len(header) < 4:
+        _log.warning("Incomplete seal header at %s: read %d bytes, expected 4", seal_file, len(header))
+        return "errors"
+    if header == b"HLS2":
+        return "kept"
+    try:
         seal_file.unlink(missing_ok=True)
+    except Exception as del_exc:
+        _log.warning("Failed to delete legacy Azure auth seal at %s: %s", seal_file, del_exc)
+        return "errors"
+    _log.info("Deleted legacy Azure auth seal at %s (header=%r)", seal_file, header)
+    return "deleted"
+
+
+def sweep_legacy_azure_auth_seals(shared_root: Path | None = None) -> dict[str, int]:
+    """Startup sweep: delete legacy (version != 2) seals across all sandbox directories.
+
+    Scans only one level deep (<root>/*/<seal file name>). Never recurse further.
+    Never reads contents beyond the 4-byte version header.
+    Header check and unlink happen under the peer's seal lock so a concurrent re-seal is never deleted;
+    a busy lock or unreadable header leaves the seal in place.
+    Never raises out of startup.
+    """
+    stats = {"scanned": 0, "kept": 0, "deleted": 0, "errors": 0}
+    try:
+        root_path = shared_root or (Path(os.environ["HLS_SHARED_DATA_DIR"]) if os.environ.get("HLS_SHARED_DATA_DIR") else None)
+        if not root_path or not root_path.is_dir():
+            return stats
+        for child in root_path.iterdir():
+            try:
+                if not child.is_dir():
+                    continue
+                seal_file = child / _SEAL_FILENAME
+                if not seal_file.is_file():
+                    continue
+                stats["scanned"] += 1
+                try:
+                    with _seal_lock(seal_file, _SWEEP_LOCK_TIMEOUT_SECONDS):
+                        outcome = _sweep_seal_locked(seal_file)
+                except OSError as lock_exc:
+                    _log.warning("Skipping seal at %s; lock unavailable: %s", seal_file, lock_exc)
+                    outcome = "errors"
+                stats[outcome] += 1
+            except Exception as child_exc:
+                stats["errors"] += 1
+                _log.warning("Error inspecting sandbox directory %s: %s", child, child_exc)
+        _log.info(
+            "Legacy auth seal sweep finished: scanned=%d, kept=%d, deleted=%d, errors=%d",
+            stats["scanned"], stats["kept"], stats["deleted"], stats["errors"]
+        )
+    except Exception as exc:
+        _log.warning("Legacy auth seal sweep encountered unexpected error: %s", exc)
+        stats["errors"] += 1
+    return stats
 def _login_snapshot(session_id: str, session: dict) -> dict:
     return {"session_id": session_id, "tool": session["tool"], **session["target"],
             "user_code": session.get("user_code"), "verification_uri": session.get("verification_uri"),
@@ -285,7 +643,8 @@ async def _device_login(session: dict, req: DeviceLoginRequest, invalidate, on_t
         else:
             account = {"tenantId": tenant, "subscriptionId": subscription}
         session.update(status="succeeded", account=account)
-        seal_azure_auth_cache()
+        # The seal lock can wait up to its timeout: keep it off the event loop.
+        await asyncio.to_thread(seal_azure_auth_cache)
         if on_target_authenticated is not None:
             try:
                 # Blocking SQLite/share I/O: keep it off the event loop.
@@ -307,6 +666,19 @@ async def _device_login(session: dict, req: DeviceLoginRequest, invalidate, on_t
             await process.wait()
         session.pop("process", None)
         session["ready"].set()
+
+
+def _clear_local_azure_credentials() -> None:
+    """Remove the active Azure CLI / Az PowerShell caches, then the seal; that order lets a concurrent sealer
+    that reads after the seal is cleared find nothing to seal. Propagates SealWriteInProgress."""
+    # Az.Accounts token caches are local to HOME, never the mounted history.
+    shutil.rmtree(Path.home() / ".Azure", ignore_errors=False) if (Path.home() / ".Azure").exists() else None
+    cli_dir = Path(os.environ.get("AZURE_CONFIG_DIR") or Path.home() / ".azure")
+    for pattern in ("msal*", "azureProfile.json", "accessTokens.json", "azps-context.json"):
+        for cache in cli_dir.glob(pattern):
+            if cache.is_file():
+                cache.unlink()
+    clear_azure_auth_seal()
 
 
 def install_hosted_routes(app, active_runs, invalidate, on_target_authenticated=None):
@@ -408,16 +780,20 @@ def install_hosted_routes(app, active_runs, invalidate, on_target_authenticated=
                 await _run(*args)
             except Exception as exc:
                 errors.append(str(exc))
-        # Az.Accounts token caches are local to HOME, never the mounted history.
-        shutil.rmtree(Path.home() / ".Azure", ignore_errors=False) if (Path.home() / ".Azure").exists() else None
-        cli_dir = Path(os.environ.get("AZURE_CONFIG_DIR") or Path.home() / ".azure")
-        for pattern in ("msal*", "azureProfile.json", "accessTokens.json", "azps-context.json"):
-            for cache in cli_dir.glob(pattern):
-                if cache.is_file():
-                    cache.unlink()
-        clear_azure_auth_seal()
+        # File I/O and the seal waits (two bounded waits at most) must not block the event loop.
+        try:
+            await asyncio.to_thread(_clear_local_azure_credentials)
+            seal_write_pending = False
+        except SealWriteInProgress:
+            seal_write_pending = True
         _sessions.clear()
         invalidate()
+        if seal_write_pending:
+            # The CLI files and seal are gone, but an earlier sign-in save is still writing; it removes itself
+            # when it lands. Sign-out is idempotent, so retrying is safe and reports success once that is done.
+            return JSONResponse({"error": "; ".join(["Sign-out is not finished: a sign-in save that started before it is still writing", *errors]),
+                                 "error_hint": "Wait 10 seconds, then sign out again. Do not treat this sandbox as signed out until sign-out succeeds."},
+                                status_code=503, headers={"Retry-After": "10"})
         if errors:
             return JSONResponse({"error": "; ".join(errors)}, status_code=502)
         return {"status": "signed_out"}

@@ -9,14 +9,16 @@ from pathlib import Path
 class TeardownScanTests(unittest.TestCase):
     def setUp(self) -> None:
         self._orchestrator_dir = str(Path(__file__).resolve().parents[1])
+        self._inserted_path = False
         if self._orchestrator_dir not in sys.path:
             sys.path.insert(0, self._orchestrator_dir)
+            self._inserted_path = True
         self.addCleanup(self._cleanup_imports)
         self.teardown_scan = importlib.import_module("shared.teardown_scan")
 
     def _cleanup_imports(self) -> None:
         sys.modules.pop("shared.teardown_scan", None)
-        if self._orchestrator_dir in sys.path:
+        if self._inserted_path and self._orchestrator_dir in sys.path:
             sys.path.remove(self._orchestrator_dir)
 
     def test_deployment_history_does_not_create_fabric_teardown_candidates(self) -> None:

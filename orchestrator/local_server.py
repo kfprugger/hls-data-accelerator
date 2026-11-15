@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from shared.policy_tags import normalize_policy_tags
 from shared.teardown_scan import live_fabric_workspaces_for_teardown
 from shared.runtime_paths import DATA_DIR, state_dir
-from shared.hosted import HOSTED, install_hosted_routes, shutdown_auth, restore_azure_auth_cache, seal_azure_auth_cache, touch_hosted_activity
+from shared.hosted import HOSTED, install_hosted_routes, shutdown_auth, restore_azure_auth_cache, seal_azure_auth_cache, touch_hosted_activity, sweep_legacy_azure_auth_seals
 
 LOG_DIR = DATA_DIR
 LOG_SESSION_ID = re.sub(r"[^A-Za-z0-9_.-]", "_", os.environ.get("ORCHESTRATOR_LOG_SESSION", "").strip() or (datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S") if HOSTED else ""))
@@ -110,6 +110,7 @@ def _handle_process_signal(signum, frame):
         signal_name = f"signal {signum}"
     logger.critical("BACKEND RECEIVED %s (%s); dumping stacks before exit", signal_name, signum)
     _log_thread_stacks(signal_name)
+    _terminate_active_processes()
     database = sys.modules.get("shared.database")
     if database and hasattr(database, "backup_database"):
         database.backup_database()
@@ -231,6 +232,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        _terminate_active_processes()
         await shutdown_auth()
         from shared.database import shutdown_database
         await asyncio.to_thread(shutdown_database)
@@ -286,6 +288,7 @@ mark_stale_as_terminated()
 reconcile_from_state_tracking_dir(state_dir(Path(__file__).resolve().parent.parent))
 backfill_form_history_from_deployments()
 if HOSTED:
+    sweep_legacy_azure_auth_seals()
     restore_azure_auth_cache()
 CACHE_FILE = DATA_DIR / ".orchestrator-cache.json"
 
@@ -348,12 +351,19 @@ def _mark_teardown_phase(phases: list[dict], phase_name: str, status: str) -> No
 
 
 def _reconcile_teardown(dep: dict) -> bool:
-    """Refresh interrupted teardown state from live resources in the teardown's pinned subscription."""
+    """Refresh interrupted teardown state from live resources in the teardown's pinned subscription.
+
+    Only worker-less records are reconciled. Reconciliation keeps a record Running only while Azure reports its
+    resource group deleting (an unreachable Azure leaves the record unchanged); once that deletion has ended
+    without finishing the teardown the record becomes Failed, so the estate is free for the advised re-run.
+    """
     cs = dep.get("customStatus") or {}
     if cs.get("runType") != "teardown":
         return False
     if dep.get("runtimeStatus") not in {"Running", "Failed", "Terminated"}:
         return False
+    if _teardown_worker_live(dep.get("instanceId")):
+        return False  # a live worker owns the record and reports the outcome itself
     subscription_id = cs.get("subscriptionId") or ""
     if not subscription_id:
         return False  # unpinned legacy record: never check it against the Azure CLI default subscription
@@ -370,6 +380,11 @@ def _reconcile_teardown(dep: dict) -> bool:
     def add_log(level: str, message: str) -> None:
         logs.append({"timestamp": datetime.now(timezone.utc).isoformat(), "level": level, "message": message})
         cs["logs"] = logs[-200:]
+
+    def fail(detail: str) -> None:
+        dep["runtimeStatus"] = "Failed"
+        cs.update(status="failed", cloudStatus="needs_attention", currentPhase="Teardown Failed", detail=detail)
+        output["status"] = "failed"
 
     if ws_name:
         try:
@@ -399,7 +414,7 @@ def _reconcile_teardown(dep: dict) -> bool:
                 cs["detail"] = f"✓ Azure RG '{rg_name}' fully deleted"
                 output["status"] = "succeeded"
             else:
-                cs["detail"] = f"Azure RG '{rg_name}' is gone, but other teardown phases did not finish; run the teardown again"
+                fail(f"Azure RG '{rg_name}' is gone, but other teardown phases did not finish; run the teardown again")
             changed = True
         elif status == 200:
             state = ((group or {}).get("properties") or {}).get("provisioningState") or "Unknown"
@@ -412,6 +427,14 @@ def _reconcile_teardown(dep: dict) -> bool:
                 cs["detail"] = f"Azure RG '{rg_name}' is still deleting in Azure"
                 output["status"] = "running"
                 changed = True
+            elif dep.get("runtimeStatus") == "Running":
+                _mark_teardown_phase(phases, PHASE_MAIN_GROUP, "failed")
+                fail(f"Azure RG '{rg_name}' is no longer deleting (state {state}); run the teardown again")
+                changed = True
+    elif dep.get("runtimeStatus") == "Running":
+        # Without a resource group no Azure deletion runs on after the worker; the interrupted run is over.
+        fail("The teardown was interrupted before it finished; run the teardown again")
+        changed = True
 
     completed = sum(1 for phase in phases if phase.get("status") in {"succeeded", "skipped"})
     cs["completedPhases"] = completed
@@ -438,6 +461,74 @@ def reconcile_interrupted_teardowns() -> int:
 # Track active subprocess PIDs for cancellation
 active_processes: dict[str, int] = {}  # instance_id → PID
 
+
+def _is_process_group_alive(pgid: int, pid: int) -> bool:
+    try:
+        wpid, _ = os.waitpid(pid, os.WNOHANG)
+    except (ChildProcessError, OSError):
+        pass
+
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except OSError as e:
+        if getattr(e, "errno", None) == 1:
+            return True
+        return False
+
+
+def _kill_process_group(pid: int, grace_seconds: float = 1.0) -> None:
+    """Terminate a process and its entire process group on POSIX, or process tree on Windows."""
+    if sys.platform == "win32":
+        try:
+            os.system(f"taskkill /F /T /PID {pid}")
+        except Exception as e:
+            logger.warning("Failed to taskkill PID %d: %s", pid, e)
+        return
+
+    try:
+        pgid = os.getpgid(pid)
+    except (ProcessLookupError, OSError):
+        return
+    if pgid == os.getpgrp() or pgid != pid:
+        logger.warning(
+            "Refusing to kill process group %d for PID %d (server pgid: %d, expected session leader pgid == pid)",
+            pgid, pid, os.getpgrp(),
+        )
+        return
+
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, OSError):
+        return
+
+    deadline = time.monotonic() + grace_seconds
+    while time.monotonic() < deadline:
+        time.sleep(0.05)
+        if not _is_process_group_alive(pgid, pid):
+            return
+
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, OSError):
+        pass
+
+
+def _terminate_active_processes() -> None:
+    """Terminate all active deployment subprocesses and their process groups on shutdown."""
+    pids = list(active_processes.values())
+    active_processes.clear()
+    for pid in pids:
+        try:
+            _kill_process_group(pid, grace_seconds=0.5)
+            logger.info("Terminated active subprocess PID %d on shutdown", pid)
+        except Exception as e:
+            logger.warning("Failed to terminate subprocess PID %d on shutdown: %s", pid, e)
+
+
+atexit.register(_terminate_active_processes)
 # Track active teardown scans for incremental UI updates
 scan_jobs: dict[str, dict] = {}
 
@@ -1142,9 +1233,69 @@ def _require_teardown_subscription(jobs: list[TeardownRequest]) -> None:
                                  "teardown never targets the Azure CLI default subscription")
 
 
+_ACTIVE_ESTATE_RUN = "Another deployment or teardown is active for this estate"
+
+# Live teardown worker per record. Cancel cannot interrupt a deletion, so liveness comes from the worker, not the status.
+_teardown_tasks: dict[str, asyncio.Task] = {}
+
+
+def _teardown_worker_live(instance_id: str | None) -> bool:
+    task = _teardown_tasks.get(instance_id or "")
+    return task is not None and not task.done()
+
+
+def _has_live_worker(instance_id: str) -> bool:
+    """True while a teardown or add-on worker of the record still runs, whatever the record's status says."""
+    return _teardown_worker_live(instance_id) or any(not task.done() for task in _addon_tasks.get(instance_id, ()))
+
+
+def _holds_local_work(instance_id: str, record: dict | None) -> bool:
+    """True while history must keep the record: a live worker, or a local Running/Pending run.
+
+    Removing such a record would hide the work from ``_require_estate_idle`` and admit a conflicting run.
+    """
+    if _has_live_worker(instance_id):
+        return True
+    if record is None:
+        return False
+    return record.get("runtimeStatus") in {"Running", "Pending"} and not (record.get("customStatus") or {}).get("importedFrom")
+
+
+def _estate_key(name: str | None) -> str:
+    return (name or "").strip().casefold()
+
+
+def _require_estate_idle(workspace_name: str | None, resource_group_name: str | None, exclude: dict | None = None) -> None:
+    """Refuse (409) a new run while another local run targets the same estate.
+
+    A run is active while ``_holds_local_work`` says so: its record is a local Running/Pending run, or it has a
+    live teardown or add-on worker whatever the record's status or provenance says (add-ons run under a
+    Completed base record; a teardown worker keeps deleting whatever the record says).
+    The estate is the Fabric workspace name or the resource group name; names compare case-insensitively and
+    empty names never match. Imported peer-sandbox history without local work and teardown-batch parent
+    records never block.
+    Callers must not ``await`` between this check and inserting their record into ``deployments``, so the
+    check and the reservation are atomic on the event loop.
+    """
+    workspace, group = _estate_key(workspace_name), _estate_key(resource_group_name)
+    if not (workspace or group):
+        return
+    for instance_id, other in deployments.items():
+        if other is exclude or not _holds_local_work(instance_id, other):
+            continue
+        other_cs = other.get("customStatus") or {}
+        if other_cs.get("runType") == "teardownBatch":
+            continue
+        if (workspace and _estate_key(other_cs.get("workspaceName")) == workspace) or (
+            group and _estate_key(other_cs.get("resourceGroupName")) == group
+        ):
+            raise HTTPException(409, _ACTIVE_ESTATE_RUN)
+
+
 @app.post("/api/teardown/start")
 async def start_teardown(req: TeardownRequest):
     _require_teardown_subscription([req])
+    _require_estate_idle(req.fabric_workspace_name, req.resource_group_name)
     now_local = datetime.now()
     timestamp = now_local.strftime("%Y%m%d-%H%M%S")
     import random
@@ -1188,8 +1339,8 @@ async def start_teardown(req: TeardownRequest):
     deployments[instance_id] = deployment
     save_state()
 
-    # Run teardown in background
-    _create_logged_task(_run_teardown(instance_id, req), name=f"teardown:{instance_id}")
+    # Run teardown in background; the estate stays reserved until this worker exits.
+    _teardown_tasks[instance_id] = _create_logged_task(_run_teardown(instance_id, req), name=f"teardown:{instance_id}")
 
     logger.info("Teardown started: %s (workspace=%s, rg=%s)",
                 instance_id, req.fabric_workspace_name, req.resource_group_name)
@@ -1200,6 +1351,16 @@ async def start_teardown(req: TeardownRequest):
 async def start_teardown_batch(req: TeardownBatchRequest):
     batch_id = f"teardownBatch-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:4]}"
     _require_teardown_subscription(req.jobs)  # reject the whole batch before any job starts
+    workspaces: set[str] = set()
+    groups: set[str] = set()
+    for job in req.jobs:
+        _require_estate_idle(job.fabric_workspace_name, job.resource_group_name)
+        workspace, group = _estate_key(job.fabric_workspace_name), _estate_key(job.resource_group_name)
+        if (workspace and workspace in workspaces) or (group and group in groups):
+            raise HTTPException(409, "Teardown batch jobs must target different workspaces and resource groups")
+        workspaces.add(workspace)
+        groups.add(group)
+    # start_teardown never awaits, so no other request can start a run between these checks and the jobs.
     children = []
     for job in req.jobs:
         result = await start_teardown(job)
@@ -1369,6 +1530,7 @@ async def _run_teardown(instance_id: str, req: TeardownRequest):
     deployment["lastUpdatedTime"] = now_iso()
     save_state()
     logger.info("Teardown %s finished (status=%s, %.1fs)", instance_id, cs["status"], duration)
+    _teardown_tasks.pop(instance_id, None)
 
 
 @app.post("/api/deploy/preflight")
@@ -1492,14 +1654,7 @@ async def start_addons(instance_id: str, body: dict):
     config = dict(cs.get("deployConfig") or {})
     if not config.get("expected_subscription_id") or not config.get("expected_tenant_id"):
         raise HTTPException(409, "This legacy deployment has no pinned tenant/subscription configuration")
-    for other in deployments.values():
-        if other is deployment:
-            continue
-        other_cs = other.get("customStatus") or {}
-        if other.get("runtimeStatus") in {"Running", "Pending"} and (
-            other_cs.get("workspaceName") == cs.get("workspaceName") or other_cs.get("resourceGroupName") == cs.get("resourceGroupName")
-        ):
-            raise HTTPException(409, "Another deployment or teardown is active for this estate")
+    _require_estate_idle(cs.get("workspaceName"), cs.get("resourceGroupName"), exclude=deployment)
     config.update({key: value for key, value in body.items() if key in _ADDON_OPTIONS})
     config.update({flag: name in names for name, flag in ADDON_FLAGS.items()})
     # Base-run phase filters do not constrain add-later execution.
@@ -1512,6 +1667,9 @@ async def start_addons(instance_id: str, body: dict):
     cs["addonRunBaseCompleted"] = True
     # A paused Databricks sibling keeps the run Running; it may finish (and settle Completed) meanwhile.
     status_before = deployment["runtimeStatus"]
+    # Running local add-ons adopts imported peer history: this sandbox now owns the run, so the estate guard,
+    # history deletion and peer re-imports must treat it as local from the Pending reservation onward.
+    imported_from = cs.pop("importedFrom", None)
     deployment["runtimeStatus"] = "Pending"
     save_state()
     try:
@@ -1521,6 +1679,8 @@ async def start_addons(instance_id: str, body: dict):
             raise HTTPException(422, "; ".join(failures))
     except BaseException:
         deployment["runtimeStatus"] = status_before if instance_id in _addon_tasks else "Completed"
+        if imported_from and instance_id not in _addon_tasks:
+            cs["importedFrom"] = imported_from  # Nothing ran locally: the record stays the peer's history.
         save_state()
         raise
     cs.setdefault("addons", {}).update({name: {**({} if not isinstance(cs.get("addons", {}).get(name), dict) else {k: v for k, v in cs["addons"][name].items() if k == "resources" and v}), "status": "pending"} for name in names})
@@ -1960,6 +2120,7 @@ def _apply_prior_success_skips(req: DeployRequest):
 @app.post("/api/deploy/start")
 async def start_deploy(req: DeployRequest):
     from activities.addons import preflight as addon_preflight
+    _require_estate_idle(req.fabric_workspace_name, req.resource_group_name)  # fail fast before slow preflight
     checks = await asyncio.to_thread(addon_preflight, req.model_dump())
     failures = [c["message"] for c in checks if c["status"] == "fail"]
     if failures:
@@ -2069,6 +2230,8 @@ async def start_deploy(req: DeployRequest):
         },
         "output": None,
     }
+    # Re-check after the last await: no await follows until the record is inserted.
+    _require_estate_idle(req.fabric_workspace_name, req.resource_group_name)
     deployments[instance_id] = deployment
     save_state()
     record_deployment_form_history(deployment)
@@ -2352,6 +2515,8 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
                         substep["status"] = "succeeded"
                         if duration and not substep.get("duration"):
                             substep["duration"] = duration
+    step_start_monotonic: dict[str, float] = {}
+
     def step_callback(event: str, step_name: str, detail: str, duration: str):
         """Handle step events from PowerShell output parser."""
         if event == "step_start":
@@ -2363,6 +2528,8 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
                 if p["status"] == "running":
                     p["status"] = "succeeded"
                     _complete_running_substeps_for_phase(p["phase"])
+                    step_start_monotonic.pop(p["phase"], None)
+            step_start_monotonic[step_name] = time.monotonic()
             phase = {"phase": step_name, "status": "running"}
             existing_substeps = deployment["customStatus"].setdefault("subStepsByPhase", {}).get(step_name)
             if existing_substeps:
@@ -2377,14 +2544,27 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
                     p["status"] = "succeeded"
                     p["duration"] = duration
                     _complete_running_substeps_for_phase(p["phase"], duration)
+                    phase_start = step_start_monotonic.pop(p["phase"], None) or step_start_monotonic.pop(step_name, None)
+                    if phase_start is not None:
+                        elapsed_sec = time.monotonic() - phase_start
+                        if elapsed_sec > 0:
+                            try:
+                                from shared.stage_eta import record_stage_sample
+                                record_stage_sample(p["phase"], elapsed_sec)
+                            except Exception as ex:
+                                logger.warning("Could not record stage sample for %s: %s", p["phase"], ex)
                     break
         elif event == "step_failed":
+            step_start_monotonic.pop(step_name, None)
             for p in reversed(phases):
                 if p["status"] == "running":
+                    step_start_monotonic.pop(p["phase"], None)
                     p["status"] = "failed"
                     p["detail"] = detail
                     p["duration"] = duration
                     break
+        elif event == "step_skipped":
+            step_start_monotonic.pop(step_name, None)
         elif event == "substep_update":
             _upsert_substep(step_name, detail, duration)
         elif event == "step_warning":
@@ -2559,6 +2739,7 @@ async def _run_deploy(instance_id: str, req: DeployRequest):
         }
 
     finally:
+        active_processes.pop(instance_id, None)
         touch_hosted_activity()
         _logging.getLogger("activities.invoke_powershell").removeHandler(handler)
         deployment["lastUpdatedTime"] = now_iso()
@@ -3147,6 +3328,11 @@ def _get_deployed_resources_sync(ws_name: str, rg_name: str) -> dict:
 async def cancel(instance_id: str):
     if instance_id in deployments:
         dep = deployments[instance_id]
+        cs = dep.get("customStatus") or {}
+        # Teardown deletion cannot be interrupted: claiming a cancel would free the estate while it still deletes.
+        if cs.get("runType") == "teardown" and (_teardown_worker_live(instance_id) or (
+                dep.get("runtimeStatus") == "Running" and cs.get("cloudStatus") == "deleting")):
+            raise HTTPException(409, "A teardown cannot be cancelled: its resource deletion keeps running until it finishes")
         dep["runtimeStatus"] = "Terminated"
         dep["customStatus"]["status"] = "cancelled"
         dep["customStatus"]["detail"] = "Cancelled by user"
@@ -3161,17 +3347,11 @@ async def cancel(instance_id: str):
         # Kill the subprocess if it's still running
         pid = active_processes.pop(instance_id, None)
         if pid:
-            import signal
             try:
-                import os
-                if sys.platform == "win32":
-                    os.system(f"taskkill /F /T /PID {pid}")
-                else:
-                    os.kill(pid, signal.SIGTERM)
+                _kill_process_group(pid, grace_seconds=1.0)
                 logger.info("Killed subprocess PID %d for %s", pid, instance_id)
             except Exception as e:
                 logger.warning("Failed to kill PID %d: %s", pid, e)
-
     return {"message": "Cancelled"}
 
 
@@ -3198,9 +3378,11 @@ async def reconcile_teardowns_endpoint():
 
 @app.delete("/api/deploy/{instance_id}")
 async def delete_deployment_endpoint(instance_id: str):
-    """Remove a deployment from history."""
-    if instance_id in deployments:
-        del deployments[instance_id]
+    """Remove a deployment from history; refuse (409) while it still has active work."""
+    # No await from this check to the removal: a worker cannot start between them on the event loop.
+    if _holds_local_work(instance_id, deployments.get(instance_id) or get_deployment(instance_id)):
+        raise HTTPException(409, "Deployment still has active work; wait for it to finish before removing it from history")
+    deployments.pop(instance_id, None)
     if db_delete_deployment(instance_id):
         logger.info("Deployment %s removed from history", instance_id)
         return {"message": "Deleted"}
@@ -3209,9 +3391,18 @@ async def delete_deployment_endpoint(instance_id: str):
 
 @app.post("/api/deployments/clear")
 async def clear_all_deployments_endpoint():
-    """Clear all deployment history."""
-    count = db_clear_all()
-    deployments.clear()
+    """Clear deployment history, retaining records that still have active work."""
+    # No await from the liveness check to the removal, so no worker can start or end unseen between them.
+    records = {record["instanceId"]: record for record in db_list_deployments()}
+    records.update(deployments)
+    retained = {instance_id for instance_id, record in records.items() if _holds_local_work(instance_id, record)}
+    if retained:
+        count = sum(1 for instance_id in records if instance_id not in retained and db_delete_deployment(instance_id))
+        logger.info("Retained %d deployment(s) with active work in history", len(retained))
+    else:
+        count = db_clear_all()
+    for instance_id in [i for i in deployments if i not in retained]:
+        del deployments[instance_id]
     logger.info("Cleared %d deployments from history", count)
     return {"message": f"Cleared {count} deployments"}
 
@@ -3247,6 +3438,15 @@ async def add_form_history_endpoint(field: str, value: str):
     add_form_history(field, value)
     return {"message": "Saved"}
 
+
+
+# ── Stage ETA Memory API ──────────────────────────────────────────────
+
+@app.get("/api/stage-etas")
+async def get_stage_etas_endpoint():
+    """Return per-stage median minutes and sample counts learned across runs."""
+    from shared.stage_eta import get_stage_etas
+    return get_stage_etas()
 
 # ── Dismissed Teardowns API ────────────────────────────────────────────
 
@@ -4166,13 +4366,15 @@ _MAIN_LOOP: asyncio.AbstractEventLoop | None = None
 def _merge_imported_deployments(records: list[dict]) -> int:
     """Add imported history to the live registry on the event loop thread.
 
-    Only unknown IDs, or entries that are themselves imported read-only history, are (re)placed: a run
-    this process owns is a live object other coroutines mutate and must never be swapped out.
+    Only unknown IDs, or entries that are themselves imported read-only history with no live local worker,
+    are (re)placed: a run this process owns is a live object other coroutines mutate and must never be
+    swapped out.
     """
     merged = 0
     for dep in records:
         current = deployments.get(dep["instanceId"])
-        if current is not None and not (current.get("customStatus") or {}).get("importedFrom"):
+        if current is not None and (not (current.get("customStatus") or {}).get("importedFrom")
+                                    or _has_live_worker(dep["instanceId"])):
             continue
         deployments[dep["instanceId"]] = dep
         merged += 1
@@ -4229,10 +4431,11 @@ if _UI_DIST.is_dir():
 
 
 if __name__ == "__main__":
-    logger.info("Starting local dev server on http://localhost:7071")
+    port = int(os.environ.get("PORT", "7071"))
+    logger.info("Starting local dev server on http://localhost:%d", port)
     logger.info("This calls real Azure/Fabric APIs using your current az login credentials")
     try:
-        uvicorn.run(app, host="0.0.0.0", port=7071, log_level="info", timeout_graceful_shutdown=3)
+        uvicorn.run(app, host="0.0.0.0", port=port, log_level="info", timeout_graceful_shutdown=3)
     except KeyboardInterrupt:
         logger.info("Server stopped by user (Ctrl+C)")
     except SystemExit:

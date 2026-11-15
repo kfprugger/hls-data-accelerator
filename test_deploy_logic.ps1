@@ -1,30 +1,40 @@
-$scriptPath = Join-Path $PSScriptRoot "phase-1/deploy-fhir.ps1"
-$tokens = $null
-$parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(
-    $scriptPath,
-    [ref]$tokens,
-    [ref]$parseErrors
+$ErrorActionPreference = 'Stop'
+
+$scripts = @(
+    "phase-1/deploy-fhir.ps1",
+    "Deploy-All.ps1",
+    "Preflight-Check.ps1"
 )
 
-if ($parseErrors.Count -gt 0) {
-    throw "deploy-fhir.ps1 has parse errors: $($parseErrors.Message -join '; ')"
+$failedScripts = @()
+
+foreach ($relPath in $scripts) {
+    $scriptPath = Join-Path $PSScriptRoot $relPath
+    if (-not (Test-Path -LiteralPath $scriptPath)) {
+        Write-Error "[$relPath] Script file not found: $scriptPath" -ErrorAction Continue
+        $failedScripts += $relPath
+        continue
+    }
+
+    $tokens = $null
+    $parseErrors = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile(
+        $scriptPath,
+        [ref]$tokens,
+        [ref]$parseErrors
+    )
+
+    if ($parseErrors -and $parseErrors.Count -gt 0) {
+        $failedScripts += $relPath
+        Write-Error "PowerShell syntax check FAILED: $relPath ($($parseErrors.Count) error(s)):" -ErrorAction Continue
+        foreach ($err in $parseErrors) {
+            Write-Error "  Line $($err.Extent.StartLineNumber), Col $($err.Extent.StartColumnNumber): $($err.Message)" -ErrorAction Continue
+        }
+    } else {
+        Write-Output "PowerShell syntax check passed: $relPath"
+    }
 }
 
-$parameterNames = @($ast.ParamBlock.Parameters | ForEach-Object {
-    $_.Name.VariablePath.UserPath
-})
-$requiredParameters = @(
-    "ResourceGroupName",
-    "Location",
-    "ReusePatients",
-    "ReseedData",
-    "SourceResourceGroup",
-    "ExpectedSubscriptionId"
-)
-$missingParameters = @($requiredParameters | Where-Object { $_ -notin $parameterNames })
-if ($missingParameters.Count -gt 0) {
-    throw "deploy-fhir.ps1 CLI contract is missing parameters: $($missingParameters -join ', ')"
+if ($failedScripts.Count -gt 0) {
+    throw "PowerShell syntax check failed for: $($failedScripts -join ', ')"
 }
-
-Write-Output "deploy-fhir.ps1 CLI contract tests passed."

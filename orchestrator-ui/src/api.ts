@@ -772,3 +772,20 @@ export async function setLock(id: string, locked: boolean): Promise<void> {
     timeoutMs: 10000,
   });
 }
+
+export interface StageEta {
+  median_minutes: number;
+  sample_count: number;
+}
+
+export interface StageEtasResponse {
+  stages?: Record<string, StageEta>;
+  [stageKey: string]: StageEta | Record<string, StageEta> | undefined;
+}
+
+export async function getStageEtas(): Promise<StageEtasResponse> {
+  return requestJson<StageEtasResponse>(`${API_BASE}/stage-etas`, {
+    timeoutMs: 10000,
+    retry: 1,
+  });
+}

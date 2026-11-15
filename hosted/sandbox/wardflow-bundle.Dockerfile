@@ -3,5 +3,4 @@
 # Published from an operator machine by Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle,
 # so CI never needs credentials for the private WardFlow repository.
 FROM scratch
-COPY caldova-cardio/ /wardflow/caldova-cardio/
-COPY .pinned-commit /wardflow/.pinned-commit
+COPY . /wardflow/

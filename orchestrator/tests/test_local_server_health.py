@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import os
 
@@ -24,8 +25,10 @@ _MISSING = object()
 class LocalServerHealthTests(unittest.TestCase):
     def setUp(self) -> None:
         self._orchestrator_dir = str(Path(__file__).resolve().parents[1])
+        self._inserted_path = False
         if self._orchestrator_dir not in sys.path:
             sys.path.insert(0, self._orchestrator_dir)
+            self._inserted_path = True
         self._saved_modules = {
             name: sys.modules.get(name, _MISSING)
             for name in ("local_server", "shared.database")
@@ -55,7 +58,7 @@ class LocalServerHealthTests(unittest.TestCase):
                     delattr(shared_pkg, "database")
             else:
                 setattr(shared_pkg, "database", self._saved_shared_database_attr)
-        if self._orchestrator_dir in sys.path:
+        if self._inserted_path and self._orchestrator_dir in sys.path:
             sys.path.remove(self._orchestrator_dir)
 
     def _fake_database_module(self) -> types.ModuleType:
@@ -623,27 +626,69 @@ class LocalServerHealthTests(unittest.TestCase):
         self.assertFalse(self.local_server._reconcile_teardown(record))
         self.assertEqual(record["runtimeStatus"], "Running")
 
-    def test_reconciliation_does_not_complete_a_teardown_with_unfinished_phases(self) -> None:
-        class GoneGroup:
+    def test_reconciled_teardown_holds_its_estate_only_while_azure_still_deletes(self) -> None:
+        from fastapi import HTTPException
+
+        group = {"status": 200, "body": {"properties": {"provisioningState": "Deleting"}}}
+
+        class Azure:
             def __init__(self, tokens):
                 pass
 
             def call(self, method, url, resource, body=None):
-                return 404, None
+                return group["status"], group["body"]
 
-        record = {
-            "runtimeStatus": "Running",
-            "customStatus": {"runType": "teardown", "resourceGroupName": "rg-a", "subscriptionId": "sub-a"},
-            "output": {"status": "running", "resources": {}, "phases": [
-                {"phase": "Preflight", "status": "succeeded"},
-                {"phase": "Front-End Resource Groups", "status": "running"},
-            ]},
-        }
-        with patch("shared.full_teardown.Rest", GoneGroup):
-            self.assertTrue(self.local_server._reconcile_teardown(record))
+        started = self._record_started_tasks()
+        for end_status, end_body in ((404, None), (200, {"properties": {"provisioningState": "Succeeded"}})):
+            with self.subTest(azure_after_deleting=end_status):
+                group.update(status=200, body={"properties": {"provisioningState": "Deleting"}})
+                started.clear()
+                # A restart leaves the interrupted teardown Terminated with no worker.
+                record = self._active_record("teardownFull-interrupted", group="rg-a", status="Terminated",
+                                             runType="teardown", subscriptionId=self._SUBSCRIPTION)
+                record["output"] = {"status": "running", "resources": {}, "phases": [
+                    {"phase": "Preflight", "status": "succeeded"},
+                    {"phase": "Front-End Resource Groups", "status": "running"},
+                ]}
+                with patch("shared.full_teardown.Rest", Azure):
+                    self.assertEqual(asyncio.run(self.local_server.reconcile_teardowns_endpoint()), {"reconciled": 1})
+                    self.assertEqual(record["runtimeStatus"], "Running")
+                    # Azure is still deleting the group: no new run and no claimed cancel.
+                    self._assert_refused(lambda: asyncio.run(self.local_server.start_teardown(self._teardown(group="rg-a"))))
+                    with self.assertRaises(HTTPException) as cancelled:
+                        asyncio.run(self.local_server.cancel("teardownFull-interrupted"))
+                    self.assertEqual(cancelled.exception.status_code, 409)
+                    self.assertEqual(record["runtimeStatus"], "Running")
 
-        self.assertEqual(record["runtimeStatus"], "Running")
-        self.assertNotEqual(record["customStatus"].get("status"), "succeeded")
+                    group.update(status=end_status, body=end_body)
+                    asyncio.run(self.local_server.reconcile_teardowns_endpoint())
+
+                self.assertEqual(record["runtimeStatus"], "Failed")
+                self.assertNotEqual(record["customStatus"]["status"], "succeeded")
+                self.assertIn("run the teardown again", record["customStatus"]["detail"])
+                rerun = asyncio.run(self.local_server.start_teardown(self._teardown(group="rg-a")))
+                self.assertEqual(started, [f"teardown:{rerun['instanceId']}"])
+                self.local_server.deployments.clear()
+
+    def test_reconciled_workspace_only_teardown_without_a_worker_frees_its_estate(self) -> None:
+        class Fabric:
+            def __init__(self, tokens):
+                pass
+
+            def pages(self, url, resource, key="value"):
+                return iter([])
+
+        started = self._record_started_tasks()
+        # A restart left a workspace-only teardown Running; no Azure deletion can still be in flight.
+        record = self._active_record("teardownPartial-interrupted", workspace="ws-a", runType="teardown",
+                                     subscriptionId=self._SUBSCRIPTION)
+        with patch("shared.full_teardown.Rest", Fabric):
+            self.assertEqual(asyncio.run(self.local_server.reconcile_teardowns_endpoint()), {"reconciled": 1})
+
+        self.assertEqual(record["runtimeStatus"], "Failed")
+        self.assertIn("run the teardown again", record["customStatus"]["detail"])
+        rerun = asyncio.run(self.local_server.start_teardown(self._teardown(workspace="WS-A")))
+        self.assertEqual(started, [f"teardown:{rerun['instanceId']}"])
 
     def test_teardown_with_failures_is_reported_failed_with_its_phases(self) -> None:
         class FailingTeardown:
@@ -713,8 +758,8 @@ class LocalServerHealthTests(unittest.TestCase):
         base = {
             "fabric_workspace_name": "med-1028",
             "resource_group_name": "rg-med-1028",
-            "expected_tenant_id": "8d038e6a-9b7d-4cb8-bbcf-e84dff156478",
-            "expected_subscription_id": "9bbee190-dc61-4c58-ab47-1275cb04018f",
+            "expected_tenant_id": "00000000-0000-0000-0000-000000000001",
+            "expected_subscription_id": "00000000-0000-0000-0000-000000000002",
         }
         valid = self.local_server.DeployRequest(**base, cardiology_prefix="cardioed1028")
         self.assertEqual(valid.cardiology_prefix, "cardioed1028")
@@ -757,8 +802,8 @@ class LocalServerHealthTests(unittest.TestCase):
         req = self.local_server.DeployRequest(
             fabric_workspace_name="med-1102",
             resource_group_name="rg-med-1102",
-            expected_tenant_id="c77e97fc-1859-4575-8c8b-53d74bc35a63",
-            expected_subscription_id="0525a464-e087-4084-a24e-a90396a83c15",
+            expected_tenant_id="11111111-2222-4333-8444-555555555555",
+            expected_subscription_id="22222222-3333-4444-8555-666666666666",
             continue_from_instance_id="run-b",
         )
         with (
@@ -808,6 +853,682 @@ class LocalServerHealthTests(unittest.TestCase):
                 self.assertFalse(blocking(recovered))
                 self.assertTrue(blocking(recovered + ["[2026-11-10 01:10:35Z][ERROR]    Clinical pipeline Failed"]))
                 self.assertTrue(blocking(recovered + ["ERROR: (AuthorizationFailed) az role assignment create failed"]))
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX-only process group test")
+    def test_posix_cancel_terminates_process_group_including_grandchild(self) -> None:
+        import subprocess
+        import time
+
+        instance_id = "test-cancel-posix-group"
+        self.local_server.deployments[instance_id] = {
+            "runtimeStatus": "Running",
+            "customStatus": {"status": "running"},
+            "createdTime": "2026-11-13T00:00:00+00:00",
+        }
+        proc = subprocess.Popen(
+            ["sh", "-c", "sleep 60 & wait"],
+            start_new_session=True,
+        )
+        self.addCleanup(lambda: proc.poll() is None and proc.kill())
+        pgid = proc.pid
+        self.local_server.active_processes[instance_id] = proc.pid
+        time.sleep(0.2)
+
+        ps_before = subprocess.run(
+            ["ps", "-o", "pid,command", "-g", str(pgid)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn("sleep", ps_before.stdout)
+
+        asyncio.run(self.local_server.cancel(instance_id))
+
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            ps_check = subprocess.run(
+                ["ps", "-o", "pid,stat,command", "-g", str(pgid)],
+                capture_output=True,
+                text=True,
+            )
+            active_lines = [
+                line for line in ps_check.stdout.strip().splitlines()[1:]
+                if len(line.split()) > 1 and "Z" not in line.split()[1]
+            ]
+            if not active_lines:
+                break
+            time.sleep(0.05)
+
+        proc.poll()
+        ps_after = subprocess.run(
+            ["ps", "-o", "pid,command", "-g", str(pgid)],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotIn("sleep", ps_after.stdout)
+        self.assertNotIn(str(proc.pid), ps_after.stdout)
+        self.assertEqual(
+            self.local_server.deployments[instance_id]["runtimeStatus"],
+            "Terminated",
+        )
+    def test_failed_deploy_cleans_up_active_processes_in_finally(self) -> None:
+        """When run_deploy raises an exception, instance_id is popped from active_processes in finally (R-1)."""
+        import activities.invoke_powershell as ip
+
+        instance_id = "test-fail-cleanup"
+        self.local_server.deployments[instance_id] = {
+            "instanceId": instance_id,
+            "runtimeStatus": "Running",
+            "customStatus": {"status": "running"},
+            "createdTime": "2026-11-13T00:00:00+00:00",
+            "output": None,
+        }
+        req = self.local_server.DeployRequest(
+            fabric_workspace_name="ws",
+            resource_group_name="rg",
+            expected_tenant_id="00000000-0000-0000-0000-000000000001",
+            expected_subscription_id="00000000-0000-0000-0000-000000000002",
+        )
+
+        def failing_run_deploy(config, step_callback=None, pid_callback=None):
+            if pid_callback:
+                pid_callback(999888)
+            self.assertEqual(self.local_server.active_processes.get(instance_id), 999888)
+            raise RuntimeError("Simulated deploy failure")
+
+        with patch.object(ip, "run_deploy", failing_run_deploy):
+            asyncio.run(self.local_server._run_deploy(instance_id, req))
+
+        self.assertEqual(self.local_server.deployments[instance_id]["runtimeStatus"], "Failed")
+        self.assertNotIn(instance_id, self.local_server.active_processes)
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX-only process group test")
+    def test_kill_process_group_safety_guards(self) -> None:
+        """_kill_process_group refuses when pgid == server pgid or pgid != pid (R-1)."""
+        import subprocess
+
+        # Child started in current process group (pgid == os.getpgrp())
+        child = subprocess.Popen(["sleep", "10"])
+        self.addCleanup(lambda: child.poll() is None and child.kill())
+        self.assertEqual(os.getpgid(child.pid), os.getpgrp())
+
+        with self.assertLogs("local_server", level="WARNING") as cm:
+            survived = self.local_server._kill_process_group(child.pid)
+
+        self.assertFalse(survived)
+        self.assertTrue(any("Refusing to kill process group" in log for log in cm.output))
+        # Child should still be alive
+        self.assertIsNone(child.poll())
+
+    # ── Concurrent-run guard: one active run per estate (workspace or resource group) ──
+
+    _TENANT = "00000000-0000-0000-0000-000000000001"
+    _SUBSCRIPTION = "00000000-0000-0000-0000-000000000002"
+
+    def _active_record(self, instance_id: str, workspace: str = "", group: str = "", status: str = "Running", **custom) -> dict:
+        record = {"instanceId": instance_id, "runtimeStatus": status, "createdTime": "2026-11-14T00:00:00+00:00",
+                  "customStatus": {"workspaceName": workspace, "resourceGroupName": group, "logs": [], **custom},
+                  "output": None}
+        self.local_server.deployments[instance_id] = record
+        return record
+
+    def _record_started_tasks(self) -> list[str]:
+        started: list[str] = []
+
+        def record_task(coro, name):
+            started.append(name)
+            coro.close()
+
+        self.local_server._create_logged_task = record_task
+        self.addCleanup(self.local_server.deployments.clear)
+        return started
+
+    def _teardown(self, workspace: str = "", group: str = ""):
+        return self.local_server.TeardownRequest(fabric_workspace_name=workspace, resource_group_name=group,
+                                                 subscription_id=self._SUBSCRIPTION)
+
+    def _deploy_request(self, workspace: str, group: str):
+        return self.local_server.DeployRequest(fabric_workspace_name=workspace, resource_group_name=group,
+                                               expected_tenant_id=self._TENANT, expected_subscription_id=self._SUBSCRIPTION)
+
+    @contextlib.contextmanager
+    def _deploy_gates(self, preflight=None):
+        async def no_deploy_run(*args, **kwargs):
+            return None
+
+        with (
+            patch("activities.addons.preflight", side_effect=preflight or (lambda config: [])),
+            patch.object(self.local_server, "_apply_prior_success_skips"),
+            patch.object(self.local_server, "_get_auth_context_sync", return_value={"ready": True}),
+            patch.object(self.local_server, "_run_deploy", no_deploy_run),
+        ):
+            yield
+
+    def _start_deploy(self, request, preflight=None):
+        with self._deploy_gates(preflight):
+            return asyncio.run(self.local_server.start_deploy(request))
+
+    @staticmethod
+    def _slow_preflight(config):
+        raise AssertionError("a conflicting deploy must be refused before its slow preflight runs")
+
+    def _assert_refused(self, call) -> None:
+        from fastapi import HTTPException
+
+        before = dict(self.local_server.deployments)
+        with self.assertRaises(HTTPException) as raised:
+            call()
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertEqual(raised.exception.detail, "Another deployment or teardown is active for this estate")
+        self.assertEqual(self.local_server.deployments, before)
+
+    def test_deploy_is_refused_while_another_run_targets_the_same_workspace(self) -> None:
+        started = self._record_started_tasks()
+        self._active_record("P1-running", workspace="ws-a", group="rg-a")
+
+        self._assert_refused(lambda: self._start_deploy(self._deploy_request("ws-a", "rg-other"), preflight=self._slow_preflight))
+        self.assertEqual(started, [])
+
+    def test_deploy_rechecks_the_estate_after_its_last_await(self) -> None:
+        started = self._record_started_tasks()
+
+        def concurrent_start(config):
+            # Another request reserves the estate while this one awaits its preflight.
+            self._active_record("teardownFull-concurrent", workspace="ws-a", group="rg-a", runType="teardown")
+            return []
+
+        from fastapi import HTTPException
+
+        with self.assertRaises(HTTPException) as raised:
+            self._start_deploy(self._deploy_request("ws-a", "rg-a"), preflight=concurrent_start)
+        self.assertEqual(raised.exception.status_code, 409)
+        self.assertEqual(list(self.local_server.deployments), ["teardownFull-concurrent"])
+        self.assertEqual(started, [])
+
+    def test_teardown_is_refused_while_a_deploy_runs_on_the_same_resource_group(self) -> None:
+        started = self._record_started_tasks()
+        self._active_record("P1-running", workspace="ws-a", group="rg-a", status="Pending")
+
+        self._assert_refused(lambda: asyncio.run(self.local_server.start_teardown(self._teardown(group="rg-a"))))
+        self.assertEqual(started, [])
+
+    def test_runs_for_different_estates_start_concurrently(self) -> None:
+        started = self._record_started_tasks()
+        self._active_record("P1-running", workspace="ws-a", group="rg-a")
+
+        deploy = self._start_deploy(self._deploy_request("ws-b", "rg-b"))
+        teardown = asyncio.run(self.local_server.start_teardown(self._teardown("ws-c", "rg-c")))
+
+        self.assertEqual(self.local_server.deployments[deploy["instanceId"]]["runtimeStatus"], "Running")
+        self.assertEqual(self.local_server.deployments[teardown["instanceId"]]["runtimeStatus"], "Running")
+        self.assertEqual(len(started), 2)
+        self._assert_refused(lambda: asyncio.run(self.local_server.start_teardown(self._teardown(group="rg-b"))))
+
+    def test_estate_names_compare_case_insensitively(self) -> None:
+        self._record_started_tasks()
+        self._active_record("P1-running", workspace="Med-Estate", group="RG-Med-Estate")
+
+        self._assert_refused(lambda: asyncio.run(self.local_server.start_teardown(self._teardown(workspace="med-estate"))))
+        self._assert_refused(lambda: asyncio.run(self.local_server.start_teardown(self._teardown(group="rg-med-estate"))))
+
+    def test_empty_estate_names_never_match(self) -> None:
+        started = self._record_started_tasks()
+        self._active_record("teardownPartial-ws-only", workspace="ws-a", group="", runType="teardown")
+
+        asyncio.run(self.local_server.start_teardown(self._teardown(workspace="ws-b", group="")))
+        self.assertEqual(len(started), 1)
+        self._assert_refused(lambda: asyncio.run(self.local_server.start_teardown(self._teardown(workspace="WS-A"))))
+
+    def test_imported_peer_history_never_blocks(self) -> None:
+        started = self._record_started_tasks()
+        self._active_record("P1-peer", workspace="ws-a", group="rg-a", importedFrom="peer-sandbox")
+
+        asyncio.run(self.local_server.start_teardown(self._teardown("ws-a", "rg-a")))
+        self.assertEqual(len(started), 1)
+        self._assert_refused(lambda: self._start_deploy(self._deploy_request("ws-a", "rg-a")))
+
+    def test_teardown_batch_parent_never_blocks(self) -> None:
+        started = self._record_started_tasks()
+        self._active_record("teardownBatch-parent", workspace="ws-a", group="rg-a", runType="teardownBatch")
+
+        deploy = self._start_deploy(self._deploy_request("ws-a", "rg-a"))
+        self.assertEqual(len(started), 1)
+        self.assertIn(deploy["instanceId"], self.local_server.deployments)
+        self._assert_refused(lambda: asyncio.run(self.local_server.start_teardown(self._teardown(group="rg-a"))))
+
+    def test_teardown_batch_with_a_colliding_job_starts_nothing(self) -> None:
+        started = self._record_started_tasks()
+        self._active_record("P1-running", workspace="ws-a", group="rg-a")
+        batch = self.local_server.TeardownBatchRequest(jobs=[self._teardown("ws-x", "rg-x"), self._teardown(group="RG-A")])
+
+        self._assert_refused(lambda: asyncio.run(self.local_server.start_teardown_batch(batch)))
+        self.assertEqual(started, [])
+
+    def test_teardown_batch_with_duplicate_jobs_starts_nothing(self) -> None:
+        from fastapi import HTTPException
+
+        started = self._record_started_tasks()
+        for jobs in ([self._teardown("ws-x", "rg-x"), self._teardown(group="RG-X")],
+                     [self._teardown("ws-x", ""), self._teardown("WS-X", "rg-y")]):
+            with self.subTest(jobs=[(j.fabric_workspace_name, j.resource_group_name) for j in jobs]):
+                with self.assertRaises(HTTPException) as raised:
+                    asyncio.run(self.local_server.start_teardown_batch(self.local_server.TeardownBatchRequest(jobs=jobs)))
+                self.assertEqual(raised.exception.status_code, 409)
+                self.assertEqual(started, [])
+                self.assertEqual(self.local_server.deployments, {})
+        # Jobs with only empty names in common are distinct estates.
+        result = asyncio.run(self.local_server.start_teardown_batch(self.local_server.TeardownBatchRequest(
+            jobs=[self._teardown("ws-x", ""), self._teardown("", "rg-y")])))
+        self.assertEqual(len(result["instanceIds"]), 2)
+
+    def _addon_deployment(self, instance_id: str, workspace: str, group: str, status: str = "Completed", **custom) -> dict:
+        record = self._active_record(instance_id, workspace=workspace, group=group, status=status, **custom)
+        record["customStatus"]["deployConfig"] = self._deploy_request(workspace, group).model_dump()
+        return record
+
+    def _start_addons(self, instance_id: str, names: list[str]):
+        async def no_addon_run(*args, **kwargs):
+            return None
+
+        with (
+            patch("activities.addons.preflight", return_value=[]),
+            patch.object(self.local_server, "_run_later_addons", no_addon_run),
+        ):
+            return asyncio.run(self.local_server.start_addons(instance_id, {"addons": names}))
+
+    def test_addon_run_is_refused_while_another_run_targets_the_estate(self) -> None:
+        self._record_started_tasks()
+        deployment = self._addon_deployment("P1-done", "ws-a", "rg-a")
+        self._active_record("teardownFull-running", workspace="", group="RG-A", runType="teardown")
+
+        self._assert_refused(lambda: self._start_addons("P1-done", ["rayfin"]))
+        self.assertEqual(deployment["runtimeStatus"], "Completed")
+
+    def test_addon_guard_excludes_the_deployment_itself(self) -> None:
+        self._record_started_tasks()
+        # A paused Databricks add-on keeps this deployment Running; it must not block its own sibling add-on.
+        deployment = self._addon_deployment("P1-paused", "ws-a", "rg-a", status="Running",
+                                            addons={"databricks": {"status": "paused"}})
+        self.local_server._addon_tasks["P1-paused"] = set()
+        self.addCleanup(self.local_server._addon_tasks.pop, "P1-paused", None)
+
+        result = self._start_addons("P1-paused", ["rayfin"])
+
+        self.assertEqual(result["addons"], ["rayfin"])
+        self.assertEqual(deployment["customStatus"]["addons"]["rayfin"]["status"], "pending")
+        self.local_server._addon_tasks["P1-paused"] = set()
+        deployment["customStatus"]["addons"]["rayfin"]["status"] = "failed"
+        self._active_record("P1-other", workspace="ws-a", group="rg-other")
+        self._assert_refused(lambda: self._start_addons("P1-paused", ["rayfin"]))
+
+    def _assert_estate_conflict(self, raised) -> None:
+        self.assertEqual(raised.status_code, 409)
+        self.assertEqual(raised.detail, "Another deployment or teardown is active for this estate")
+
+    def test_live_addon_worker_under_a_completed_deployment_holds_its_estate(self) -> None:
+        from fastapi import HTTPException
+
+        started = self._record_started_tasks()
+        # _run_deploy marks the base Completed, then runs the requested add-ons as a tracked worker.
+        deployment = self._addon_deployment("P1-chained", "ws-a", "rg-a", addons={"databricks": {"status": "running"}})
+        release: asyncio.Event | None = None
+
+        class AwaitingAddons:
+            def __init__(self, *args):
+                pass
+
+            async def run(self, names, fresh_export=False):
+                await release.wait()
+
+        async def refused(start) -> None:
+            before = dict(self.local_server.deployments)
+            with self.assertRaises(HTTPException) as raised:
+                await start
+            self._assert_estate_conflict(raised.exception)
+            self.assertEqual(self.local_server.deployments, before)
+
+        async def scenario():
+            nonlocal release
+            release = asyncio.Event()
+            worker = asyncio.create_task(self.local_server._run_later_addons(
+                "P1-chained", deployment["customStatus"]["deployConfig"], ["databricks"], fresh_export=False))
+            self.local_server._track_addon_task("P1-chained", worker)
+            await asyncio.sleep(0)
+            self.assertEqual(deployment["runtimeStatus"], "Completed")
+
+            await refused(self.local_server.start_teardown(self._teardown(group="RG-A")))
+            await refused(self.local_server.start_teardown_batch(self.local_server.TeardownBatchRequest(
+                jobs=[self._teardown("ws-x", "rg-x"), self._teardown(workspace="WS-A")])))
+            await refused(self.local_server.start_deploy(self._deploy_request("ws-a", "rg-other")))
+            self.assertEqual(started, [])
+            unrelated = await self.local_server.start_teardown(self._teardown("ws-b", "rg-b"))
+
+            release.set()
+            await worker
+            self.assertEqual(deployment["runtimeStatus"], "Completed")
+            freed = await self.local_server.start_teardown(self._teardown("ws-a", "rg-a"))
+            self.assertEqual(started, [f"teardown:{unrelated['instanceId']}", f"teardown:{freed['instanceId']}"])
+
+        with self._deploy_gates(self._slow_preflight), patch("activities.addons.AddonRunner", AwaitingAddons):
+            asyncio.run(scenario())
+
+    def test_teardown_worker_holds_its_estate_until_its_deletion_ends(self) -> None:
+        from fastapi import HTTPException
+
+        deleting, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        self.addCleanup(self.local_server.deployments.clear)
+
+        class SlowDeletion:
+            def __init__(self, spec, tokens, report):
+                self.report = report
+
+            def run(self):
+                self.report.phase("Azure Resource Group", "running")
+                deleting.set()
+                release.wait(10)
+                self.report.phase("Azure Resource Group", "failed")
+                return {"status": "failed", "failures": ["Azure Resource Group: still deleting"], "deleted": {}, "skipped": []}
+
+        class NoAzure:
+            def __init__(self, tokens):
+                raise AssertionError("a teardown with a live worker must not be reconciled")
+
+        def preflight(config):
+            return [] if release.is_set() else self._slow_preflight(config)
+
+        async def scenario():
+            teardown_id = (await self.local_server.start_teardown(self._teardown("ws-a", "rg-a")))["instanceId"]
+            record = self.local_server.deployments[teardown_id]
+            self.assertTrue(await asyncio.to_thread(deleting.wait, 10))
+
+            # Deletion cannot be interrupted, so cancel must not claim success or free the estate.
+            with self.assertRaises(HTTPException) as cancelled:
+                await self.local_server.cancel(teardown_id)
+            self.assertEqual(cancelled.exception.status_code, 409)
+            self.assertEqual(await self.local_server.reconcile_teardowns_endpoint(), {"reconciled": 0})
+            self.assertEqual(record["runtimeStatus"], "Running")
+            with self.assertRaises(HTTPException) as refused:
+                await self.local_server.start_deploy(self._deploy_request("WS-A", "rg-other"))
+            self._assert_estate_conflict(refused.exception)
+            self.assertEqual(list(self.local_server.deployments), [teardown_id])
+
+            release.set()
+
+            async def settled():
+                while record["runtimeStatus"] == "Running":
+                    await asyncio.sleep(0.01)
+
+            await asyncio.wait_for(settled(), 10)
+            self.assertEqual(record["runtimeStatus"], "Failed")
+            deploy = await self.local_server.start_deploy(self._deploy_request("ws-a", "rg-a"))
+            self.assertEqual(self.local_server.deployments[deploy["instanceId"]]["runtimeStatus"], "Running")
+
+        with (
+            self._deploy_gates(preflight),
+            patch("shared.full_teardown.DeploymentTeardown", SlowDeletion),
+            patch("shared.full_teardown.Rest", NoAzure),
+        ):
+            asyncio.run(scenario())
+
+    # ── History mutation must never hide a live run from the estate guard ──
+
+    def _history_store(self, *records: dict) -> dict:
+        """Back the history routes with an in-memory deployments table holding copies of ``records``."""
+        store = {record["instanceId"]: dict(record) for record in records}
+
+        def clear() -> int:
+            count = len(store)
+            store.clear()
+            return count
+
+        for name, fake in (("db_list_deployments", lambda: list(store.values())),
+                           ("db_delete_deployment", lambda instance_id: store.pop(instance_id, None) is not None),
+                           ("db_clear_all", clear), ("get_deployment", store.get)):
+            patcher = patch.object(self.local_server, name, fake)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return store
+
+    def test_history_delete_refuses_a_record_whose_worker_still_runs_whatever_its_status(self) -> None:
+        from fastapi import HTTPException
+
+        started = self._record_started_tasks()
+        server = self.local_server
+        addon = self._active_record("P1-addon", workspace="ws-a", group="rg-a", status="Completed")
+        teardown = self._active_record("teardownFull-b", workspace="ws-b", group="rg-b", status="Failed", runType="teardown")
+        cancelled = self._active_record("teardownFull-c", workspace="ws-c", group="rg-c", status="Terminated", runType="teardown")
+        running = self._active_record("P1-running", workspace="ws-d", group="rg-d")
+        store = self._history_store(addon, teardown, cancelled, running)
+
+        async def refused_delete(instance_id: str) -> None:
+            with self.assertRaises(HTTPException) as raised:
+                await server.delete_deployment_endpoint(instance_id)
+            self.assertEqual(raised.exception.status_code, 409)
+            self.assertIn(instance_id, server.deployments)
+            self.assertIn(instance_id, store)
+
+        async def refused_start(workspace: str, group: str) -> None:
+            with self.assertRaises(HTTPException) as raised:
+                await server.start_teardown(self._teardown(workspace, group))
+            self._assert_estate_conflict(raised.exception)
+
+        async def scenario():
+            gate = asyncio.Event()
+            addon_worker, teardown_worker, cancelled_worker = (asyncio.create_task(gate.wait()) for _ in range(3))
+            server._track_addon_task("P1-addon", addon_worker)
+            server._teardown_tasks["teardownFull-b"] = teardown_worker
+            server._teardown_tasks["teardownFull-c"] = cancelled_worker
+            await asyncio.sleep(0)
+
+            for instance_id, workspace, group in (("P1-addon", "WS-A", ""), ("teardownFull-b", "", "RG-B"),
+                                                  ("teardownFull-c", "ws-c", ""), ("P1-running", "", "rg-d")):
+                with self.subTest(instance_id=instance_id):
+                    await refused_delete(instance_id)
+                    await refused_start(workspace, group)
+            self.assertEqual(started, [])
+
+            gate.set()
+            await asyncio.gather(addon_worker, teardown_worker, cancelled_worker)
+            for instance_id in ("P1-addon", "teardownFull-b", "teardownFull-c"):
+                with self.subTest(released=instance_id):
+                    self.assertEqual(await server.delete_deployment_endpoint(instance_id), {"message": "Deleted"})
+                    self.assertNotIn(instance_id, server.deployments)
+                    self.assertNotIn(instance_id, store)
+            await refused_delete("P1-running")
+            freed = await server.start_teardown(self._teardown("ws-a", "rg-b"))
+            self.assertEqual(started, [f"teardown:{freed['instanceId']}"])
+
+        asyncio.run(scenario())
+
+    def test_history_clear_retains_active_records_and_removes_inactive_ones(self) -> None:
+        from fastapi import HTTPException
+
+        started = self._record_started_tasks()
+        server = self.local_server
+        records = [
+            self._active_record("P1-addon", workspace="ws-a", group="rg-a", status="Completed"),
+            self._active_record("teardownFull-b", workspace="ws-b", group="rg-b", status="Terminated", runType="teardown"),
+            self._active_record("P1-running", workspace="ws-c", group="rg-c", status="Pending"),
+            self._active_record("P1-peer", workspace="ws-d", group="rg-d", importedFrom="peer-sandbox"),
+            self._active_record("P1-done", workspace="ws-e", group="rg-e", status="Completed"),
+            self._active_record("P1-failed", workspace="ws-f", group="rg-f", status="Failed"),
+            self._active_record("teardownFull-old", workspace="ws-g", group="rg-g", status="Failed", runType="teardown"),
+        ]
+        store = self._history_store(*records, {"instanceId": "P1-db-only", "runtimeStatus": "Completed",
+                                               "customStatus": {"workspaceName": "ws-h"}})
+        active = {"P1-addon", "teardownFull-b", "P1-running"}
+
+        async def refused_start(workspace: str, group: str) -> None:
+            with self.assertRaises(HTTPException) as raised:
+                await server.start_teardown(self._teardown(workspace, group))
+            self._assert_estate_conflict(raised.exception)
+
+        async def scenario():
+            gate = asyncio.Event()
+            addon_worker, teardown_worker = asyncio.create_task(gate.wait()), asyncio.create_task(gate.wait())
+            finished_addon, finished_teardown = asyncio.create_task(asyncio.sleep(0)), asyncio.create_task(asyncio.sleep(0))
+            await asyncio.gather(finished_addon, finished_teardown)
+            server._track_addon_task("P1-addon", addon_worker)
+            server._teardown_tasks["teardownFull-b"] = teardown_worker
+            server._track_addon_task("P1-done", finished_addon)
+            server._teardown_tasks["teardownFull-old"] = finished_teardown
+
+            self.assertEqual(await server.clear_all_deployments_endpoint(), {"message": "Cleared 5 deployments"})
+            self.assertEqual(set(server.deployments), active)
+            self.assertEqual(set(store), active)
+            await refused_start("ws-a", "")
+            await refused_start("", "RG-B")
+            await refused_start("WS-C", "")
+            self.assertEqual(started, [])
+
+            gate.set()
+            await asyncio.gather(addon_worker, teardown_worker)
+            self.assertEqual(await server.clear_all_deployments_endpoint(), {"message": "Cleared 2 deployments"})
+            self.assertEqual(set(server.deployments), {"P1-running"})
+            self.assertEqual(set(store), {"P1-running"})
+            await refused_start("ws-c", "")
+            freed = await server.start_teardown(self._teardown("ws-a", "rg-b"))
+            self.assertEqual(started, [f"teardown:{freed['instanceId']}"])
+
+        asyncio.run(scenario())
+
+    def test_history_clear_without_active_work_clears_everything(self) -> None:
+        self._record_started_tasks()
+        self._active_record("P1-done", workspace="ws-a", group="rg-a", status="Completed")
+        self._active_record("teardownFull-old", workspace="ws-b", group="rg-b", status="Failed", runType="teardown")
+        store = self._history_store(*self.local_server.deployments.values(),
+                                    {"instanceId": "P1-db-only", "runtimeStatus": "Terminated", "customStatus": {}})
+
+        self.assertEqual(asyncio.run(self.local_server.clear_all_deployments_endpoint()), {"message": "Cleared 3 deployments"})
+        self.assertEqual(self.local_server.deployments, {})
+        self.assertEqual(store, {})
+
+    def _imported_peer_record(self, instance_id: str, workspace: str, status: str = "Completed") -> dict:
+        return {"instanceId": instance_id, "runtimeStatus": status,
+                "customStatus": {"workspaceName": workspace, "resourceGroupName": "", "importedFrom": "peer-sandbox"}}
+
+    def test_local_addons_on_imported_history_hold_its_estate_from_preflight_until_the_worker_ends(self) -> None:
+        from fastapi import HTTPException
+
+        started = self._record_started_tasks()
+        server = self.local_server
+        base = self._addon_deployment("P1-imported", "ws-a", "rg-a", importedFrom="peer-sandbox")
+        store = self._history_store(base, self._imported_peer_record("P1-peer-old", "ws-p"))
+        entered, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        gate: asyncio.Event | None = None
+
+        def slow_preflight(config):
+            entered.set()
+            release.wait(10)
+            return []
+
+        class AwaitingAddons:
+            def __init__(self, *args):
+                pass
+
+            async def run(self, names, fresh_export=False):
+                await gate.wait()
+
+        async def estate_held() -> None:
+            for workspace, group in (("WS-A", ""), ("", "rg-a")):
+                with self.assertRaises(HTTPException) as raised:
+                    await server.start_teardown(self._teardown(workspace, group))
+                self._assert_estate_conflict(raised.exception)
+            with self.assertRaises(HTTPException) as raised:
+                await server.delete_deployment_endpoint("P1-imported")
+            self.assertEqual(raised.exception.status_code, 409)
+            await server.clear_all_deployments_endpoint()
+            self.assertIs(server.deployments.get("P1-imported"), base)
+            self.assertIn("P1-imported", store)
+
+        async def scenario():
+            nonlocal gate
+            gate = asyncio.Event()
+            start = asyncio.create_task(server.start_addons("P1-imported", {"addons": ["rayfin"]}))
+            self.assertTrue(await asyncio.to_thread(entered.wait, 10))
+            self.assertEqual(base["runtimeStatus"], "Pending")
+            await estate_held()
+            self.assertNotIn("P1-peer-old", store)  # Imported history with no local work stays removable.
+
+            release.set()
+            self.assertEqual(await start, {"instanceId": "P1-imported", "addons": ["rayfin"]})
+            (worker,) = server._addon_tasks["P1-imported"]
+            await estate_held()
+            # A later peer import must not swap the locally owned run back to read-only history.
+            server._merge_imported_deployments([self._imported_peer_record("P1-imported", "ws-a")])
+            self.assertIs(server.deployments["P1-imported"], base)
+            await estate_held()
+            self.assertEqual(started, [])
+
+            gate.set()
+            await worker
+            self.assertEqual(base["runtimeStatus"], "Completed")
+            self.assertEqual(await server.delete_deployment_endpoint("P1-imported"), {"message": "Deleted"})
+            freed = await server.start_teardown(self._teardown("ws-a", "rg-a"))
+            self.assertEqual(started, [f"teardown:{freed['instanceId']}"])
+
+        with (
+            patch("activities.addons.preflight", side_effect=slow_preflight),
+            patch("activities.addons.AddonRunner", AwaitingAddons),
+        ):
+            asyncio.run(scenario())
+
+    def test_failed_addon_preflight_leaves_imported_history_removable_and_non_blocking(self) -> None:
+        from fastapi import HTTPException
+
+        started = self._record_started_tasks()
+        server = self.local_server
+        base = self._addon_deployment("P1-imported", "ws-a", "rg-a", importedFrom="peer-sandbox")
+        store = self._history_store(base)
+
+        with patch("activities.addons.preflight", return_value=[{"status": "fail", "message": "capacity paused"}]):
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(server.start_addons("P1-imported", {"addons": ["rayfin"]}))
+        self.assertEqual(raised.exception.status_code, 422)
+        self.assertEqual(base["runtimeStatus"], "Completed")
+        self.assertEqual(base["customStatus"]["importedFrom"], "peer-sandbox")
+
+        asyncio.run(server.start_teardown(self._teardown("ws-a", "rg-a")))
+        self.assertEqual(len(started), 1)
+        self.assertEqual(asyncio.run(server.delete_deployment_endpoint("P1-imported")), {"message": "Deleted"})
+        self.assertNotIn("P1-imported", store)
+
+    def test_live_local_worker_outranks_imported_provenance(self) -> None:
+        from fastapi import HTTPException
+
+        started = self._record_started_tasks()
+        server = self.local_server
+        # A worker started under a record that still carries peer provenance (created before adoption).
+        record = self._active_record("P1-pre-adoption", workspace="ws-a", group="rg-a", status="Completed",
+                                     importedFrom="peer-sandbox")
+        store = self._history_store(record)
+
+        async def scenario():
+            gate = asyncio.Event()
+            worker = asyncio.create_task(gate.wait())
+            server._track_addon_task("P1-pre-adoption", worker)
+            await asyncio.sleep(0)
+
+            with self.assertRaises(HTTPException) as raised:
+                await server.start_teardown(self._teardown("", "RG-A"))
+            self._assert_estate_conflict(raised.exception)
+            with self.assertRaises(HTTPException) as raised:
+                await server.delete_deployment_endpoint("P1-pre-adoption")
+            self.assertEqual(raised.exception.status_code, 409)
+            self.assertEqual(await server.clear_all_deployments_endpoint(), {"message": "Cleared 0 deployments"})
+            server._merge_imported_deployments([self._imported_peer_record("P1-pre-adoption", "ws-other")])
+            self.assertIs(server.deployments["P1-pre-adoption"], record)
+            self.assertEqual(started, [])
+
+            gate.set()
+            await worker
+            await server.start_teardown(self._teardown("ws-a", "rg-a"))
+            self.assertEqual(len(started), 1)
+            self.assertEqual(await server.delete_deployment_endpoint("P1-pre-adoption"), {"message": "Deleted"})
+            self.assertNotIn("P1-pre-adoption", store)
+
+        asyncio.run(scenario())
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       wardflow_commit:
-        description: 'Full WardFlow commit SHA of a published hls-wardflow-bundle (empty uses vars.WARDFLOW_REF)'
+        description: 'Full WardFlow commit SHA of a published hls-wardflow-bundle, or "none" (empty uses vars.WARDFLOW_REF)'
         required: false
         type: string
 
@@ -33,7 +33,7 @@ jobs:
         env:
           WARDFLOW_REF: ${{ inputs.wardflow_commit || vars.WARDFLOW_REF }}
         run: |
-          if ($env:WARDFLOW_REF -notmatch '^[0-9a-f]{40}$') { throw 'Set repository variable WARDFLOW_REF to the full commit of a published WardFlow bundle (Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle).' }
+          if ($env:WARDFLOW_REF -notmatch '^[0-9a-f]{40}$' -and $env:WARDFLOW_REF -ne 'none') { throw 'Set repository variable WARDFLOW_REF to the full commit of a published WardFlow bundle (Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle) or "none".' }
       - name: Sign in to the deployment tenant
         uses: azure/login@v2
         with:

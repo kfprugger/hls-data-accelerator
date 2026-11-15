@@ -19,6 +19,27 @@ def build_resources(patients: list[dict], as_of: date) -> list[dict]:
     for name, code in payer_types:
         resources.append({"resourceType": "Organization", "id": resource_id("payer", name), "active": True,
                           "name": f"Synthetic Demo {name}", "type": [{"coding": [{"code": "pay"}]}]})
+    demo_locations = [
+        ("clinic-1", "Synthetic Demo Primary Care Clinic"),
+        ("clinic-2", "Synthetic Demo Outreach Center"),
+    ]
+    for loc_key, loc_name in demo_locations:
+        resources.append({
+            "resourceType": "Location",
+            "id": resource_id("location", loc_key),
+            "status": "active",
+            "name": loc_name,
+            "mode": "instance",
+            "physicalType": {
+                "coding": [
+                    {
+                        "system": "http://terminology.hl7.org/CodeSystem/location-physical-type",
+                        "code": "bu",
+                        "display": "Building",
+                    }
+                ]
+            },
+        })
     for index, patient in enumerate(sorted(patients, key=lambda p: p["id"])):
         patient_id = patient["id"]
         patient_ref = {"reference": f"Patient/{patient_id}"}
@@ -27,13 +48,17 @@ def build_resources(patients: list[dict], as_of: date) -> list[dict]:
                           "beneficiary": patient_ref, "payor": [{"reference": f"Organization/{resource_id('payer', payer_name)}", "display": f"Synthetic Demo {payer_name}"}],
                           "type": {"coding": [{"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode", "code": payer_code, "display": payer_name}], "text": payer_name},
                           "period": {"start": f"{as_of.year}-01-01", "end": f"{as_of.year}-12-31"}})
+        loc_key, loc_name = demo_locations[index % len(demo_locations)]
+        loc_id = resource_id("location", loc_key)
+        loc_ref = {"reference": f"Location/{loc_id}", "type": "Location", "display": loc_name}
         start = datetime.combine(as_of - timedelta(days=1 + index % 28), datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=14)
         resources.append({"resourceType": "Appointment", "id": resource_id(patient_id, "appointment"),
                           "status": "fulfilled" if index % 3 else "booked", "description": "Synthetic demo preventive-care outreach appointment",
                           "serviceType": [{"coding": [{"system": "http://snomed.info/sct", "code": "185349003", "display": "Encounter for check up"}]}],
                           "start": start.isoformat(), "end": (start + timedelta(minutes=30)).isoformat(),
                           "created": (start - timedelta(days=7)).isoformat(),
-                          "participant": [{"actor": patient_ref, "status": "accepted"}]})
+                          "participant": [{"actor": patient_ref, "status": "accepted"},
+                                          {"actor": loc_ref, "status": "accepted"}]})
         # Qualifying scenarios are explicit synthetic clinical additions, not inferred diagnoses.
         if index >= 30:
             continue

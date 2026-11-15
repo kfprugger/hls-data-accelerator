@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useRef, type PointerEvent as ReactPointer
 import { useNavigate } from "react-router-dom";
 
 
-import { startDeployment, listCapacities, checkExistingDeployment, resumeCapacity, pauseCapacity, listFhirRegions, listSubscriptions, listDeployments, type DeploymentConfig, type FabricCapacity, type ExistingDeploymentInfo } from "../api";
+import { startDeployment, listCapacities, checkExistingDeployment, resumeCapacity, pauseCapacity, listFhirRegions, listSubscriptions, listDeployments, getStageEtas, type DeploymentConfig, type FabricCapacity, type ExistingDeploymentInfo, type StageEta, type StageEtasResponse } from "../api";
 import { startMockDeployment } from "../mockDeployment";
 import { useAppState } from "../AppState";
 import { HistoryInput } from "../components/HistoryInput";
@@ -655,6 +655,15 @@ export function DeployWizard() {
     }>>(Object.entries(draft?.config.tags || { SecurityControl: 'Ignore' }).map(([name, value]) => ({ name, value })));
     const [namingPrefix, setNamingPrefix] = useState(draft?.namingPrefix || '');
     const [lastWorkspaceName, setLastWorkspaceName] = useState("");
+    const [stageEtas, setStageEtas] = useState<Record<string, StageEta>>({});
+    useEffect(() => {
+        getStageEtas().then((res: StageEtasResponse) => {
+            const stages = (res.stages || res) as Record<string, StageEta>;
+            setStageEtas(stages || {});
+        }).catch(() => {
+            setStageEtas({});
+        });
+    }, []);
     const hydratedTargetRef = useRef("");
     useEffect(() => {
         const activeSub = (selectedSubscription || authContext?.cli.subscriptionId || authContext?.pwsh.subscriptionId || "").trim().toLowerCase();
@@ -798,43 +807,87 @@ export function DeployWizard() {
     // HDS phase is decomposed: a DICOM-independent base (clinical + OMOP ingestion,
     // shortcuts, row gates ~34m) plus the imaging ingestion sub-pipeline (~25m) that
     // only fires when DICOM data exists — mirrors deploy_hds_pipelines.run gating.
-    const getEstimatedDurationMinutes = (): number => {
-        let minutes = 3; // base Azure infrastructure
-        if (!config.skip_fhir)
-            minutes += 6 + (config.skip_synthea ? 0 : Math.ceil(config.patient_count / 10));
-        if (!config.skip_fhir && !config.skip_synthea && config.use_cached_synthea)
-            minutes -= 8;
-        if (!config.skip_fhir && !config.skip_device_assoc)
-            minutes += 1;
-        if (!config.skip_dicom)
-            minutes += 8;
-        if (!config.skip_fabric)
-            minutes += 1;
-        if (!config.skip_fabric && !config.skip_rti_phase2)
-            minutes += 13;
-        if (config.scaffolding_only)
-            minutes += 45; // HDS source artifact publication without pipeline runs
-        if (!config.skip_hds_pipelines) {
-            minutes += 34; // clinical + OMOP ingestion, shortcuts, row gates
-            if (!config.skip_dicom)
-                minutes += 25; // imaging ingestion sub-pipeline
+    const getEstimatedDurationDetails = (): { minutes: number; learnedRuns: number } => {
+        let minutes = 0;
+        const learnedRunsList: number[] = [];
+
+        const getStageDuration = (stageKey: string, constantMinutes: number): number => {
+            const entry = stageEtas[stageKey];
+            if (entry && typeof entry.median_minutes === "number" && entry.sample_count >= 3 && !isNaN(entry.median_minutes)) {
+                learnedRunsList.push(entry.sample_count);
+                return Math.max(1, Math.round(entry.median_minutes));
+            }
+            return constantMinutes;
+        };
+
+        // Base Azure infrastructure
+        minutes += getStageDuration("phase_1_base_infra", 3);
+
+        if (!config.skip_fhir) {
+            let fhirConst = 6 + (config.skip_synthea ? 0 : Math.ceil(config.patient_count / 10));
+            if (!config.skip_synthea && config.use_cached_synthea) fhirConst -= 8;
+            if (!config.skip_device_assoc) fhirConst += 1;
+            minutes += getStageDuration("phase_1_fhir", Math.max(1, fhirConst));
         }
-        if (!config.skip_imaging)
-            minutes += 9;
-        if (!config.skip_ontology)
-            minutes += 4;
-        if (!config.skip_data_agents)
-            minutes += 1;
-        if (!config.skip_activator)
-            minutes += 1;
-        if (!config.skip_quality_measures)
-            minutes += 4;
-        if (!config.skip_phase7)
-            minutes += 46;
-        return Math.max(3, minutes);
+
+        if (!config.skip_dicom) {
+            minutes += getStageDuration("phase_1_dicom", 8);
+        }
+
+        if (!config.skip_fabric) {
+            minutes += getStageDuration("phase_1_workspace", 1);
+        }
+
+        if (!config.skip_fabric && !config.skip_rti_phase2) {
+            minutes += getStageDuration("phase_2_rti_enrichment", 13);
+        }
+
+        if (config.scaffolding_only) {
+            minutes += 45;
+        }
+
+        if (!config.skip_hds_pipelines) {
+            const hdsLearned = stageEtas["phase_3_hds_pipelines"];
+            if (hdsLearned && hdsLearned.sample_count >= 3 && typeof hdsLearned.median_minutes === "number" && !isNaN(hdsLearned.median_minutes)) {
+                learnedRunsList.push(hdsLearned.sample_count);
+                minutes += Math.max(1, Math.round(hdsLearned.median_minutes));
+            } else {
+                minutes += 34;
+                if (!config.skip_dicom) minutes += 25;
+            }
+        }
+
+        if (!config.skip_imaging) {
+            minutes += getStageDuration("phase_4_imaging", 9);
+        }
+
+        if (!config.skip_ontology) {
+            minutes += getStageDuration("phase_4_ontology", 4);
+        }
+
+        if (!config.skip_data_agents) {
+            const agentKey = config.skip_ontology ? "phase_2_agents" : "phase_4_agents";
+            minutes += getStageDuration(agentKey, 1);
+        }
+
+        if (!config.skip_activator) {
+            minutes += getStageDuration("phase_5_alerts", 1);
+        }
+
+        if (!config.skip_quality_measures) {
+            minutes += getStageDuration("phase_6_quality", 4);
+        }
+
+        if (!config.skip_phase7) {
+            minutes += getStageDuration("phase_7_payer_ops", 46);
+        }
+
+        const learnedRuns = learnedRunsList.length > 0 ? Math.max(...learnedRunsList) : 0;
+        return { minutes: Math.max(3, minutes), learnedRuns };
     };
+
     const getEstimatedDuration = (): string => {
-        const minutes = getEstimatedDurationMinutes();
+        const { minutes } = getEstimatedDurationDetails();
         return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
     };
     const applyPreset = (preset: "demo" | "full" | "scaffold" | "infra" | "repair" | "data") => {
@@ -2662,6 +2715,11 @@ export function DeployWizard() {
             }}>
                   {getEstimatedDuration()}
                 </Typography>
+                {getEstimatedDurationDetails().learnedRuns >= 3 && (
+                  <Typography style={{ color: "var(--m3-colorNeutralForeground2)", marginTop: 2 }} component="div" variant="caption">
+                    Learned from {getEstimatedDurationDetails().learnedRuns} runs
+                  </Typography>
+                )}
               </div>
               <div>
                 <Typography component="div" variant="caption" sx={{

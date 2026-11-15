@@ -1,38 +1,112 @@
 #Requires -Version 7.2
 [CmdletBinding()]
 param(
-    [string]$SubscriptionId = '0525a464-e087-4084-a24e-a90396a83c15',
-    [string]$TenantId = 'c77e97fc-1859-4575-8c8b-53d74bc35a63',
+    [string]$SubscriptionId = '',
+    [string]$TenantId = '',
     [string]$ResourceGroup = 'rg-hls-deployer',
     [string]$Location = 'westus2',
-    [string]$WardflowPath = '~/git/.worktrees/wardflow-jb-dev',
+    [string]$WardflowPath = '',
     [string]$WardflowCommit = '',
     [switch]$PublishWardflowBundle,
     [string]$ImageTag = '',
     [switch]$SkipInfra,
     [switch]$SkipImages,
     [switch]$BootstrapEntra,
-    [string]$CustomDomain = 'hls.jbatl.dev',
+    [string]$CustomDomain = '',
+    [string]$DnsZone = '',
     [string]$ClientId = $env:HLS_CLIENT_ID,
-    [string]$AllowedUsers = '8d038e6a-9b7d-4cb8-bbcf-e84dff156478:joey@brakekat.com,c77e97fc-1859-4575-8c8b-53d74bc35a63:joey@jbatl.dev,72f988bf-86f1-41af-91ab-2d7cd011db47:jbrakefield@microsoft.com',
-    [string]$AllowedTenants = ''
+    [string]$AllowedUsers = '',
+    [string]$AllowedTenants = '',
+    [string[]]$AllowedDomains = @(),
+    [string]$DeploymentProfile = '',
+    [string]$GitHubRepo = '',
+    [string]$Registry = '',
+    [string]$Vault = '',
+    [string]$Storage = ''
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repoRoot = Split-Path $PSScriptRoot -Parent
-$githubRepo = 'kfprugger/hls-data-accelerator'
-$registry = 'acrhlsdeployer'
-$vault = 'kv-hls-deployer'
+
+Import-Module (Join-Path $PSScriptRoot 'HostedDeployHelper.psm1') -Force
+
+$profileData = @{}
+if ($DeploymentProfile) {
+    $profileData = Import-DeploymentProfile -ProfileName $DeploymentProfile -ProfilesDir (Join-Path $PSScriptRoot 'profiles')
+}
+
+if (-not $PSBoundParameters.ContainsKey('SubscriptionId') -and $profileData.ContainsKey('SubscriptionId')) { $SubscriptionId = $profileData['SubscriptionId'] }
+if (-not $PSBoundParameters.ContainsKey('TenantId') -and $profileData.ContainsKey('TenantId')) { $TenantId = $profileData['TenantId'] }
+if (-not $PSBoundParameters.ContainsKey('ResourceGroup') -and $profileData.ContainsKey('ResourceGroup')) { $ResourceGroup = $profileData['ResourceGroup'] }
+if (-not $PSBoundParameters.ContainsKey('Location') -and $profileData.ContainsKey('Location')) { $Location = $profileData['Location'] }
+if (-not $PSBoundParameters.ContainsKey('WardflowPath') -and $profileData.ContainsKey('WardflowPath')) { $WardflowPath = $profileData['WardflowPath'] }
+if (-not $PSBoundParameters.ContainsKey('WardflowCommit') -and $profileData.ContainsKey('WardflowCommit')) { $WardflowCommit = $profileData['WardflowCommit'] }
+if (-not $PSBoundParameters.ContainsKey('CustomDomain') -and $profileData.ContainsKey('CustomDomain')) { $CustomDomain = $profileData['CustomDomain'] }
+if (-not $PSBoundParameters.ContainsKey('DnsZone') -and $profileData.ContainsKey('DnsZone')) { $DnsZone = $profileData['DnsZone'] }
+if (-not $PSBoundParameters.ContainsKey('ClientId') -and $profileData.ContainsKey('ClientId')) { $ClientId = $profileData['ClientId'] }
+if (-not $PSBoundParameters.ContainsKey('AllowedUsers') -and $profileData.ContainsKey('AllowedUsers')) { $AllowedUsers = $profileData['AllowedUsers'] }
+if (-not $PSBoundParameters.ContainsKey('AllowedTenants') -and $profileData.ContainsKey('AllowedTenants')) { $AllowedTenants = $profileData['AllowedTenants'] }
+if (-not $PSBoundParameters.ContainsKey('AllowedDomains') -and $profileData.ContainsKey('AllowedDomains')) { $AllowedDomains = @($profileData['AllowedDomains']) }
+if (-not $PSBoundParameters.ContainsKey('GitHubRepo') -and $profileData.ContainsKey('GitHubRepo')) { $GitHubRepo = $profileData['GitHubRepo'] }
+if (-not $PSBoundParameters.ContainsKey('Registry') -and $profileData.ContainsKey('Registry')) { $Registry = $profileData['Registry'] }
+if (-not $PSBoundParameters.ContainsKey('Vault') -and $profileData.ContainsKey('Vault')) { $Vault = $profileData['Vault'] }
+if (-not $PSBoundParameters.ContainsKey('Storage') -and $profileData.ContainsKey('Storage')) { $Storage = $profileData['Storage'] }
+
+$hasExplicitRegistry = $PSBoundParameters.ContainsKey('Registry') -or ($profileData -and $profileData.ContainsKey('Registry'))
+$hasExplicitVault = $PSBoundParameters.ContainsKey('Vault') -or ($profileData -and $profileData.ContainsKey('Vault'))
+$hasExplicitStorage = $PSBoundParameters.ContainsKey('Storage') -or ($profileData -and $profileData.ContainsKey('Storage'))
+$hasExplicitCustomDomain = $PSBoundParameters.ContainsKey('CustomDomain') -or ($profileData -and $profileData.ContainsKey('CustomDomain'))
+
+if (-not $SubscriptionId) { throw 'SubscriptionId is required (pass -SubscriptionId or specify in -DeploymentProfile).' }
+if (-not $TenantId) { throw 'TenantId is required (pass -TenantId or specify in -DeploymentProfile).' }
+
+if (-not $GitHubRepo) {
+    try {
+        $originUrl = (& git -C $repoRoot config --get remote.origin.url 2>$null)
+        if ($originUrl -and $originUrl -match 'github\.com[:/](?<owner>[^/]+)/(?<repo>[^/]+?)(?:\.git)?$') {
+            $GitHubRepo = "$($Matches['owner'])/$($Matches['repo'])"
+        }
+    } catch { Write-Verbose "Cannot derive GitHubRepo from origin: $($_.Exception.Message)" }
+}
+
+if ($CustomDomain -and $DnsZone) {
+    Test-CustomDomainDnsZone -CustomDomain $CustomDomain -DnsZone $DnsZone
+}
+
+$registry = $Registry
+$vault = $Vault
+$storage = $Storage
+$githubRepo = $GitHubRepo
 $groupId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
-$registryId = "$groupId/providers/Microsoft.ContainerRegistry/registries/$registry"
-$vaultId = "$groupId/providers/Microsoft.KeyVault/vaults/$vault"
+$registryId = ''
+$vaultId = ''
 $template = Join-Path $PSScriptRoot 'infra/main.bicep'
 
 function Invoke-AzJson([string[]]$Arguments) {
-    $result = & az @Arguments --subscription $SubscriptionId --only-show-errors --output json
-    if ($LASTEXITCODE -ne 0) { throw "Azure CLI failed: $($Arguments[0..([Math]::Min(2, $Arguments.Count - 1))] -join ' ')" }
-    if ($result) { return ($result -join "`n" | ConvertFrom-Json -AsHashtable) }
+    $errFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $result = & az @Arguments --subscription $SubscriptionId --only-show-errors --output json 2>$errFile
+        $cmdName = $(@($Arguments[0..([Math]::Min(2, $Arguments.Count - 1))]) -join ' ')
+        $rawErr = if (Test-Path -LiteralPath $errFile) { Get-Content -LiteralPath $errFile -Raw } else { $null }
+        $errText = if ($rawErr) { [string]$rawErr.Trim() } else { '' }
+        if ($LASTEXITCODE -ne 0) {
+            $msg = "Azure CLI failed: $cmdName"
+            if ($errText) { $msg += ": $errText" }
+            throw $msg
+        }
+        if ($errText) {
+            Write-Warning "Azure CLI ($cmdName): $errText"
+        }
+        if ($result) {
+            $jsonText = ($result -join "`n").Trim()
+            if ($jsonText) {
+                return ($jsonText | ConvertFrom-Json)
+            }
+        }
+    } finally {
+        Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
+    }
 }
 function Invoke-Native([string]$Program, [string[]]$Arguments) {
     & $Program @Arguments
@@ -79,11 +153,12 @@ function Invoke-Graph([string]$Method, [string]$Path, [object]$Body = $null) {
 }
 function Assert-BootstrapPermissions {
     if ($account.user.type -ne 'user') { throw '-BootstrapEntra requires a signed-in user, not a service principal.' }
-    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'Bootstrap requires gh authenticated as kfprugger with repository admin access.' }
+    if (-not $githubRepo) { throw 'GitHubRepo owner/name is required for bootstrap.' }
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw "Bootstrap requires gh authenticated with repository admin access on $githubRepo." }
     $login = & gh api user --jq .login
-    if ($LASTEXITCODE -ne 0 -or $login -ne 'kfprugger') { throw 'Bootstrap requires gh authenticated as kfprugger. No resources have been created.' }
+    if ($LASTEXITCODE -ne 0 -or -not $login) { throw 'Bootstrap requires gh to be authenticated. No resources have been created.' }
     $admin = & gh api "repos/$githubRepo" --jq .permissions.admin
-    if ($LASTEXITCODE -ne 0 -or $admin -ne 'true') { throw "Bootstrap requires kfprugger to have admin permission on $githubRepo. No resources have been created." }
+    if ($LASTEXITCODE -ne 0 -or $admin -ne 'true') { throw "Bootstrap requires current gh user ($login) to have admin permission on $githubRepo. No resources have been created." }
 
     $canCreateApps = $false
     try {
@@ -170,6 +245,9 @@ function Deploy-Infrastructure([bool]$Gateway, [string]$Domain = '', [bool]$Cert
         allowedUsers = @{ value = $AllowedUsers }; allowedTenants = @{ value = $AllowedTenants }
         deployGateway = @{ value = $Gateway }; customDomain = @{ value = $Domain }
         enableManagedCertificate = @{ value = $Certificate }
+        registryName = @{ value = $registry }
+        storageAccountName = @{ value = $storage }
+        keyVaultName = @{ value = $vault }
     }
     $parameterFile = Join-Path ([IO.Path]::GetTempPath()) "hls-parameters-$([Guid]::NewGuid().ToString('N')).json"
     try {
@@ -239,7 +317,8 @@ function Initialize-GitHub {
     $rawRepo = & gh api "repos/$githubRepo"
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read GitHub immutable repository and owner IDs.' }
     $repo = $rawRepo | ConvertFrom-Json -AsHashtable
-    $prefix = "repo:$githubRepo"
+    $canonicalRepo = if ($repo.full_name) { $repo.full_name } else { $githubRepo }
+    $prefix = "repo:$canonicalRepo"
     if ($customization['use_immutable_subject']) { $prefix = "repo:$($repo.owner.login)@$($repo.owner.id)/$($repo.name)@$($repo.id)" }
     if ($customization['sub_claim_prefix']) { $prefix = $customization['sub_claim_prefix'].TrimEnd(':') }
     $subject = "${prefix}:ref:refs/heads/main"
@@ -247,7 +326,7 @@ function Initialize-GitHub {
     $principal = Ensure-ServicePrincipal $app.appId
     $credential = @{
         name = 'github-main'; issuer = 'https://token.actions.githubusercontent.com'; subject = $subject
-        audiences = @('api://AzureADTokenExchange'); description = "$githubRepo main branch releases"
+        audiences = @('api://AzureADTokenExchange'); description = "$canonicalRepo main branch releases"
     }
     $credentials = @((Invoke-Graph GET "applications/$($app.id)/federatedIdentityCredentials").value)
     $existing = @($credentials | Where-Object name -eq 'github-main')
@@ -256,30 +335,72 @@ function Initialize-GitHub {
     Ensure-Role $principal.id 'AcrPush' $registryId
     Ensure-Role $principal.id 'Contributor' $groupId
     foreach ($secret in @{ AZURE_CLIENT_ID = $app.appId; AZURE_TENANT_ID = $TenantId; AZURE_SUBSCRIPTION_ID = $SubscriptionId }.GetEnumerator()) {
-        $secret.Value | & gh secret set $secret.Key --repo $githubRepo
+        $secret.Value | & gh secret set $secret.Key --repo $canonicalRepo
         if ($LASTEXITCODE -ne 0) { throw "Could not set GitHub secret $($secret.Key)." }
     }
     Write-Host "GitHub federation configured: $subject"
 }
-function Publish-WardflowBundle([string]$Commit) {
+function Publish-WardflowBundle([string]$Commit, [switch]$SetGitHubVariable) {
+    if (-not $Commit) { throw 'WardflowCommit is required to publish a bundle.' }
     $stage = Join-Path ([IO.Path]::GetTempPath()) "hls-wardflow-$([Guid]::NewGuid().ToString('N'))"
     try {
         $null = New-Item -ItemType Directory -Path $stage
-        $archive = Join-Path $stage 'wardflow.tar'
-        Invoke-Native git @('-C', $WardflowPath, 'archive', '--format=tar', "--output=$archive", $Commit, 'caldova-cardio')
         $context = Join-Path $stage 'context'
         $null = New-Item -ItemType Directory -Path $context
-        Invoke-Native tar @('-xf', $archive, '-C', $context)
-        Set-Content -LiteralPath (Join-Path $context '.pinned-commit') -Value $Commit -NoNewline
+
+        if ($Commit -eq 'none') {
+            Write-Host "Publishing empty WardFlow bundle (none)."
+            Set-Content -LiteralPath (Join-Path $context '.pinned-commit') -Value 'none' -NoNewline
+        } else {
+            if (-not $WardflowPath) { throw "WardflowPath must be the wardflow checkout to publish bundle $Commit." }
+            $resolvedWardflowPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($WardflowPath)
+            if (-not (Test-Path -LiteralPath $resolvedWardflowPath)) {
+                throw "WardFlow checkout path not found: $WardflowPath"
+            }
+            # Inspect commit tree for available paths (H-5)
+            $treeItems = @(Invoke-Native git @('-C', $resolvedWardflowPath, 'ls-tree', '--name-only', $Commit))
+            $targets = @('caldova-cardio', 'rayfin-wardflow-persona-app')
+            foreach ($target in $targets) {
+                if ($treeItems -notcontains $target) {
+                    throw "WardFlow commit $Commit lacks required path '$target'."
+                }
+            }
+            $archive = Join-Path $stage 'wardflow.tar'
+            Invoke-Native git (@('-C', $resolvedWardflowPath, 'archive', '--format=tar', "--output=$archive", $Commit) + $targets)
+            Invoke-Native tar @('-xf', $archive, '-C', $context)
+            Set-Content -LiteralPath (Join-Path $context '.pinned-commit') -Value $Commit -NoNewline
+        }
+
+        Set-Content -LiteralPath (Join-Path $context '.dockerignore') -Value "Dockerfile`n.dockerignore"
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sandbox/wardflow-bundle.Dockerfile') -Destination (Join-Path $context 'Dockerfile')
         Write-Host "Publishing WardFlow bundle $Commit (committed source only)."
         Invoke-AcrBuild $context "hls-wardflow-bundle:$Commit" 'Dockerfile'
     } finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }
-    if ((Get-Command gh -ErrorAction SilentlyContinue) -and ((& gh api user --jq .login 2>$null) -eq 'kfprugger')) {
-        Invoke-Native gh @('variable', 'set', 'WARDFLOW_REF', '--repo', $githubRepo, '--body', $Commit)
-        Write-Host "GitHub variable WARDFLOW_REF set to $Commit; CI releases now use this bundle."
-    } else {
-        Write-Warning "Set GitHub variable WARDFLOW_REF to $Commit so CI releases use this bundle."
+
+    if ($SetGitHubVariable) {
+        $canSetVar = $false
+        if ($githubRepo -and (Get-Command gh -ErrorAction SilentlyContinue)) {
+            $admin = & gh api "repos/$githubRepo" --jq .permissions.admin 2>$null
+            if ($LASTEXITCODE -eq 0 -and $admin -eq 'true') {
+                $canSetVar = $true
+            }
+        }
+        if ($canSetVar) {
+            $shouldSet = $true
+            if ($Commit -eq 'none') {
+                $existingRef = (& gh variable get WARDFLOW_REF --repo $githubRepo 2>$null)
+                if ($LASTEXITCODE -eq 0 -and $existingRef -and $existingRef.Trim() -match '^[0-9a-f]{40}$') {
+                    $shouldSet = $false
+                    Write-Host "Existing GitHub variable WARDFLOW_REF is a commit SHA ($($existingRef.Trim())); preserving it and not replacing with 'none'."
+                }
+            }
+            if ($shouldSet) {
+                Invoke-Native gh @('variable', 'set', 'WARDFLOW_REF', '--repo', $githubRepo, '--body', $Commit)
+                Write-Host "GitHub variable WARDFLOW_REF set to $Commit; CI releases now use this bundle."
+            }
+        } else {
+            Write-Warning "Set GitHub variable WARDFLOW_REF to $Commit on $githubRepo so CI releases use this bundle."
+        }
     }
 }
 
@@ -291,33 +412,255 @@ if ($account.id -ne $SubscriptionId -or $account.tenantId -ne $TenantId) {
     throw "Wrong Azure context. Run: az login --use-device-code --tenant $TenantId ; az account set --subscription $SubscriptionId"
 }
 if ($BootstrapEntra) { Assert-BootstrapPermissions }
-if (-not $ImageTag) {
-    $ImageTag = & git -C $repoRoot rev-parse --short HEAD
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the HLS source commit.' }
-}
-if ($ImageTag -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$') { throw 'ImageTag is not a valid OCI tag.' }
-$gatewayImage = "$registry.azurecr.io/hls-gateway:$ImageTag"
-$sandboxImage = "$registry.azurecr.io/hls-orchestrator-sandbox:$ImageTag"
-if ($WardflowCommit -and $WardflowCommit -notmatch '^[0-9a-f]{40}$') { throw 'WardflowCommit must be a full 40-character commit SHA.' }
-if ($PublishWardflowBundle -or (-not $WardflowCommit -and ($BootstrapEntra -or -not $SkipImages))) {
-    $WardflowPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($WardflowPath)
-    if (-not $WardflowCommit) { $WardflowCommit = & git -C $WardflowPath rev-parse HEAD }
-    if ($LASTEXITCODE -ne 0 -or -not $WardflowCommit) { throw "WardflowPath must be the wardflow checkout, or pass -WardflowCommit: $WardflowPath" }
-}
-$wardflowCommit = $WardflowCommit
-$wardflowBundleImage = "$registry.azurecr.io/hls-wardflow-bundle:$wardflowCommit"
+
 $exists = Invoke-AzJson @('group', 'exists', '--name', $ResourceGroup)
 $existingApp = $null
-if ($exists) { $existingApp = @(Invoke-AzJson @('containerapp', 'list', '--resource-group', $ResourceGroup)) | Where-Object name -eq 'hls-gateway' }
+if ($exists) {
+    $apps = Invoke-AzJson @('containerapp', 'list', '--resource-group', $ResourceGroup)
+    [object[]]$appList = if ($apps -is [System.Collections.IDictionary]) { ,$apps } else { $apps }
+    foreach ($app in $appList) {
+        if ($app -and $app.PSObject.Properties['name'] -and $app.name -eq 'hls-gateway') {
+            $existingApp = $app
+            break
+        }
+    }
+}
 if ($existingApp) {
     $currentEnv = $existingApp.properties.template.containers[0].env
     if (-not $ClientId) { $ClientId = ($currentEnv | Where-Object name -eq 'HLS_CLIENT_ID').value }
+
+    # N-5: On a redeploy, the live gateway allowlist is authoritative.
+    # Profile AllowedUsers and AllowedTenants never apply on a redeploy; live values
+    # are authoritative (including absent or empty) unless explicit parameters are passed.
+    $savedUsers = @($currentEnv | Where-Object { $_ -and $_.PSObject.Properties['name'] -and $_.name -eq 'HLS_ALLOWED_USERS' })
+    $savedTenants = @($currentEnv | Where-Object { $_ -and $_.PSObject.Properties['name'] -and $_.name -eq 'HLS_ALLOWED_TENANTS' })
+
     if (-not $PSBoundParameters.ContainsKey('AllowedUsers')) {
-        $savedUsers = @($currentEnv | Where-Object name -eq 'HLS_ALLOWED_USERS')
-        if ($savedUsers.Count) { $AllowedUsers = [string]$savedUsers[0].value }
+        $AllowedUsers = ''
+        if ($savedUsers.Count -gt 0) {
+            $prop = $savedUsers[0].PSObject.Properties['value']
+            if ($prop -and $prop.Value) { $AllowedUsers = [string]$prop.Value }
+        }
     }
-    if (-not $PSBoundParameters.ContainsKey('AllowedTenants')) { $AllowedTenants = ($currentEnv | Where-Object name -eq 'HLS_ALLOWED_TENANTS').value }
+    if (-not $PSBoundParameters.ContainsKey('AllowedTenants')) {
+        $AllowedTenants = ''
+        if ($savedTenants.Count -gt 0) {
+            $prop = $savedTenants[0].PSObject.Properties['value']
+            if ($prop -and $prop.Value) { $AllowedTenants = [string]$prop.Value }
+        }
+    }
+    if (-not $PSBoundParameters.ContainsKey('AllowedDomains')) {
+        $AllowedDomains = @()
+    }
+
+    # H-4: When a gateway already exists and registry, key vault or storage names were not given
+    # (param or profile), read them from the live deployment.
+    if (-not $hasExplicitRegistry) {
+        $server = ''
+        if ($existingApp.properties.configuration.PSObject.Properties['registries'] -and $existingApp.properties.configuration.registries.Count -gt 0) {
+            $server = $existingApp.properties.configuration.registries[0].server
+        }
+        if ($server -and $server.EndsWith('.azurecr.io', [StringComparison]::OrdinalIgnoreCase)) {
+            $Registry = $server.Substring(0, $server.Length - 11)
+        } else {
+            $existingImage = $existingApp.properties.template.containers[0].image
+            $imageHost = $existingImage.Split('/')[0]
+            if ($imageHost.EndsWith('.azurecr.io', [StringComparison]::OrdinalIgnoreCase)) {
+                $Registry = $imageHost.Substring(0, $imageHost.Length - 11)
+            }
+        }
+    }
+    if (-not $hasExplicitVault) {
+        if ($existingApp.properties.configuration.PSObject.Properties['secrets']) {
+            foreach ($sec in $existingApp.properties.configuration.secrets) {
+                if ($sec.keyVaultUrl -and $sec.keyVaultUrl -match '^https://(?<vaultName>[^.]+)\.vault\.azure\.net') {
+                    $Vault = $Matches['vaultName']
+                    break
+                }
+            }
+        }
+    }
+    if (-not $hasExplicitStorage) {
+        $savedStorage = ($currentEnv | Where-Object name -eq 'HLS_STORAGE_ACCOUNT')
+        if ($savedStorage -and $savedStorage.value) {
+            $Storage = [string]$savedStorage.value
+        }
+    }
+    # Keep an existing custom-domain binding (read it from live when not given)
+    if (-not $hasExplicitCustomDomain) {
+        if ($existingApp.properties.configuration.ingress.PSObject.Properties['customDomains']) {
+            $existingDomains = @($existingApp.properties.configuration.ingress.customDomains)
+            if ($existingDomains.Count -gt 0 -and $existingDomains[0].name) {
+                $CustomDomain = [string]$existingDomains[0].name
+            }
+        }
+    }
+} else {
+    if (-not $PSBoundParameters.ContainsKey('AllowedUsers') -and $profileData.ContainsKey('AllowedUsers')) {
+        $AllowedUsers = $profileData['AllowedUsers']
+    }
+    if (-not $PSBoundParameters.ContainsKey('AllowedTenants') -and $profileData.ContainsKey('AllowedTenants')) {
+        $AllowedTenants = $profileData['AllowedTenants']
+    }
+    if (-not $PSBoundParameters.ContainsKey('AllowedDomains') -and $profileData.ContainsKey('AllowedDomains')) {
+        $AllowedDomains = @($profileData['AllowedDomains'])
+    }
 }
+
+$deterministic = Get-DeterministicResourceNames -SubscriptionId $SubscriptionId -ResourceGroup $ResourceGroup
+$computedRegistryUsed = $false
+$computedVaultUsed = $false
+$computedStorageUsed = $false
+
+if (-not $Registry) { $Registry = $deterministic.Registry; $computedRegistryUsed = $true }
+if (-not $Vault) { $Vault = $deterministic.Vault; $computedVaultUsed = $true }
+if (-not $Storage) { $Storage = $deterministic.Storage; $computedStorageUsed = $true }
+
+$registry = $Registry
+$vault = $Vault
+$storage = $Storage
+$groupId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
+$registryId = "$groupId/providers/Microsoft.ContainerRegistry/registries/$registry"
+$vaultId = "$groupId/providers/Microsoft.KeyVault/vaults/$vault"
+
+if ($CustomDomain -and $DnsZone) {
+    Test-CustomDomainDnsZone -CustomDomain $CustomDomain -DnsZone $DnsZone
+}
+
+if ($exists) {
+    $rawReg = Invoke-AzJson @('acr', 'list', '--resource-group', $ResourceGroup)
+    $existingRegNames = @()
+    if ($rawReg) {
+        foreach ($r in @($rawReg)) { if ($r -and $r.PSObject.Properties['name']) { $existingRegNames += [string]$r.name } }
+    }
+    $rawVaults = Invoke-AzJson @('keyvault', 'list', '--resource-group', $ResourceGroup)
+    $existingVaultNames = @()
+    if ($rawVaults) {
+        foreach ($v in @($rawVaults)) { if ($v -and $v.PSObject.Properties['name']) { $existingVaultNames += [string]$v.name } }
+    }
+    $rawStorage = Invoke-AzJson @('storage', 'account', 'list', '--resource-group', $ResourceGroup)
+    $existingStorageNames = @()
+    if ($rawStorage) {
+        foreach ($s in @($rawStorage)) { if ($s -and $s.PSObject.Properties['name']) { $existingStorageNames += [string]$s.name } }
+    }
+    if ($existingApp) {
+        if ($computedRegistryUsed -and ($existingRegNames -notcontains $Registry)) {
+            throw "Gateway exists in '$ResourceGroup', but container registry could not be resolved from live deployment and computed name '$Registry' does not exist in the resource group."
+        }
+        if ($computedVaultUsed -and ($existingVaultNames -notcontains $Vault)) {
+            throw "Gateway exists in '$ResourceGroup', but key vault could not be resolved from live deployment and computed name '$Vault' does not exist in the resource group."
+        }
+        if ($computedStorageUsed -and ($existingStorageNames -notcontains $Storage)) {
+            throw "Gateway exists in '$ResourceGroup', but storage account could not be resolved from live deployment and computed name '$Storage' does not exist in the resource group."
+        }
+    }
+
+    if ($existingRegNames.Count -gt 0 -and ($existingRegNames -notcontains $Registry)) {
+        throw "Found existing container registry '$($existingRegNames -join ',')' in '$ResourceGroup' differing from target '$Registry'. Refusing to create a second registry beside the live one."
+    }
+    if ($existingVaultNames.Count -gt 0 -and ($existingVaultNames -notcontains $Vault)) {
+        throw "Found existing key vault '$($existingVaultNames -join ',')' in '$ResourceGroup' differing from target '$Vault'. Refusing to create a second key vault beside the live one."
+    }
+    if ($existingStorageNames.Count -gt 0 -and ($existingStorageNames -notcontains $Storage)) {
+        throw "Found existing storage account '$($existingStorageNames -join ',')' in '$ResourceGroup' differing from target '$Storage'. Refusing to create a second storage account beside the live one."
+    }
+}
+
+# Consumer Microsoft-account tenants are refused for AllowedTenants and AllowedDomains
+$consumerTenants = Get-ConsumerTenantIds
+$cleanTenants = [System.Collections.Generic.List[string]]::new()
+if ($AllowedTenants) {
+    foreach ($t in ($AllowedTenants -split ',')) {
+        $raw = $t.Trim()
+        if (-not $raw) { continue }
+        $parsedGuid = [guid]::Empty
+        if (-not [guid]::TryParse($raw, [ref]$parsedGuid)) {
+            throw "AllowedTenants entry '$t' is not a valid GUID."
+        }
+        $cleanTenant = $parsedGuid.ToString('D').ToLowerInvariant()
+        if ($cleanTenant -in $consumerTenants) {
+            throw "Tenant '$t' is a consumer Microsoft-account tenant, which is refused."
+        }
+        if (-not $cleanTenants.Contains($cleanTenant)) {
+            $cleanTenants.Add($cleanTenant)
+        }
+    }
+}
+$AllowedTenants = ($cleanTenants -join ',')
+
+# Validate and resolve AllowedDomains before any Azure writes (H-9)
+if ($AllowedDomains -and $AllowedDomains.Count -gt 0) {
+    $AllowedTenants = Resolve-AllowedDomains -Domains $AllowedDomains -CurrentAllowedTenants $AllowedTenants
+}
+# Clean and strip empty entries from AllowedUsers (H-8)
+$cleanUsers = [System.Collections.Generic.List[string]]::new()
+if ($AllowedUsers) {
+    foreach ($u in ($AllowedUsers -split ',')) {
+        $clean = $u.Trim()
+        if ($clean -and -not $cleanUsers.Contains($clean)) {
+            $cleanUsers.Add($clean)
+        }
+    }
+}
+$AllowedUsers = ($cleanUsers -join ',')
+
+# On a fresh deployment refuse to continue if users and tenants are both empty (H-8)
+if (-not $existingApp) {
+    if ([string]::IsNullOrWhiteSpace($AllowedUsers) -and [string]::IsNullOrWhiteSpace($AllowedTenants)) {
+        throw 'Fresh deployment requires at least one allowed user, tenant, or domain. Refusing to deploy an orchestrator with empty allowlists.'
+    }
+}
+
+# Image resolution (H-2)
+$gatewayImage = $null
+$sandboxImage = $null
+
+if ($SkipImages -and $existingApp -and -not $PSBoundParameters.ContainsKey('ImageTag')) {
+    $gatewayImage = [string]$existingApp.properties.template.containers[0].image
+    $sandboxEnv = @($currentEnv | Where-Object name -eq 'HLS_SANDBOX_IMAGE')
+    if ($sandboxEnv.Count -gt 0 -and $sandboxEnv[0].value) {
+        $sandboxImage = [string]$sandboxEnv[0].value
+    } else {
+        $sandboxImage = "$registry.azurecr.io/hls-orchestrator-sandbox:latest"
+    }
+    if ($gatewayImage -match ':([^:]+)$') {
+        $ImageTag = $Matches[1]
+    }
+} else {
+    if (-not $ImageTag) {
+        $ImageTag = & git -C $repoRoot rev-parse --short HEAD
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the HLS source commit.' }
+    }
+    if ($ImageTag -notmatch '^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$') { throw 'ImageTag is not a valid OCI tag.' }
+    $gatewayImage = "$registry.azurecr.io/hls-gateway:$ImageTag"
+    $sandboxImage = "$registry.azurecr.io/hls-orchestrator-sandbox:$ImageTag"
+}
+
+# WardFlow resolution (H-1)
+if ($WardflowCommit -and $WardflowCommit -ne 'none' -and $WardflowCommit -notmatch '^[0-9a-f]{40}$') {
+    throw 'WardflowCommit must be a full 40-character commit SHA or "none".'
+}
+
+$needsWardflow = $PublishWardflowBundle -or (-not $WardflowCommit -and -not $SkipImages)
+if ($needsWardflow -and $WardflowPath) {
+    $resolvedWardflowPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($WardflowPath)
+    if (-not (Test-Path -LiteralPath $resolvedWardflowPath)) {
+        throw "WardflowPath '$WardflowPath' was specified but the path does not exist."
+    }
+    $rev = (& git -C $resolvedWardflowPath rev-parse HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $rev -notmatch '^[0-9a-f]{40}$') {
+        throw "WardflowPath '$WardflowPath' is not a git checkout."
+    }
+    if (-not $WardflowCommit) {
+        $WardflowCommit = $rev.Trim()
+    }
+}
+
+if (-not $WardflowCommit) {
+    $WardflowCommit = 'none'
+}
+$wardflowCommit = $WardflowCommit
+$wardflowBundleImage = "$registry.azurecr.io/hls-wardflow-bundle:$wardflowCommit"
 if ($SkipInfra -and -not $existingApp) { throw '-SkipInfra requires an already bootstrapped hls-gateway.' }
 if (-not $SkipInfra) {
     $null = Invoke-AzJson @('group', 'create', '--name', $ResourceGroup, '--location', $Location)
@@ -328,7 +671,7 @@ if (-not $SkipInfra) {
 if ($BootstrapEntra) {
     $armClaims = Get-JwtClaims (Get-PinnedToken 'https://management.azure.com/')
     Ensure-Role $armClaims.oid 'Key Vault Secrets Officer' $vaultId 'User'
-    $redirects = @("https://$defaultFqdn/auth/callback", 'https://hls.jbatl.dev/auth/callback')
+    $redirects = @("https://$defaultFqdn/auth/callback")
     if ($CustomDomain) { $redirects += "https://$CustomDomain/auth/callback" }
     $portal = Ensure-Application 'hls-deployer-portal' @{
         signInAudience = 'AzureADMultipleOrgs'
@@ -366,12 +709,17 @@ if ($BootstrapEntra) {
 }
 if (-not $ClientId) { throw 'No portal client ID. First run with -BootstrapEntra, or provide -ClientId and provision both gateway secrets in Key Vault.' }
 
-if ($PublishWardflowBundle) { Publish-WardflowBundle $wardflowCommit }
+if ($PublishWardflowBundle) { Publish-WardflowBundle $wardflowCommit -SetGitHubVariable }
 if (-not $SkipImages) {
     $bundleTags = @()
     try { $bundleTags = @(Invoke-AzJson @('acr', 'repository', 'show-tags', '--name', $registry, '--repository', 'hls-wardflow-bundle')) } catch { $bundleTags = @() }
     if ($bundleTags -notcontains $wardflowCommit) {
-        throw "WardFlow bundle $wardflowCommit is not in $registry. Publish it from a machine with the wardflow checkout: ./hosted/Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle -SkipInfra"
+        if ($wardflowCommit -eq 'none') {
+            Write-Host "WardFlow bundle 'none' missing in $registry; building empty bundle."
+            Publish-WardflowBundle 'none'
+        } else {
+            throw "WardFlow bundle $wardflowCommit is not in $registry. Publish it from a machine with the wardflow checkout: ./hosted/Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle -SkipInfra"
+        }
     }
     $stage = Join-Path ([IO.Path]::GetTempPath()) "hls-build-$([Guid]::NewGuid().ToString('N'))"
     try {
@@ -410,16 +758,17 @@ if ($SkipInfra) {
 } else {
     $boundDomain = ''
     $boundCertificate = $false
-    if ($existingApp -and $CustomDomain) {
-        $binding = @($existingApp.properties.configuration.ingress['customDomains'] | Where-Object { $_.name -eq $CustomDomain -and $_.bindingType -eq 'SniEnabled' })
+    if ($existingApp -and $CustomDomain -and $existingApp.properties.configuration.ingress.PSObject.Properties['customDomains']) {
+        $binding = @($existingApp.properties.configuration.ingress.customDomains | Where-Object { $_.name -eq $CustomDomain -and $_.bindingType -eq 'SniEnabled' })
         if ($binding.Count) { $boundDomain = $CustomDomain; $boundCertificate = $true }
     }
     $outputs = Deploy-Infrastructure $true $boundDomain $boundCertificate
     Wait-GatewayHealth $outputs.gatewayFqdn.value 10 -CheckRevision
     if ($CustomDomain -and $env:CLOUDFLARE_API_TOKEN) {
-        if (-not $CustomDomain.EndsWith('.jbatl.dev', [StringComparison]::OrdinalIgnoreCase)) { throw 'Automatic DNS is restricted to subdomains of zone jbatl.dev.' }
-        $zones = Invoke-RestMethod -Uri 'https://api.cloudflare.com/client/v4/zones?name=jbatl.dev' -Headers @{ Authorization = "Bearer $env:CLOUDFLARE_API_TOKEN" }
-        if (-not $zones.success -or @($zones.result).Count -ne 1) { throw 'Cloudflare token must have Zone:Read and DNS:Edit access to jbatl.dev.' }
+        if (-not $DnsZone) { throw 'DnsZone is required for automatic Cloudflare DNS configuration.' }
+        Test-CustomDomainDnsZone -CustomDomain $CustomDomain -DnsZone $DnsZone
+        $zones = Invoke-RestMethod -Uri "https://api.cloudflare.com/client/v4/zones?name=$([Uri]::EscapeDataString($DnsZone))" -Headers @{ Authorization = "Bearer $env:CLOUDFLARE_API_TOKEN" }
+        if (-not $zones.success -or @($zones.result).Count -ne 1) { throw "Cloudflare token must have Zone:Read and DNS:Edit access to $DnsZone." }
         $zoneId = $zones.result[0].id
         Set-CloudflareRecord $zoneId 'CNAME' $CustomDomain $outputs.gatewayFqdn.value
         Set-CloudflareRecord $zoneId 'TXT' "asuid.$CustomDomain" $outputs.customDomainVerificationId.value

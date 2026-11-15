@@ -1,4 +1,6 @@
 # Deployment state (user-specific)
+hosted/profiles/*.psd1
+!hosted/profiles/example.psd1
 state-tracking/
 .deployment-state*.json
 .orchestrator-state.json
@@ -56,6 +58,8 @@ orchestrator-ui/frontend-stdout.log
 orchestrator-ui/frontend-stderr.log
 orchestrator/orchestrator-session-*.log
 orchestrator/backend-crash-dump.log
+orchestrator/stage_eta_samples.json
+**/stage_eta_samples.json
 .codegraph/
 $null
 

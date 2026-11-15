@@ -1,31 +1,35 @@
+relationship rel-quality-measures-patient
+	fromColumn: agg_quality_measures.patient_id
+	toColumn: dim_patient.patient_id
+
 relationship rel-quality-measures-gaps
 	fromColumn: care_gaps.patient_id
-	toColumn: agg_quality_measures.patient_id
+	toColumn: dim_patient.patient_id
 
 relationship rel-quality-measures-adherence
 	fromColumn: agg_medication_adherence.patient_id
-	toColumn: agg_quality_measures.patient_id
+	toColumn: dim_patient.patient_id
 
 relationship rel-claim-diagnosis
 	fromColumn: fact_diagnosis.icd_code
 	toColumn: dim_diagnosis.icd_code
 
-relationship "fact_patient_hcc→dim_hcc"
+relationship "fact_patient_hcc->dim_hcc"
 	fromColumn: fact_patient_hcc.hcc_code
 	toColumn: dim_hcc.hcc_code
 
-relationship "agg_risk_scores→agg_quality_measures"
+relationship "agg_risk_scores->dim_patient"
 	fromColumn: agg_risk_scores.patient_id
-	toColumn: agg_quality_measures.patient_id
+	toColumn: dim_patient.patient_id
 
-relationship "revenue_opportunity→agg_risk_scores"
+relationship "revenue_opportunity->agg_risk_scores"
 	fromColumn: revenue_opportunity.patient_id
 	toColumn: agg_risk_scores.patient_id
 
-relationship "readmission_risk_scores→agg_quality_measures"
+relationship "readmission_risk_scores->dim_patient"
 	fromColumn: readmission_risk_scores.patient_id
-	toColumn: agg_quality_measures.patient_id
+	toColumn: dim_patient.patient_id
 
-relationship "agg_high_cost_claimants→agg_quality_measures"
+relationship "agg_high_cost_claimants->dim_patient"
 	fromColumn: agg_high_cost_claimants.patient_id
-	toColumn: agg_quality_measures.patient_id
+	toColumn: dim_patient.patient_id

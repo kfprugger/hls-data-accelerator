@@ -1,0 +1,22 @@
+/// Patient dimension — unique patient identifier
+table dim_patient
+	lineageTag: e1000001-aaaa-bbbb-cccc-e10000000001
+
+	partition 'dim_patient' = entity
+		mode: directLake
+		source
+			entityName: dim_patient
+			schemaName: dbo
+			expressionSource: ReportingGoldSource
+
+	column patient_id
+		dataType: string
+		lineageTag: e1000001-aaaa-bbbb-cccc-e10000000002
+		sourceColumn: patient_id
+		summarizeBy: none
+
+	column load_timestamp
+		dataType: dateTime
+		lineageTag: e1000001-aaaa-bbbb-cccc-e10000000003
+		sourceColumn: load_timestamp
+		summarizeBy: none

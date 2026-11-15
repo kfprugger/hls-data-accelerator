@@ -166,7 +166,7 @@ def create_app(settings=None, manager=None, msal_client=None):
             return page("Sign-in failed", f"<p>{escape(str(exc))}</p>", 403)
         request.session.clear()
         if not allowed(user, app.state.settings):
-            return page("Access not enabled", '<p>Send your tenant ID and object ID to the operator to request access.</p>'
+            return page("Access not enabled", "<p>Ask this deployer's operator to approve your organization or account, and include the IDs shown below.</p>"
                         f'<p>Email: <code>{escape(user.email or "not provided")}</code><br>'
                         f'Tenant ID: <code>{escape(user.tid)}</code><br>'
                         f'Object ID: <code>{escape(user.oid)}</code></p>', 403)

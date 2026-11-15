@@ -82,7 +82,7 @@ class TestPhiPersonaViews(unittest.TestCase):
     """Test suite for PHI de-identification, OneLake RBAC, and Entra persona lifecycle."""
 
     def setUp(self) -> None:
-        self.tenant_id = "c77e97fc-1859-4575-8c8b-53d74bc35a63"
+        self.tenant_id = "00000000-0000-0000-0000-000000000001"
         self.nurse_id = "11111111-1111-1111-1111-111111111111"
         self.researcher_id = "22222222-2222-2222-2222-222222222222"
         self.roles_payload = manage_researcher_persona.build_data_access_roles(

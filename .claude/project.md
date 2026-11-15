@@ -11,7 +11,7 @@ Every agent in this setup reads this file for the things that depend on your pro
 - **What it is:** HLS Data Accelerator: a one-click deployer for a Microsoft Fabric healthcare estate (HDS, FHIR, DICOM, Real-Time Intelligence, Data Agents, Ontology, Databricks), plus the `rayfin-imaging` Fabric app (Patient 360 oncology, WardFlow Cardiology, 2D/3D/4D imaging).
 - **Stack:** TypeScript 5.8, React 19, Vite 7, Rayfin SDK 1.36 (`rayfin-imaging/`); Rayfin user data functions in `rayfin-imaging/rayfin/functions/` (Node, `mssql`, OneLake SAS); Python 3.13/3.14 (`orchestrator/`, `synthea/`, `rayfin-imaging/pipeline/`); PowerShell 7 (`Deploy-All.ps1`, `phase-*/`).
 - **Codebase map:** `README.md` and `AGENTS.md` at the root. App UI: `rayfin-imaging/src/` (routes in `src/App.tsx`, nav in `src/components/AppShell.tsx`, pages in `src/pages/`). App backend: `rayfin-imaging/rayfin/functions/src/function_app.ts`. Local-mode backend (same response shapes, DuckDB over `work/tables`): `rayfin-imaging/local/api.ts` + `local/plugin.ts`. Fabric seeding: `rayfin-imaging/scripts/setup_fabric.py`, `rayfin-imaging/pipeline/seed_patient360_silos.py`. Synthetic FHIR enrichment: `synthea/`. Add-on orchestration: `orchestrator/activities/addons.py` (`AddonRunner.rayfin`, `prepare_rayfin_imaging`). Base deployment: `Deploy-All.ps1` and `phase-*/`.
-- **Read before writing code:** `AGENTS.md`, `rayfin-imaging/AGENTS.md`, `rayfin-imaging/README.md`. For any Fabric REST call, the skill docs under `/Users/joey/git/skills-for-fabric/skills/` (every Fabric REST call sends the header `x-ms-fabric-skill: <skill-name>`).
+- **Read before writing code:** `AGENTS.md`, `rayfin-imaging/AGENTS.md`, `rayfin-imaging/README.md`. Consult the official `microsoft/skills-for-fabric` repository before Fabric operations. Every Fabric REST call sends `x-ms-fabric-skill: <skill-name>`.
 
 ## Commands
 
@@ -20,22 +20,22 @@ Run these from the worktree root unless the command changes directory itself.
 | What | Command |
 |---|---|
 | Install | `cd rayfin-imaging && npm ci --registry=https://registry.npmjs.org/ --no-audit --no-fund && cd rayfin/functions && npm ci --registry=https://registry.npmjs.org/ --no-audit --no-fund` |
-| Lint | none (`rayfin-imaging` has no ESLint flat config; `npm run lint` fails before this change set) |
+| Lint | `cd rayfin-imaging && npm run lint` |
 | Build | `cd rayfin-imaging && ./node_modules/.bin/tsc -b && ./node_modules/.bin/vite build --mode localdata --outDir dist-local && cd rayfin/functions && ./node_modules/.bin/tsc --build` |
-| Tests | `cd rayfin-imaging && ./node_modules/.bin/vitest run && cd ../orchestrator && /Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python -m unittest discover -s tests -p 'test_*.py'` |
+| Tests | `cd rayfin-imaging && ./node_modules/.bin/vitest run && cd ../orchestrator && python3 -m unittest discover -s tests -p 'test_*.py' && cd .. && pwsh -NoProfile -File ./test_deploy_logic.ps1` |
 | Start the app on a port | `cd rayfin-imaging && ./node_modules/.bin/vite --mode localdata --port <port> --strictPort` |
 | App is up when | `curl -s -o /dev/null -w '%{http_code}' http://localhost:<port>/` prints 200 |
 
-- **Python for scripts and tests:** `/Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python` (has `pyarrow`, `requests`, `azure-identity`, `pyyaml`). The system `python3` lacks these. Do not `pip install` from PyPI; it is blocked on this machine.
+- **Python for scripts and tests:** Activate an environment installed from `orchestrator/requirements.lock`. The `python3` commands below must use that environment.
 - **npm registry:** the default Microsoft feed in `~/.npmrc` is unreachable. Always pass `--registry=https://registry.npmjs.org/`.
-- **Fresh worktree setup:** run the Install command. Faster alternative with the same result: `cp -Rc /Users/joey/git/.worktrees/hls-fabric-wow/rayfin-imaging/node_modules rayfin-imaging/node_modules` and the same for `rayfin-imaging/rayfin/functions/node_modules`. Then build local data: until ticket 001 is merged, local mode has no tables and `/local-api/getCohort` returns 500. After 001: `/Users/joey/git/.worktrees/hls-auth-refresh/orchestrator/.venv/bin/python rayfin-imaging/pipeline/build_local_tables.py`.
+- **Fresh worktree setup:** Run the Install command and use the locked Python environment. Build local tables with `python3 rayfin-imaging/pipeline/build_local_tables.py` before using local data routes.
 - **Local data is per folder:** yes (`rayfin-imaging/work/` is per worktree and gitignored).
 - **One dev server per folder:** yes.
 - **Build and dev server can run together in one folder:** yes (`dist-local/` is separate from the dev server).
 
 ## Live Fabric target (for tickets that write to Fabric)
 
-- Tenant `c77e97fc-1859-4575-8c8b-53d74bc35a63` (JBATL), workspace `med-1103a` (`f306e105-78fd-4b16-bfbe-2b556d493cb7`), Azure CLI profile `AZURE_CONFIG_DIR=$HOME/.azure-isolated/JBATL`, signed-in user `joey@jbatl.dev`.
+- Keep live tenant, workspace, subscription and login identifiers in operator-local configuration. Verify the intended Azure CLI profile and `az account show` before each live operation.
 - Network: while the Microsoft VPN is connected, `api.fabric.microsoft.com` times out on the default route. Python scripts honour `HLS_BIND_INTERFACE=en0` (see `rayfin-imaging/scripts/setup_fabric.py`). Never change VPN or routes.
 - Every live write must be idempotent (deterministic IDs, create-or-update), tagged as synthetic demo data, and removable by a matching cleanup command.
 
@@ -52,7 +52,7 @@ Run these from the worktree root unless the command changes directory itself.
 - **How to create one:** none. Local mode has no sign-in. Live Fabric checks use the signed-in Azure CLI user above; ticket 006 adds one Entra test user for the researcher persona.
 - **How to sign in to an existing one:** none.
 - **Names:** worker on ticket NNN → `tNNN`; team → `t050`; reproducer → `t090`; checker and watchdog → `t000`. Unused while the app has no accounts.
-- **Extra URLs agents should know:** local API at `http://localhost:<port>/local-api/<functionName>`; deployed app (read-only reference, needs Fabric sign-in) `https://elfin-field-43838dcb1c-westus2.webapp.fabricapps.net`.
+- **Extra URLs agents should know:** Local API at `http://localhost:<port>/local-api/<functionName>`. Use the origin returned by the verified Rayfin deployment for live checks; Fabric sign-in is required.
 
 ## Core flows
 

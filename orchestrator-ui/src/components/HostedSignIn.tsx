@@ -54,7 +54,7 @@ export function HostedSignIn() {
       <Button variant="outlined" onClick={() => { void navigator.clipboard.writeText(auth.code!.user_code).catch(() => setCopyError('Unable to copy. Select the code and copy it manually.')); }}>Copy code</Button>
       <Stack spacing={0.75}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Next step</Typography>
-        <Button component="a" href={auth.code.verification_uri} target="_blank" rel="noopener noreferrer" variant="contained" color="success" onClick={() => { void navigator.clipboard.writeText(auth.code!.user_code).catch(() => {}); }}>Next: Copy code & open Microsoft sign-in</Button>
+        <Button variant="contained" color="success" onClick={() => { void navigator.clipboard.writeText(auth.code!.user_code).catch(() => {}); if (auth.code?.verification_uri) { window.open(auth.code.verification_uri, '_blank', 'noopener,noreferrer'); } }}>Next: Copy code & open Microsoft sign-in</Button>
       </Stack>
       <Button variant="outlined" color="warning" onClick={() => { followSignIn.current = true; void auth.reissue(); }}>Request new token</Button>
       <Typography variant="caption">Use this only if Microsoft rejects the code. It restarts this pending sign-in.</Typography>

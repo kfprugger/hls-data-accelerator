@@ -403,5 +403,85 @@ class InvokePowershellParserTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
 
+    def test_run_preflight_leading_diagnostic_json(self) -> None:
+        lines = [
+            '{"diagnostic": "az account show executed successfully"}\n',
+            "[INFO] Checking Fabric capacity...\n",
+            '{\n',
+            '  "passed": true,\n',
+            '  "checks": [{"name": "capacity", "passed": true}],\n',
+            '  "failures": [],\n',
+            '  "warnings": []\n',
+            '}\n',
+        ]
+        process = FakePowerShellProcess(lines)
+        with patch.object(self.invoke_powershell.subprocess, "Popen", return_value=process):
+            result = self.invoke_powershell.run_preflight({})
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["checks"], [{"name": "capacity", "passed": True}])
+        self.assertEqual(result["failures"], [])
+        self.assertEqual(result["warnings"], [])
+        self.assertIn("Checking Fabric capacity...", result["output"])
+
+    def test_run_preflight_trailing_non_json_text(self) -> None:
+        lines = [
+            '{\n',
+            '  "passed": true,\n',
+            '  "checks": [{"name": "subscription", "passed": true}],\n',
+            '  "failures": [],\n',
+            '  "warnings": ["Region capacity is near threshold"]\n',
+            '}\n',
+            "Preflight-Check.ps1 completed in 4.2 seconds.\n",
+            "All preflight gates passed.\n",
+        ]
+        process = FakePowerShellProcess(lines)
+        with patch.object(self.invoke_powershell.subprocess, "Popen", return_value=process):
+            result = self.invoke_powershell.run_preflight({})
+
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["checks"], [{"name": "subscription", "passed": True}])
+        self.assertEqual(result["warnings"], ["Region capacity is near threshold"])
+        self.assertEqual(result["failures"], [])
+        self.assertIn("completed in 4.2 seconds", result["output"])
+
+    def test_run_preflight_no_json_at_all_logged_and_returns_failure_shape(self) -> None:
+        lines = [
+            "pwsh: command not found: Preflight-Check.ps1\n",
+            "Fatal: PowerShell execution failed before writing preflight results.\n",
+        ]
+        process = FakePowerShellProcess(lines)
+        process.returncode = 1
+
+        with patch.object(self.invoke_powershell.subprocess, "Popen", return_value=process):
+            with self.assertLogs(self.invoke_powershell.logger, level="WARNING") as cm:
+                result = self.invoke_powershell.run_preflight({})
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["checks"], [])
+        self.assertEqual(result["failures"], [])
+        self.assertEqual(result["warnings"], [])
+        self.assertIn("pwsh: command not found", result["output"])
+        self.assertTrue(any("No JSON document found in preflight output" in msg for msg in cm.output))
+        self.assertTrue(any("command not found" in msg for msg in cm.output))
+
+    def test_run_preflight_malformed_json_logged_and_returns_failure_shape(self) -> None:
+        lines = [
+            "Starting preflight...\n",
+            '{ "passed": false, "checks": [ broken json syntax\n',
+        ]
+        process = FakePowerShellProcess(lines)
+        process.returncode = 1
+
+        with patch.object(self.invoke_powershell.subprocess, "Popen", return_value=process):
+            with self.assertLogs(self.invoke_powershell.logger, level="WARNING") as cm:
+                result = self.invoke_powershell.run_preflight({})
+
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["checks"], [])
+        self.assertEqual(result["failures"], [])
+        self.assertEqual(result["warnings"], [])
+        self.assertTrue(any("Failed to parse preflight JSON document" in msg for msg in cm.output))
+        self.assertTrue(any("broken json syntax" in msg for msg in cm.output))
 if __name__ == "__main__":
     unittest.main()

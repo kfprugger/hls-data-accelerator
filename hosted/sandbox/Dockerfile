@@ -2,12 +2,12 @@
 # .dockerignore: Dockerfile.dockerignore beside this file is the runtime-only allowlist.
 # WardFlow cardiology source comes from the pinned bundle image published by
 # Deploy-HostedOrchestrator.ps1 -PublishWardflowBundle (hosted/sandbox/wardflow-bundle.Dockerfile).
-# Example: docker build --platform linux/amd64 --build-arg WARDFLOW_BUNDLE_IMAGE=<acr>/hls-wardflow-bundle:<commit> --build-arg HLS_IMAGE_COMMIT=$(git rev-parse HEAD) -f hosted/sandbox/Dockerfile .
+# Example: docker build --platform linux/amd64 --build-arg WARDFLOW_BUNDLE_IMAGE=<acr>/hls-wardflow-bundle:<commit> --build-arg OHIF_VIEWER_IMAGE=<registry>/hls-ohif-static:<tag> --build-arg HLS_IMAGE_COMMIT=$(git rev-parse HEAD) -f hosted/sandbox/Dockerfile .
 ARG WARDFLOW_BUNDLE_IMAGE
-ARG OHIF_VIEWER_IMAGE=acrhlsdeployer.azurecr.io/hls-ohif-static:9a2d2c3d1367-manifest-v1
+ARG OHIF_VIEWER_IMAGE
 FROM ${WARDFLOW_BUNDLE_IMAGE} AS wardflow
 FROM ${OHIF_VIEWER_IMAGE} AS ohif
-FROM node:20-bookworm-slim AS node
+FROM node:22-bookworm-slim AS node
 FROM node AS ui
 WORKDIR /ui
 COPY orchestrator-ui/package*.json ./

@@ -2,7 +2,7 @@ import { Alert, Box, Button, Card, CardHeader, Checkbox, Chip, Dialog, DialogAct
 import { Tabs, Tab } from '@mui/material';
 import { ArrowBack, ArrowDownward, Close, ContentCopy, ContentPaste, Description, ErrorOutlined, OpenInNew, Pause, PlayArrow, Replay, Shield, TableChart, WarningAmber } from "@mui/icons-material";
 import { makeStyles } from "@griffel/react";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 
@@ -30,7 +30,11 @@ import {
   type CloudStateResult,
   type ValidationResult,
   type PhaseSubStep,
+  getStageEtas,
+  type StageEta,
+  type StageEtasResponse,
 } from "../api";
+import { getStageKeyForPhase, calculateEta } from "../stageMapping";
 import {
   isMockInstance,
   getMockStatus,
@@ -430,6 +434,135 @@ const ALL_PHASES: PhaseInfo[] = [
   { id: "phase_7_payer_ops", phase: "7. Payer RTI & Ops: Claim stream, scoring, activator, and agents", status: "pending", milestone: 7 },
 ];
 
+const STEP_WEIGHTS: Array<{
+    patterns: string[];
+    weight: number;
+}> = [
+    // Milestone 1 — Foundation: infra and patient-linked source data.
+    { patterns: ["Fabric Workspace"], weight: 1 },
+    { patterns: ["Base Azure Infrastructure", "Azure Infrastructure", "Shared HDS Infrastructure"], weight: 10 },
+    { patterns: ["FHIR Service", "Synthea"], weight: 15 },
+    { patterns: ["DICOM Loader", "ImagingStudy"], weight: 8 },
+    // Milestone 2 — Active telemetry: Event Hub/Eventstream/Eventhouse/KQL.
+    { patterns: ["Fabric RTI Ingest", "Fabric RTI Phase 1", "Phase 1: Fabric RTI", "Eventhouse", "Eventstream"], weight: 7 },
+    { patterns: ["Fabric RTI Enrichment", "RTI Phase 2", "Phase 2: Fabric RTI", "Enrichment"], weight: 5 },
+    // Milestone 3 — HDS bridge and row gates.
+    { patterns: ["HDS Deployment", "HDS Detection", "HDS Guidance", "Healthcare Data Solutions"], weight: 1 },
+    { patterns: ["DICOM Shortcut", "HDS Pipeline", "Pipeline Triggers", "Row Gates"], weight: 10 },
+    // Milestone 4+ — optional enrichments, semantic layer, and UX.
+    { patterns: ["Imaging", "Cohorting", "DICOM Viewer", "Direct Lake"], weight: 10 },
+    { patterns: ["Ontology", "DeviceAssociation"], weight: 4 },
+    { patterns: ["Data Agent", "Conversational"], weight: 3 },
+    { patterns: ["Activator", "Reflex"], weight: 3 },
+    { patterns: ["Quality", "Claims", "CMS", "Scorecard", "PDC"], weight: 12 },
+    { patterns: ["Payer", "claim-stream", "HealthcareOpsAgent", "Graph Agent"], weight: 8 },
+    { patterns: ["Databricks"], weight: 15 },
+    { patterns: ["Cardiology"], weight: 15 },
+    { patterns: ["Rayfin"], weight: 20 },
+];
+
+function getStepWeight(phaseName: string): number {
+    for (const sw of STEP_WEIGHTS) {
+        if (sw.patterns.some((pat) => phaseName.toUpperCase().includes(pat.toUpperCase()))) {
+            return sw.weight;
+        }
+    }
+    const phaseMatch = phaseName.match(/PHASE\s*(\d+)/i);
+    if (phaseMatch) {
+        const n = Number(phaseMatch[1]);
+        if (n === 1)
+            return 8;
+        if (n === 2)
+            return 6;
+        if (n === 3)
+            return 5;
+        if (n === 4)
+            return 5;
+    }
+    return 1;
+}
+type MilestoneDef = {
+    label: string;
+    shortLabel?: string;
+    phaseIndices: number[];
+    namePatterns: string[];
+    position: number;
+    endWeight: number;
+    phaseNumber?: number;
+};
+
+const TEARDOWN_MILESTONES: MilestoneDef[] = [
+    "Preflight", "Front-End Apps", "Databricks Unity Catalog", "Fabric Connections",
+    "Workspace Identity", "Delete Workspace", "Front-End Entra Apps",
+    "Front-End Resource Groups", "Azure Resource Group", "Verification",
+].map((name, index) => ({
+    label: name, phaseIndices: [index], namePatterns: [name], position: 8 + index * 9, endWeight: (index + 1) * 10,
+}));
+
+const MILESTONES: MilestoneDef[] = [
+    { label: "1. Data Fabric Foundation", shortLabel: "Foundation", phaseIndices: [0, 1, 2, 3], namePatterns: ["Fabric Workspace", "Base Azure Infrastructure", "FHIR", "Shared HDS Infrastructure", "DICOM Loader", "ImagingStudy"], position: 8, endWeight: 34, phaseNumber: 1 },
+    { label: "2. Active Patient Telemetry", shortLabel: "Telemetry", phaseIndices: [4, 5, 6], namePatterns: ["Fabric RTI", "Fabric RTI (auto)", "Telemetry", "Eventhouse", "Eventstream", "RTI Phase 2", "Enrichment", "HDS Deployment", "HDS Detection", "HDS Guidance", "Healthcare Data Solutions"], position: 24, endWeight: 46, phaseNumber: 2 },
+    { label: "3. HDS Bridge + Row Gates", shortLabel: "HDS Bridge", phaseIndices: [7], namePatterns: ["DICOM Shortcut", "HDS Pipelines", "Pipeline Triggers", "Row Gates"], position: 40, endWeight: 57, phaseNumber: 3 },
+    { label: "4. Semantic Intelligence & UX", shortLabel: "Semantic UX", phaseIndices: [8, 9, 10], namePatterns: ["Imaging", "Cohorting", "DICOM Viewer", "Direct Lake", "Ontology", "DeviceAssociation", "Data Agent", "Conversational"], position: 56, endWeight: 74, phaseNumber: 4 },
+    { label: "5. Bedside Alerting & Action", shortLabel: "Alerts", phaseIndices: [11], namePatterns: ["Activator", "Reflex"], position: 75, endWeight: 77, phaseNumber: 5 },
+    { label: "6. Population Health & Quality", shortLabel: "Quality", phaseIndices: [12], namePatterns: ["Quality", "Claims", "CMS", "Scorecard", "PDC", "Adherence", "HCC", "RAF", "Readmission", "Utilization", "PMPM", "Star Rating"], position: 92, endWeight: 89, phaseNumber: 6 },
+    { label: "7. Payer RTI & Ops", shortLabel: "Payer Ops", phaseIndices: [13], namePatterns: ["Payer", "Fraud", "HighCost", "CareGap", "claim-stream", "PayerOps", "HealthcareOpsAgent", "Graph Agent"], position: 98, endWeight: 97, phaseNumber: 7 },
+];
+
+const cleanPhaseName = (name: string) => name.toLowerCase()
+    .replace(/^(phase\s*\d+:|\d+[a-z]?\.\s*[^:]+:)/i, "")
+    .replace(/\s*\(auto\)\s*/i, "")
+    .replace(/\s*\(manual\)\s*/i, "")
+    .trim();
+
+const phaseMatchesTemplate = (phase: PhaseInfo, template: PhaseInfo): boolean => {
+    if (phase.phase === template.phase)
+        return true;
+    if (template.id === "phase_5_alerts" && /phase\s*5|data activator|clinicalalertactivator|reflex/i.test(phase.phase))
+        return true;
+    if (template.id === "phase_7_payer_ops" && /payer|claim-stream|healthcareopsagent|graph agent/i.test(phase.phase))
+        return true;
+    const pClean = cleanPhaseName(phase.phase);
+    const templateClean = cleanPhaseName(template.phase);
+    if (pClean === templateClean)
+        return true;
+    if (pClean.includes("workspace") && templateClean.includes("workspace"))
+        return true;
+    if (((pClean.includes("base azure") || pClean.includes("shared hds infrastructure")) && templateClean.includes("base azure")))
+        return true;
+    if (pClean.includes("fhir service") && templateClean.includes("fhir service"))
+        return true;
+    if ((pClean.includes("dicom loader") || pClean.includes("dicom service") || pClean.includes("imagingstudy")) && (templateClean.includes("dicom loader") || templateClean.includes("imagingstudy")))
+        return true;
+    if ((pClean.includes("healthcare data solutions") || pClean.includes("hds guidance") || pClean.includes("hds deployment")) && (templateClean.includes("hds deployment") || templateClean.includes("hds detection")))
+        return true;
+    if (pClean.includes("dicom shortcut") && templateClean.includes("dicom shortcut"))
+        return true;
+    if ((pClean.includes("swa viewer") || pClean.includes("imaging & reporting") || pClean.includes("imaging and reporting")) && (templateClean.includes("swa viewer") || templateClean.includes("direct lake")))
+        return true;
+    if ((pClean.includes("conversational") || pClean.includes("data agents")) && templateClean.includes("conversational"))
+        return true;
+    if (pClean.includes("ontology") && templateClean.includes("ontology"))
+        return true;
+    if ((pClean.includes("reflex alerts") || pClean.includes("data activator")) && templateClean.includes("reflex alerts"))
+        return true;
+    if ((pClean.includes("analytics pipeline") || pClean.includes("cms quality") || pClean.includes("quality")) && templateClean.includes("analytics pipeline"))
+        return true;
+    if ((pClean.includes("payer") || pClean.includes("claim")) && templateClean.includes("payer rti"))
+        return true;
+    if (templateClean === "fabric rti ingest") {
+        const lower = phase.phase.toLowerCase();
+        const isEnrichment = lower.includes("enrichment") || lower.includes("phase 2: fabric rti (") || lower.includes("rti phase 2");
+        return pClean.includes("fabric rti") && !isEnrichment;
+    }
+    if (templateClean === "fabric rti enrichment") {
+        const lower = phase.phase.toLowerCase();
+        const isEnrichment = lower.includes("enrichment") || lower.includes("phase 2: fabric rti (") || lower.includes("rti phase 2");
+        return pClean.includes("fabric rti") && isEnrichment;
+    }
+    return pClean.includes(templateClean) || templateClean.includes(pClean);
+};
+
 export function PhaseMonitor() {
     const styles = useStyles();
     const reducedMotion = useReducedMotion();
@@ -450,6 +583,15 @@ export function PhaseMonitor() {
     const [frozenElapsed, setFrozenElapsed] = useState<number | null>(null);
     const [tick, setTick] = useState(0);
     const [operatorMode, setOperatorMode] = useState(false);
+    const [stageEtas, setStageEtas] = useState<Record<string, StageEta>>({});
+    useEffect(() => {
+        getStageEtas().then((res: StageEtasResponse) => {
+            const stages = (res.stages || res) as Record<string, StageEta>;
+            setStageEtas(stages || {});
+        }).catch(() => {
+            setStageEtas({});
+        });
+    }, []);
     const [drilldownType, setDrilldownType] = useState<"error" | "warn" | null>(null);
     const [drilldownSearch, setDrilldownSearch] = useState("");
     const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
@@ -842,13 +984,152 @@ export function PhaseMonitor() {
         acc[level] = (acc[level] ?? 0) + 1;
         return acc;
     }, {} as Record<string, number>);
+    // ── Adaptive milestones: determine active milestones from instance ID ──
+    function getActiveMilestoneNumbers(): Set<number> {
+        const deployConfig = (status?.customStatus as Record<string, unknown>)?.deployConfig as DeploymentConfig | undefined;
+        const id = instanceId ?? "";
+        const pMatch = id.match(/^P(\d+)-/i);
+        const idMilestones = pMatch
+            ? new Set(pMatch[1].split("").map(Number).filter((n) => n >= 1 && n <= 7))
+            : null;
+        if (deployConfig && !isTeardown) {
+            const set = new Set<number>(idMilestones ?? [1]);
+            if (!deployConfig.skip_fabric || !deployConfig.skip_rti_phase2 || instanceId?.startsWith("P"))
+                set.add(2);
+            if (!deployConfig.skip_hds_pipelines)
+                set.add(3);
+            if (!(deployConfig.skip_imaging && deployConfig.skip_data_agents && deployConfig.skip_ontology))
+                set.add(4);
+            if (!deployConfig.skip_activator)
+                set.add(5);
+            if (!deployConfig.skip_quality_measures)
+                set.add(6);
+            if (!deployConfig.skip_phase7)
+                set.add(7);
+            if (set.has(5) && !set.has(6))
+                set.add(6);
+            return set;
+        }
+        if (idMilestones) {
+            if (idMilestones.has(5) && !idMilestones.has(6)) {
+                idMilestones.add(6);
+            }
+            return idMilestones;
+        }
+        if (id.startsWith("ALLPHASES") || id.startsWith("PHASE2+") || id.startsWith("FABRIC"))
+            return new Set([1, 2, 3, 4, 5, 6, 7]);
+        return new Set([1, 2, 3, 4, 5, 6, 7]);
+    }
+    const activeMilestoneNumbers = getActiveMilestoneNumbers();
+    if (!isTeardown && activeMilestoneNumbers.has(7) && !phases.some((p) => /payer|claim-stream|healthcareopsagent|graph agent/i.test(p.phase))) {
+        phases = [...phases, { phase: "7. Payer RTI & Ops: Claim stream, scoring, activator, and agents", status: "pending", milestone: 7 }];
+    }
+    const deployConfig = (status?.customStatus as Record<string, unknown> | null)?.deployConfig as DeploymentConfig | undefined;
+    const skippedByConfig = (template: PhaseInfo): boolean => {
+        if (!deployConfig)
+            return false;
+        switch (template.id) {
+            case "phase_1_base_infra":
+                return deployConfig.skip_base_infra;
+            case "phase_1_fhir":
+                return deployConfig.skip_fhir || deployConfig.skip_synthea;
+            case "phase_2_rti_ingest":
+                return deployConfig.skip_fabric;
+            case "phase_2_rti_enrichment":
+                return deployConfig.skip_rti_phase2;
+            case "phase_1_dicom":
+                return deployConfig.skip_dicom;
+            case "phase_3_hds_detection":
+            case "phase_3_hds_pipelines":
+                return deployConfig.skip_hds_pipelines;
+            case "phase_4_imaging":
+                return deployConfig.skip_imaging;
+            case "phase_2_agents":
+            case "phase_4_agents":
+                return deployConfig.skip_data_agents;
+            case "phase_4_ontology":
+                return deployConfig.skip_ontology;
+            case "phase_5_alerts":
+                return deployConfig.skip_activator;
+            case "phase_6_quality":
+                return deployConfig.skip_quality_measures;
+            case "phase_7_payer_ops":
+                return deployConfig.skip_phase7;
+            default:
+                return false;
+        }
+    };
+    const displayPhaseTemplate = isTeardown
+        ? phases
+        : ALL_PHASES.filter((phase) => activeMilestoneNumbers.has(phase.milestone ?? 0));
+    const displayPhases = isTeardown
+        ? phases
+        : displayPhaseTemplate.map((template) => {
+            const templateWithConfig = template.id === "phase_4_agents"
+                ? { ...template, id: deployConfig?.skip_ontology ? "phase_2_agents" : "phase_4_agents" }
+                : template;
+            const matches = phases.filter((phase) => phaseMatchesTemplate(phase, templateWithConfig));
+            const activeMatch = matches.find((phase) => phase.status === "running" || phase.status === "waiting_for_input");
+            const resolved = activeMatch ?? matches[matches.length - 1];
+            const currentMatchesTemplate = currentPhase
+                ? phaseMatchesTemplate({ phase: currentPhase, status: "running" }, templateWithConfig)
+                : false;
+            if (!resolved && !currentMatchesTemplate)
+                return { ...templateWithConfig, status: skippedByConfig(templateWithConfig) ? "skipped" : "pending" as const };
+            const statusForCurrentPhase = isRunning && currentMatchesTemplate
+                ? "running"
+                : resolved?.status ?? "pending";
+            return { ...templateWithConfig, ...resolved, phase: templateWithConfig.phase, status: statusForCurrentPhase };
+        });
+
+    const rawAddonPhases = phases.filter((p) => /^add-on:/i.test(p.phase));
+    const seenAddonTitles = new Set<string>();
+    const latestAddonPhases: PhaseInfo[] = [];
+    for (let i = rawAddonPhases.length - 1; i >= 0; i--) {
+        const p = rawAddonPhases[i];
+        const key = getStageKeyForPhase(p.phase) ?? p.phase.toLowerCase().trim();
+        if (!seenAddonTitles.has(key)) {
+            seenAddonTitles.add(key);
+            latestAddonPhases.unshift(p);
+        }
+    }
+
+    const customAddons = (status?.customStatus as Record<string, unknown> | null)?.addons as Record<string, { status?: string }> | undefined;
+    const queuedAddonPhases: PhaseInfo[] = [];
+    if (customAddons) {
+        for (const [name, addon] of Object.entries(customAddons)) {
+            if (addon?.status === "pending") {
+                const stageKey = `addon_${name.toLowerCase()}`;
+                const title = `Add-on: ${name.charAt(0).toUpperCase() + name.slice(1)}`;
+                const existing = latestAddonPhases.find((p) => (getStageKeyForPhase(p.phase) === stageKey) || p.phase.toLowerCase() === title.toLowerCase());
+                if (!existing) {
+                    queuedAddonPhases.push({
+                        id: stageKey,
+                        phase: title,
+                        status: "pending",
+                    });
+                } else if (existing.status === "failed") {
+                    existing.status = "pending";
+                }
+            }
+        }
+    }
+
+    const allAddonPhases = [...latestAddonPhases, ...queuedAddonPhases];
+    const allMonitorPhases = [...displayPhases, ...allAddonPhases];
     const elapsedMinutes = elapsedSeconds / 60;
-    const completedBeforeActions = phases.filter((p) => p.status === "succeeded" || p.status === "skipped").length;
-    const completedOrPartial = completedBeforeActions + (phases.some((p) => p.status === "running") ? 0.35 : 0);
-    const remainingPhases = Math.max(phases.length - completedOrPartial, 0);
-    const etaMinutes = isRunning && elapsedMinutes > 0 && completedOrPartial > 0
-        ? Math.min(180, Math.max(1, Math.round((remainingPhases / completedOrPartial) * elapsedMinutes)))
-        : 0;
+    const completedBeforeActions = allMonitorPhases.filter((p) => p.status === "succeeded" || p.status === "skipped").length;
+    const { etaMinutes, etaLearnedRuns } = useMemo(() => {
+        return calculateEta({
+            isRunning,
+            activePhases: allMonitorPhases,
+            stageEtas,
+            elapsedMinutes,
+            getStageKey: getStageKeyForPhase,
+            getStepWeightFallback: getStepWeight,
+            config: deployConfig ? { skip_ontology: deployConfig.skip_ontology } : undefined,
+        });
+    }, [isRunning, allMonitorPhases, stageEtas, elapsedMinutes, deployConfig?.skip_ontology]);
     const copyDiagnostics = () => {
         const diagnostics = {
             instanceId,
@@ -857,7 +1138,7 @@ export function PhaseMonitor() {
             elapsed: elapsedFormatted,
             etaMinutes,
             completedPhases: completedBeforeActions,
-            totalPhases: phases.length,
+            totalPhases: allMonitorPhases.length,
             logCounts,
             resources: status?.customStatus?.resources ?? status?.output?.resources ?? {},
         };
@@ -929,52 +1210,6 @@ export function PhaseMonitor() {
         }
     }, [status, notificationsEnabled, notificationPermissionGranted, instanceId, elapsedFormatted, completedCount, phases.length]);
     // ── Weighted progress based on typical step durations (minutes) ──
-    // Each step gets a weight proportional to how long it typically takes.
-    // This gives accurate progress bar fill instead of equal step weighting.
-    const STEP_WEIGHTS: Array<{
-        patterns: string[];
-        weight: number;
-    }> = [
-        // Milestone 1 — Foundation: infra and patient-linked source data.
-        { patterns: ["Fabric Workspace"], weight: 1 },
-        { patterns: ["Base Azure Infrastructure", "Azure Infrastructure", "Shared HDS Infrastructure"], weight: 10 },
-        { patterns: ["FHIR Service", "Synthea"], weight: 15 },
-        { patterns: ["DICOM Loader", "ImagingStudy"], weight: 8 },
-        // Milestone 2 — Active telemetry: Event Hub/Eventstream/Eventhouse/KQL.
-        { patterns: ["Fabric RTI Ingest", "Fabric RTI Phase 1", "Phase 1: Fabric RTI", "Eventhouse", "Eventstream"], weight: 7 },
-        { patterns: ["Fabric RTI Enrichment", "RTI Phase 2", "Phase 2: Fabric RTI", "Enrichment"], weight: 5 },
-        // Milestone 3 — HDS bridge and row gates.
-        { patterns: ["HDS Deployment", "HDS Detection", "HDS Guidance", "Healthcare Data Solutions"], weight: 1 },
-        { patterns: ["DICOM Shortcut", "HDS Pipeline", "Pipeline Triggers", "Row Gates"], weight: 10 },
-        // Milestone 4+ — optional enrichments, semantic layer, and UX.
-        { patterns: ["Imaging", "Cohorting", "DICOM Viewer", "Direct Lake"], weight: 10 },
-        { patterns: ["Ontology", "DeviceAssociation"], weight: 4 },
-        { patterns: ["Data Agent", "Conversational"], weight: 3 },
-        { patterns: ["Activator", "Reflex"], weight: 3 },
-        { patterns: ["Quality", "Claims", "CMS", "Scorecard", "PDC"], weight: 12 },
-        { patterns: ["Payer", "claim-stream", "HealthcareOpsAgent", "Graph Agent"], weight: 8 },
-    ];
-    function getStepWeight(phaseName: string): number {
-        for (const sw of STEP_WEIGHTS) {
-            if (sw.patterns.some((pat) => phaseName.toUpperCase().includes(pat.toUpperCase()))) {
-                return sw.weight;
-            }
-        }
-        // Legacy Durable Functions phases may still emit only a broad phase number.
-        const phaseMatch = phaseName.match(/PHASE\s*(\d+)/i);
-        if (phaseMatch) {
-            const n = Number(phaseMatch[1]);
-            if (n === 1)
-                return 8;
-            if (n === 2)
-                return 6;
-            if (n === 3)
-                return 5;
-            if (n === 4)
-                return 5;
-        }
-        return 1; // Unknown step gets minimal weight
-    }
     // Compute weighted progress
     let weightedCompleted = 0;
     let weightedRunning = 0;
@@ -1004,198 +1239,6 @@ export function PhaseMonitor() {
         return 92;
     }
     // Milestone definitions (static templates)
-    type MilestoneDef = {
-        label: string;
-        shortLabel?: string;
-        phaseIndices: number[];
-        namePatterns: string[];
-        position: number;
-        endWeight: number;
-        phaseNumber?: number;
-    };
-    // The shared runner emits only applicable phases; each operation has its own group.
-    const TEARDOWN_MILESTONES: MilestoneDef[] = [
-        "Preflight", "Front-End Apps", "Databricks Unity Catalog", "Fabric Connections",
-        "Workspace Identity", "Delete Workspace", "Front-End Entra Apps",
-        "Front-End Resource Groups", "Azure Resource Group", "Verification",
-    ].map((name, index) => ({
-        label: name, phaseIndices: [index], namePatterns: [name], position: 8 + index * 9, endWeight: (index + 1) * 10,
-    }));
-    const MILESTONES: MilestoneDef[] = [
-        { label: "1. Data Fabric Foundation", shortLabel: "Foundation", phaseIndices: [0, 1, 2, 3], namePatterns: ["Fabric Workspace", "Base Azure Infrastructure", "FHIR", "Shared HDS Infrastructure", "DICOM Loader", "ImagingStudy"], position: 8, endWeight: 34, phaseNumber: 1 },
-        { label: "2. Active Patient Telemetry", shortLabel: "Telemetry", phaseIndices: [4, 5, 6], namePatterns: ["Fabric RTI", "Fabric RTI (auto)", "Telemetry", "Eventhouse", "Eventstream", "RTI Phase 2", "Enrichment", "HDS Deployment", "HDS Detection", "HDS Guidance", "Healthcare Data Solutions"], position: 24, endWeight: 46, phaseNumber: 2 },
-        { label: "3. HDS Bridge + Row Gates", shortLabel: "HDS Bridge", phaseIndices: [7], namePatterns: ["DICOM Shortcut", "HDS Pipelines", "Pipeline Triggers", "Row Gates"], position: 40, endWeight: 57, phaseNumber: 3 },
-        { label: "4. Semantic Intelligence & UX", shortLabel: "Semantic UX", phaseIndices: [8, 9, 10], namePatterns: ["Imaging", "Cohorting", "DICOM Viewer", "Direct Lake", "Ontology", "DeviceAssociation", "Data Agent", "Conversational"], position: 56, endWeight: 74, phaseNumber: 4 },
-        { label: "5. Bedside Alerting & Action", shortLabel: "Alerts", phaseIndices: [11], namePatterns: ["Activator", "Reflex"], position: 75, endWeight: 77, phaseNumber: 5 },
-        { label: "6. Population Health & Quality", shortLabel: "Quality", phaseIndices: [12], namePatterns: ["Quality", "Claims", "CMS", "Scorecard", "PDC", "Adherence", "HCC", "RAF", "Readmission", "Utilization", "PMPM", "Star Rating"], position: 92, endWeight: 89, phaseNumber: 6 },
-        { label: "7. Payer RTI & Ops", shortLabel: "Payer Ops", phaseIndices: [13], namePatterns: ["Payer", "Fraud", "HighCost", "CareGap", "claim-stream", "PayerOps", "HealthcareOpsAgent", "Graph Agent"], position: 98, endWeight: 97, phaseNumber: 7 },
-    ];
-    // ── Adaptive milestones: determine active milestones from instance ID ──
-    // Instance ID format: P<milestone-digits>-<timestamp> (e.g. P12345-20260406-195906)
-    // Legacy formats: ALLPHASES-*, PHASE2+-*, FABRIC-*, teardown*
-    function getActiveMilestoneNumbers(): Set<number> {
-        const deployConfig = (status?.customStatus as Record<string, unknown>)?.deployConfig as DeploymentConfig | undefined;
-        const id = instanceId ?? "";
-        const pMatch = id.match(/^P(\d+)-/i);
-        const idMilestones = pMatch
-            ? new Set(pMatch[1].split("").map(Number).filter((n) => n >= 1 && n <= 7))
-            : null;
-        // Overrule legacy IDs if we have the rich deployment config saved, but do
-        // not delete milestone digits already encoded in a P123... instance id.
-        // Resumed runs legitimately set skip_* flags for already-completed work;
-        // hiding those milestones makes the frontend look like phases were missed.
-        if (deployConfig && !isTeardown) {
-            const set = new Set<number>(idMilestones ?? [1]);
-            // Keep milestone 2 visible when Phase 2 telemetry work was part of the
-            // original journey, even if this resumed run skipped already-completed
-            // Fabric/RTI steps. Hiding it makes the journey line jump from 1 to 3.
-            if (!deployConfig.skip_fabric || !deployConfig.skip_rti_phase2 || instanceId?.startsWith("P"))
-                set.add(2);
-            if (!deployConfig.skip_hds_pipelines)
-                set.add(3);
-            if (!(deployConfig.skip_imaging && deployConfig.skip_data_agents && deployConfig.skip_ontology))
-                set.add(4);
-            if (!deployConfig.skip_activator)
-                set.add(5);
-            if (!deployConfig.skip_quality_measures)
-                set.add(6);
-            if (!deployConfig.skip_phase7)
-                set.add(7);
-            if (set.has(5) && !set.has(6))
-                set.add(6);
-            return set;
-        }
-        // New format: P followed by milestone digits (P12345, P2345, P3, etc.)
-        if (idMilestones) {
-            if (idMilestones.has(5) && !idMilestones.has(6)) {
-                // If it had the 5-digit full deploy, map to all 6 milestones under the new model
-                idMilestones.add(6);
-            }
-            return idMilestones;
-        }
-        // Legacy formats
-        if (id.startsWith("ALLPHASES"))
-            return new Set([1, 2, 3, 4, 5, 6, 7]);
-        if (id.startsWith("PHASE2+"))
-            return new Set([1, 2, 3, 4, 5, 6, 7]);
-        if (id.startsWith("FABRIC"))
-            return new Set([1, 2, 3, 4, 5, 6, 7]);
-        // Default: show all current deployment milestones.
-        return new Set([1, 2, 3, 4, 5, 6, 7]);
-    }
-    const activeMilestoneNumbers = getActiveMilestoneNumbers();
-    // The backend only emits phases that actually logged a Deploy-All step.
-    // Keep Phase 7 visible when it was selected in the deployment config but did
-    // not produce an output phase, so operators can see the gap instead of
-    // mistaking the deployment screen for a six-phase plan.
-    if (!isTeardown && activeMilestoneNumbers.has(7) && !phases.some((p) => /payer|claim-stream|healthcareopsagent|graph agent/i.test(p.phase))) {
-        phases = [...phases, { phase: "7. Payer RTI & Ops: Claim stream, scoring, activator, and agents", status: "pending", milestone: 7 }];
-    }
-    const cleanPhaseName = (name: string) => name.toLowerCase()
-        .replace(/^(phase\s*\d+:|\d+[a-z]?\.\s*[^:]+:)/i, "")
-        .replace(/\s*\(auto\)\s*/i, "")
-        .replace(/\s*\(manual\)\s*/i, "")
-        .trim();
-    const phaseMatchesTemplate = (phase: PhaseInfo, template: PhaseInfo): boolean => {
-        if (phase.phase === template.phase)
-            return true;
-        if (template.id === "phase_5_alerts" && /phase\s*5|data activator|clinicalalertactivator|reflex/i.test(phase.phase))
-            return true;
-        if (template.id === "phase_7_payer_ops" && /payer|claim-stream|healthcareopsagent|graph agent/i.test(phase.phase))
-            return true;
-        const pClean = cleanPhaseName(phase.phase);
-        const templateClean = cleanPhaseName(template.phase);
-        if (pClean === templateClean)
-            return true;
-        if (pClean.includes("workspace") && templateClean.includes("workspace"))
-            return true;
-        if (((pClean.includes("base azure") || pClean.includes("shared hds infrastructure")) && templateClean.includes("base azure")))
-            return true;
-        if (pClean.includes("fhir service") && templateClean.includes("fhir service"))
-            return true;
-        if ((pClean.includes("dicom loader") || pClean.includes("dicom service") || pClean.includes("imagingstudy")) && (templateClean.includes("dicom loader") || templateClean.includes("imagingstudy")))
-            return true;
-        if ((pClean.includes("healthcare data solutions") || pClean.includes("hds guidance") || pClean.includes("hds deployment")) && (templateClean.includes("hds deployment") || templateClean.includes("hds detection")))
-            return true;
-        if (pClean.includes("dicom shortcut") && templateClean.includes("dicom shortcut"))
-            return true;
-        if ((pClean.includes("swa viewer") || pClean.includes("imaging & reporting") || pClean.includes("imaging and reporting")) && (templateClean.includes("swa viewer") || templateClean.includes("direct lake")))
-            return true;
-        if ((pClean.includes("conversational") || pClean.includes("data agents")) && templateClean.includes("conversational"))
-            return true;
-        if (pClean.includes("ontology") && templateClean.includes("ontology"))
-            return true;
-        if ((pClean.includes("reflex alerts") || pClean.includes("data activator")) && templateClean.includes("reflex alerts"))
-            return true;
-        if ((pClean.includes("analytics pipeline") || pClean.includes("cms quality") || pClean.includes("quality")) && templateClean.includes("analytics pipeline"))
-            return true;
-        if ((pClean.includes("payer") || pClean.includes("claim")) && templateClean.includes("payer rti"))
-            return true;
-        if (templateClean === "fabric rti ingest") {
-            const lower = phase.phase.toLowerCase();
-            const isEnrichment = lower.includes("enrichment") || lower.includes("phase 2: fabric rti (") || lower.includes("rti phase 2");
-            return pClean.includes("fabric rti") && !isEnrichment;
-        }
-        if (templateClean === "fabric rti enrichment") {
-            const lower = phase.phase.toLowerCase();
-            const isEnrichment = lower.includes("enrichment") || lower.includes("phase 2: fabric rti (") || lower.includes("rti phase 2");
-            return pClean.includes("fabric rti") && isEnrichment;
-        }
-        return pClean.includes(templateClean) || templateClean.includes(pClean);
-    };
-    const skippedByConfig = (template: PhaseInfo): boolean => {
-        const deployConfig = (status?.customStatus as Record<string, unknown> | null)?.deployConfig as DeploymentConfig | undefined;
-        if (!deployConfig)
-            return false;
-        switch (template.id) {
-            case "phase_1_base_infra":
-                return deployConfig.skip_base_infra;
-            case "phase_1_fhir":
-                return deployConfig.skip_fhir || deployConfig.skip_synthea;
-            case "phase_2_rti_ingest":
-                return deployConfig.skip_fabric;
-            case "phase_2_rti_enrichment":
-                return deployConfig.skip_rti_phase2;
-            case "phase_1_dicom":
-                return deployConfig.skip_dicom;
-            case "phase_3_hds_detection":
-            case "phase_3_hds_pipelines":
-                return deployConfig.skip_hds_pipelines;
-            case "phase_4_imaging":
-                return deployConfig.skip_imaging;
-            case "phase_4_agents":
-                return deployConfig.skip_data_agents;
-            case "phase_4_ontology":
-                return deployConfig.skip_ontology;
-            case "phase_5_alerts":
-                return deployConfig.skip_activator;
-            case "phase_6_quality":
-                return deployConfig.skip_quality_measures;
-            case "phase_7_payer_ops":
-                return deployConfig.skip_phase7;
-            default:
-                return false;
-        }
-    };
-    const displayPhaseTemplate = isTeardown
-        ? phases
-        : ALL_PHASES.filter((phase) => activeMilestoneNumbers.has(phase.milestone ?? 0));
-    const displayPhases = isTeardown
-        ? phases
-        : displayPhaseTemplate.map((template) => {
-            const matches = phases.filter((phase) => phaseMatchesTemplate(phase, template));
-            const activeMatch = matches.find((phase) => phase.status === "running" || phase.status === "waiting_for_input");
-            const resolved = activeMatch ?? matches[matches.length - 1];
-            const currentMatchesTemplate = currentPhase
-                ? phaseMatchesTemplate({ phase: currentPhase, status: "running" }, template)
-                : false;
-            if (!resolved && !currentMatchesTemplate)
-                return { ...template, status: skippedByConfig(template) ? "skipped" : "pending" as const };
-            const statusForCurrentPhase = isRunning && currentMatchesTemplate
-                ? "running"
-                : resolved?.status ?? "pending";
-            return { ...template, ...resolved, phase: template.phase, status: statusForCurrentPhase };
-        });
     const isProblemSubStep = (subStep: PhaseSubStep) => subStep.status === "failed" || subStep.status === "warning";
     const phaseSubSteps = (phase: PhaseInfo) => phase.subSteps ?? [];
     const actionRequiredSubSteps = displayPhases.flatMap((phase) => phaseSubSteps(phase)
@@ -1522,7 +1565,7 @@ export function PhaseMonitor() {
             {isRunning && currentPhase ? ` · ${currentPhase}` : ""}
           </Typography>
           <Typography style={{ color: "var(--m3-colorNeutralForeground3)" }} component="span" variant="caption">
-            {isComplete && !isCancelled && !isFailed ? `Completed in ${elapsedFormatted || "0m 0s"}` : (elapsedFormatted || "0m 0s")}{isRunning && etaMinutes > 0 ? ` · ETA ~${etaMinutes}m` : ""}
+            {isComplete && !isCancelled && !isFailed ? `Completed in ${elapsedFormatted || "0m 0s"}` : (elapsedFormatted || "0m 0s")}{isRunning && etaMinutes > 0 ? ` · ETA ~${etaMinutes}m${etaLearnedRuns >= 3 ? ` (learned from ${etaLearnedRuns} runs)` : ""}` : ""}
           </Typography>
         </div>
 
@@ -1909,7 +1952,7 @@ export function PhaseMonitor() {
     }}>Operator diagnostics</Typography>}/>
         <div className={styles.configGrid}>
           <span className={styles.configItem}><Chip component="span" size="small" variant="filled" color="default" label={<>Elapsed</>}/> {elapsedFormatted || "0m 0s"}</span>
-          <span className={styles.configItem}><Chip component="span" size="small" variant="filled" color="primary" label={<>ETA</>}/> {isRunning && etaMinutes > 0 ? `~${etaMinutes}m` : "—"}</span>
+          <span className={styles.configItem}><Chip component="span" size="small" variant="filled" color="primary" label={<>ETA</>}/> {isRunning && etaMinutes > 0 ? `~${etaMinutes}m` : "—"}{etaLearnedRuns >= 3 ? <Typography component="span" variant="caption" sx={{ ml: 0.5, color: "var(--m3-colorNeutralForeground3)" }}>(learned from {etaLearnedRuns} runs)</Typography> : null}</span>
           <span className={styles.configItem}><Chip component="span" size="small" variant="filled" color="default" label={<>Logs</>}/> {(backendLogs ?? []).length}</span>
           <span className={styles.clickableConfigItem} onClick={() => {
             setDrilldownType("error");

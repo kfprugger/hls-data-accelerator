@@ -2,20 +2,29 @@
 // 03-clinical-alert-functions.kql
 // Clinical alert detection functions implementing the 3-tier alert system.
 //
-// Alert Tiers:
-//   WARNING  — SpO2 < 94% OR PR > 110 or < 50 (any patient)
-//   URGENT   — SpO2 < 90% OR PR > 130 or < 45, OR patient has COPD/CHF
-//   CRITICAL — SpO2 < 85% OR PR > 150 or < 40, AND patient has COPD/CHF
+// Deployed source: deploy-fabric-rti.ps1 creates fn_SpO2Alerts,
+// fn_PulseRateAlerts and a basic fn_ClinicalAlerts in section 6e, then Phase 2b
+// replaces fn_ClinicalAlerts with a version that joins the HDS Silver
+// Patient, Condition and Basic (device association) tables.
+// utilities/run-kql-scripts.ps1 holds the same inline definitions.
+// The threshold functions below use the same filters and thresholds as the
+// deployed ones. Running this file on a deployed Eventhouse replaces the
+// enriched fn_ClinicalAlerts with the basic version at the end of this file.
 //
-// These functions are designed to work with:
-//   - TelemetryRaw (from Eventstream → Eventhouse)
-//   - Silver Lakehouse tables from Healthcare Data Solutions (via shortcuts)
+// Metric tiers (any patient):
+//   WARNING  — SpO2 < 94% OR PR > 110 or < 50
+//   URGENT   — SpO2 < 90% OR PR > 130 or < 45
+//   CRITICAL — SpO2 < 85% OR PR > 150 or < 40
+// SpO2 counts only non-null readings with 0 < SpO2 < 100 and compares the
+// unrounded minimum. Pulse rate is compared as toint(pr) with no positivity
+// filter. The enriched fn_ClinicalAlerts raises WARNING to URGENT and URGENT
+// to CRITICAL when the patient has a Silver Condition with SNOMED code
+// 13645005 (COPD), 84114007 (heart failure), 195967001 (asthma),
+// 233604007 (pneumonia) or 59621000 (essential hypertension).
 //
 // IMPORTANT: TelemetryRaw.timestamp is STRING type (auto-created by Eventstream).
 // All datetime operations must wrap it with todatetime(timestamp).
 // NOTE: "latest" is a Kusto reserved keyword — avoid as a variable name.
-//
-// Run this in MasimoKQLDB after data is flowing.
 // ============================================================================
 
 // ---------------------------------------------------------------------------
@@ -28,20 +37,21 @@
 ) fn_SpO2Alerts(windowMinutes: int = 5) {
     TelemetryRaw
     | where todatetime(timestamp) > ago(1m * windowMinutes)
+    | where isnotnull(telemetry.spo2)
+    | extend spo2 = todouble(telemetry.spo2)
+    | where spo2 > 0 and spo2 < 100
     | summarize
         readings  = count(),
-        avg_spo2  = round(avg(todouble(telemetry.spo2)), 1),
-        min_spo2  = round(min(todouble(telemetry.spo2)), 1),
+        avg_spo2  = round(avg(spo2), 1),
+        min_spo2  = min(spo2),
         last_time = max(todatetime(timestamp))
       by device_id
-    | where min_spo2 < 94 or avg_spo2 < 95
+    | where min_spo2 < 94
     | extend alert_tier = case(
         min_spo2 < 85, "CRITICAL",
         min_spo2 < 90, "URGENT",
-        min_spo2 < 94, "WARNING",
-        "INFO"
+        "WARNING"
       )
-    | where alert_tier != "INFO"
     | extend
         alert_type = "SPO2_LOW",
         message = strcat(
