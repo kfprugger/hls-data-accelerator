@@ -79,6 +79,7 @@ except ImportError:
     )
 
 KQL_POLL_INTERVAL_SECONDS = 3.0
+# Bounds each Eventhouse observation: the timeout of a single query, or the whole window of a poll.
 KQL_OBSERVATION_DEADLINE_SECONDS = 30.0
 # Activator evaluates every P seconds; allow P + L plus mail transport before T3 is reported not_observed.
 GRAPH_POLL_INTERVAL_SECONDS = 10.0
@@ -114,16 +115,25 @@ def poll_until(
     sleeper: Callable[[float], None],
     deadline_seconds: float,
     interval_seconds: float,
-    attempt: Callable[[], Any],
+    attempt: Callable[[float], Any],
 ) -> Any:
-    """Call attempt until it returns a non-None value or the bounded deadline (time and attempt count) passes."""
+    """Call attempt(budget_seconds) until it returns a non-None value or the bounded deadline (time and attempt count) passes.
+
+    Each attempt receives the seconds left before the deadline as the limit for its own network calls. A value that
+    arrives after the deadline is not counted, and no attempt starts once the deadline has passed. clock must measure
+    elapsed time (time.monotonic), not UTC, so a wall-clock adjustment cannot move the deadline.
+    """
     deadline = clock() + deadline_seconds
     max_attempts = int(math.ceil(deadline_seconds / interval_seconds)) + 1
     for attempt_no in range(max_attempts):
-        value = attempt()
+        budget = deadline - clock()
+        if budget <= 0:
+            return None
+        value = attempt(budget)
+        now = clock()
         if value is not None:
-            return value
-        if attempt_no + 1 >= max_attempts or clock() + interval_seconds > deadline:
+            return value if now <= deadline else None
+        if attempt_no + 1 >= max_attempts or now + interval_seconds > deadline:
             return None
         sleeper(interval_seconds)
     return None
@@ -395,6 +405,7 @@ def run_trigger(
     eventhub_name: Optional[str] = None,
     sleep_fn: Optional[Callable[[float], None]] = None,
     time_fn: Optional[Callable[[], float]] = None,
+    monotonic_fn: Optional[Callable[[], float]] = None,
 ) -> Dict[str, Any]:
     """Execute SpO2 alert trigger, dedupe check, and stopwatch measurement.
 
@@ -408,7 +419,9 @@ def run_trigger(
       settle_seconds: Optional delay in seconds before baseline check and drop.
       previous_alert_epoch: Optional epoch timestamp of previous alert for testing or override.
       sleep_fn: Sleep callable for testing / live delays (defaults to time.sleep).
-      time_fn: Clock callable for testing / stopwatch timestamps (defaults to time.time).
+      time_fn: UTC clock callable for event timestamps, T0 and dedupe epochs (defaults to time.time).
+      monotonic_fn: Elapsed-time clock for observation deadlines and HTTP budgets (defaults to time.monotonic),
+        so a wall-clock adjustment cannot extend or shorten a poll window.
     """
     if cleanup:
         return {
@@ -442,6 +455,7 @@ def run_trigger(
 
     sleeper = sleep_fn if sleep_fn is not None else time.sleep
     clock = time_fn if time_fn is not None else time.time
+    elapsed_clock = monotonic_fn if monotonic_fn is not None else time.monotonic
 
     if settle_seconds > 0:
         sleeper(settle_seconds)
@@ -517,13 +531,13 @@ def run_trigger(
         q_headers = {"Authorization": f"Bearer {kusto_tok}", "Content-Type": "application/json"}
         url = f"https://{ns}.servicebus.windows.net/{eh_name}/messages"
 
-        def kql_rows(csl: str) -> Tuple[Optional[List[Any]], Optional[str]]:
+        def kql_rows(csl: str, timeout_seconds: float) -> Tuple[Optional[List[Any]], Optional[str]]:
             try:
                 resp = requests.post(
                     f"{query_uri}/v2/rest/query",
                     headers=q_headers,
                     json={"db": "MasimoEventhouse", "csl": csl},
-                    timeout=10,
+                    timeout=timeout_seconds,
                 )
                 return kql_primary_rows(resp)
             except Exception as exc:
@@ -551,7 +565,7 @@ def run_trigger(
             f"| project ingestion_time(), timestamp, device_id\n"
             f"| take 1"
         )
-        recent_rows, _ = kql_rows(csl_check)
+        recent_rows, _ = kql_rows(csl_check, KQL_OBSERVATION_DEADLINE_SECONDS)
         if not recent_rows:
             baseline_seeded = True
             base_timestamp = format_iso_timestamp(clock())
@@ -579,13 +593,13 @@ def run_trigger(
                 f"| take 1"
             )
 
-            def observe_baseline() -> Optional[bool]:
-                rows, error = kql_rows(csl_base_poll)
+            def observe_baseline(budget: float) -> Optional[bool]:
+                rows, error = kql_rows(csl_base_poll, budget)
                 if error:
                     poll_errors["baseline"] = error
                 return True if rows else None
 
-            base_found = poll_until(clock, sleeper, KQL_OBSERVATION_DEADLINE_SECONDS, KQL_POLL_INTERVAL_SECONDS, observe_baseline)
+            base_found = poll_until(elapsed_clock, sleeper, KQL_OBSERVATION_DEADLINE_SECONDS, KQL_POLL_INTERVAL_SECONDS, observe_baseline)
             if not base_found:
                 sys.stderr.write(
                     f"ERROR: Baseline telemetry row with timestamp {base_timestamp} not queryable in TelemetryRaw after "
@@ -644,7 +658,7 @@ def run_trigger(
                 f"| summarize max(todatetime(timestamp))\n"
                 f"| extend has_high_risk = device_high_risk"
             )
-            rows, history_query_error = kql_rows(csl_prev)
+            rows, history_query_error = kql_rows(csl_prev, KQL_OBSERVATION_DEADLINE_SECONDS)
             if rows is None:
                 history_query_failed = True
             elif len(rows) != 1 or not isinstance(rows[0], list) or len(rows[0]) < 1:
@@ -681,9 +695,9 @@ def run_trigger(
             f"| top 1 by ingested_at desc"
         )
 
-        def observe_t1() -> Optional[Tuple[float, str]]:
+        def observe_t1(budget: float) -> Optional[Tuple[float, str]]:
             nonlocal kql_telemetry_raw
-            rows, error = kql_rows(csl_t1)
+            rows, error = kql_rows(csl_t1, budget)
             if error:
                 poll_errors["t1"] = error
             if not rows or not isinstance(rows[0], list) or not rows[0]:
@@ -694,7 +708,7 @@ def run_trigger(
                 return None
             return parsed, rows[0][0]
 
-        t1_obs = poll_until(clock, sleeper, KQL_OBSERVATION_DEADLINE_SECONDS, KQL_POLL_INTERVAL_SECONDS, observe_t1)
+        t1_obs = poll_until(elapsed_clock, sleeper, KQL_OBSERVATION_DEADLINE_SECONDS, KQL_POLL_INTERVAL_SECONDS, observe_t1)
         if t1_obs:
             t1_epoch, t1_source = t1_obs
 
@@ -714,9 +728,9 @@ def run_trigger(
             f"| top 1 by alert_time desc"
         )
 
-        def observe_t2() -> Optional[Tuple[float, str]]:
+        def observe_t2(budget: float) -> Optional[Tuple[float, str]]:
             nonlocal kql_alert_row
-            rows, error = kql_rows(csl_t2)
+            rows, error = kql_rows(csl_t2, budget)
             if error:
                 poll_errors["t2"] = error
             if not rows or not isinstance(rows[0], list) or len(rows[0]) < 2:
@@ -728,7 +742,7 @@ def run_trigger(
                 return None
             return evaluated, rows[0][0]
 
-        t2_obs = poll_until(clock, sleeper, KQL_OBSERVATION_DEADLINE_SECONDS, KQL_POLL_INTERVAL_SECONDS, observe_t2)
+        t2_obs = poll_until(elapsed_clock, sleeper, KQL_OBSERVATION_DEADLINE_SECONDS, KQL_POLL_INTERVAL_SECONDS, observe_t2)
         if t2_obs:
             t2_epoch, t2_source = t2_obs
 
@@ -754,14 +768,18 @@ def run_trigger(
                 "&$select=subject,from,receivedDateTime"
             )
 
-            def observe_t3() -> Optional[Tuple[float, str, Dict[str, Any]]]:
+            def observe_t3(budget: float) -> Optional[Tuple[float, str, Dict[str, Any]]]:
                 nonlocal graph_error
+                page_deadline = elapsed_clock() + budget
                 page_url: Optional[str] = first_page
                 for _ in range(GRAPH_MAX_PAGES):
                     if not page_url:
                         return None
+                    remaining = page_deadline - elapsed_clock()
+                    if remaining <= 0:
+                        return None
                     try:
-                        g_resp = requests.get(page_url, headers={"Authorization": f"Bearer {graph_tok}"}, timeout=15)
+                        g_resp = requests.get(page_url, headers={"Authorization": f"Bearer {graph_tok}"}, timeout=min(15.0, remaining))
                         if g_resp.status_code != 200:
                             graph_error = f"HTTP {g_resp.status_code}: {g_resp.text}"
                             return None
@@ -786,7 +804,7 @@ def run_trigger(
                     page_url = body.get("@odata.nextLink")
                 return None
 
-            t3_obs = poll_until(clock, sleeper, GRAPH_OBSERVATION_DEADLINE_SECONDS, GRAPH_POLL_INTERVAL_SECONDS, observe_t3)
+            t3_obs = poll_until(elapsed_clock, sleeper, GRAPH_OBSERVATION_DEADLINE_SECONDS, GRAPH_POLL_INTERVAL_SECONDS, observe_t3)
             if t3_obs:
                 t3_epoch, t3_source, activator_msg = t3_obs
                 graph_msg = {

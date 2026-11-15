@@ -186,9 +186,11 @@ class TestDataAgentQA(unittest.TestCase):
         with patch("requests.get") as mock_get:
             mock_res = MagicMock()
             mock_res.status_code = 401
-            mock_res.raise_for_status.side_effect = urllib.error.HTTPError(
+            unauthorized = urllib.error.HTTPError(
                 "http://test", 401, "Unauthorized: Invalid or expired delegated token", {}, io.BytesIO()
             )
+            self.addCleanup(unauthorized.close)
+            mock_res.raise_for_status.side_effect = unauthorized
             mock_get.return_value = mock_res
             with self.assertRaises(Exception):
                 verifier.resolve_workspace()
@@ -212,9 +214,11 @@ class TestDataAgentQA(unittest.TestCase):
                 "data": [],
                 "rowCount": 0,
             }
-            forbidden_res.raise_for_status.side_effect = urllib.error.HTTPError(
+            forbidden = urllib.error.HTTPError(
                 "http://test", 403, "Forbidden", {}, io.BytesIO(b'{"error":"forbidden","rowCount":0}')
             )
+            self.addCleanup(forbidden.close)
+            forbidden_res.raise_for_status.side_effect = forbidden
             mock_post.return_value = forbidden_res
 
             with self.assertRaises(Exception) as ctx:

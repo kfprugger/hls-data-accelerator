@@ -57,7 +57,8 @@ def _fetch(method: str, url: str, headers: dict) -> tuple[int, Any]:
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.status, json.loads(response.read() or b"{}")
     except urllib.error.HTTPError as exc:
-        return exc.code, {}
+        with exc:
+            return exc.code, {}
     except (urllib.error.URLError, ValueError, OSError) as exc:
         return 0, {"error": type(exc).__name__}
 

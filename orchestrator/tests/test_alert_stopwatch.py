@@ -358,7 +358,8 @@ class TestAlertStopwatch(unittest.TestCase):
              patch("scripts.trigger_spo2_alert.requests.post", side_effect=mock_live_post), \
              patch("scripts.trigger_spo2_alert.requests.get", return_value=kql_resp), \
              patch("scripts.trigger_spo2_alert.time.sleep"), \
-             patch("scripts.trigger_spo2_alert.time.time", side_effect=advancing_clock):
+             patch("scripts.trigger_spo2_alert.time.time", side_effect=advancing_clock), \
+             patch("scripts.trigger_spo2_alert.time.monotonic", side_effect=advancing_clock):
             res = trigger_mod.run_trigger(
                 patient_id="TCGA-G6-A8L6",
                 email="alerts@example.com",
@@ -602,6 +603,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
                 sleep_fn=mock_sleep,
                 time_fn=mock_clock,
+                monotonic_fn=mock_clock,
                 previous_alert_epoch=10.0,
             )
 
@@ -650,6 +652,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
                 sleep_fn=mock_sleep,
                 time_fn=mock_clock,
+                monotonic_fn=mock_clock,
                 previous_alert_epoch=10.0,
             )
 
@@ -686,6 +689,7 @@ class TestAlertStopwatch(unittest.TestCase):
                     eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
                     sleep_fn=lambda _: None,
                     time_fn=fast_clock,
+                    monotonic_fn=fast_clock,
                 )
             self.assertEqual(1, cm.exception.code)
 
@@ -753,6 +757,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 previous_alert_epoch=10.0,
                 sleep_fn=lambda s: fake_now.__setitem__(0, fake_now[0] + s),
                 time_fn=lambda: fake_now[0],
+                monotonic_fn=lambda: fake_now[0],
             )
 
         t2_query = next((q for q in kql_queries if "fn_ClinicalAlerts(25)" in q), None)
@@ -801,6 +806,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 min_tier="CRITICAL",
                 sleep_fn=lambda _: None,
                 time_fn=lambda: t_drop,
+                monotonic_fn=lambda: t_drop,
             )
 
         self.assertEqual("SUPPRESSED_DEDUPE", res["status"])
@@ -849,6 +855,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 min_tier="URGENT",
                 sleep_fn=lambda _: None,
                 time_fn=lambda: t_drop_a1,
+                monotonic_fn=lambda: t_drop_a1,
             )
 
         # Eligibility is only a prediction: an empty mailbox leaves dispatch unobserved, never DISPATCHED.
@@ -890,6 +897,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
                 sleep_fn=lambda _: None,
                 time_fn=lambda: 1763000500.0,
+                monotonic_fn=lambda: 1763000500.0,
             )
 
         self.assertEqual("UNCERTAIN_BOUNDARY", res["status"])
@@ -939,6 +947,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 min_tier=min_tier,
                 sleep_fn=lambda _: None,
                 time_fn=lambda: t_drop,
+                monotonic_fn=lambda: t_drop,
             )
 
     def test_high_risk_escalation_inside_cooldown_suppresses_dispatch(self):
@@ -1018,7 +1027,8 @@ class TestAlertStopwatch(unittest.TestCase):
              patch("scripts.trigger_spo2_alert.requests.post", side_effect=mock_post), \
              patch("scripts.trigger_spo2_alert.requests.get", return_value=graph_resp), \
              patch("scripts.trigger_spo2_alert.time.sleep"), \
-             patch("scripts.trigger_spo2_alert.time.time", side_effect=advancing_clock):
+             patch("scripts.trigger_spo2_alert.time.time", side_effect=advancing_clock), \
+             patch("scripts.trigger_spo2_alert.time.monotonic", side_effect=advancing_clock):
             rc = trigger_mod.main()
 
         self.assertEqual(1, rc)
@@ -1028,6 +1038,277 @@ class TestAlertStopwatch(unittest.TestCase):
         failure = next(line for line in stderr.getvalue().splitlines() if "Live alert verification failed" in line)
         self.assertIn(f"T1 observed=False (last query error: HTTP 403: {denied})", failure)
         self.assertIn(f"T2 observed=False (last query error: HTTP 403: {denied})", failure)
+
+    def _run_live_cli_against_timed_eventhouse(self, timings, honor_timeout=True, graph_pages=None, wall_rollback=None):
+        """Run the live CLI against a fake Eventhouse on a fake clock; return (exit code, JSON result, stderr, query log).
+
+        timings maps a query kind (recent, history, t1, t2) to (seconds, has_row) for its successive calls; the last entry
+        repeats. With honor_timeout, a query slower than its request timeout raises ReadTimeout once that timeout has
+        elapsed, as requests does; without it, the transport returns late anyway. wall_rollback=(kind, seconds) steps the
+        local UTC clock (time.time) back by seconds when the first query of that kind (including "graph") starts, while
+        elapsed time (time.monotonic) and the service-side timestamps keep advancing.
+        """
+        script = {"recent": [(0.4, True)], "history": [(0.4, True)], "t1": [(0.4, True)], "t2": [(0.4, True)]}
+        script.update(timings)
+        now = [1763000000.0]
+        queries = []  # (kind, start, timeout)
+        wall_offset = [0.0]
+        eh_resp = MagicMock()
+        eh_resp.status_code = 201
+        emitted_events = []
+
+        def kind_of(csl):
+            if "ago(55m)" in csl:
+                return "recent"
+            if "summarize max(todatetime(timestamp))" in csl:
+                return "history"
+            return "t2" if "fn_ClinicalAlerts" in csl else "t1"
+
+        def roll_wall_clock_back(kind):
+            if wall_rollback is not None and wall_rollback[0] == kind and not any(q[0] == kind for q in queries):
+                wall_offset[0] -= wall_rollback[1]
+
+        def mock_post(url, **kwargs):
+            if "servicebus" in url:
+                emitted_events.append(json.loads(kwargs["data"]))
+                return eh_resp
+            kind = kind_of(kwargs["json"]["csl"])
+            start, timeout = now[0], kwargs["timeout"]
+            seconds, has_row = script[kind][min(sum(1 for q in queries if q[0] == kind), len(script[kind]) - 1)]
+            roll_wall_clock_back(kind)
+            queries.append((kind, start, timeout))
+            if honor_timeout and seconds > timeout:
+                now[0] += timeout
+                raise trigger_mod.requests.exceptions.ReadTimeout(f"Read timed out. (read timeout={timeout})")
+            now[0] += seconds
+            stamp = trigger_mod.format_iso_timestamp(now[0])
+            rows = {
+                "recent": [[stamp, stamp, "MASIMO-RADIUS7-0101"]],
+                "history": [[None, False]],
+                "t1": [[stamp]],
+                "t2": [[stamp, stamp, "CRITICAL", "SpO2", 84.0, 115]],
+            }[kind]
+            return self._kusto_response(rows if has_row else [])
+
+        def advance(seconds):
+            now[0] += seconds
+
+        graph_resp = MagicMock()
+        graph_resp.status_code = 200
+        graph_resp.json.return_value = {"value": []}
+
+        def mock_get(url, **kwargs):
+            if graph_pages is None:
+                return graph_resp
+            page_index = sum(1 for query in queries if query[0] == "graph")
+            seconds, matches = graph_pages[min(page_index, len(graph_pages) - 1)]
+            start, timeout = now[0], kwargs["timeout"]
+            roll_wall_clock_back("graph")
+            queries.append(("graph", start, timeout))
+            if honor_timeout and seconds > timeout:
+                now[0] += timeout
+                raise trigger_mod.requests.exceptions.ReadTimeout(f"Read timed out. (read timeout={timeout})")
+            now[0] += seconds
+            event = emitted_events[-1]
+            message = {
+                "subject": f"Alert {event['device_id']} {trigger_mod.alert_probe_subject_marker(event['metadata'][trigger_mod.ALERT_PROBE_FIELD])}",
+                "receivedDateTime": trigger_mod.format_iso_timestamp(now[0]),
+            }
+            response = MagicMock()
+            response.status_code = 200
+            body = {"value": [message] if matches else []}
+            if page_index + 1 < len(graph_pages):
+                body["@odata.nextLink"] = f"https://graph.microsoft.com/v1.0/me/messages?skip={page_index + 1}"
+            response.json.return_value = body
+            return response
+
+        os.environ.pop("FHIR_SERVICE_URL", None)
+        os.environ.pop("FHIR_URL", None)
+        argv = [
+            "trigger_spo2_alert.py", "--live", "--json",
+            "--eventhub-namespace", "ns-test",
+            "--resource-group", "rg-test",
+            "--eventhouse-query-uri", "https://eh.kusto.fabric.microsoft.com",
+        ]
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch("sys.argv", argv), patch("sys.stdout", stdout), patch("sys.stderr", stderr), \
+             patch("scripts.trigger_spo2_alert.get_msal_token", return_value="tok"), \
+             patch("scripts.trigger_spo2_alert.requests.post", side_effect=mock_post), \
+             patch("scripts.trigger_spo2_alert.requests.get", side_effect=mock_get), \
+             patch("scripts.trigger_spo2_alert.time.sleep", side_effect=advance), \
+             patch("scripts.trigger_spo2_alert.time.time", side_effect=lambda: now[0] + wall_offset[0]), \
+             patch("scripts.trigger_spo2_alert.time.monotonic", side_effect=lambda: now[0]):
+            rc = trigger_mod.main()
+        return rc, json.loads(stdout.getvalue()), stderr.getvalue(), queries
+
+    def test_slow_valid_history_and_t2_queries_are_observed(self):
+        """Valid history and T2 queries that take 12 s (longer than a 10 s request timeout) succeed inside the 30 s window."""
+        rc, result, stderr, _ = self._run_live_cli_against_timed_eventhouse({"history": [(12.0, True)], "t2": [(12.0, True)]})
+
+        self.assertEqual(0, rc, stderr)
+        self.assertEqual("EXPECTED_DISPATCH", result["expected_outcome"])
+        self.assertNotIn("Eventhouse alert history query failed", stderr)
+        beats = {b["id"]: b for b in result["beats"]}
+        self.assertEqual("completed", beats["eventstream_enqueued"]["status"])
+        self.assertEqual("completed", beats["kql_detected"]["status"])
+        self.assertIsNone(result["poll_errors"]["t2"])
+
+    def test_eventhouse_queries_stay_inside_observation_deadline(self):
+        """Request timeouts use the remaining budget; failed polls retain their error and late rows are not observed."""
+        deadline = trigger_mod.KQL_OBSERVATION_DEADLINE_SECONDS
+        cases = (
+            # The first T2 poll returns no alert row after 12 s; the next poll gets only the remaining budget and times out.
+            ("transport_timeout", {"history": [(40.0, True)], "t2": [(12.0, False), (40.0, True)]}, True),
+            # A transport that ignores its timeout returns a valid T2 row after the window has closed.
+            ("late_success", {"t2": [(40.0, True)]}, False),
+        )
+        for name, timings, honor_timeout in cases:
+            with self.subTest(case=name):
+                rc, result, stderr, queries = self._run_live_cli_against_timed_eventhouse(timings, honor_timeout)
+
+                self.assertEqual(1, rc)
+                beats = {b["id"]: b for b in result["beats"]}
+                self.assertEqual("completed", beats["eventstream_enqueued"]["status"])
+                self.assertEqual("not_observed", beats["kql_detected"]["status"])
+                self.assertIn("T2 observed=False", stderr)
+                history = next(q for q in queries if q[0] == "history")
+                self.assertLessEqual(history[2], deadline)
+                t2_polls = [q for q in queries if q[0] == "t2"]
+                for _, start, timeout in t2_polls:
+                    self.assertLessEqual(start + timeout, t2_polls[0][1] + deadline)
+                if honor_timeout:
+                    self.assertEqual(2, len(t2_polls))
+                    self.assertEqual("UNCERTAIN_BOUNDARY", result["status"])
+                    self.assertIn("Read timed out", result["boundary_notice"])
+                    self.assertIn("Read timed out", result["poll_errors"]["t2"])
+                    self.assertIn("T2 observed=False (last query error: Read timed out", stderr)
+                else:
+                    self.assertEqual("EXPECTED_DISPATCH", result["expected_outcome"])
+                    self.assertIsNone(beats["kql_detected"]["timestamp"])
+
+    def test_poll_refreshes_budget_after_process_pause(self):
+        """A process pause must not consume expired network time or retain the initial timeout."""
+        for pause in (12.0, 31.0):
+            with self.subTest(pause=pause):
+                now = [0.0]
+                requests_started = []
+
+                def clock():
+                    before_pause = now[0]
+                    now[0] = pause
+                    return before_pause
+
+                def request(budget):
+                    requests_started.append((now[0], budget))
+                    return "observed"
+
+                result = trigger_mod.poll_until(clock, lambda _: None, 30.0, 3.0, request)
+                if pause < 30.0:
+                    self.assertEqual("observed", result)
+                    self.assertEqual([(pause, 30.0 - pause)], requests_started)
+                else:
+                    self.assertIsNone(result)
+                    self.assertEqual([], requests_started)
+
+    def test_mailbox_pages_share_one_observation_deadline(self):
+        """A delayed second page cannot count an email after the mailbox observation window."""
+        with patch.object(trigger_mod, "GRAPH_OBSERVATION_DEADLINE_SECONDS", 20.0):
+            rc, result, stderr, queries = self._run_live_cli_against_timed_eventhouse(
+                {}, graph_pages=[(12.0, False), (12.0, True)],
+            )
+        self.assertEqual(0, rc, stderr)
+        self.assertEqual("DISPATCH_NOT_OBSERVED", result["status"])
+        self.assertFalse(result["dispatch_observed"])
+        self.assertIn("Read timed out", result["graph_error"])
+        beat = next(beat for beat in result["beats"] if beat["id"] == "activator_dispatched")
+        self.assertEqual("not_observed", beat["status"])
+        self.assertIsNone(beat["timestamp"])
+        graph_queries = [query for query in queries if query[0] == "graph"]
+        deadline = graph_queries[0][1] + 20.0
+        for _, start, timeout in graph_queries:
+            self.assertLess(start, deadline)
+            self.assertLessEqual(start + timeout, deadline)
+
+    def test_utc_rollback_does_not_grow_mailbox_page_budget(self):
+        """A backward UTC step during the first mailbox page leaves the second page only the elapsed-time budget."""
+        with patch.object(trigger_mod, "GRAPH_OBSERVATION_DEADLINE_SECONDS", 20.0):
+            rc, result, stderr, queries = self._run_live_cli_against_timed_eventhouse(
+                {}, graph_pages=[(12.0, False), (12.0, True)], wall_rollback=("graph", 100.0),
+            )
+        self.assertEqual(0, rc, stderr)
+        self.assertEqual("DISPATCH_NOT_OBSERVED", result["status"])
+        self.assertFalse(result["dispatch_observed"])
+        self.assertIsNone(result["graph_msg"])
+        self.assertIn("Read timed out", result["graph_error"])
+        graph_queries = [query for query in queries if query[0] == "graph"]
+        self.assertEqual(2, len(graph_queries))
+        first_start = graph_queries[0][1]
+        for _, start, timeout in graph_queries:
+            self.assertLessEqual(start + timeout, first_start + 20.0)
+        self.assertLessEqual(graph_queries[1][2], 20.0 - 12.0)
+        beats = {b["id"]: b for b in result["beats"]}
+        self.assertEqual("not_observed", beats["activator_dispatched"]["status"])
+        self.assertIsNone(beats["activator_dispatched"]["timestamp"])
+        # T0 was taken before the adjustment and stays the real UTC emission time.
+        expected_t0 = trigger_mod.format_iso_timestamp(1763000000.0 + 0.4 + 0.4)
+        self.assertEqual(expected_t0, result["payload"]["timestamp"])
+        self.assertEqual(expected_t0, beats["telemetry_emitted"]["timestamp"])
+
+    def test_injected_utc_rollback_does_not_extend_eventhouse_window(self):
+        """run_trigger with separate UTC and monotonic clocks rejects a T1 row that arrives after 31 elapsed seconds
+        even though UTC moved back 100 s during the query; UTC still supplies T0 and the payload timestamp."""
+        wall_start = 1763000000.0
+        elapsed = [0.0]
+        wall_offset = [0.0]
+        t1_starts = []
+        eh_resp = MagicMock()
+        eh_resp.status_code = 201
+
+        def mock_post(url, **kwargs):
+            if "servicebus" in url:
+                return eh_resp
+            csl = kwargs["json"]["csl"]
+            if "ago(55m)" in csl:
+                return self._kusto_response([["2025-11-13T02:00:00.000Z", "2025-11-13T02:00:00.000Z", "MASIMO-RADIUS7-0101"]])
+            if "summarize max(todatetime(timestamp))" in csl:
+                return self._kusto_response([[None, False]])
+            if "fn_ClinicalAlerts" in csl:
+                return self._kusto_response([])
+            # T1: the row arrives after 31 s of elapsed time while the local UTC clock steps back 100 s.
+            t1_starts.append((elapsed[0], kwargs["timeout"]))
+            elapsed[0] += 31.0
+            wall_offset[0] -= 100.0
+            return self._kusto_response([[trigger_mod.format_iso_timestamp(wall_start + elapsed[0])]])
+
+        graph_resp = MagicMock()
+        graph_resp.status_code = 200
+        graph_resp.json.return_value = {"value": []}
+
+        with patch("scripts.trigger_spo2_alert.get_msal_token", return_value="tok"), \
+             patch("scripts.trigger_spo2_alert.requests.post", side_effect=mock_post), \
+             patch("scripts.trigger_spo2_alert.requests.get", return_value=graph_resp):
+            res = trigger_mod.run_trigger(
+                patient_id="TCGA-G6-A8L6",
+                email="alerts@example.com",
+                dry_run=False,
+                live=True,
+                eventhub_namespace="ns-test",
+                resource_group="rg-test",
+                eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
+                sleep_fn=lambda s: elapsed.__setitem__(0, elapsed[0] + s),
+                time_fn=lambda: wall_start + elapsed[0] + wall_offset[0],
+                monotonic_fn=lambda: elapsed[0],
+            )
+
+        self.assertEqual(1, len(t1_starts))
+        self.assertLessEqual(t1_starts[0][1], trigger_mod.KQL_OBSERVATION_DEADLINE_SECONDS)
+        beats = {b["id"]: b for b in res["beats"]}
+        self.assertEqual("not_observed", beats["eventstream_enqueued"]["status"])
+        self.assertIsNone(beats["eventstream_enqueued"]["timestamp"])
+        self.assertIsNone(res["t_ingest"])
+        expected_t0 = trigger_mod.format_iso_timestamp(wall_start)
+        self.assertEqual(expected_t0, res["payload"]["timestamp"])
+        self.assertEqual(expected_t0, beats["telemetry_emitted"]["timestamp"])
 
     def test_live_drop_payload_timestamp_matches_graph_filter_after_settle(self):
         """F-4 (M9): In live mode with settle delay, payload['timestamp'] is updated at drop time and equals the Graph filter timestamp."""
@@ -1090,6 +1371,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
                 sleep_fn=advancing_sleep,
                 time_fn=lambda: clock_val[0],
+                monotonic_fn=lambda: clock_val[0],
             )
 
         # Run started at 1763000000.0 (02:13:20.000Z), baseline seeded (3s poll + 70s settle) -> drop at 1763000073.0 (02:14:33.000Z)
@@ -1158,6 +1440,7 @@ class TestAlertStopwatch(unittest.TestCase):
                         eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
                         sleep_fn=lambda _: None,
                         time_fn=lambda: 1763000500.0,
+                        monotonic_fn=lambda: 1763000500.0,
                     )
                 self.assertEqual("UNCERTAIN_BOUNDARY", res["status"])
                 self.assertFalse(res["email_expected"])
@@ -1196,6 +1479,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
                 sleep_fn=lambda _: None,
                 time_fn=lambda: 1763000500.0,
+                monotonic_fn=lambda: 1763000500.0,
             )
         self.assertEqual("DISPATCH_NOT_OBSERVED", res["status"])
         self.assertTrue(res["email_expected"])
@@ -1252,6 +1536,7 @@ class TestAlertStopwatch(unittest.TestCase):
                         cooldown_minutes=10,
                         sleep_fn=lambda _: None,
                         time_fn=lambda: t_drop,
+                        monotonic_fn=lambda: t_drop,
                     )
                 self.assertEqual(exp_status, res["status"])
                 self.assertEqual(exp_suppressed, res["suppressed_by_dedupe"])
@@ -1293,6 +1578,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
                 sleep_fn=lambda _: None,
                 time_fn=lambda: 1763000500.0,
+                monotonic_fn=lambda: 1763000500.0,
             )
 
         hist_query = next((q for q in captured_csl if "summarize max(todatetime(timestamp))" in q), "")
@@ -1345,6 +1631,7 @@ class TestAlertStopwatch(unittest.TestCase):
                 eventhouse_query_uri="https://eh.kusto.fabric.microsoft.com",
                 sleep_fn=advancing_sleep,
                 time_fn=lambda: clock_val[0],
+                monotonic_fn=lambda: clock_val[0],
             )
 
         beats_by_id = {b["id"]: b for b in res["beats"]}

@@ -254,11 +254,12 @@ class Cloud:
         try:
             return urllib.request.urlopen(req, timeout=120)
         except urllib.error.HTTPError as error:
-            detail = error.read().decode("utf-8", errors="replace")[:800]
-            message = f"{method} {url.split('?', 1)[0]} -> HTTP {error.code}: {detail}"
-            if error.code == 429 or error.code >= 500:
-                raise TransientHttpError(message, error.code, _retry_after_seconds(error.headers.get("Retry-After") if error.headers else None)) from None
-            raise RuntimeError(message) from None
+            with error:
+                detail = error.read().decode("utf-8", errors="replace")[:800]
+                message = f"{method} {url.split('?', 1)[0]} -> HTTP {error.code}: {detail}"
+                if error.code == 429 or error.code >= 500:
+                    raise TransientHttpError(message, error.code, _retry_after_seconds(error.headers.get("Retry-After") if error.headers else None)) from None
+                raise RuntimeError(message) from None
 
     def call(self, method: str, url: str, resource: str = FABRIC, body=None, skill="search-consumption-cli"):
         response = self.request(method, url, resource, body, skill)
